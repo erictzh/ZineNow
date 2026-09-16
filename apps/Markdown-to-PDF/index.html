@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Md to PDF Converter</title>
+
+  <!-- Google Fonts: Inter, Merriweather, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Merriweather:wght@400;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind CSS (CDN / JIT) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!--
+    Dark-mode palette, extending Tailwind's default theme rather than
+    replacing it (layout/spacing/typography utilities are untouched —
+    only these color + font tokens are added). Values are taken verbatim
+    from the app's dark mode style guide, so `bg-ink`, `bg-ink-alt`,
+    `bg-ink-card`, `bg-ink-terminal`, `border-line`, `text-fg`,
+    `text-fg-muted`, `bg-accent` / `text-accent`, `bg-accent-hover`,
+    `bg-canvas` and the `font-ui` / `font-mono2` utilities below all map
+    1:1 to the guide's --ui-* tokens (also defined as real CSS custom
+    properties in styles.css, for the couple of places plain CSS needs
+    them instead of a Tailwind class). `canvas` (#dbdbdb) is the guide's
+    "light neutral fill... deliberately breaking from the dark theme,
+    e.g. a print preview" — used for the live-preview pane's backdrop,
+    so the eBook page floating on it can stay pure white as required,
+    even though the rest of the app chrome is dark.
+  -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: {
+              DEFAULT: '#171312',
+              alt: '#241d1b',
+              card: '#2b2220',
+              terminal: '#100d0c',
+            },
+            line: '#3f3634',
+            fg: {
+              DEFAULT: '#e9e9ee',
+              muted: '#9a9ca6',
+            },
+            accent: {
+              DEFAULT: '#dd531a',
+              hover: '#bf6836',
+            },
+            canvas: '#dbdbdb',
+            success: '#8fe28f',
+            warning: '#ffcf6b',
+            highlight: '#7fd7ff',
+          },
+          fontFamily: {
+            ui: [
+              '-apple-system',
+              'BlinkMacSystemFont',
+              '"Segoe UI"',
+              'Roboto',
+              'Helvetica',
+              'Arial',
+              'sans-serif',
+            ],
+            mono2: ['"SFMono-Regular"', 'Consolas', '"Liberation Mono"', 'Menlo', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- marked.js — Markdown parsing (version pinned so a future release can't change behavior under you) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+
+  <!--
+    Note: this app does NOT use html2pdf.js/html2canvas for PDF export.
+    That rasterization-based approach turned out to be unreliable (a
+    well-known html2canvas bug clips off-screen-rendered content), so
+    pdfGenerator.js instead drives the browser's own native print engine
+    (window.print(), page sized via @page CSS) to produce the PDF —
+    higher quality output (real selectable text, not a raster image)
+    with no extra library needed. See the comment on exportToPdf() in
+    pdfGenerator.js for the full explanation.
+  -->
+
+  <!-- React 18 (UMD), version pinned. App.jsx below is precompiled to plain
+       React.createElement calls (see the note at the top of that file), so
+       no in-browser JSX transpiler (Babel) is loaded or needed at all. -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="h-full w-full bg-ink text-fg font-ui antialiased">
+  <div id="root" class="h-screen w-screen"></div>
+
+  <!--
+    Default typography/page values, exposed as window.MD2eBookDefaultConfig.
+    Loaded before pdfGenerator.js (which reads it) for the same file://
+    reason as App.jsx below — see the comment at the top of
+    defaultConfig.json for the full explanation.
+  -->
+  <script src="defaultConfig.json"></script>
+
+  <!-- Plain JS: PDF/HTML generation engine, exposed on window.MD2eBook -->
+  <script src="pdfGenerator.js"></script>
+
+  <!--
+    The sample Markdown shown on first load, exposed as
+    window.MD2eBookSampleMarkdown. Loaded before App.jsx (which reads
+    it) for the same file:// reason — see the comment at the top of
+    sample.md.
+  -->
+  <script src="sample.md"></script>
+
+  <!--
+    React application. App.jsx is loaded here as a normal script — not
+    via a text/babel tag with a src, and not via a manual fetch() of it
+    either. Both of those approaches read App.jsx's contents at runtime
+    (via an internal XHR or fetch), which most browsers silently block
+    when this page is opened directly as a file (file://) instead of
+    through a web server — the read comes back empty, nothing renders,
+    and the page is left blank with no visible error. Because App.jsx
+    ships here pre-transpiled to plain JavaScript, a normal <script src>
+    works instead: that kind of resource load isn't subject to the same
+    restriction, so this page runs identically whether it's opened by
+    double-clicking it on disk or served from a real web host.
+  -->
+  <script src="App.jsx"></script>
+</body>
+</html>
