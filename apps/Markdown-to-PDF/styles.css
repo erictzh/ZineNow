@@ -1,0 +1,363 @@
+/* ==========================================================================
+   Md to PDF Converter — App shell & preview styles
+   ==========================================================================
+   This file styles the AUTHORING APP (editor, sidebar, preview chrome).
+   The generated eBook document itself (headings, paragraphs, tables, code
+   blocks, page dimensions, etc.) is styled separately, inline, by
+   pdfGenerator.js — so it can be embedded verbatim into the exported PDF
+   and into the live preview <iframe srcDoc>. This keeps "what you see" and
+   "what you export" byte-for-byte identical.
+   ========================================================================== */
+
+:root {
+  /* --------------------------------------------------------------------
+     Dark mode tokens — copied verbatim from the app's dark mode style
+     guide, so this block can be dropped into any other project and read
+     the same way. These style the APP CHROME ONLY (header, sidebar,
+     buttons, inputs); the generated eBook document keeps its own,
+     separate white-paper styling regardless (see pdfGenerator.js), and
+     Tailwind classes in App.jsx (bg-ink, bg-ink-card, text-fg, etc., set
+     up in index.html's tailwind.config) reference these same colors as
+     utility classes for anything not covered by plain CSS below.
+     -------------------------------------------------------------------- */
+
+  /* Backgrounds — darkest to lightest.
+     Warm neutral / burnt orange palette (solid-fill variant from the
+     style guide — chosen over the guide's alpha-transparent originals
+     because this app doesn't draw a border on every surface that uses
+     these as a fill, which the alpha variant depends on for shape). */
+  --ui-bg: #171312; /* page background */
+  --ui-bg-alt: #241d1b; /* subtle panel / title-bar background */
+  --ui-bg-card: #2b2220; /* card / control background */
+  --ui-bg-terminal: #100d0c; /* darkest — log/terminal areas */
+
+  /* Structure */
+  --ui-border: #3f3634;
+  --ui-radius: 10px;
+
+  /* Text */
+  --ui-fg: #e9e9ee; /* primary text */
+  --ui-fg-muted: #9a9ca6; /* secondary/label text */
+
+  /* Accent (buttons, links, focus rings) */
+  --ui-accent: #dd531a;
+  --ui-accent-hover: #bf6836;
+
+  /* Fonts */
+  --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --ui-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  /* --------------------------------------------------------------------
+     App layout tokens
+     -------------------------------------------------------------------- */
+  --md2ebook-sidebar-width: 40vw;
+  --md2ebook-header-height: 64px;
+  --md2ebook-border: var(--ui-border);
+  /* The live-preview pane's own backdrop is a neutral gray, distinct from
+     both the app chrome's dark palette and the eBook page itself — so the
+     white page still reads clearly as a floating "sheet of paper" without
+     blending into the surrounding dark UI. The paper itself (.page, inside
+     the iframe) stays pure white regardless — see pdfGenerator.js. */
+  --md2ebook-canvas-bg: #2f2f2f;
+  --md2ebook-canvas-fg: #b5b5b5; /* readable light text for that darker backdrop */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--ui-font);
+  background-color: var(--ui-bg);
+  color: var(--ui-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --------------------------------------------------------------------
+   Layout scaffolding
+   -------------------------------------------------------------------- */
+
+.md2ebook-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.md2ebook-header {
+  flex: 0 0 auto;
+  height: var(--md2ebook-header-height);
+}
+
+.md2ebook-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.md2ebook-sidebar {
+  flex: 0 0 var(--md2ebook-sidebar-width);
+  max-width: var(--md2ebook-sidebar-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--md2ebook-border);
+  background: var(--ui-bg-alt);
+}
+
+.md2ebook-sidebar-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.md2ebook-editor-textarea {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  tab-size: 2;
+  /* pre-wrap (not pre): still preserves whitespace/indentation exactly
+     like typed, but wraps long lines onto the next row instead of
+     overflowing — pre alone caused a long pasted paragraph to run off
+     the right edge with a horizontal scrollbar instead of wrapping.
+     overflow-wrap handles the one case wrapping alone doesn't: a single
+     very long unbreakable token (e.g. a long URL with no spaces). */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  resize: none;
+}
+
+.md2ebook-preview-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--md2ebook-canvas-bg);
+  background-image: radial-gradient(circle, #444444 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* --------------------------------------------------------------------
+   Preview status bar — pinned to the bottom of the preview pane's own
+   scroll viewport (not the whole app) via position: sticky, so it stays
+   visible while scrolling through a long document instead of scrolling
+   away with the pages. Needs an opaque background since it now overlays
+   whatever page content is scrolled underneath it.
+   -------------------------------------------------------------------- */
+
+.md2ebook-preview-statusbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--md2ebook-canvas-bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* --------------------------------------------------------------------
+   Preview canvas — the scaled "sheet of paper"
+   -------------------------------------------------------------------- */
+
+.md2ebook-canvas-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 40px 24px 80px;
+  min-height: 100%;
+}
+
+.md2ebook-canvas-scale-box {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.md2ebook-page-shadow {
+  /* No background/shadow of its own: the content is now one or more
+     Paged.js page boxes (see App.jsx's PreviewCanvas and the comment on
+     renderHtmlDocument in pdfGenerator.js), each already a separate
+     white box with its own visual framing — this wrapper just supplies
+     the scale transform and sizing math around however many of them
+     stack up, and the preview-pane's own backdrop shows through as the
+     gutter between pages. */
+  transform-origin: top left;
+  overflow: hidden;
+}
+
+.md2ebook-page-iframe {
+  display: block;
+  border: 0;
+  /* Transparent (not white): the embedded document is one or more
+     Paged.js page boxes with gaps between them (see .md2ebook-page-shadow
+     above) — leaving this transparent lets the preview-pane's gray
+     backdrop show through those gaps as the gutter between pages,
+     instead of the iframe itself painting them white. */
+  background: transparent;
+  /* Intentionally interactive (no pointer-events:none): the iframe's own
+     height is kept in sync with its actual content height (see App.jsx's
+     PreviewCanvas), so it never needs an internal scrollbar of its own —
+     but disabling pointer events here previously also blocked normal
+     mouse-wheel scrolling from reaching this element, which was mistaken
+     for "the preview's scrollbar doesn't work." Leaving pointer events on
+     keeps scrolling reliable; the only side effect is that preview text
+     becomes selectable, which is harmless. */
+}
+
+/* --------------------------------------------------------------------
+   Font combobox
+   -------------------------------------------------------------------- */
+
+.md2ebook-combobox-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar,
+.md2ebook-sidebar-content::-webkit-scrollbar,
+.md2ebook-preview-pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Combobox dropdown and sidebar sit on the dark app chrome; the preview
+   pane sits on its own separate gray canvas backdrop (see
+   --md2ebook-canvas-bg above). Both are dark-ish surfaces now, but this
+   stays a separate, later rule for the preview pane so its thumb color
+   can be tuned independently if the canvas backdrop ever changes. */
+.md2ebook-combobox-list::-webkit-scrollbar-thumb,
+.md2ebook-sidebar-content::-webkit-scrollbar-thumb {
+  background: var(--ui-border);
+  border-radius: 9999px;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar-thumb:hover,
+.md2ebook-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-fg-muted);
+}
+
+.md2ebook-preview-pane::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+  border-radius: 9999px;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar-track,
+.md2ebook-sidebar-content::-webkit-scrollbar-track,
+.md2ebook-preview-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------
+   Tabs
+   -------------------------------------------------------------------- */
+
+.md2ebook-tab-btn {
+  transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+
+/* --------------------------------------------------------------------
+   Spinner for the export button
+   -------------------------------------------------------------------- */
+
+@keyframes md2ebook-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.md2ebook-spinner {
+  animation: md2ebook-spin 0.8s linear infinite;
+}
+
+/* --------------------------------------------------------------------
+   Page-break rules for the exported document
+   --------------------------------------------------------------------
+   These mirror the rules pdfGenerator.js injects inline into the
+   generated document's own <style> block. They are duplicated here so
+   that if this stylesheet is ever loaded directly inside the generated
+   document (or the document is printed straight from the browser via
+   Ctrl/Cmd+P instead of the html2pdf export pipeline), page breaks still
+   behave correctly.
+   ========================================================================== */
+
+.md2ebook-doc h1,
+.md2ebook-doc h2,
+.md2ebook-doc h3 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.md2ebook-doc pre,
+.md2ebook-doc blockquote,
+.md2ebook-doc table,
+.md2ebook-doc img,
+.md2ebook-doc figure {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.md2ebook-doc p {
+  orphans: 3;
+  widows: 3;
+}
+
+/* ==========================================================================
+   Print media query
+   ==========================================================================
+   Applies when the generated document (rendered inside the preview
+   iframe, or opened standalone) is printed directly from the browser as
+   a fallback to the html2pdf export pipeline. Hides any non-document
+   chrome and forces exact page sizing.
+   ========================================================================== */
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .md2ebook-app,
+  .md2ebook-header,
+  .md2ebook-sidebar,
+  .md2ebook-preview-pane,
+  .md2ebook-canvas-wrapper {
+    all: unset;
+  }
+
+  .md2ebook-no-print {
+    display: none !important;
+  }
+
+  .md2ebook-doc h1,
+  .md2ebook-doc h2,
+  .md2ebook-doc h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .md2ebook-doc pre,
+  .md2ebook-doc blockquote,
+  .md2ebook-doc table,
+  .md2ebook-doc img,
+  .md2ebook-doc figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .md2ebook-page-shadow {
+    box-shadow: none !important;
+    transform: none !important;
+  }
+}

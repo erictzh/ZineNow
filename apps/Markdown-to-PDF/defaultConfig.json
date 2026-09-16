@@ -1,0 +1,41 @@
+/* ==========================================================================
+   Md to PDF Converter — defaultConfig.json
+   ==========================================================================
+   Edit the object below to change the app's default typography/page
+   values — it's what every field falls back to when left blank, and
+   what the sliders/inputs show on first load.
+
+   Why this ".json" file isn't plain JSON: this app is built to run by
+   opening index.html directly from disk, with no local web server (see
+   the note at the top of App.jsx) — and Chrome blocks fetch()/XHR reads
+   of local sibling files under file://, which is exactly the bug that
+   caused a blank screen earlier in this app's build. A normal <script
+   src="..."> tag (like this file is loaded with, in index.html) doesn't
+   have that restriction, but it only works if the file's content is
+   valid JavaScript — plain JSON isn't.
+
+   So: everything between "= " and the trailing ";" below IS valid JSON
+   (double-quoted keys/strings, no trailing commas, no comments inside
+   it) — edit it exactly like you would a normal JSON file. Just leave
+   the "window.MD2eBookDefaultConfig = " prefix and the trailing ";" in
+   place, or the app will fail to load.
+   ========================================================================== */
+window.MD2eBookDefaultConfig = {
+  "fontFamily": "Inter",
+  "paperSize": "a4",
+  "fontSize": 16,
+  "lineHeight": 1.6,
+  "paragraphSpacing": "1rem",
+  "h1Size": 28,
+  "h1Weight": 700,
+  "h2Size": 22,
+  "h2Weight": 600,
+  "h3Size": 18,
+  "h3Weight": 600,
+  "baseWeight": 400,
+  "boldWeight": 700,
+  "marginVerticalIn": 0.75,
+  "marginHorizontalIn": 0.75,
+  "pageNumbersEnabled": false,
+  "pageStartFrom": 1
+};

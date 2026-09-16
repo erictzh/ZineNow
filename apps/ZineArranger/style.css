@@ -1,0 +1,1536 @@
+:root {
+    --sheet-width: 850px;
+    --sheet-height: 1100px;
+    
+    --sheet-print-width: 8.5in;
+    --sheet-print-height: 11in;
+    
+    --page-width: 425px;
+    --page-height: 275px;
+    
+    --sheet-scale: 1;
+
+    /* On-screen UI theme only — never applied to the zine/print output above, which must stay print-accurate.
+       These --ui-* tokens are copied verbatim from MD2eBook's styles.css :root block. */
+    --ui-bg: #171312;
+    --ui-bg-alt: #241d1bb0;
+    --ui-bg-card: #201918e8;
+    --ui-bg-terminal: #100d0c6b;
+    --ui-border: #3f3634;
+    --ui-fg: #e9e9ee;
+    --ui-fg-muted: #9a9ca6;
+    --ui-accent: #dd531a;
+    --ui-accent-hover: #bf6836;
+    --ui-accent-text: #dd531a;
+    --ui-radius: 10px;
+    --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --ui-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --preview-bar: #151313c9;
+
+    /* App layout tokens — also copied verbatim from MD2eBook's styles.css :root. */
+    --md2ebook-sidebar-width: 40vw;
+    --md2ebook-header-height: 64px;
+    --md2ebook-border: var(--ui-border);
+    --md2ebook-canvas-bg: #29292994;;
+    --md2ebook-canvas-fg: #b5b5b5;
+    --font-std: 0.75em;
+}
+
+xsmall {
+    font-size: x-small;
+}
+
+div#preview-footer {
+    background-color: var(--preview-bar);
+}
+
+p,label {
+    font-size: var(--font-std);
+    line-height: 1rem;
+}
+
+* {
+    image-resolution: 300dpi;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+p {
+    margin: 5px;
+    font-family: var(--ui-font);
+}
+
+h1 {
+    font-family: var(--ui-font);
+    font-size: 36pt;
+    font-weight: bold;
+}
+
+button {
+    margin: 10px;
+}
+
+input {
+    margin: 5px 5px 0px 15px;
+}
+
+.num-input {
+    background-color: #FFF;
+}
+
+.zine-sheet {
+    width: var(--sheet-width);
+    height: var(--sheet-height);
+    display: grid;
+    grid-template-areas:
+    "tl tr"
+    "bl br";
+}
+
+.half-por {
+    grid-template-areas:
+    "tl tr";
+}
+
+.half-lnd {
+    grid-template-areas:
+    "tr"
+    "tl";
+}
+
+.qtr-side {
+    grid-template-areas:
+    "tl tr"
+    "bl br";
+}
+
+.qtr-top {
+    grid-template-areas:
+    "tl bl"
+    "tr br";
+}
+
+.eig-por {
+    grid-template-areas:
+    "tl tml tmr tr"
+    "bl bml bmr br";
+}
+
+.eig-lnd {
+    grid-template-areas:
+    "bl tl"
+    "bml tml"
+    "bmr tmr"
+    "br tr";
+}
+
+.twlv-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05"
+    "g10 g11 g12 g13 g14 g15";
+}
+
+.twlv-lnd {
+    grid-template-areas:
+    "g00 g01"
+    "g10 g11"
+    "g20 g21"
+    "g30 g31"
+    "g40 g41"
+    "g50 g51";
+}
+
+.sxtn-por {
+    grid-template-areas:
+    "g00 g01 g02 g03"
+    "g10 g11 g12 g13"
+    "g20 g21 g22 g23"
+    "g30 g31 g32 g33";
+}
+
+.sxtn-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03"
+    "g10 g11 g12 g13"
+    "g20 g21 g22 g23"
+    "g30 g31 g32 g33";
+}
+    
+.twfr-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05"
+    "g10 g11 g12 g13 g14 g15"
+    "g20 g21 g22 g23 g24 g25"
+    "g30 g31 g32 g33 g34 g35"
+}
+
+.twfr-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03"
+    "g10 g11 g12 g13"
+    "g20 g21 g22 g23"
+    "g30 g31 g32 g33"
+    "g40 g41 g42 g43"
+    "g50 g51 g52 g53"
+}
+
+.thtw-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05 g06 g07"
+    "g10 g11 g12 g13 g14 g15 g16 g17"
+    "g20 g21 g22 g23 g24 g25 g26 g27"
+    "g30 g31 g32 g33 g34 g35 g36 g37"
+}
+
+.thtw-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03"
+    "g10 g11 g12 g13"
+    "g20 g21 g22 g23"
+    "g30 g31 g32 g33"
+    "g40 g41 g42 g43"
+    "g50 g51 g52 g53"
+    "g60 g61 g62 g63"
+    "g70 g71 g72 g73"
+}
+
+.thsx-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05"
+    "g10 g11 g12 g13 g14 g15"
+    "g20 g21 g22 g23 g24 g25"
+    "g30 g31 g32 g33 g34 g35"
+    "g40 g41 g42 g43 g44 g45"
+    "g50 g51 g52 g53 g54 g55"
+}
+
+.thsx-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05"
+    "g10 g11 g12 g13 g14 g15"
+    "g20 g21 g22 g23 g24 g25"
+    "g30 g31 g32 g33 g34 g35"
+    "g40 g41 g42 g43 g44 g45"
+    "g50 g51 g52 g53 g54 g55"
+}
+
+.frei-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05 g06 g07"
+    "g10 g11 g12 g13 g14 g15 g16 g17"
+    "g20 g21 g22 g23 g24 g25 g26 g27"
+    "g30 g31 g32 g33 g34 g35 g36 g37"
+    "g40 g41 g42 g43 g44 g45 g46 g47"
+    "g50 g51 g52 g53 g54 g55 g56 g57"
+}
+
+.frei-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05"
+    "g10 g11 g12 g13 g14 g15"
+    "g20 g21 g22 g23 g24 g25"
+    "g30 g31 g32 g33 g34 g35"
+    "g40 g41 g42 g43 g44 g45"
+    "g50 g51 g52 g53 g54 g55"
+    "g60 g61 g62 g63 g64 g65"
+    "g70 g71 g72 g73 g74 g75"
+}
+
+.sxfr-por {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05 g06 g07"
+    "g10 g11 g12 g13 g14 g15 g16 g17"
+    "g20 g21 g22 g23 g24 g25 g26 g27"
+    "g30 g31 g32 g33 g34 g35 g36 g37"
+    "g40 g41 g42 g43 g44 g45 g46 g47"
+    "g50 g51 g52 g53 g54 g55 g56 g57"
+    "g60 g61 g62 g63 g64 g65 g66 g67"
+    "g70 g71 g72 g73 g74 g75 g76 g77"
+}
+
+.sxfr-lnd {
+    grid-template-areas:
+    "g00 g01 g02 g03 g04 g05 g06 g07"
+    "g10 g11 g12 g13 g14 g15 g16 g17"
+    "g20 g21 g22 g23 g24 g25 g26 g27"
+    "g30 g31 g32 g33 g34 g35 g36 g37"
+    "g40 g41 g42 g43 g44 g45 g46 g47"
+    "g50 g51 g52 g53 g54 g55 g56 g57"
+    "g60 g61 g62 g63 g64 g65 g66 g67"
+    "g70 g71 g72 g73 g74 g75 g76 g77"
+}
+
+.zine-page {
+    width: var(--page-width);
+    height: var(--page-height);
+    padding: .2rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    flex: 1;
+}
+
+/*.zine-canvas {
+    flex: 1;
+}*/
+
+.tl {
+    grid-area: tl;
+}
+
+.tr {
+    grid-area: tr;
+}
+
+.bl {
+    grid-area: bl;
+}
+
+.br {
+    grid-area: br;
+}
+
+.tml {
+    grid-area: tml;
+}
+
+.tmr {
+    grid-area: tmr;
+}
+
+.bml {
+    grid-area: bml;
+}
+
+.bmr {
+    grid-area: bmr;
+}
+
+.g00 {
+    grid-area: g00;
+}
+
+.g01 {
+    grid-area: g01;
+}
+
+.g02 {
+    grid-area: g02;
+}
+
+.g03 {
+    grid-area: g03;
+}
+
+.g04 {
+    grid-area: g04;
+}
+
+.g05 {
+    grid-area: g05;
+}
+
+.g06 {
+    grid-area: g06;
+}
+
+.g07 {
+    grid-area: g07;
+}
+
+.g10 {
+    grid-area: g10;
+}
+
+.g11 {
+    grid-area: g11;
+}
+
+.g12 {
+    grid-area: g12;
+}
+
+.g13 {
+    grid-area: g13;
+}
+
+.g14 {
+    grid-area: g14;
+}
+
+.g15 {
+    grid-area: g15;
+}
+
+.g16 {
+    grid-area: g16;
+}
+
+.g17 {
+    grid-area: g17;
+}
+
+.g20 {
+    grid-area: g20;
+}
+
+.g21 {
+    grid-area: g21;
+}
+
+.g22 {
+    grid-area: g22;
+}
+
+.g23 {
+    grid-area: g23;
+}
+
+.g24 {
+    grid-area: g24;
+}
+
+.g25 {
+    grid-area: g25;
+}
+
+.g26 {
+    grid-area: g26;
+}
+
+.g27 {
+    grid-area: g27;
+}
+
+.g30 {
+    grid-area: g30;
+}
+
+.g31 {
+    grid-area: g31;
+}
+
+.g32 {
+    grid-area: g32;
+}
+
+.g33 {
+    grid-area: g33;
+}
+
+.g34 {
+    grid-area: g34;
+}
+
+.g35 {
+    grid-area: g35;
+}
+
+.g36 {
+    grid-area: g36;
+}
+
+.g37 {
+    grid-area: g37;
+}
+
+.g40 {
+    grid-area: g40;
+}
+
+.g41 {
+    grid-area: g41;
+}
+
+.g42 {
+    grid-area: g42;
+}
+
+.g43 {
+    grid-area: g43;
+}
+
+.g44 {
+    grid-area: g44;
+}
+
+.g45 {
+    grid-area: g45;
+}
+
+.g46 {
+    grid-area: g46;
+}
+
+.g47 {
+    grid-area: g47;
+}
+
+.g50 {
+    grid-area: g50;
+}
+
+.g51 {
+    grid-area: g51;
+}
+
+.g52 {
+    grid-area: g52;
+}
+
+.g53 {
+    grid-area: g53;
+}
+
+.g54 {
+    grid-area: g54;
+}
+
+.g55 {
+    grid-area: g55;
+}
+
+.g56 {
+    grid-area: g56;
+}
+
+.g57 {
+    grid-area: g57;
+}
+
+.g60 {
+    grid-area: g60;
+}
+
+.g61 {
+    grid-area: g61;
+}
+
+.g62 {
+    grid-area: g62;
+}
+
+.g63 {
+    grid-area: g63;
+}
+
+.g64 {
+    grid-area: g64;
+}
+
+.g65 {
+    grid-area: g65;
+}
+
+.g66 {
+    grid-area: g66;
+}
+
+.g67 {
+    grid-area: g67;
+}
+
+.g70 {
+    grid-area: g70;
+}
+
+.g71 {
+    grid-area: g71;
+}
+
+.g72 {
+    grid-area: g72;
+}
+
+.g73 {
+    grid-area: g73;
+}
+
+.g74 {
+    grid-area: g74;
+}
+
+.g75 {
+    grid-area: g75;
+}
+
+.g76 {
+    grid-area: g76;
+}
+
+.g77 {
+    grid-area: g77;
+}
+
+.rotate {
+    transform: rotate(180deg);
+}
+
+.guide-margins {
+    border: 6px solid black;
+    /*outline: 8px solid black;*/
+}
+
+.guide-solid-bottom {
+    border-bottom: 3px solid black;
+}
+
+.guide-solid-left {
+    border-left: 3px solid black;
+}
+
+.guide-solid-top {
+    border-top: 3px solid black;
+}
+
+.guide-solid-right {
+    border-right: 3px solid black;
+}
+
+.guide-dotted-bottom {
+    border-bottom: 2px dotted black;
+}
+
+.guide-dotted-left {
+    border-left: 2px dotted black;
+}
+
+.guide-dotted-top {
+    border-top: 2px dotted black;
+}
+
+.guide-dotted-right {
+    border-right: 2px dotted black;
+}
+
+@media screen {
+    html, body {
+        height: 100%;
+        margin: 0;
+    }
+
+    /* ---- The following .md2ebook-* rules are copied verbatim (selectors,
+       properties, and values) from MD2eBook's own styles.css layout
+       scaffolding section, applied here via the same class names on the
+       corresponding elements. .app-shell/.topbar/etc. are kept alongside
+       them only for the rest of this file's existing selectors (button
+       styling, panel cards, zine-specific rendering) that don't have an
+       equivalent in MD2eBook's plain CSS — those come from this app's own
+       rules further down, same as before. ---- */
+    .md2ebook-app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+    }
+
+    .md2ebook-header {
+        flex: 0 0 auto;
+        height: var(--md2ebook-header-height);
+    }
+
+    .md2ebook-body {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .md2ebook-sidebar {
+        flex: 0 0 var(--md2ebook-sidebar-width);
+        max-width: var(--md2ebook-sidebar-width);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--md2ebook-border);
+        background: var(--ui-bg-alt);
+    }
+
+    .md2ebook-sidebar-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .md2ebook-preview-pane {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        background: var(--md2ebook-canvas-bg);
+        background-image: radial-gradient(circle, #4e4e4e 1px, transparent 1px);
+        background-size: 18px 18px;
+    }
+
+    .md2ebook-preview-statusbar {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        background: var(--md2ebook-canvas-bg);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .md2ebook-canvas-wrapper {
+        display: flex;
+        /* NOTE: MD2eBook uses justify-content:center here, but that centers based
+           on the PRE-transform layout size of the scaled child (CSS transform
+           doesn't shrink an element's contribution to its parent's layout, only
+           its paint) — since MD2eBook scales a live iframe with JS-synced real
+           dimensions rather than a CSS transform, it never hits this mismatch.
+           Centering a much-larger-than-visible pre-transform box here caused
+           the sheet to overflow symmetrically past both edges. flex-start avoids
+           it; the scale target already equals the available width (see
+           getPreviewTargetWidth() in the script), so the sheet still fills the
+           pane the same way centering would have shown it. */
+        justify-content: flex-start;
+        padding: 40px 24px 80px;
+        min-height: 100%;
+    }
+
+    .md2ebook-canvas-scale-box {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    .md2ebook-page-shadow {
+        transform-origin: top left;
+        overflow: hidden;
+    }
+
+    .md2ebook-tab-btn {
+        transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+    }
+
+    .md2ebook-sidebar-content::-webkit-scrollbar,
+    .md2ebook-preview-pane::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    .md2ebook-sidebar-content::-webkit-scrollbar-thumb {
+        background: var(--ui-border);
+        border-radius: 9999px;
+    }
+
+    .md2ebook-sidebar-content::-webkit-scrollbar-thumb:hover {
+        background: var(--ui-fg-muted);
+    }
+
+    .md2ebook-preview-pane::-webkit-scrollbar-thumb {
+        background: #6b6b6b;
+        border-radius: 9999px;
+    }
+
+    .md2ebook-sidebar-content::-webkit-scrollbar-track,
+    .md2ebook-preview-pane::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    @keyframes md2ebook-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .md2ebook-spinner {
+        animation: md2ebook-spin 0.8s linear infinite;
+    }
+
+    /* ---- app-shell/etc: this app's own names for the same elements, kept for
+       the rest of this file's rules (sizing not covered by the verbatim
+       block above, since MD2eBook's own sizing for these same elements
+       came from Tailwind utility classes in its JSX, not from styles.css). ---- */
+    .app-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    /* ---- Top bar: branding + primary actions — fixed 64px height, matching
+       the reference's --md2ebook-header-height exactly ---- */
+    .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--ui-border);
+        background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    }
+
+    .topbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .topbar-logo {
+        flex: 0 0 auto;
+        height: 32px;
+        min-width: 32px;
+        border-radius: 8px;
+        background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%) !important ;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    .topbar-brand-text {
+        min-width: 0;
+    }
+
+    .topbar-title {
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .topbar-subtitle {
+        font-size: 11px;
+        line-height: 1.25;
+        color: var(--ui-fg-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+    }
+
+    .topbar-file-input {
+        margin: 0;
+    }
+
+    /* ---- Tab bar: Basic / Advanced — scoped to the sidebar only (not the
+       full app width), tabs split the sidebar width evenly. MD2eBook builds
+       this exact row (flex border-b border-line flex-none) with Tailwind
+       utility classes directly in JSX rather than a named CSS class, so
+       there's no verbatim .md2ebook-* rule to reuse for the row itself —
+       only .md2ebook-tab-btn (already applied above, supplies the hover/
+       active transition timing) for the individual buttons. ---- */
+    .tabbar {
+        display: flex;
+        flex: 0 0 auto;
+        border-bottom: 1px solid var(--ui-border);
+    }
+
+    .tab {
+        flex: 1 1 0;
+        margin: 0;
+        padding: 12px 16px;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        color: var(--ui-fg-muted);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        /* transition timing comes from .md2ebook-tab-btn, also on this element */
+    }
+
+    .tab:hover {
+        color: var(--ui-fg);
+    }
+
+    .tab.active {
+        color: var(--ui-accent);
+        border-bottom-color: var(--ui-accent);
+    }
+
+    .panel-note {
+        flex: 0 0 auto;
+        padding: 12px 16px 0 16px;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--ui-fg-muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    /* .workspace-panel-content adds the padding/gap that in MD2eBook itself
+       comes from Tailwind classes (p-3/p-4) on a per-tab inner wrapper in
+       JSX, rather than from .md2ebook-sidebar-content in styles.css — the
+       flex/overflow-y sizing here comes from that verbatim class instead
+       (also applied to this element). */
+    .workspace-panel-content {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    #tab-content-basic, #tab-content-advanced {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .panel-card {
+        width: 100%;
+        box-sizing: border-box;
+        background-color: var(--ui-bg-card);
+        border: 1px solid var(--ui-border);
+        border-radius: var(--ui-radius);
+        padding: 14px 16px;
+    }
+
+    /* ---- Smooth hide/restore for cards that don't apply while Reverse
+       Impose is active (e.g. Zine Size, and everything in Advanced) —
+       collapses height/opacity/margin together rather than an instant
+       display:none, per the "smoothly transition away" / "smoothly
+       restore" requirement. aria-hidden (set alongside the class in JS)
+       also keeps these out of the tab order while collapsed. ---- */
+    .panel-card.ri-hidden {
+        opacity: 0;
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-top: 0;
+        margin-bottom: 0;
+        border-width: 0;
+        overflow: hidden;
+        pointer-events: none;
+    }
+
+    #tab-content-basic, #tab-content-advanced {
+        transition: gap 0.2s ease;
+    }
+
+    #tab-content-basic.ri-tight, #tab-content-advanced.ri-tight {
+        gap: 0;   /* avoid stray flex-gap space next to fully-collapsed (0-height) cards above */
+    }
+
+    .panel-card:not(.ri-hidden) {
+        transition: opacity 0.2s ease, max-height 0.25s ease, padding 0.2s ease, margin 0.2s ease, border-width 0.2s ease;
+        max-height: 600px;   /* generous cap — just needs to be bigger than any real card so the transition has somewhere to animate from */
+    }
+
+    /* the tab itself, disabled (not just visually) while its content doesn't apply */
+    .tab[disabled] {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    /* ---- Reverse Impose toggle switch — track/thumb use the same neutral
+       card/border tokens as everything else at rest, and the app's accent
+       color once switched on, per the theme-integration requirement. ---- */
+    .toggle-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .toggle-row-text p {
+        margin: 0 0 2px 0;
+    }
+
+    .toggle-switch {
+        position: relative;
+        flex: 0 0 auto;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+        margin-top: 2px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+    }
+
+    .toggle-slider {
+        position: absolute;
+        inset: 0;
+        background-color: var(--ui-bg);
+        border: 1px solid var(--ui-border);
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .toggle-slider::before {
+        content: "";
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        left: 2px;
+        top: 2px;
+        border-radius: 50%;
+        background-color: var(--ui-fg-muted);
+        transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+        background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+        border-color: var(--ui-accent);
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+        transform: translateX(18px);
+        background-color: #fff;
+    }
+
+    .toggle-switch input:focus-visible + .toggle-slider {
+        outline: 2px solid var(--ui-accent-text);
+        outline-offset: 2px;
+    }
+
+    /* ---- Reverse Impose sequential-page preview grid — a simple wrapped
+       grid of full pages in reading order (1..N), as opposed to .zine's
+       folded/imposed sheet layout, since de-imposing produces an ordinary
+       sequential document rather than something meant to be folded. ---- */
+    .reverse-impose-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        justify-content: flex-start;
+        width: max-content;
+        max-width: 100%;
+    }
+
+    .reverse-impose-page {
+        position: relative;
+        width: 260px;   /* fixed on-screen thumbnail width; aspect-ratio (set inline per element in JS from the real page dimensions) keeps proportions correct. Print sizing is separate — see --ri-print-width/height below. */
+        background-color: var(--ui-bg-card);
+        outline: 4px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .reverse-impose-page canvas {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .reverse-impose-page .ri-page-label {
+        position: absolute;
+        bottom: 4px;
+        right: 6px;
+        font-size: 11px;
+        font-family: var(--ui-mono);
+        color: var(--ui-fg-muted);
+        background-color: rgba(0,0,0,0.55);
+        padding: 1px 6px;
+        border-radius: 4px;
+    }
+
+    .log-card.panel-card {
+        padding: 0;
+        overflow: hidden;
+        flex: 1 1 auto;         /* let the log soak up any leftover sidebar height instead of sitting short */
+        min-height: 160px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .workspace-preview {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* .workspace-preview-scroll itself now needs nothing beyond what
+       .md2ebook-preview-pane already supplies (flex/overflow/the dotted
+       canvas background) — the flex-centering + padding around the page
+       has moved to #canvas-wrapper / .md2ebook-canvas-wrapper below,
+       matching MD2eBook's own nested structure exactly. */
+
+    .preview-empty {
+        margin: auto;
+        color: var(--md2ebook-canvas-fg);
+        font-size: 14px;
+        text-align: center;
+    }
+
+    .zine {
+        display: block;
+        margin: 0;
+        background-color: transparent;
+    }
+
+    .zine-scale {
+        width: max-content;
+        margin: 0 auto;
+        transform: scale(var(--sheet-scale));
+        /* transform-origin comes from .md2ebook-page-shadow, also on this element */
+    }
+
+    .zine-sheet {
+        margin: 0 0 32px 0;
+        outline: 6px solid black;
+        background-color: var(--ui-bg-card);
+    }
+
+    .zine-page, .zine-canvas {
+        background-color: #dbdbdb;
+    }
+
+    /* position/bottom/z-index/background/border-top come from
+       .md2ebook-preview-statusbar, also on this element — these are the
+       properties MD2eBook itself sets via Tailwind utility classes
+       (px-6 py-2 text-center text-xs text-[color:var(--canvas-fg)]) rather
+       than through styles.css. */
+    .workspace-preview-footer {
+        width: 100%;
+        flex: 0 0 auto;
+        margin-top: auto;
+        text-align: center;
+        padding: 8px 24px;
+        color: var(--md2ebook-canvas-fg);
+        font-size: 12px;
+    }
+
+    /* ---- Small screens: drop the fixed-viewport app-shell, stack sidebar above preview,
+       and let the page scroll normally instead of each pane scrolling internally.
+       MD2eBook itself has no mobile breakpoint at all (its own layout is a fixed
+       40vw/64px shell regardless of viewport) — this media query is this app's
+       own addition on top, for usability on narrow screens. ---- */
+    @media (max-width: 900px) {
+        .app-shell, .md2ebook-app {
+            height: auto;
+            overflow: visible;
+        }
+
+        .topbar, .md2ebook-header {
+            height: auto;
+            flex-wrap: wrap;
+            padding: 10px 20px;
+        }
+
+        .workspace, .md2ebook-body {
+            flex-direction: column;
+        }
+
+        .workspace-panel, .md2ebook-sidebar {
+            flex: 0 0 auto;
+            max-width: none;
+            width: 100%;
+            border-right: none;
+            border-bottom: 1px solid var(--ui-border);
+        }
+
+        .workspace-panel-content, .md2ebook-sidebar-content {
+            overflow-y: visible;
+        }
+
+        .log-card.panel-card {
+            min-height: 220px;
+        }
+
+        .workspace-preview-scroll, .md2ebook-preview-pane {
+            max-height: 70vh;
+        }
+    }
+}
+
+@media print {
+    @page {
+        margin: 0;
+        bleed: 0;
+    }
+
+    /* The following two rules are copied verbatim from MD2eBook's own print
+       media query. Its third rule there (`.md2ebook-app, .md2ebook-header,
+       .md2ebook-sidebar, .md2ebook-preview-pane, .md2ebook-canvas-wrapper {
+       all: unset; }`) is intentionally NOT copied — all: unset would reset
+       display to inline on those elements, and .md2ebook-preview-pane /
+       .md2ebook-canvas-wrapper are still part of the print flow here
+       (wrapping the actual zine sheets, unlike in MD2eBook where the
+       printed content is a single iframe). This app's own .noprint rule
+       below already achieves the same "hide the chrome" result safely for
+       the elements that use it. */
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+    }
+
+    .md2ebook-no-print {
+        display: none !important;
+    }
+
+    .zine-sheet {
+        /*width: 100vw;
+        height: 100vh;*/
+        width: var(--sheet-print-width);
+        height: var(--sheet-print-height);
+        /*float: left;*/
+        /*gap: 1.5px;*/
+        break-after: always;
+        break-inside: avoid;
+        /*border: 4px dashed black;*/
+    }
+
+    /* Reverse Impose's de-imposed pages print one-per-sheet, at their real
+       physical size (set inline per element in JS, since it's derived from
+       the actual source PDF page dimensions rather than a fixed constant
+       like --sheet-print-width/height above). */
+    .reverse-impose-grid {
+        display: block !important;   /* the flex-wrap grid is a screen-only convenience; each page break_after's onto its own printed sheet regardless */
+        width: auto !important;
+    }
+
+    .reverse-impose-page {
+        width: var(--ri-print-width) !important;
+        height: var(--ri-print-height) !important;
+        aspect-ratio: auto !important;
+        break-after: always;
+        break-inside: avoid;
+        background-color: #fff !important;
+        outline: none !important;
+    }
+
+    /* Without this, Chromium's print-to-PDF engine was emitting one extra
+       trailing blank page — a forced break-after on the very last page has
+       nothing after it to break onto, but the browser generated an empty
+       page for it anyway. Same values apply to .zine-sheet:last-child. */
+    .reverse-impose-page:last-child, .zine-sheet:last-child {
+        break-after: auto;
+    }
+
+    /* Safety net: the dark card color above is screen-only styling. Force plain white
+       here regardless, so the physical/PDF print output is never affected even if the
+       browser's "print background graphics" option is turned on. */
+    .zine, .zine-scale, .zine-sheet, .zine-page, .zine-canvas {
+        background-color: #fff;
+    }
+
+    /* Copied verbatim from MD2eBook's .md2ebook-page-shadow print rule — also
+       applied to .zine-scale, which carries that class. */
+    .md2ebook-page-shadow {
+        box-shadow: none !important;
+        transform: none !important;
+    }
+
+    .guide-margins {
+        width: 100%;
+        height: 100%;
+    }
+    
+    .noprint {
+        display: none;
+    }
+}
+
+/* ============================================================
+   MODERN DARK THEME — scoped to .app-shell (the on-screen controls)
+   The .zine / .zine-sheet print-preview area is deliberately excluded
+   via :not(), since that has to stay print-accurate.
+   ============================================================ */
+html, body {
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+}
+
+.app-shell, .app-shell *:not(.zine):not(.zine *) {
+    /* NOTE: no `background-color: transparent` here anymore — it used to
+       counter a legacy universal `* { background-color: #DDD }` rule, but
+       that rule no longer exists (removed at some point), so this override
+       had become pure dead weight. Worse than pointless, actually: its
+       selector's specificity (three chained classes, effectively) beat
+       every plain single-class component rule in the file — .panel-card,
+       .md2ebook-sidebar, .toggle-slider, .tab, .log-output, etc. — silently
+       forcing ALL of them transparent regardless of what color they
+       declared. It went unnoticed because transparent elements just reveal
+       whatever's behind them, and most of those fallback colors happened
+       to be similarly dark — until a color was chosen that actually looked
+       different (like the lighter preview-panel grey), at which point it
+       became visibly wrong. Removing it restores every component's real,
+       intended background color without needing !important anywhere. */
+    color: var(--ui-fg);
+    font-family: var(--ui-font);
+    box-sizing: border-box;
+}
+
+p {
+    color: var(--ui-fg-muted);
+}
+
+a {
+    color: var(--ui-accent-text);
+}
+
+.log-panel-subtitle {
+    display: none;   /* save horizontal space in the log title bar on small screens */
+}
+
+@media (min-width: 901px) {
+    .log-panel-subtitle {
+        display: inline;   /* plenty of room in the sidebar on wider screens */
+    }
+}
+
+input[type="text"],
+input[type="number"],
+.num-input {
+    /* !important needed here: the app-shell's blanket theme-reset selector
+       (`.app-shell *:not(.zine):not(.zine *) { background-color: transparent }`)
+       has higher specificity than this plain attribute/class selector, so
+       without it this background color is silently overridden back to
+       transparent regardless of what's set here. */
+    background-color: #0c0c0cab !important;
+    color: var(--ui-fg);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus {
+    outline: 2px solid var(--ui-accent-text);
+    outline-offset: 1px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+    accent-color: var(--ui-accent-text);
+    transform: scale(1.1);
+}
+
+input[type="file"]::file-selector-button {
+    /* Matches MD2eBook's "Load Sample Markdown" / "Clear Editor" hollow buttons
+       exactly: rounded-md, border-line, bg-ink-card, px-3 py-1.5, text-xs
+       font-medium, text-fg-muted brightening to text-fg on hover. */
+    background-color: var(--ui-bg-card);
+    color: var(--ui-fg-muted);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: var(--ui-font);
+    font-size: 12px;
+    font-weight: 500;   /* pseudo-element, doesn't inherit from the `button {}` rule below */
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+}
+
+/* Matches MD2eBook's hollow buttons exactly: rounded-md(6px), border-line,
+   bg-ink-card, px-3 py-1.5, text-xs(12px) font-medium(500), text-fg-muted
+   at rest brightening to text-fg + bg-ink on hover. .tab and
+   .log-btn/.log-copy-btn override this with their own more specific rules. */
+button {
+    background-color: var(--ui-bg-card);
+    color: var(--ui-fg-muted);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+button:hover {
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+/* Exception: the Print button stays solid/filled and accent-colored, as the one
+   primary call-to-action — kept fully self-contained (not layered on the plain
+   button styling above) so it isn't affected by that button's styling changes.
+   Matches MD2eBook's "Download PDF eBook" button: rounded-md, solid bg-accent,
+   px-4 py-1.5, text-xs font-semibold, white text, hover bg-accent-hover. */
+button.btn-solid {
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    color: #fff;
+    border: 1px solid var(--ui-accent);
+    border-radius: 6px;
+    padding: 6px 16px;
+    min-width: 85px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+button.btn-solid:hover {
+    background-color: var(--ui-accent-hover);
+    border-color: var(--ui-accent-hover);
+}
+
+/* ---- Activity log panel ---- */
+/* Sits inside the sidebar (.workspace-panel) as one of the stacked .panel-card
+   elements — see .log-card.panel-card in the workspace CSS above for its sizing
+   (flex:1 so it soaks up leftover sidebar height). The blanket
+   `.app-shell *:not(.zine):not(.zine *)` reset above already covers every
+   descendant here (background/color/font), so no separate reset is needed. */
+#log-panel {
+    /* NOTE: no `display` here on purpose — it's set via the .panel-card class
+       (screen-only) instead, so that print media's `.noprint{display:none}` (a class
+       selector) isn't out-specificity'd by an ID selector and can still hide this
+       panel when printing. */
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.log-panel-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background-color: var(--ui-bg-alt);
+    border-bottom: 1px solid var(--ui-border);
+    font-family: var(--ui-font);
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--ui-fg-muted);
+}
+
+.log-panel-subtitle {
+    text-transform: none;
+    font-size: 10px;
+    opacity: 0.7;
+    margin-left: 6px;
+}
+
+.log-panel-actions {
+    display: flex;
+}
+
+.log-btn {
+    margin: 0 0 0 6px;
+    padding: 4px 10px;
+    min-width: unset;
+    font-size: 11px;
+    font-weight: 500;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    color: var(--ui-fg-muted);
+}
+
+.log-btn:hover {
+    color: var(--ui-fg);
+    background-color: var(--ui-bg);
+    border-color: var(--ui-border);
+}
+
+.log-output-wrap {
+    position: relative;
+    flex: 1 1 auto;     /* fill whatever vertical space is left in the panel once it's stretched to match the zine preview's height */
+    min-height: 0;      /* let it actually shrink within the flex column instead of overflowing */
+}
+
+.log-output {
+    height: 100%;        /* fill .log-output-wrap, rather than stopping at a fixed 200px and leaving empty space below when the panel is taller */
+    overflow-y: auto;
+    padding: 10px 44px 10px 16px;  /* extra right padding so text never runs under the copy button */
+    font-family: var(--ui-font);
+    font-size: 12px;
+    line-height: 1.7;
+    color: #8fe28f;
+    background-color: var(--ui-bg-terminal);
+}
+
+.log-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* system messages (startup, cleared, etc.) — no command context */
+.log-line.log-sys {
+    color: var(--ui-fg-muted);
+    font-style: italic;
+}
+
+/* the "command" line: the actual function call being executed, terminal-prompt style */
+.log-line.log-cmd {
+    color: #eaeaf2;
+    font-weight: 600;
+}
+
+.log-line.log-cmd .log-time {
+    color: var(--ui-fg-muted);
+    font-weight: 400;
+}
+
+.log-line.log-cmd .log-prompt {
+    color: var(--ui-accent-hover);
+    font-weight: 700;
+}
+
+.log-line.log-cmd .log-code {
+    color: #ffb37a;
+}
+
+/* the "result" line: indented under its command, REPL echo of the outcome */
+.log-line.log-result {
+    color: #8fe28f;
+    padding-left: 22px;
+    opacity: 0.92;
+}
+
+.log-line.log-result .log-arrow {
+    color: var(--ui-fg-muted);
+    margin-right: 4px;
+}
+
+.log-line.log-warn {
+    color: #ffcf6b;
+}
+
+.log-output::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-output::-webkit-scrollbar-thumb {
+    background-color: var(--ui-border);
+    border-radius: 4px;
+}
+
+/* mini copy button pinned to the corner of the terminal box */
+.log-copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    min-width: unset;
+    margin: 0;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    background-color: rgba(43, 34, 32, 0.85);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    color: var(--ui-fg-muted);
+    cursor: pointer;
+    backdrop-filter: blur(2px);
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.log-copy-btn:hover {
+    color: var(--ui-fg);
+    border-color: var(--ui-accent);
+}
+
