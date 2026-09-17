@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZEditor</title>
+
+<!-- React 18 (UMD) + Babel Standalone, all from CDN via normal <script>
+     tags — that kind of resource load isn't subject to file://'s fetch
+     restriction, unlike a fetch()/XHR read would be. -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- pdf.js — a local copy (own folder, not shared with Zine Arranger, so
+     this app stays self-contained), loaded the same proven way Zine
+     Arranger already uses it. -->
+<script src="./pdfjs/build/pdf.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <!--
+    JSX lives inline here, NOT loaded via <script type="text/babel" src="...">.
+    Babel Standalone fetches a src file with its own internal XHR to read it
+    before transforming — which is exactly the kind of read file:// blocks.
+    Inline content has no such fetch: the browser already parsed it as part
+    of this document, so Babel Standalone just transforms text that's
+    already sitting in the DOM. Same file://-safety principle as
+    Markdown-to-PDF's precompiled App.jsx, different mechanism.
+  -->
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    const THUMB_SCALE = 0.3;
+    const MAIN_SCALE = 1.1;
+    const DEFAULT_PAGE_SIZE = { width: 420, height: 594 }; // used only if no PDF has been loaded yet
+
+    // Renders a blank white page straight to a data URL — no pdf.js
+    // involved, since a blank page has no underlying PDF page to render.
+    function makeBlankThumb(width, height, rotation, scale) {
+      const s = scale || THUMB_SCALE;
+      const swapped = rotation % 180 !== 0;
+      const w = Math.max(1, Math.round((swapped ? height : width) * s));
+      const h = Math.max(1, Math.round((swapped ? width : height) * s));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      return canvas.toDataURL();
+    }
+
+    // ---- Guides overlay -----------------------------------------------
+    // Purely visual — a dashed inset rectangle standing in for margin/trim
+    // guides. Real print-format-aware guides come later.
+    function GuidesOverlay() {
+      return <div className="ze-guides-overlay" aria-hidden="true" />;
+    }
+
+    function bboxOf(ann) {
+      if (ann.type === "text") {
+        return { x: ann.x, y: ann.y, width: ann.width || 160, height: ann.height || 26 };
+      }
+      const xs = ann.points.map((p) => p[0]);
+      const ys = ann.points.map((p) => p[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+    }
+
+    // ---- One text annotation --------------------------------------------
+    // Plain non-interactive <div> when idle (so a mousedown can mean "start
+    // dragging" without fighting a native text cursor); swaps to a real
+    // <textarea> only while editing. Double-click (or any click while the
+    // Text tool is active) enters edit mode.
+    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate }) {
+      const [editing, setEditing] = useState(!!startEditing);
+
+      function startDrag(e) {
+        if (tool !== "select") return;
+        e.stopPropagation();
+        onSelect(ann.id);
+        const startX = e.clientX, startY = e.clientY;
+        const origX = ann.x, origY = ann.y;
+        const move = (ev) => {
+          onUpdate(ann.id, { x: origX + (ev.clientX - startX), y: origY + (ev.clientY - startY) });
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
+
+      function handleMouseDown(e) {
+        if (tool === "text") {
+          // Same fix as the overlay's own text-tool handler — prevent the
+          // browser's default mousedown action from undoing the focus we're
+          // about to set via editing=true's autoFocus.
+          e.preventDefault();
+          e.stopPropagation();
+          onSelect(ann.id);
+          setEditing(true);
+          return;
+        }
+        startDrag(e);
+      }
+
+      const style = { left: ann.x, top: ann.y };
+
+      if (editing) {
+        return (
+          <textarea
+            className="ze-ann-text ze-ann-text--editing"
+            style={style}
+            autoFocus
+            value={ann.text}
+            onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
+            onBlur={() => setEditing(false)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+        );
+      }
+
+      return (
+        <div
+          className={"ze-ann-text" + (isSelected ? " is-selected" : "")}
+          style={style}
+          onMouseDown={handleMouseDown}
+          onDoubleClick={(e) => { e.stopPropagation(); onSelect(ann.id); setEditing(true); }}
+        >
+          {ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}
+        </div>
+      );
+    }
+
+    // ---- One freehand stroke (pen or highlighter) -----------------------
+    // Rendered as an SVG polyline; a dashed bounding box appears around it
+    // when selected. The stroke itself only captures clicks in Select tool
+    // (pointer-events toggle below) so it doesn't intercept drawing/text
+    // clicks meant for the page background.
+    function StrokeShape({ ann, tool, isSelected, onSelect }) {
+      const pts = ann.points.map((p) => p[0] + "," + p[1]).join(" ");
+      const isHi = ann.tool === "highlighter";
+      const box = bboxOf(ann);
+      return (
+        <React.Fragment>
+          <polyline
+            points={pts}
+            fill="none"
+            stroke={isHi ? "#ffe066" : "#1a1a1a"}
+            strokeWidth={isHi ? 14 : 2.5}
+            strokeOpacity={isHi ? 0.45 : 1}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: tool === "select" ? "pointer" : "default" }}
+            onMouseDown={(e) => { if (tool === "select") { e.stopPropagation(); onSelect(ann.id); } }}
+          />
+          {isSelected && (
+            <rect
+              x={box.x - 6} y={box.y - 6}
+              width={box.width + 12} height={box.height + 12}
+              fill="none" stroke="#dd531a" strokeDasharray="4 3" strokeWidth="1.5"
+              pointerEvents="none"
+            />
+          )}
+        </React.Fragment>
+      );
+    }
+
+    // ---- Compose canvas — renders the selected page at full size, plus
+    // the annotation layer (text boxes + freehand strokes) on top of it.
+    function ComposeCanvas({
+      pdfDocRef, page, guidesOn, tool,
+      annotations, selectedAnnId, autoEditAnnId,
+      onSelectAnnotation, onAddText, onAddStroke, onUpdateAnnotation,
+    }) {
+      const canvasRef = useRef(null);
+      const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+      const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
+      const [drawTick, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
+
+      useEffect(() => {
+        if (!page) return;
+        let cancelled = false;
+        (async () => {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          let w, h;
+          if (page.isBlank) {
+            const swapped = page.rotation % 180 !== 0;
+            w = Math.round((swapped ? page.height : page.width) * MAIN_SCALE);
+            h = Math.round((swapped ? page.width : page.height) * MAIN_SCALE);
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+          } else {
+            if (!pdfDocRef.current) return;
+            const pdfPage = await pdfDocRef.current.getPage(page.pageNumber);
+            const viewport = pdfPage.getViewport({ scale: MAIN_SCALE, rotation: page.rotation });
+            if (cancelled) return;
+            w = viewport.width;
+            h = viewport.height;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+          }
+          if (!cancelled) setCanvasSize({ width: w, height: h });
+        })();
+        return () => { cancelled = true; };
+      }, [page && page.key, page && page.rotation]);
+
+      function overlayPoint(e) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      }
+
+      function handleOverlayMouseDown(e) {
+        if (!page) return;
+        if (tool === "text") {
+          // Without this, the browser's own default mousedown action (which
+          // moves focus away from whatever's focused, since this overlay div
+          // itself isn't focusable) fires right after React mounts and
+          // autofocuses the new text box — undoing the focus a moment later
+          // and silently kicking the box straight back out of edit mode.
+          e.preventDefault();
+          const p = overlayPoint(e);
+          onAddText(p.x, p.y);
+          return;
+        }
+        if (tool === "pen" || tool === "highlighter") {
+          const start = overlayPoint(e);
+          drawingRef.current = { tool, points: [[start.x, start.y]] };
+          setDrawTick((t) => t + 1);
+          const move = (ev) => {
+            const p = overlayPoint(ev);
+            drawingRef.current.points.push([p.x, p.y]);
+            setDrawTick((t) => t + 1);
+          };
+          const up = () => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+            if (drawingRef.current && drawingRef.current.points.length > 1) {
+              onAddStroke({ tool: drawingRef.current.tool, points: drawingRef.current.points });
+            }
+            drawingRef.current = null;
+            setDrawTick((t) => t + 1);
+          };
+          window.addEventListener("mousemove", move);
+          window.addEventListener("mouseup", up);
+          return;
+        }
+        // Select tool: clicking empty background deselects.
+        onSelectAnnotation(null);
+      }
+
+      if (!page) {
+        return (
+          <div className="preview-empty">
+            No pages yet — load a PDF to get started.
+          </div>
+        );
+      }
+
+      const cursorClass = tool === "text" ? "ze-tool-text" : (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" : "";
+
+      return (
+        <div className="ze-page ze-page--rendered">
+          <canvas ref={canvasRef} />
+          <div
+            className={"ze-annotation-layer " + cursorClass}
+            style={{ width: canvasSize.width, height: canvasSize.height }}
+            onMouseDown={handleOverlayMouseDown}
+          >
+            <svg className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
+              {annotations.filter((a) => a.type === "stroke").map((a) => (
+                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId} onSelect={onSelectAnnotation} />
+              ))}
+              {drawingRef.current && (
+                <polyline
+                  points={drawingRef.current.points.map((p) => p.join(",")).join(" ")}
+                  fill="none"
+                  stroke={drawingRef.current.tool === "highlighter" ? "#ffe066" : "#1a1a1a"}
+                  strokeWidth={drawingRef.current.tool === "highlighter" ? 14 : 2.5}
+                  strokeOpacity={drawingRef.current.tool === "highlighter" ? 0.45 : 1}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+            </svg>
+            {annotations.filter((a) => a.type === "text").map((a) => (
+              <AnnotationText
+                key={a.id}
+                ann={a}
+                tool={tool}
+                isSelected={a.id === selectedAnnId}
+                startEditing={a.id === autoEditAnnId}
+                onSelect={onSelectAnnotation}
+                onUpdate={onUpdateAnnotation}
+              />
+            ))}
+          </div>
+          {guidesOn && <GuidesOverlay />}
+        </div>
+      );
+    }
+
+    // ---- One sidebar thumbnail ------------------------------------------
+    function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+      return (
+        <div
+          className={"ze-thumb" + (isSelected ? " is-selected" : "")}
+          draggable="true"
+          onClick={() => onSelect(idx)}
+          {...dragHandlers}
+        >
+          <div className="ze-thumb-img-wrap">
+            <img src={p.dataUrl} alt={p.isBlank ? "Blank page" : "Page " + p.pageNumber} />
+          </div>
+          <div className="ze-thumb-footer">
+            <span className="ze-thumb-num">{idx + 1}</span>
+            <div className="ze-thumb-actions">
+              <button
+                type="button"
+                className="log-btn"
+                title="Rotate"
+                onClick={(e) => { e.stopPropagation(); onRotate(idx); }}
+              >⟳</button>
+              <button
+                type="button"
+                className="log-btn"
+                title="Delete"
+                onClick={(e) => { e.stopPropagation(); onDelete(idx); }}
+              >×</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---- Hover gap between (or around) thumbnails — reveals a line + a
+    // floating "+" to insert a blank page at that exact spot. Hover state
+    // is pure CSS (:hover), so no extra JS/state is needed for it.
+    function PageGap({ onInsert }) {
+      return (
+        <div
+          className="ze-page-gap"
+          role="button"
+          tabIndex={0}
+          title="Add blank page"
+          onClick={onInsert}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onInsert(); } }}
+        >
+          <div className="ze-page-gap-line" />
+          <span className="ze-page-gap-btn" aria-hidden="true">+</span>
+        </div>
+      );
+    }
+
+    // ---- Sidebar — page thumbnail strip (Organize) ---------------------
+    const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
+    const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
+
+    function Sidebar({ pages, selectedIdx, onSelect, onRotate, onDelete, onReorder, onLoadClick, onInsertBlank, loading }) {
+      const dragIndexRef = useRef(null);
+      const bodyRef = useRef(null);
+      const scrollDirRef = useRef(0); // -1 up, 0 idle, 1 down
+      const rafRef = useRef(null);
+      // { idx, before } — which slot is currently being dragged over, and
+      // whether the drop line should sit above (before) or below it.
+      const [dragOverInfo, setDragOverInfo] = useState(null);
+
+      function startAutoScroll() {
+        if (rafRef.current) return;
+        const step = () => {
+          const el = bodyRef.current;
+          if (el && scrollDirRef.current !== 0) {
+            el.scrollTop += scrollDirRef.current * EDGE_SCROLL_SPEED;
+          }
+          rafRef.current = requestAnimationFrame(step);
+        };
+        rafRef.current = requestAnimationFrame(step);
+      }
+
+      function stopAutoScroll() {
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        scrollDirRef.current = 0;
+      }
+
+      useEffect(() => stopAutoScroll, []); // safety: cancel any pending loop if the sidebar unmounts mid-drag
+
+      // Attached to the scrollable container itself (not per-thumbnail) so
+      // it keeps working no matter which child — a thumbnail or a gap — the
+      // cursor happens to be over.
+      function handleContainerDragOver(e) {
+        const el = bodyRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const distFromTop = e.clientY - rect.top;
+        const distFromBottom = rect.bottom - e.clientY;
+        if (distFromTop < EDGE_SCROLL_ZONE) {
+          scrollDirRef.current = -1;
+        } else if (distFromBottom < EDGE_SCROLL_ZONE) {
+          scrollDirRef.current = 1;
+        } else {
+          scrollDirRef.current = 0;
+        }
+      }
+
+      function dragHandlersFor(idx) {
+        return {
+          onDragStart: () => { dragIndexRef.current = idx; startAutoScroll(); },
+          onDragOver: (e) => {
+            e.preventDefault();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const before = e.clientY < rect.top + rect.height / 2;
+            setDragOverInfo({ idx, before });
+          },
+          onDragLeave: () => setDragOverInfo((cur) => (cur && cur.idx === idx ? null : cur)),
+          onDragEnd: () => { dragIndexRef.current = null; setDragOverInfo(null); stopAutoScroll(); },
+          onDrop: (e) => {
+            e.preventDefault();
+            const from = dragIndexRef.current;
+            const info = dragOverInfo;
+            setDragOverInfo(null);
+            dragIndexRef.current = null;
+            stopAutoScroll();
+            if (from === null || !info || from === idx) return;
+            // Target's index once the dragged page has already been
+            // removed from the list — matches how onReorder applies the
+            // move (remove at `from`, then insert at `to`).
+            const targetAfterRemoval = idx > from ? idx - 1 : idx;
+            const to = targetAfterRemoval + (info.before ? 0 : 1);
+            onReorder(from, to);
+          },
+        };
+      }
+
+      return (
+        <aside className="ze-sidebar">
+          <div className="ze-sidebar-head">
+            <span>Pages{pages.length > 0 ? " (" + pages.length + ")" : ""}</span>
+            <button type="button" onClick={onLoadClick} disabled={loading}>
+              {loading ? "Loading…" : "Load PDF"}
+            </button>
+          </div>
+          <div className="ze-sidebar-body" ref={bodyRef} onDragOver={handleContainerDragOver}>
+            {pages.length === 0 && !loading ? (
+              <div className="ze-sidebar-empty">
+                No pages yet. Click "Load PDF" to bring in a file.
+              </div>
+            ) : (
+              <div className="ze-thumb-list">
+                <PageGap onInsert={() => onInsertBlank(0)} />
+                {pages.map((p, idx) => (
+                  <React.Fragment key={p.key}>
+                    {dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && (
+                      <div className="ze-drop-line" />
+                    )}
+                    <div className="ze-thumb-slot">
+                      <Thumbnail
+                        p={p}
+                        idx={idx}
+                        isSelected={idx === selectedIdx}
+                        onSelect={onSelect}
+                        onRotate={onRotate}
+                        onDelete={onDelete}
+                        dragHandlers={dragHandlersFor(idx)}
+                      />
+                    </div>
+                    {dragOverInfo && dragOverInfo.idx === idx && !dragOverInfo.before && (
+                      <div className="ze-drop-line" />
+                    )}
+                    <PageGap onInsert={() => onInsertBlank(idx + 1)} />
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    function App() {
+      const [guidesOn, setGuidesOn] = useState(false);
+      const [pages, setPages] = useState([]); // {key, pageNumber, rotation, dataUrl, isBlank, annotations}
+      const [selectedIdx, setSelectedIdx] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [errorMsg, setErrorMsg] = useState(null);
+      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'pen' | 'highlighter'
+      const [selectedAnnId, setSelectedAnnId] = useState(null);
+      const [autoEditAnnId, setAutoEditAnnId] = useState(null);
+
+      const pdfDocRef = useRef(null);
+      const fileInputRef = useRef(null);
+      const nextKeyRef = useRef(1);
+      const nextAnnIdRef = useRef(1);
+      const pageSizeRef = useRef(null); // captured from the first loaded PDF page; used as the default size for new blank pages
+
+      async function renderThumb(pageNumber, rotation) {
+        const pdfPage = await pdfDocRef.current.getPage(pageNumber);
+        const viewport = pdfPage.getViewport({ scale: THUMB_SCALE, rotation });
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+        return canvas.toDataURL();
+      }
+
+      async function handleFile(file) {
+        setErrorMsg(null);
+        setLoading(true);
+        try {
+          const buf = await file.arrayBuffer();
+          const loadingTask = pdfjsLib.getDocument({ data: buf });
+          const doc = await loadingTask.promise;
+          pdfDocRef.current = doc;
+
+          const newPages = [];
+          for (let i = 1; i <= doc.numPages; i++) {
+            const dataUrl = await renderThumb(i, 0);
+            newPages.push({ key: nextKeyRef.current++, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
+          }
+          if (!pageSizeRef.current) {
+            const p1 = await doc.getPage(1);
+            const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+            pageSizeRef.current = { width: vp1.width, height: vp1.height };
+          }
+          setPages(newPages);
+          setSelectedIdx(newPages.length > 0 ? 0 : null);
+        } catch (err) {
+          setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function handleLoadClick() {
+        fileInputRef.current && fileInputRef.current.click();
+      }
+
+      function handleFileInputChange(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = ""; // allow re-selecting the same file later
+        if (file) handleFile(file);
+      }
+
+      async function handleRotate(idx) {
+        const target = pages[idx];
+        const newRotation = (target.rotation + 90) % 360;
+        const dataUrl = target.isBlank
+          ? makeBlankThumb(target.width, target.height, newRotation)
+          : await renderThumb(target.pageNumber, newRotation);
+        setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, rotation: newRotation, dataUrl } : p)));
+      }
+
+      function handleInsertBlank(atIndex) {
+        const size = pageSizeRef.current || DEFAULT_PAGE_SIZE;
+        const newPage = {
+          key: nextKeyRef.current++,
+          isBlank: true,
+          rotation: 0,
+          width: size.width,
+          height: size.height,
+          dataUrl: makeBlankThumb(size.width, size.height, 0),
+          annotations: [],
+        };
+        setPages((prev) => {
+          const next = prev.slice();
+          next.splice(atIndex, 0, newPage);
+          return next;
+        });
+        setSelectedIdx(atIndex);
+      }
+
+      function handleDelete(idx) {
+        setPages((prev) => {
+          const next = prev.filter((_, i) => i !== idx);
+          return next;
+        });
+        setSelectedIdx((prevSel) => {
+          if (prevSel === null) return null;
+          if (idx === prevSel) return null;
+          if (idx < prevSel) return prevSel - 1;
+          return prevSel;
+        });
+      }
+
+      function handleReorder(fromIdx, toIdx) {
+        setPages((prev) => {
+          const next = prev.slice();
+          const [moved] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, moved);
+          return next;
+        });
+        setSelectedIdx((prevSel) => {
+          if (prevSel === null) return null;
+          if (prevSel === fromIdx) return toIdx;
+          if (fromIdx < prevSel && toIdx >= prevSel) return prevSel - 1;
+          if (fromIdx > prevSel && toIdx <= prevSel) return prevSel + 1;
+          return prevSel;
+        });
+      }
+
+      // ---- Annotations (Compose mode) ------------------------------------
+      function updateAnnotationsFor(pageIdx, updater) {
+        setPages((prev) => prev.map((p, i) => (i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p)));
+      }
+
+      function handleAddText(x, y) {
+        if (selectedIdx === null) return;
+        const id = nextAnnIdRef.current++;
+        updateAnnotationsFor(selectedIdx, (anns) => [...anns, { id, type: "text", x, y, text: "" }]);
+        setSelectedAnnId(id);
+        setAutoEditAnnId(id);
+      }
+
+      function handleAddStroke(stroke) {
+        if (selectedIdx === null) return;
+        const id = nextAnnIdRef.current++;
+        updateAnnotationsFor(selectedIdx, (anns) => [...anns, { id, type: "stroke", tool: stroke.tool, points: stroke.points }]);
+      }
+
+      function handleUpdateAnnotation(id, patch) {
+        if (selectedIdx === null) return;
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+      }
+
+      function handleDeleteAnnotation(id) {
+        if (selectedIdx === null) return;
+        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id));
+        setSelectedAnnId((cur) => (cur === id ? null : cur));
+      }
+
+      // Clear the annotation selection whenever the selected page changes —
+      // a selection outline shouldn't survive a page switch.
+      useEffect(() => { setSelectedAnnId(null); }, [selectedIdx]);
+
+      const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
+
+      return (
+        <div className="ze-shell">
+          <header className="topbar">
+            <div className="topbar-brand">
+              <div className="topbar-logo">ZE</div>
+              <div className="topbar-brand-text">
+                <div className="topbar-title">ZEditor</div>
+                <div className="topbar-subtitle">Compose zine pages</div>
+              </div>
+            </div>
+            <div className="topbar-actions">
+              <div className="toggle-row">
+                <div className="toggle-row-text">
+                  <p>Guides</p>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={guidesOn}
+                    onChange={(e) => setGuidesOn(e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </header>
+
+          {errorMsg && <div className="ze-error-bar">{errorMsg}</div>}
+
+          <div className="ze-body">
+            <Sidebar
+              pages={pages}
+              selectedIdx={selectedIdx}
+              onSelect={setSelectedIdx}
+              onRotate={handleRotate}
+              onDelete={handleDelete}
+              onReorder={handleReorder}
+              onLoadClick={handleLoadClick}
+              onInsertBlank={handleInsertBlank}
+              loading={loading}
+            />
+            <div className="ze-compose-area">
+              {selectedPage && (
+                <div className="ze-tool-bar">
+                  <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Select" onClick={() => setTool("select")}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3l6.5 16 2-6.5L19 10.5z" fill="currentColor" /></svg>
+                  </button>
+                  <button type="button" className={"ze-tool-icon-btn" + (tool === "text" ? " active" : "")} title="Text" onClick={() => setTool("text")}>
+                    <span className="ze-tool-icon-text">T</span>
+                  </button>
+                  <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Pen" onClick={() => setTool("pen")}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M4 20l1-4L16 5l3 3L8 19z" />
+                      <path d="M14 7l3 3" />
+                    </svg>
+                  </button>
+                  <button type="button" className={"ze-tool-icon-btn" + (tool === "highlighter" ? " active" : "")} title="Highlighter" onClick={() => setTool("highlighter")}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M6 20l1-3.5 8-8 3.5 3.5-8 8z" />
+                      <path d="M14 9l3.5 3.5" />
+                      <path d="M3 21h5" />
+                    </svg>
+                  </button>
+                  <div className="ze-tool-divider" />
+                  <button
+                    type="button"
+                    className="ze-tool-icon-btn"
+                    title="Delete selected"
+                    disabled={selectedAnnId === null}
+                    onClick={() => handleDeleteAnnotation(selectedAnnId)}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M4 7h16" />
+                      <path d="M9 7V4h6v3" />
+                      <path d="M6 7l1 13h10l1-13" />
+                      <path d="M10 11v6" />
+                      <path d="M14 11v6" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              <div className="preview-pane">
+                <div className="preview-canvas-wrapper">
+                  <ComposeCanvas
+                    pdfDocRef={pdfDocRef}
+                    page={selectedPage}
+                    guidesOn={guidesOn}
+                    tool={tool}
+                    annotations={selectedPage ? (selectedPage.annotations || []) : []}
+                    selectedAnnId={selectedAnnId}
+                    autoEditAnnId={autoEditAnnId}
+                    onSelectAnnotation={setSelectedAnnId}
+                    onAddText={handleAddText}
+                    onAddStroke={handleAddStroke}
+                    onUpdateAnnotation={handleUpdateAnnotation}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            style={{ display: "none" }}
+            onChange={handleFileInputChange}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

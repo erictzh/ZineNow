@@ -1,0 +1,473 @@
+/* ==========================================================================
+   ZEditor — phase 1 (shell only). Tokens and the topbar/preview-pane/toggle
+   components below are reused verbatim from component-kit.css so this
+   matches Zine Arranger and the rest of the suite exactly.
+   ========================================================================== */
+
+:root {
+    --ui-bg: #171312;
+    --ui-bg-alt: #241d1bb0;
+    --ui-bg-card: #201918e8;
+    --ui-bg-terminal: #100d0c6b;
+    --ui-border: #3f3634;
+    --ui-fg: #e9e9ee;
+    --ui-fg-muted: #9a9ca6;
+    --ui-accent: #dd531a;
+    --ui-accent-hover: #bf6836;
+    --ui-accent-text: #dd531a;
+    --ui-radius: 10px;
+    --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --ui-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --preview-bar: #151313c9;
+
+    --md2ebook-header-height: 64px;
+    --md2ebook-canvas-bg: #29292994;
+    --md2ebook-canvas-fg: #b5b5b5;
+
+    --ze-sidebar-width: 240px;
+    --ze-page-w: 420px;
+    --ze-page-h: 594px; /* ~A5 ratio placeholder */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+    font-family: var(--ui-font);
+}
+#root { height: 100%; }
+
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--ui-border); border-radius: 9999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--ui-fg-muted); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- Buttons — hollow by default; .btn-solid is the one primary
+   call-to-action exception per screen (verbatim from component-kit.css).
+   This was missing from ZEditor's stylesheet, which is why every <button>
+   and .log-btn was rendering as an unstyled browser default. ---- */
+button {
+    background-color: var(--ui-bg-card);
+    color: var(--ui-fg-muted);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+button:hover { background-color: var(--ui-bg); color: var(--ui-fg); }
+button:active { transform: scale(0.97); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+button.btn-solid {
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    color: #fff;
+    border: 1px solid var(--ui-accent);
+    border-radius: 6px;
+    padding: 6px 16px;
+    min-width: 85px;
+    font-size: 12px;
+    font-weight: 600;
+}
+button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color: var(--ui-accent-hover); }
+
+/* ---- Small toolbar buttons (verbatim from component-kit.css) ---- */
+.log-btn {
+    margin: 0 0 0 6px;
+    padding: 4px 10px;
+    min-width: unset;
+    font-size: 11px;
+    font-weight: 500;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    color: var(--ui-fg-muted);
+}
+.log-btn:hover { color: var(--ui-fg); background-color: var(--ui-bg); border-color: var(--ui-border); }
+
+/* ---- Tabs (verbatim from component-kit.css) — used for the Compose
+   tool switcher (Select / Text / Pen / Highlighter) ---- */
+.tabbar {
+    display: flex;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--ui-border);
+}
+.tab {
+    flex: 1 1 0;
+    margin: 0;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    color: var(--ui-fg-muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+}
+.tab:hover { color: var(--ui-fg); }
+.tab.active { color: var(--ui-accent); border-bottom-color: var(--ui-accent); }
+.tab[disabled] { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* ---- Topbar (verbatim from component-kit.css) --------------------------- */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--md2ebook-header-height);
+    gap: 16px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--ui-border);
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    flex: 0 0 auto;
+}
+.topbar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar-logo {
+    flex: 0 0 auto;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    font-weight: 700;
+    font-size: 14px;
+}
+.topbar-brand-text { min-width: 0; }
+.topbar-title { font-weight: 600; font-size: 14px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-subtitle { font-size: 11px; line-height: 1.25; color: var(--ui-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+/* ---- Toggle switch (verbatim from component-kit.css) --------------------- */
+.toggle-row { display: flex; align-items: center; gap: 12px; }
+.toggle-row-text p { margin: 0; font-size: 12px; color: var(--ui-fg-muted); }
+.toggle-switch { position: relative; flex: 0 0 auto; display: inline-block; width: 40px; height: 22px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background-color: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    width: 16px; height: 16px;
+    left: 2px; top: 2px;
+    border-radius: 50%;
+    background-color: var(--ui-fg-muted);
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.toggle-switch input:checked + .toggle-slider { background-color: var(--ui-accent); border-color: var(--ui-accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background-color: #fff; }
+.toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--ui-accent-text); outline-offset: 2px; }
+
+/* ---- Preview pane / canvas workspace (verbatim from component-kit.css) --- */
+.preview-pane {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
+    background: var(--md2ebook-canvas-bg);
+    background-image: radial-gradient(circle, #4e4e4e 1px, transparent 1px);
+    background-size: 18px 18px;
+}
+.preview-canvas-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 24px 80px;
+    min-height: 100%;
+}
+.preview-empty {
+    margin: auto;
+    color: var(--md2ebook-canvas-fg);
+    font-size: 14px;
+    text-align: center;
+    max-width: 260px;
+}
+
+/* ---- Shell layout --------------------------------------------------------- */
+.ze-shell { display: flex; flex-direction: column; height: 100%; }
+.ze-body { flex: 1 1 auto; display: flex; min-height: 0; }
+
+/* ---- Sidebar (Organize) ---------------------------------------------------- */
+.ze-sidebar {
+    width: var(--ze-sidebar-width);
+    flex: 0 0 auto;
+    border-right: 1px solid var(--ui-border);
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.ze-sidebar-head {
+    flex: 0 0 auto;
+    padding: 14px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ui-fg-muted);
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-sidebar-body { flex: 1 1 auto; overflow-y: auto; padding: 16px; }
+.ze-sidebar-empty { font-size: 12px; color: var(--ui-fg-muted); line-height: 1.6; }
+
+/* ---- Blank page placeholder + guides overlay ------------------------------- */
+.ze-page {
+    position: relative;
+    width: var(--ze-page-w);
+    height: var(--ze-page-h);
+    max-width: 100%;
+    background-color: #dbdbdb;
+    border-radius: 2px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    flex: 0 0 auto;
+}
+.ze-page--rendered {
+    width: auto;
+    height: auto;
+    background-color: transparent;
+    box-shadow: none;
+}
+.ze-page--rendered canvas {
+    display: block;
+    border-radius: 2px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.ze-guides-overlay {
+    position: absolute;
+    inset: 28px;
+    border: 1px dashed color-mix(in srgb, var(--ui-accent) 70%, #000);
+    pointer-events: none;
+}
+
+/* ---- Load-PDF button + error bar -------------------------------------------
+   Load PDF intentionally uses the plain base `button` style from
+   component-kit — no custom variant. */
+.ze-sidebar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ze-error-bar {
+    flex: 0 0 auto;
+    padding: 8px 20px;
+    font-size: 12px;
+    color: #ff9b81;
+    background-color: color-mix(in srgb, #dd1a1a 12%, var(--ui-bg));
+    border-bottom: 1px solid color-mix(in srgb, #dd1a1a 35%, var(--ui-border));
+}
+
+/* ---- Page thumbnails -------------------------------------------------------- */
+.ze-thumb-list { display: flex; flex-direction: column; }
+
+.ze-thumb-slot { border-radius: 8px; }
+
+/* Hover gap between (or around) thumbnails — click/tap to insert a blank
+   page at that exact spot. Hover reveal is pure CSS. */
+.ze-page-gap {
+    position: relative;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+.ze-page-gap-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    background-color: transparent;
+    border-radius: 999px;
+    transition: background-color 0.12s ease;
+}
+.ze-page-gap:hover .ze-page-gap-line,
+.ze-page-gap:focus-visible .ze-page-gap-line {
+    background-color: var(--ui-accent);
+}
+.ze-page-gap-btn {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.6);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--ui-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.ze-page-gap:hover .ze-page-gap-btn,
+.ze-page-gap:focus-visible .ze-page-gap-btn {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+.ze-page-gap:focus-visible { outline: none; }
+
+/* Drop-target indicator while dragging a thumbnail — a thin accent line
+   showing exactly where the page will land. */
+.ze-drop-line {
+    height: 2px;
+    margin: -1px 2px;
+    border-radius: 999px;
+    background-color: var(--ui-accent);
+}
+
+.ze-thumb {
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background-color: var(--ui-bg-card);
+    cursor: grab;
+    overflow: hidden;
+    transition: border-color 0.12s ease;
+}
+.ze-thumb:active { cursor: grabbing; }
+.ze-thumb.is-selected { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
+
+.ze-thumb-img-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--ui-bg);
+    padding: 10px;
+    min-height: 60px;
+}
+.ze-thumb-img-wrap img { max-width: 100%; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+.ze-thumb-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-top: 1px solid var(--ui-border);
+}
+.ze-thumb-num { font-size: 11px; color: var(--ui-fg-muted); font-weight: 600; }
+/* no extra gap here — .log-btn already carries its own left margin for
+   spacing consecutive toolbar buttons, per component-kit.css */
+.ze-thumb-actions { display: flex; }
+
+/* ---- Compose area: tool bar + preview pane, stacked -------------------- */
+.ze-compose-area {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ze-tool-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.ze-tool-icon-btn {
+    width: 32px;
+    height: 32px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ze-tool-icon-btn.active {
+    color: #fff;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    border-color: var(--ui-accent);
+}
+.ze-tool-icon-btn.active:hover { color: #fff; }
+.ze-tool-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ze-tool-icon-btn:disabled:hover { color: var(--ui-fg-muted); background-color: var(--ui-bg-card); }
+
+.ze-tool-icon-text { font-size: 15px; font-weight: 700; line-height: 1; }
+
+.ze-tool-divider {
+    width: 1px;
+    height: 20px;
+    background-color: var(--ui-border);
+    margin: 0 4px;
+    flex: 0 0 auto;
+}
+
+/* ---- Annotation layer (Compose mode) ------------------------------------
+   Sits absolutely positioned directly on top of the rendered page canvas,
+   pixel-for-pixel — see .ze-page (position:relative) and the canvas's own
+   natural (unpositioned) size, which .ze-annotation-layer's width/height is
+   kept in sync with from React state. */
+.ze-annotation-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+.ze-tool-text { cursor: text; }
+.ze-tool-draw { cursor: crosshair; }
+
+.ze-stroke-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* individual strokes opt back in via inline style when Select is active */
+}
+
+.ze-ann-text {
+    position: absolute;
+    min-width: 40px;
+    max-width: 320px;
+    padding: 2px 4px;
+    font-size: 16px;
+    line-height: 1.3;
+    color: #1a1a1a;
+    background: transparent;
+    border: 1px dashed transparent;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: move;
+    font-family: var(--ui-font);
+}
+.ze-ann-text.is-selected { border-color: var(--ui-accent); }
+.ze-ann-text-placeholder { color: rgba(0, 0, 0, 0.35); font-style: italic; }
+
+.ze-ann-text--editing {
+    resize: both;
+    overflow: auto;
+    border: 1px solid var(--ui-accent);
+    background-color: rgba(255, 255, 255, 0.92);
+    outline: none;
+    min-width: 120px;
+    min-height: 32px;
+    cursor: text;
+}
+
+/* ---- Responsive ------------------------------------------------------------- */
+@media (max-width: 640px) {
+    :root { --ze-sidebar-width: 180px; }
+}
