@@ -20,5 +20,9 @@ window.ZINENOW_APPS = [
   {
     folder: "Markdown-to-PDF",
     desc: "Md text editor for PDF Rxport",
+  },
+  {
+    folder: "ZEditor",
+    desc: "Compose and edit zine pages"
   }
 ];
