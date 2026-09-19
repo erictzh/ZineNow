@@ -19,18 +19,15 @@
   <!--
     Dark-mode palette, extending Tailwind's default theme rather than
     replacing it (layout/spacing/typography utilities are untouched —
-    only these color + font tokens are added). Values are taken verbatim
-    from the app's dark mode style guide, so `bg-ink`, `bg-ink-alt`,
-    `bg-ink-card`, `bg-ink-terminal`, `border-line`, `text-fg`,
-    `text-fg-muted`, `bg-accent` / `text-accent`, `bg-accent-hover`,
-    `bg-canvas` and the `font-ui` / `font-mono2` utilities below all map
-    1:1 to the guide's --ui-* tokens (also defined as real CSS custom
-    properties in styles.css, for the couple of places plain CSS needs
-    them instead of a Tailwind class). `canvas` (#dbdbdb) is the guide's
-    "light neutral fill... deliberately breaking from the dark theme,
-    e.g. a print preview" — used for the live-preview pane's backdrop,
-    so the eBook page floating on it can stay pure white as required,
-    even though the rest of the app chrome is dark.
+    only these color + font tokens are added). Values are now taken
+    verbatim from component-kit.css (linked below), which is the actual
+    source of truth for this app's colors/components going forward —
+    styles.css itself no longer defines its own competing --ui-* tokens
+    (see the note in that file). `canvas` (#dbdbdb) is the one token
+    component-kit.css doesn't define, since it's specific to this app's
+    live-preview backdrop rather than a general UI color — kept here as
+    the "light neutral fill... deliberately breaking from the dark
+    theme" so the eBook page floating on it can stay pure white.
   -->
   <script>
     tailwind.config = {
@@ -39,9 +36,9 @@
           colors: {
             ink: {
               DEFAULT: '#171312',
-              alt: '#241d1b',
-              card: '#2b2220',
-              terminal: '#100d0c',
+              alt: '#241d1bb0',
+              card: '#201918e8',
+              terminal: '#100d0c6b',
             },
             line: '#3f3634',
             fg: {
@@ -51,6 +48,7 @@
             accent: {
               DEFAULT: '#dd531a',
               hover: '#bf6836',
+              text: '#dd531a',
             },
             canvas: '#dbdbdb',
             success: '#8fe28f',
@@ -74,8 +72,61 @@
     };
   </script>
 
+  <!--
+    Component kit — colors, fonts, and reusable component styles (top
+    bar, buttons, tabs, cards, toggle switch, inputs, log panel, preview
+    pane), pulled verbatim from a sibling app and adopted here as the
+    priority basis for anything overlapping: where this app already had
+    a similar color or component, the kit's version wins. Linked before
+    styles.css so styles.css can layer this app's own page-specific
+    layout on top without fighting it on specificity — see the note at
+    the top of styles.css for exactly what still lives there.
+  -->
+  <link rel="stylesheet" href="component-kit.css" />
+
   <!-- marked.js — Markdown parsing (version pinned so a future release can't change behavior under you) -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+
+  <!--
+    Document import libraries — used only by the sidebar's "Upload"
+    button (see pdfGenerator.js's convertDocxToMarkdown/
+    convertEpubToMarkdown). Unlike marked.js above, the app works fine
+    without these ever loading; they're only touched if you actually
+    import a .docx or .epub file, and pdfGenerator.js's requireGlobal()
+    gives a clear error naming whichever one didn't load rather than
+    failing silently. All three pinned to a specific version, same
+    reasoning as marked.js above.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <!--
+    pdf-lib — assembles a real PDF from the rasterized page images used
+    only by "Send to ZineArranger" (see handleSendToZineArranger in
+    App.jsx and renderRasterizationDocument in pdfGenerator.js). The main
+    "Download PDF eBook" export doesn't use this at all — it drives the
+    browser's own print engine instead (see the note on exportToPdf in
+    pdfGenerator.js). Same library ZEditor uses for its own PDF export,
+    version pinned like the other libraries above.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+  <!--
+    DOMPurify — used only by renderRasterizationDocument (pdfGenerator.js)
+    to sanitize the markdown-rendered HTML before "Send to ZineArranger"
+    rasterizes it. That path's hidden iframe needs the allow-same-origin
+    sandbox flag for html2canvas to work at all (confirmed: it silently
+    hangs without it), which is exactly the flag combination the live
+    preview's iframe (see renderHtmlDocument) deliberately avoids, since
+    allow-scripts + allow-same-origin would let a <script> smuggled in
+    through pasted raw HTML (marked.js passes raw HTML through by
+    default) reach out and manipulate this app. Sanitizing the HTML first
+    removes that content outright, which holds regardless of sandboxing —
+    a stronger guarantee than isolation alone, and the reason it's safe
+    to grant that iframe allow-same-origin here specifically.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
   <!--
     Note: this app does NOT use html2pdf.js/html2canvas for PDF export.

@@ -17,6 +17,10 @@
      Arranger already uses it. -->
 <script src="./pdfjs/build/pdf.js"></script>
 
+<!-- pdf-lib — local copy, used only for Export: assembles the rendered
+     page images into a real downloadable PDF. -->
+<script src="./pdf-lib/pdf-lib.min.js"></script>
+
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -32,14 +36,600 @@
     Markdown-to-PDF's precompiled App.jsx, different mechanism.
   -->
   <script type="text/babel">
-    const { useState, useRef, useEffect } = React;
+    const { useState, useRef, useEffect, useMemo } = React;
 
     const THUMB_SCALE = 0.3;
     const MAIN_SCALE = 1.1;
     const DEFAULT_PAGE_SIZE = { width: 420, height: 594 }; // used only if no PDF has been loaded yet
 
+    // Guides — trim/margin/bleed presets, in inches. Page geometry
+    // (page.width/height, canvas px at MAIN_SCALE) is already in points
+    // (72/in), same unit pdf.js and PDFs use, so presets convert cleanly.
+    const POINTS_PER_INCH = 72;
+    const GUIDE_FORMAT_PRESETS = [
+      { key: "match", label: "Match Page Size" },
+      { key: "half-letter", label: "Half Letter (5.5 × 8.5 in)", widthIn: 5.5, heightIn: 8.5 },
+      { key: "digest", label: "Digest (5.5 × 8.25 in)", widthIn: 5.5, heightIn: 8.25 },
+      { key: "a5", label: "A5 (5.83 × 8.27 in)", widthIn: 5.83, heightIn: 8.27 },
+      { key: "a6", label: "A6 (4.13 × 5.83 in)", widthIn: 4.13, heightIn: 5.83 },
+      { key: "quarter-letter", label: "Quarter Letter (4.25 × 5.5 in)", widthIn: 4.25, heightIn: 5.5 },
+      { key: "letter", label: "US Letter (8.5 × 11 in)", widthIn: 8.5, heightIn: 11 },
+      { key: "a4", label: "A4 (8.27 × 11.69 in)", widthIn: 8.27, heightIn: 11.69 },
+    ];
+    const DEFAULT_GUIDE_MARGIN_IN = 0.25;
+    const DEFAULT_GUIDE_BLEED_IN = 0.125;
+
+    // Undo/redo — one entry per discrete action (a finished drag, a
+    // committed edit, a delete, a rotate), not per pixel or keystroke.
+    // Rapid repeats of the SAME gesture (a drag's mousemoves, a slider
+    // being dragged, keystrokes while typing) collapse into one entry by
+    // sharing a coalesce key within this window; letting go and coming
+    // back starts a fresh entry. See recordUndoCheckpoint in App.
+    const UNDO_COALESCE_MS = 700;
+    const MAX_UNDO_HISTORY = 50;
+
+    // Page filter — a photocopier/screen-print treatment applied to both
+    // the page background and any placed images. Pen and text annotations
+    // are never touched, so your own marks stay crisp on top. Applies both
+    // live and in Export PDF. Global across the whole document, same scope
+    // as Guides, rather than per-page — real zines usually want one
+    // consistent treatment throughout.
+    const PAGE_FILTER_OPTIONS = [
+      { key: "none", label: "None" },
+      { key: "grayscale", label: "Grayscale" },
+      { key: "duotone", label: "Duotone" },
+      { key: "halftone", label: "Halftone" },
+    ];
+    // Same four treatments, plus "Match Page" — an image's own filter
+    // defaults to following whatever the page filter is, same as before
+    // this existed, rather than starting every image at "None".
+    const IMAGE_FILTER_OPTIONS = [
+      { key: "match", label: "Match Page" },
+      { key: "none", label: "None" },
+      { key: "grayscale", label: "Grayscale" },
+      { key: "duotone", label: "Duotone" },
+      { key: "halftone", label: "Halftone" },
+    ];
+    const DEFAULT_DUOTONE_DARK = "#1a1a1a";
+    const DEFAULT_DUOTONE_LIGHT = "#ffe066";
+    const DEFAULT_HALFTONE_CELL_SIZE = 6;
+    const MIN_HALFTONE_CELL_SIZE = 1;
+    const DEFAULT_HALFTONE_COLOR = "#1a1a1a";
+    const DEFAULT_PAGE_FILTER = { type: "none" };
+
+    // Resolves what an image annotation should actually be filtered with:
+    // no `ann.filter` (or type "match") follows the page filter, exactly
+    // like every image behaved before per-image filters existed; type
+    // "none" opts an image out even when the page has a filter; anything
+    // else is the image's own independent filter settings.
+    function effectiveImageFilter(ann, pageFilter) {
+      const f = ann.filter;
+      if (!f || f.type === "match") return pageFilter || { type: "none" };
+      if (f.type === "none") return { type: "none" };
+      return f;
+    }
+
+    // Starting font presets, shown before (or alongside) any fonts loaded
+    // from the browser via the Local Font Access API — see FontCombobox.
+    // Plain family names, same convention Markdown-to-PDF uses: applied as
+    // `'${name}', sans-serif` at render time, so an unrecognized/unavailable
+    // name just falls back to the browser's default sans rather than erroring.
+    const DEFAULT_FONT_OPTIONS = ["Inter", "Georgia", "Courier New", "Comic Sans MS", "Impact"];
+
+    const TEXT_COLOR_SWATCHES = ["#1a1a1a", "#ffffff", "#dd531a", "#2563eb", "#16a34a", "#dc2626", "#eab308"];
+    const PEN_COLOR_SWATCHES = ["#1a1a1a", "#dd531a", "#dc2626", "#2563eb"];
+    const HIGHLIGHTER_COLOR_SWATCHES = ["#ffe066", "#ffb84d", "#7ec8ff", "#ff9ecf", "#7dffb3"];
+
+    const PEN_DEFAULTS = { color: "#1a1a1a", width: 2.5 };
+    const HIGHLIGHTER_DEFAULTS = { color: "#ffe066", width: 14 };
+
+    // Turns raw recorded points into a smoothed SVG path — quadratic curves
+    // through the midpoint of each consecutive pair, using the shared point
+    // as the control. A common, cheap freehand-smoothing trick: it rounds
+    // off the jagged look of raw mouse samples without needing pressure
+    // data (which a mouse doesn't have) or an external library. Hit-testing
+    // for the eraser still uses the original raw points, not this curve.
+    function smoothPathD(points) {
+      if (points.length < 2) return "";
+      if (points.length === 2) {
+        return `M ${points[0][0]},${points[0][1]} L ${points[1][0]},${points[1][1]}`;
+      }
+      let d = `M ${points[0][0]},${points[0][1]}`;
+      for (let i = 1; i < points.length - 1; i++) {
+        const [x0, y0] = points[i];
+        const [x1, y1] = points[i + 1];
+        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        d += ` Q ${x0},${y0} ${mx},${my}`;
+      }
+      const last = points[points.length - 1];
+      d += ` L ${last[0]},${last[1]}`;
+      return d;
+    }
+
+    // Shortest distance from point p to the segment a-b — used by the
+    // eraser to decide whether it's passing close enough to a stroke.
+    function distToSegment(p, a, b) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const lenSq = dx * dx + dy * dy;
+      let t = lenSq === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const cx = a[0] + t * dx, cy = a[1] + t * dy;
+      return Math.hypot(p[0] - cx, p[1] - cy);
+    }
+
+    function strokeHitTest(point, ann) {
+      const threshold = (ann.strokeWidth || 8) / 2 + 6;
+      for (let i = 0; i < ann.points.length - 1; i++) {
+        if (distToSegment(point, ann.points[i], ann.points[i + 1]) <= threshold) return true;
+      }
+      return false;
+    }
+
+    // ---- Variable-width (tapered) stroke outline --------------------------
+    // A plain SVG <path stroke-width> can't vary along its length, so a
+    // real taper means building a filled silhouette instead: offset each
+    // point perpendicular to the stroke's direction by half the width AT
+    // THAT POINT, narrowing near both ends when taper > 0. `taper` is a
+    // fraction (0–0.45) of the stroke's total length that each end spends
+    // ramping in/out; 0 means constant width (no taper) the whole way.
+    function taperedPathD(points, baseWidth, taper) {
+      if (points.length < 2) return "";
+      const dists = [0];
+      for (let i = 1; i < points.length; i++) {
+        dists.push(dists[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+      }
+      const total = dists[dists.length - 1] || 1;
+      const tf = Math.min(0.45, Math.max(0, taper));
+
+      function widthAt(t) {
+        if (tf <= 0) return baseWidth;
+        let factor;
+        if (t < tf) factor = t / tf;
+        else if (t > 1 - tf) factor = (1 - t) / tf;
+        else factor = 1;
+        return Math.max(baseWidth * 0.12, baseWidth * factor);
+      }
+
+      const left = [], right = [];
+      for (let i = 0; i < points.length; i++) {
+        const t = dists[i] / total;
+        const w = widthAt(t) / 2;
+        const prev = points[Math.max(0, i - 1)];
+        const next = points[Math.min(points.length - 1, i + 1)];
+        let dx = next[0] - prev[0], dy = next[1] - prev[1];
+        const len = Math.hypot(dx, dy) || 1;
+        dx /= len; dy /= len;
+        const nx = -dy, ny = dx;
+        left.push([points[i][0] + nx * w, points[i][1] + ny * w]);
+        right.push([points[i][0] - nx * w, points[i][1] - ny * w]);
+      }
+
+      let d = `M ${left[0][0]},${left[0][1]}`;
+      for (let i = 1; i < left.length; i++) d += ` L ${left[i][0]},${left[i][1]}`;
+      for (let i = right.length - 1; i >= 0; i--) d += ` L ${right[i][0]},${right[i][1]}`;
+      d += " Z";
+      return d;
+    }
+
+    // ==========================================================================
+    // Export — renders each page (background + all annotations) to a canvas
+    // at export resolution, exactly reusing the same stroke geometry
+    // (smoothPathD/taperedPathD) the live editor draws with via Path2D, so
+    // the exported PDF always matches what's on screen. Text is redrawn
+    // with manual word-wrapping since canvas has no built-in text-wrap.
+    // ==========================================================================
+    const EXPORT_DPI = 200;
+    const EXPORT_SCALE = EXPORT_DPI / 72; // PDF/pdf.js "scale 1" is 72 DPI
+
+    function hexToRgb(hex) {
+      const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+      return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
+    }
+
+    // Same Rec.601 coefficients applyColorRemap uses, as an SVG
+    // feColorMatrix — puts luminance into R, G, and B alike so a
+    // feComponentTransfer right after it can remap that single value per
+    // channel (see App's hidden <defs>, used by AnnotationImage's live
+    // grayscale/duotone preview).
+    const LUMINANCE_MATRIX_VALUES = "0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0 0 0 1 0";
+
+    // Classic newsprint halftone: samples average luminance per grid cell
+    // from the source pixels, then redraws that cell as a single dot whose
+    // radius tracks darkness, on a white background — replaces the
+    // continuous-tone image entirely, same as a real halftone plate.
+    function drawHalftoneDots(ctx, sourceImageData, width, height, cellSize, color) {
+      const data = sourceImageData.data;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = color;
+      const maxRadius = cellSize * 0.62;
+      for (let cy = 0; cy < height; cy += cellSize) {
+        const ch = Math.min(cellSize, height - cy);
+        for (let cx = 0; cx < width; cx += cellSize) {
+          const cw = Math.min(cellSize, width - cx);
+          let sum = 0, count = 0;
+          for (let y = 0; y < ch; y++) {
+            const rowStart = ((cy + y) * width + cx) * 4;
+            for (let x = 0; x < cw; x++) {
+              const idx = rowStart + x * 4;
+              sum += data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
+              count++;
+            }
+          }
+          const avgLum = count ? sum / count / 255 : 1;
+          const radius = (1 - avgLum) * maxRadius;
+          if (radius > 0.4) {
+            ctx.beginPath();
+            ctx.arc(cx + cw / 2, cy + ch / 2, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+
+    // Grayscale/duotone pixel remap, in place on whatever's painted on
+    // `ctx` — the shared piece of applyPageFilter (background) and
+    // drawImageOnCanvas (a placed image, remapped on its own offscreen
+    // canvas before compositing, so the remap never bleeds into
+    // surrounding page pixels). Halftone isn't a simple per-pixel remap
+    // (it replaces pixels with dots via drawHalftoneDots), so both call
+    // sites branch around this function for that case instead.
+    function applyColorRemap(ctx, canvas, filter) {
+      const { width, height } = canvas;
+      if (width === 0 || height === 0) return;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      if (filter.type === "grayscale") {
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          data[i] = data[i + 1] = data[i + 2] = lum;
+        }
+      } else if (filter.type === "duotone") {
+        const dark = hexToRgb(filter.darkColor || DEFAULT_DUOTONE_DARK);
+        const light = hexToRgb(filter.lightColor || DEFAULT_DUOTONE_LIGHT);
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+          data[i] = dark.r + (light.r - dark.r) * lum;
+          data[i + 1] = dark.g + (light.g - dark.g) * lum;
+          data[i + 2] = dark.b + (light.b - dark.b) * lum;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Applies the page-level filter to whatever's currently painted on
+    // `ctx` (the page background, drawn just before this is called) —
+    // grayscale/duotone remap pixels in place, halftone replaces them
+    // outright. `scaleFactor` converts cellSize from its editor-px unit
+    // to this canvas's actual resolution (1 live, EXPORT_SCALE/MAIN_SCALE
+    // on export), same convention drawStrokeOnCanvas uses for strokeWidth.
+    function applyPageFilter(ctx, canvas, filter, scaleFactor) {
+      if (!filter || filter.type === "none" || canvas.width === 0 || canvas.height === 0) return;
+      if (filter.type === "grayscale" || filter.type === "duotone") {
+        applyColorRemap(ctx, canvas, filter);
+      } else if (filter.type === "halftone") {
+        const { width, height } = canvas;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, (filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE) * scaleFactor);
+        drawHalftoneDots(ctx, imageData, width, height, cellSize, filter.color || DEFAULT_HALFTONE_COLOR);
+      }
+    }
+
+    // ---- Torn-edge clip — a deterministic jagged boundary (a sine-based
+    // hash instead of Math.random(), so the exact same shape is available
+    // to both the live CSS clip-path and the export canvas's Path2D clip,
+    // with no seed needing to be stored on the annotation). Points are in
+    // the image's own 0..width/0..height space.
+    function tornEdgePoints(width, height) {
+      const step = Math.max(6, Math.min(width, height) / 10);
+      const jitter = step * 0.6;
+      function noise(i) {
+        const v = Math.sin(i * 12.9898) * 43758.5453;
+        return v - Math.floor(v);
+      }
+      const points = [];
+      let i = 0;
+      for (let x = 0; x <= width; x += step) points.push([x, noise(i++) * jitter]);
+      for (let y = step; y <= height; y += step) points.push([width - noise(i++) * jitter, y]);
+      for (let x = width - step; x >= 0; x -= step) points.push([x, height - noise(i++) * jitter]);
+      for (let y = height - step; y >= step; y -= step) points.push([noise(i++) * jitter, y]);
+      return points;
+    }
+
+    function tornEdgeClipPathCss(width, height) {
+      if (width <= 0 || height <= 0) return undefined;
+      const pts = tornEdgePoints(width, height);
+      return "polygon(" + pts.map(([x, y]) => `${(x / width * 100).toFixed(2)}% ${(y / height * 100).toFixed(2)}%`).join(", ") + ")";
+    }
+
+    function clipTornEdge(ctx, width, height) {
+      const pts = tornEdgePoints(width, height);
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+      ctx.closePath();
+      ctx.clip();
+    }
+
+    function drawStrokeOnCanvas(ctx, ann, scaleFactor) {
+      const isHi = ann.tool === "highlighter";
+      const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
+      const width = (ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)) * scaleFactor;
+      const taper = ann.taper || 0;
+      const pts = ann.points.map((p) => [p[0] * scaleFactor, p[1] * scaleFactor]);
+      ctx.save();
+      ctx.globalAlpha = isHi ? 0.45 : 1;
+      if (taper > 0) {
+        ctx.fillStyle = color;
+        ctx.fill(new Path2D(taperedPathD(pts, width, taper)));
+      } else {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke(new Path2D(smoothPathD(pts)));
+      }
+      ctx.restore();
+    }
+
+    // Word-based wrapping (canvas has no auto-wrap) — also respects
+    // explicit newlines, matching the editor's `white-space: pre-wrap`.
+    function wrapTextLines(ctx, text, maxWidth) {
+      const paragraphs = (text || "").split("\n");
+      const lines = [];
+      for (const para of paragraphs) {
+        if (para === "") { lines.push(""); continue; }
+        const words = para.split(" ");
+        let current = "";
+        for (const word of words) {
+          const test = current ? current + " " + word : word;
+          if (current && ctx.measureText(test).width > maxWidth) {
+            lines.push(current);
+            current = word;
+          } else {
+            current = test;
+          }
+        }
+        lines.push(current);
+      }
+      return lines;
+    }
+
+    function drawTextOnCanvas(ctx, ann, scaleFactor) {
+      const fontSize = (ann.fontSize || 16) * scaleFactor;
+      const weight = ann.bold ? "700" : "400";
+      const styleStr = ann.italic ? "italic" : "normal";
+      const family = ann.fontFamily || "sans-serif";
+      ctx.font = `${styleStr} ${weight} ${fontSize}px '${family}', sans-serif`;
+      ctx.textBaseline = "top";
+      ctx.fillStyle = ann.color || "#1a1a1a";
+
+      const x = ann.x * scaleFactor;
+      const y = ann.y * scaleFactor;
+      const padX = 4 * scaleFactor, padY = 2 * scaleFactor;
+      const maxWidthCap = 320 * scaleFactor;
+
+      let boxWidth;
+      if (ann.width) {
+        boxWidth = ann.width * scaleFactor;
+      } else {
+        const naturalWidth = Math.max(10, ...(ann.text || "").split("\n").map((l) => ctx.measureText(l).width));
+        boxWidth = Math.min(naturalWidth + padX * 2, maxWidthCap);
+      }
+      const innerWidth = Math.max(4, boxWidth - padX * 2);
+      const lines = wrapTextLines(ctx, ann.text || "", innerWidth);
+      const lineHeight = fontSize * 1.3;
+
+      lines.forEach((line, i) => {
+        const lineWidth = ctx.measureText(line).width;
+        let lineX = x + padX;
+        if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
+        else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
+        const lineY = y + padY + i * lineHeight;
+        ctx.fillText(line, lineX, lineY);
+        if (ann.underline && line) {
+          ctx.save();
+          ctx.strokeStyle = ann.color || "#1a1a1a";
+          ctx.lineWidth = Math.max(1, fontSize * 0.06);
+          const underlineY = lineY + fontSize * 0.92;
+          ctx.beginPath();
+          ctx.moveTo(lineX, underlineY);
+          ctx.lineTo(lineX + lineWidth, underlineY);
+          ctx.stroke();
+          ctx.restore();
+        }
+      });
+    }
+
+    // Renders one full page (background + annotations) to an offscreen
+    // canvas at export resolution. Kept independent from ComposeCanvas's
+    // own live-editing render path (some duplicated logic, but it avoids
+    // any risk of an export-specific change accidentally affecting the
+    // already-tested live editor).
+    function loadImageElement(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Couldn't load a placed image for export."));
+        img.src = src;
+      });
+    }
+
+    async function drawImageOnCanvas(ctx, ann, scaleFactor, pageFilter) {
+      const img = await loadImageElement(ann.src);
+      const x = ann.x * scaleFactor, y = ann.y * scaleFactor;
+      const w = ann.width * scaleFactor, h = ann.height * scaleFactor;
+
+      // Crop is just a source rect into the natural image — undefined
+      // fields mean "no crop" (the whole image), matching AnnotationImage.
+      let sx = ann.cropX || 0, sy = ann.cropY || 0;
+      let sw = ann.cropW || img.naturalWidth || w, sh = ann.cropH || img.naturalHeight || h;
+      let source = img;
+
+      // An image's own filter (if it has one) takes over from the page
+      // filter entirely, rather than the two combining — see
+      // effectiveImageFilter. Rendered on its own offscreen canvas, sized
+      // to the image's TARGET on-page size (not its natural resolution) —
+      // that matters for halftone specifically, so its dot cells come out
+      // the same physical size as the background's. Doing this before
+      // compositing also means a torn edge's clip never leaks the filter
+      // into surrounding page pixels.
+      const imgFilter = effectiveImageFilter(ann, pageFilter);
+      const filterType = imgFilter.type;
+      if (filterType === "grayscale" || filterType === "duotone" || filterType === "halftone") {
+        const off = document.createElement("canvas");
+        off.width = Math.max(1, Math.round(w));
+        off.height = Math.max(1, Math.round(h));
+        const octx = off.getContext("2d");
+        octx.drawImage(img, sx, sy, sw, sh, 0, 0, off.width, off.height);
+        if (filterType === "halftone") {
+          const imageData = octx.getImageData(0, 0, off.width, off.height);
+          const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, (imgFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE) * scaleFactor);
+          drawHalftoneDots(octx, imageData, off.width, off.height, cellSize, imgFilter.color || DEFAULT_HALFTONE_COLOR);
+        } else {
+          applyColorRemap(octx, off, imgFilter);
+        }
+        source = off;
+        sx = 0; sy = 0; sw = off.width; sh = off.height;
+      }
+
+      if (ann.tornEdge) {
+        ctx.save();
+        ctx.translate(x, y);
+        clipTornEdge(ctx, w, h);
+        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(source, sx, sy, sw, sh, x, y, w, h);
+      }
+    }
+
+    // Resolves which loaded pdf.js document a page belongs to. Pages can
+    // now come from more than one source PDF (the original load, plus any
+    // PDFs brought in via Insert PDF), so `pdfDocsRef` is a map of
+    // docId -> { doc, bytes } rather than a single ref — `bytes` is kept
+    // alongside the parsed doc purely so Save Project can re-embed the
+    // original file later without pdf.js needing to expose it itself.
+    function docFor(pdfDocsRef, page) {
+      const entry = pdfDocsRef.current[page.docId];
+      return entry ? entry.doc : null;
+    }
+
+    // Real pixel size of a page at a given scale, in the same coordinate
+    // space annotations are positioned in (accounts for blank-page vs. PDF
+    // page and 90°/270° rotation swapping width/height). Used for centering
+    // a newly-added image on whichever page is currently selected.
+    async function getPageDisplaySize(page, pdfDocsRef, scale) {
+      if (page.isBlank) {
+        const swapped = page.rotation % 180 !== 0;
+        return {
+          width: Math.round((swapped ? page.height : page.width) * scale),
+          height: Math.round((swapped ? page.width : page.height) * scale),
+        };
+      }
+      const pdfPage = await docFor(pdfDocsRef, page).getPage(page.pageNumber);
+      const viewport = pdfPage.getViewport({ scale, rotation: page.rotation });
+      return { width: viewport.width, height: viewport.height };
+    }
+
+    async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      let w, h;
+      if (page.isBlank) {
+        const swapped = page.rotation % 180 !== 0;
+        w = Math.round((swapped ? page.height : page.width) * exportScale);
+        h = Math.round((swapped ? page.width : page.height) * exportScale);
+        canvas.width = w; canvas.height = h;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        const pdfPage = await docFor(pdfDocsRef, page).getPage(page.pageNumber);
+        const viewport = pdfPage.getViewport({ scale: exportScale, rotation: page.rotation });
+        w = viewport.width; h = viewport.height;
+        canvas.width = w; canvas.height = h;
+        await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+      }
+
+      const scaleFactor = exportScale / MAIN_SCALE; // annotation coords were recorded in the editor's on-screen canvas space
+      applyPageFilter(ctx, canvas, pageFilter, scaleFactor); // background only — drawn before any annotation touches the canvas
+      const annotations = page.annotations || [];
+      // Images first (bottom), then strokes, then text on top — matches
+      // the editor's own DOM layering in the annotation overlay.
+      for (const a of annotations.filter((a) => a.type === "image")) {
+        await drawImageOnCanvas(ctx, a, scaleFactor, pageFilter);
+      }
+      annotations.filter((a) => a.type === "stroke").forEach((a) => drawStrokeOnCanvas(ctx, a, scaleFactor));
+      annotations.filter((a) => a.type === "text").forEach((a) => drawTextOnCanvas(ctx, a, scaleFactor));
+      return canvas;
+    }
+
+    function canvasToArrayBuffer(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(async (blob) => {
+          if (!blob) { reject(new Error("Couldn't encode a page image.")); return; }
+          resolve(await blob.arrayBuffer());
+        }, "image/png");
+      });
+    }
+
+    // Same native Save-As pattern Markdown-to-PDF and Zine Arranger use —
+    // falls back to a forced download for browsers without the File
+    // System Access API (Firefox, Safari). Shared by Export PDF and Save
+    // Project — `data` can be bytes, a string, or a Blob.
+    async function saveFile(data, filename, mimeType, description, extensions) {
+      if (typeof window.showSaveFilePicker === "function") {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description, accept: { [mimeType]: extensions } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(data);
+          await writable.close();
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return; // user closed the dialog — not an error
+          // fall through to the download fallback below
+        }
+      }
+      const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function savePdfBytes(bytes, filename) {
+      return saveFile(bytes, filename, "application/pdf", "PDF file", [".pdf"]);
+    }
+
+    // Base64 <-> ArrayBuffer, for embedding a source PDF's raw bytes inside
+    // a saved project's JSON. Chunked to avoid blowing the call stack that
+    // spreading a huge byte array into String.fromCharCode would risk.
+    function arrayBufferToBase64(buf) {
+      const bytes = new Uint8Array(buf);
+      const chunkSize = 0x8000;
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    function base64ToArrayBuffer(b64) {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+
     // Renders a blank white page straight to a data URL — no pdf.js
     // involved, since a blank page has no underlying PDF page to render.
+
     function makeBlankThumb(width, height, rotation, scale) {
       const s = scale || THUMB_SCALE;
       const swapped = rotation % 180 !== 0;
@@ -55,10 +645,47 @@
     }
 
     // ---- Guides overlay -----------------------------------------------
-    // Purely visual — a dashed inset rectangle standing in for margin/trim
-    // guides. Real print-format-aware guides come later.
-    function GuidesOverlay() {
-      return <div className="ze-guides-overlay" aria-hidden="true" />;
+    // Trim/margin/bleed guides drawn in real page geometry: `width`/`height`
+    // are the page's current on-screen pixel size (points * MAIN_SCALE, same
+    // space annotations live in), so a preset's inch dimensions convert to
+    // px via POINTS_PER_INCH * MAIN_SCALE and the trim box centers exactly
+    // on the physical page — no matter the page's actual size or rotation.
+    function GuidesOverlay({ width, height, format, marginIn, bleedIn }) {
+      const preset = GUIDE_FORMAT_PRESETS.find((p) => p.key === format) || GUIDE_FORMAT_PRESETS[0];
+      const toPx = (inches) => inches * POINTS_PER_INCH * MAIN_SCALE;
+
+      const trimW = preset.widthIn ? Math.min(width, toPx(preset.widthIn)) : width;
+      const trimH = preset.heightIn ? Math.min(height, toPx(preset.heightIn)) : height;
+      const trimX = (width - trimW) / 2;
+      const trimY = (height - trimH) / 2;
+      const showTrim = preset.key !== "match"; // page edge already reads as the trim line otherwise
+
+      const marginPx = toPx(marginIn || 0);
+      const marginW = trimW - marginPx * 2, marginH = trimH - marginPx * 2;
+      const showMargin = marginPx > 0 && marginW > 0 && marginH > 0;
+
+      const bleedPx = toPx(bleedIn || 0);
+      const showBleed = bleedPx > 0;
+
+      return (
+        <svg className="ze-guides-overlay" width={width} height={height} aria-hidden="true">
+          {showBleed && (
+            <rect
+              x={trimX - bleedPx} y={trimY - bleedPx} width={trimW + bleedPx * 2} height={trimH + bleedPx * 2}
+              fill="none" stroke="#dd531a" strokeDasharray="2 4" strokeWidth="1" opacity="0.6"
+            />
+          )}
+          {showTrim && (
+            <rect x={trimX} y={trimY} width={trimW} height={trimH} fill="none" stroke="#ffffff" strokeDasharray="5 3" strokeWidth="1.25" opacity="0.85" />
+          )}
+          {showMargin && (
+            <rect
+              x={trimX + marginPx} y={trimY + marginPx} width={marginW} height={marginH}
+              fill="none" stroke="#dd531a" strokeDasharray="4 3" strokeWidth="1.25"
+            />
+          )}
+        </svg>
+      );
     }
 
     function bboxOf(ann) {
@@ -77,13 +704,137 @@
     // dragging" without fighting a native text cursor); swaps to a real
     // <textarea> only while editing. Double-click (or any click while the
     // Text tool is active) enters edit mode.
-    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate }) {
+    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate, onSwitchToTextTool }) {
       const [editing, setEditing] = useState(!!startEditing);
+
+      // Click vs. drag are told apart by movement, not by click count: a
+      // mousedown that releases with barely any movement is a click
+      // (select + edit + switch the toolbar to Text); one that moves past
+      // a small threshold first is a drag (just reposition, never edit).
+      // Selection itself fires immediately on mousedown either way, so the
+      // box highlights the instant you press down, same as before.
+      function handleMouseDown(e) {
+        if (tool !== "select" && tool !== "text") return; // other tools (pen/highlighter/etc.) shouldn't drag or select text boxes
+        e.preventDefault();
+        e.stopPropagation();
+        onSelect(ann.id, e.shiftKey);
+        const startX = e.clientX, startY = e.clientY;
+        const origX = ann.x, origY = ann.y;
+        let moved = false;
+        const DRAG_THRESHOLD = 4;
+        const move = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
+          if (moved) onUpdate(ann.id, { x: origX + dx, y: origY + dy });
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+          if (!moved) {
+            // A genuine click, not a drag — enter edit mode and make the
+            // toolbar/panel reflect Text, matching what's now happening.
+            onSwitchToTextTool && onSwitchToTextTool();
+            setEditing(true);
+          }
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
+
+      const style = {
+        left: ann.x,
+        top: ann.y,
+        fontFamily: ann.fontFamily ? `'${ann.fontFamily}', sans-serif` : undefined,
+        fontSize: (ann.fontSize || 16) + "px",
+        fontWeight: ann.bold ? 700 : 400,
+        fontStyle: ann.italic ? "italic" : "normal",
+        textDecoration: ann.underline ? "underline" : "none",
+        color: ann.color,
+        textAlign: ann.align || "left",
+      };
+      // Explicit size only if the box has been manually resized at least
+      // once (see onMouseUp below) — otherwise both stay auto/shrink-to-fit,
+      // matching the original behavior for untouched boxes.
+      if (ann.width) style.width = ann.width;
+      if (ann.height) style.height = ann.height;
+
+      if (editing) {
+        return (
+          <textarea
+            className="ze-ann-text ze-ann-text--editing"
+            style={style}
+            autoFocus
+            value={ann.text}
+            onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
+            onBlur={(e) => {
+              // Always re-sync size on the way out, not just after an
+              // explicit resize drag — otherwise a box that was never
+              // manually resized snaps from the textarea's actual on-screen
+              // size down to the plain <div>'s shrink-to-fit size the
+              // instant you click away, which read as the box "shrinking
+              // itself" even though nothing was actually lost.
+              onUpdate(ann.id, { width: e.target.offsetWidth, height: e.target.offsetHeight });
+              setEditing(false);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => {
+              // Fires after any drag on the textarea, including a resize
+              // drag via its native corner handle — harmless to call when
+              // nothing was actually resized, since it just re-syncs the
+              // current size. Without this, a resize is lost the moment
+              // editing ends and the box swaps back to the idle <div>.
+              onUpdate(ann.id, { width: e.target.offsetWidth, height: e.target.offsetHeight });
+            }}
+            onKeyDown={(e) => {
+              // Escape steps back to "selected, not editing" — the only
+              // way to reach that state at all, since a click either edits
+              // the box (not moved) or drags it (moved), and clicking away
+              // deselects entirely. Needed so Ctrl+C has something to copy:
+              // a text box's own Ctrl+C is otherwise unreachable, since
+              // while you're still focused in the textarea, Ctrl+C is
+              // deliberately left alone for the browser's native "copy the
+              // highlighted text" behavior instead.
+              if (e.key === "Escape") { e.stopPropagation(); e.currentTarget.blur(); }
+            }}
+          />
+        );
+      }
+
+      return (
+        <div
+          className={"ze-ann-text" + (isSelected ? " is-selected" : "")}
+          style={style}
+          onMouseDown={handleMouseDown}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}
+        </div>
+      );
+    }
+
+    // ---- One placed image --------------------------------------------
+    // Drag to move (Select tool, same pattern as text). A resize handle
+    // in the bottom-right corner appears only when selected — dragging it
+    // scales width/height together, keeping the image's aspect ratio
+    // rather than letting it stretch. Cropping isn't built yet — this is
+    // add/move/resize/select/delete only, deliberately scoped that way.
+    const MIN_CROP_SIZE = 20; // natural px — keeps a crop drag from collapsing to nothing
+
+    function AnnotationImage({ ann, tool, isSelected, isPrimary, isCropping, onSelect, onUpdate, onToggleCrop, pageFilter }) {
+      const halftoneCanvasRef = useRef(null);
+      const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
+      // Crop is a sub-rect of the source image, in ITS OWN natural pixel
+      // space — undefined/missing fields mean "no crop yet" (the full
+      // image), so existing annotations from before cropping existed keep
+      // working with no migration needed.
+      const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
+      const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
 
       function startDrag(e) {
         if (tool !== "select") return;
+        e.preventDefault();
         e.stopPropagation();
-        onSelect(ann.id);
+        onSelect(ann.id, e.shiftKey);
         const startX = e.clientX, startY = e.clientY;
         const origX = ann.x, origY = ann.y;
         const move = (ev) => {
@@ -97,70 +848,248 @@
         window.addEventListener("mouseup", up);
       }
 
-      function handleMouseDown(e) {
-        if (tool === "text") {
-          // Same fix as the overlay's own text-tool handler — prevent the
-          // browser's default mousedown action from undoing the focus we're
-          // about to set via editing=true's autoFocus.
-          e.preventDefault();
-          e.stopPropagation();
-          onSelect(ann.id);
-          setEditing(true);
-          return;
-        }
-        startDrag(e);
+      function startResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const origWidth = ann.width;
+        const aspect = cropH / cropW; // the CROPPED aspect ratio, not the source image's
+        const move = (ev) => {
+          const newWidth = Math.max(20, origWidth + (ev.clientX - startX));
+          onUpdate(ann.id, { width: newWidth, height: newWidth * aspect });
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
       }
 
-      const style = { left: ann.x, top: ann.y };
+      // Both crop gestures work in a fixed "px on screen per natural px"
+      // scale established at drag-start, and a fixed image origin (where
+      // the source image's own (0,0) pixel sits on screen) — panning only
+      // ever moves cropX/cropY within that fixed frame, and resizing only
+      // ever moves the crop rect's edges, so the two never fight each other.
+      function startCropPan(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const scale = ann.width / cropW;
+        const startX = e.clientX, startY = e.clientY;
+        const origCropX = cropX, origCropY = cropY;
+        const move = (ev) => {
+          const dxNat = (ev.clientX - startX) / scale;
+          const dyNat = (ev.clientY - startY) / scale;
+          const newCropX = Math.min(Math.max(0, origCropX - dxNat), Math.max(0, naturalW - cropW));
+          const newCropY = Math.min(Math.max(0, origCropY - dyNat), Math.max(0, naturalH - cropH));
+          onUpdate(ann.id, { cropX: newCropX, cropY: newCropY });
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
 
-      if (editing) {
+      function startCropCornerResize(corner, e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const scale = ann.width / cropW;
+        const imageOriginX = ann.x - cropX * scale;
+        const imageOriginY = ann.y - cropY * scale;
+        const startX = e.clientX, startY = e.clientY;
+        const orig = { cropX, cropY, cropW, cropH };
+        const move = (ev) => {
+          const dxNat = (ev.clientX - startX) / scale;
+          const dyNat = (ev.clientY - startY) / scale;
+          let cx = orig.cropX, cy = orig.cropY, cw = orig.cropW, ch = orig.cropH;
+          if (corner === "se") { cw = orig.cropW + dxNat; ch = orig.cropH + dyNat; }
+          else if (corner === "ne") { cy = orig.cropY + dyNat; cw = orig.cropW + dxNat; ch = orig.cropH - dyNat; }
+          else if (corner === "sw") { cx = orig.cropX + dxNat; cw = orig.cropW - dxNat; ch = orig.cropH + dyNat; }
+          else { cx = orig.cropX + dxNat; cy = orig.cropY + dyNat; cw = orig.cropW - dxNat; ch = orig.cropH - dyNat; } // nw
+          cw = Math.max(MIN_CROP_SIZE, cw);
+          ch = Math.max(MIN_CROP_SIZE, ch);
+          cx = Math.min(Math.max(0, cx), orig.cropX + orig.cropW - MIN_CROP_SIZE);
+          cy = Math.min(Math.max(0, cy), orig.cropY + orig.cropH - MIN_CROP_SIZE);
+          cw = Math.min(cw, naturalW - cx);
+          ch = Math.min(ch, naturalH - cy);
+          onUpdate(ann.id, {
+            cropX: cx, cropY: cy, cropW: cw, cropH: ch,
+            x: imageOriginX + cx * scale, y: imageOriginY + cy * scale,
+            width: cw * scale, height: ch * scale,
+          });
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
+
+      // An image's own filter (if it has one — see effectiveImageFilter)
+      // takes over from the page filter entirely for that image, rather
+      // than combining with it. Grayscale/duotone are approximated live
+      // via an SVG filter built from the exact same luminance/lerp formula
+      // applyColorRemap uses on canvas, so preview and Export PDF match.
+      // Halftone has no CSS-filter equivalent (it replaces pixels with
+      // dots, not a per-pixel remap), so that case swaps the <img> for a
+      // <canvas> the effect below draws the dot pattern onto directly,
+      // same drawHalftoneDots the background and Export use — sourced from
+      // the crop sub-rect via drawImage's source-rect args, which crops
+      // "for free" without a separate step.
+      const imgFilter = effectiveImageFilter(ann, pageFilter);
+      const filterType = imgFilter.type;
+      const isHalftone = filterType === "halftone";
+
+      useEffect(() => {
+        if (!isHalftone || isCropping) return;
+        let cancelled = false;
+        (async () => {
+          const img = await loadImageElement(ann.src);
+          if (cancelled) return;
+          const canvas = halftoneCanvasRef.current;
+          if (!canvas) return;
+          const w = Math.max(1, Math.round(ann.width));
+          const h = Math.max(1, Math.round(ann.height));
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, imgFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE);
+          drawHalftoneDots(ctx, imageData, w, h, cellSize, imgFilter.color || DEFAULT_HALFTONE_COLOR);
+        })();
+        return () => { cancelled = true; };
+      }, [isHalftone, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH, imgFilter.cellSize, imgFilter.color]);
+
+      // Crop-editing view — shows the WHOLE source image (dimmed outside
+      // the current crop window) at the scale the crop rect is already
+      // displayed at, so entering/leaving crop mode doesn't jump the
+      // image's apparent zoom. Deliberately no separate confirm/cancel:
+      // every crop adjustment goes through onUpdate, so it's just another
+      // undo-able edit like any other, rather than its own modal state.
+      if (isCropping) {
+        const scale = ann.width / cropW;
+        const imageOriginX = ann.x - cropX * scale;
+        const imageOriginY = ann.y - cropY * scale;
+        const fullW = naturalW * scale, fullH = naturalH * scale;
+        const winX = cropX * scale, winY = cropY * scale, winW = cropW * scale, winH = cropH * scale;
         return (
-          <textarea
-            className="ze-ann-text ze-ann-text--editing"
-            style={style}
-            autoFocus
-            value={ann.text}
-            onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
-            onBlur={() => setEditing(false)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
+          <div className="ze-ann-image ze-ann-image--cropping" style={{ left: imageOriginX, top: imageOriginY, width: fullW, height: fullH }}>
+            <img src={ann.src} alt="" draggable="false" className="ze-crop-full-img" />
+            <div className="ze-crop-mask" style={{ left: 0, top: 0, width: "100%", height: winY }} />
+            <div className="ze-crop-mask" style={{ left: 0, top: winY + winH, width: "100%", height: Math.max(0, fullH - (winY + winH)) }} />
+            <div className="ze-crop-mask" style={{ left: 0, top: winY, width: winX, height: winH }} />
+            <div className="ze-crop-mask" style={{ left: winX + winW, top: winY, width: Math.max(0, fullW - (winX + winW)), height: winH }} />
+            <div className="ze-crop-window" style={{ left: winX, top: winY, width: winW, height: winH }} onMouseDown={startCropPan}>
+              <div className="ze-crop-handle ze-crop-handle-nw" onMouseDown={(e) => startCropCornerResize("nw", e)} />
+              <div className="ze-crop-handle ze-crop-handle-ne" onMouseDown={(e) => startCropCornerResize("ne", e)} />
+              <div className="ze-crop-handle ze-crop-handle-sw" onMouseDown={(e) => startCropCornerResize("sw", e)} />
+              <div className="ze-crop-handle ze-crop-handle-se" onMouseDown={(e) => startCropCornerResize("se", e)} />
+            </div>
+          </div>
         );
       }
 
+      // Grayscale always reuses the one global filter (no colors to
+      // differ). Duotone reuses it too UNLESS this image has its own
+      // duotone colors, in which case it gets its own uniquely-id'd
+      // <filter> rendered right below, since the global one is tuned to
+      // the page's duotone colors, not necessarily this image's.
+      const hasOwnDuotone = ann.filter && ann.filter.type === "duotone";
+      const duotoneFilterId = hasOwnDuotone ? "ze-filter-duotone-img-" + ann.id : "ze-filter-duotone";
+      const cssFilter =
+        filterType === "grayscale" ? "url(#ze-filter-grayscale)" :
+        filterType === "duotone" ? `url(#${duotoneFilterId})` : undefined;
+      const frameStyle = {};
+      if (ann.tornEdge) frameStyle.clipPath = tornEdgeClipPathCss(ann.width, ann.height);
+      if (cssFilter) frameStyle.filter = cssFilter;
+      const ownDuotoneDarkRgb = hasOwnDuotone ? hexToRgb(imgFilter.darkColor || DEFAULT_DUOTONE_DARK) : null;
+      const ownDuotoneLightRgb = hasOwnDuotone ? hexToRgb(imgFilter.lightColor || DEFAULT_DUOTONE_LIGHT) : null;
+
+      // Un-cropped display scale/offset — when there's no crop these
+      // collapse to (0,0) and the image's natural size, so an uncropped
+      // image renders exactly as it always did.
+      const scale = ann.width / cropW;
+
       return (
         <div
-          className={"ze-ann-text" + (isSelected ? " is-selected" : "")}
-          style={style}
-          onMouseDown={handleMouseDown}
-          onDoubleClick={(e) => { e.stopPropagation(); onSelect(ann.id); setEditing(true); }}
+          className={"ze-ann-image" + (isSelected ? " is-selected" : "")}
+          style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
+          onMouseDown={(e) => { if (tool === "select") startDrag(e); else e.stopPropagation(); }}
         >
-          {ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}
+          {isHalftone ? (
+            <canvas ref={halftoneCanvasRef} style={frameStyle} />
+          ) : (
+            <div className="ze-ann-image-frame" style={frameStyle}>
+              <img
+                src={ann.src}
+                alt=""
+                draggable="false"
+                style={{ position: "absolute", left: -cropX * scale, top: -cropY * scale, width: naturalW * scale, height: naturalH * scale }}
+              />
+            </div>
+          )}
+          {isPrimary && tool === "select" && (
+            <div className="ze-ann-image-handle" onMouseDown={startResize} title="Drag to resize" />
+          )}
+          {hasOwnDuotone && (
+            <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+              <defs>
+                <filter id={duotoneFilterId} colorInterpolationFilters="sRGB">
+                  <feColorMatrix type="matrix" values={LUMINANCE_MATRIX_VALUES} />
+                  <feComponentTransfer>
+                    <feFuncR type="linear" slope={(ownDuotoneLightRgb.r - ownDuotoneDarkRgb.r) / 255} intercept={ownDuotoneDarkRgb.r / 255} />
+                    <feFuncG type="linear" slope={(ownDuotoneLightRgb.g - ownDuotoneDarkRgb.g) / 255} intercept={ownDuotoneDarkRgb.g / 255} />
+                    <feFuncB type="linear" slope={(ownDuotoneLightRgb.b - ownDuotoneDarkRgb.b) / 255} intercept={ownDuotoneDarkRgb.b / 255} />
+                  </feComponentTransfer>
+                </filter>
+              </defs>
+            </svg>
+          )}
         </div>
       );
     }
 
     // ---- One freehand stroke (pen or highlighter) -----------------------
-    // Rendered as an SVG polyline; a dashed bounding box appears around it
-    // when selected. The stroke itself only captures clicks in Select tool
-    // (pointer-events toggle below) so it doesn't intercept drawing/text
-    // clicks meant for the page background.
+    // Rendered as a smoothed SVG path; a dashed bounding box appears around
+    // it when selected. The stroke itself only captures clicks in Select
+    // tool (pointer-events toggle below) so it doesn't intercept
+    // drawing/text clicks meant for the page background.
     function StrokeShape({ ann, tool, isSelected, onSelect }) {
-      const pts = ann.points.map((p) => p[0] + "," + p[1]).join(" ");
       const isHi = ann.tool === "highlighter";
+      const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
+      const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
+      const taper = ann.taper || 0;
       const box = bboxOf(ann);
+      const handleMouseDown = (e) => { if (tool === "select") { e.stopPropagation(); onSelect(ann.id, e.shiftKey); } };
+      const selectCursor = { cursor: tool === "select" ? "pointer" : "default" };
       return (
         <React.Fragment>
-          <polyline
-            points={pts}
-            fill="none"
-            stroke={isHi ? "#ffe066" : "#1a1a1a"}
-            strokeWidth={isHi ? 14 : 2.5}
-            strokeOpacity={isHi ? 0.45 : 1}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ pointerEvents: tool === "select" ? "stroke" : "none", cursor: tool === "select" ? "pointer" : "default" }}
-            onMouseDown={(e) => { if (tool === "select") { e.stopPropagation(); onSelect(ann.id); } }}
-          />
+          {taper > 0 ? (
+            <path
+              d={taperedPathD(ann.points, width, taper)}
+              fill={color}
+              fillOpacity={isHi ? 0.45 : 1}
+              stroke="none"
+              style={{ pointerEvents: tool === "select" ? "fill" : "none", ...selectCursor }}
+              onMouseDown={handleMouseDown}
+            />
+          ) : (
+            <path
+              d={smoothPathD(ann.points)}
+              fill="none"
+              stroke={color}
+              strokeWidth={width}
+              strokeOpacity={isHi ? 0.45 : 1}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ pointerEvents: tool === "select" ? "stroke" : "none", ...selectCursor }}
+              onMouseDown={handleMouseDown}
+            />
+          )}
           {isSelected && (
             <rect
               x={box.x - 6} y={box.y - 6}
@@ -174,11 +1103,14 @@
     }
 
     // ---- Compose canvas — renders the selected page at full size, plus
-    // the annotation layer (text boxes + freehand strokes) on top of it.
+    // the annotation layer (images + text boxes + freehand strokes) on
+    // top of it.
     function ComposeCanvas({
-      pdfDocRef, page, guidesOn, tool,
-      annotations, selectedAnnId, autoEditAnnId,
-      onSelectAnnotation, onAddText, onAddStroke, onUpdateAnnotation,
+      pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, tool,
+      pageFilter, onionGhostSrc, onionSkinOpacity,
+      penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
+      annotations, selectedAnnId, selectedAnnIds, autoEditAnnId, croppingAnnId,
+      onSelectAnnotation, onAddText, onAddStroke, onUpdateAnnotation, onEraseStroke, onSwitchToTextTool, onToggleCrop,
     }) {
       const canvasRef = useRef(null);
       const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -202,8 +1134,9 @@
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, w, h);
           } else {
-            if (!pdfDocRef.current) return;
-            const pdfPage = await pdfDocRef.current.getPage(page.pageNumber);
+            const doc = docFor(pdfDocsRef, page);
+            if (!doc) return;
+            const pdfPage = await doc.getPage(page.pageNumber);
             const viewport = pdfPage.getViewport({ scale: MAIN_SCALE, rotation: page.rotation });
             if (cancelled) return;
             w = viewport.width;
@@ -213,10 +1146,12 @@
             const ctx = canvas.getContext("2d");
             await pdfPage.render({ canvasContext: ctx, viewport }).promise;
           }
-          if (!cancelled) setCanvasSize({ width: w, height: h });
+          if (cancelled) return;
+          applyPageFilter(canvas.getContext("2d"), canvas, pageFilter, 1); // background only, same as Export
+          setCanvasSize({ width: w, height: h });
         })();
         return () => { cancelled = true; };
-      }, [page && page.key, page && page.rotation]);
+      }, [page && page.key, page && page.rotation, pageFilter]);
 
       function overlayPoint(e) {
         const rect = canvasRef.current.getBoundingClientRect();
@@ -225,20 +1160,12 @@
 
       function handleOverlayMouseDown(e) {
         if (!page) return;
-        if (tool === "text") {
-          // Without this, the browser's own default mousedown action (which
-          // moves focus away from whatever's focused, since this overlay div
-          // itself isn't focusable) fires right after React mounts and
-          // autofocuses the new text box — undoing the focus a moment later
-          // and silently kicking the box straight back out of edit mode.
-          e.preventDefault();
-          const p = overlayPoint(e);
-          onAddText(p.x, p.y);
-          return;
-        }
         if (tool === "pen" || tool === "highlighter") {
           const start = overlayPoint(e);
-          drawingRef.current = { tool, points: [[start.x, start.y]] };
+          const color = tool === "highlighter" ? highlighterColor : penColor;
+          const width = tool === "highlighter" ? highlighterWidth : penWidth;
+          const taper = tool === "highlighter" ? highlighterTaper : penTaper;
+          drawingRef.current = { tool, color, width, taper, points: [[start.x, start.y]] };
           setDrawTick((t) => t + 1);
           const move = (ev) => {
             const p = overlayPoint(ev);
@@ -249,7 +1176,13 @@
             window.removeEventListener("mousemove", move);
             window.removeEventListener("mouseup", up);
             if (drawingRef.current && drawingRef.current.points.length > 1) {
-              onAddStroke({ tool: drawingRef.current.tool, points: drawingRef.current.points });
+              onAddStroke({
+                tool: drawingRef.current.tool,
+                points: drawingRef.current.points,
+                color: drawingRef.current.color,
+                strokeWidth: drawingRef.current.width,
+                taper: drawingRef.current.taper,
+              });
             }
             drawingRef.current = null;
             setDrawTick((t) => t + 1);
@@ -258,8 +1191,47 @@
           window.addEventListener("mouseup", up);
           return;
         }
-        // Select tool: clicking empty background deselects.
+        if (tool === "eraser") {
+          const erasedIds = new Set();
+          const tryErase = (pt) => {
+            annotations.forEach((a) => {
+              if (a.type === "stroke" && !erasedIds.has(a.id) && strokeHitTest(pt, a)) {
+                erasedIds.add(a.id);
+                onEraseStroke(a.id);
+              }
+            });
+          };
+          tryErase([overlayPoint(e).x, overlayPoint(e).y]);
+          const move = (ev) => {
+            const p = overlayPoint(ev);
+            tryErase([p.x, p.y]);
+          };
+          const up = () => {
+            window.removeEventListener("mousemove", move);
+            window.removeEventListener("mouseup", up);
+          };
+          window.addEventListener("mousemove", move);
+          window.addEventListener("mouseup", up);
+          return;
+        }
+        // Select or Text tool, clicking empty background: deselect. (Pen/
+        // Highlighter/Eraser all returned above, so only these two tools
+        // ever reach here.)
         onSelectAnnotation(null);
+      }
+
+      // Double-click on empty page background creates a new text box —
+      // text creation is double-click-only now, not a single click while
+      // the Text tool happens to be active.
+      function handleOverlayDoubleClick(e) {
+        if (!page) return;
+        if (tool !== "select" && tool !== "text") return;
+        // Same fix as elsewhere: without this, the browser's own default
+        // mousedown action (from the clicks that make up this double-click)
+        // undoes the focus we're about to set via the new box's autoFocus.
+        e.preventDefault();
+        const p = overlayPoint(e);
+        onAddText(p.x, p.y);
       }
 
       if (!page) {
@@ -270,45 +1242,82 @@
         );
       }
 
-      const cursorClass = tool === "text" ? "ze-tool-text" : (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" : "";
+      const cursorClass =
+        tool === "text" ? "ze-tool-text" :
+        (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" :
+        tool === "eraser" ? "ze-tool-erase" : "";
 
       return (
         <div className="ze-page ze-page--rendered">
           <canvas ref={canvasRef} />
+          {onionGhostSrc && (
+            <img className="ze-onion-ghost" src={onionGhostSrc} alt="" style={{ opacity: onionSkinOpacity }} />
+          )}
           <div
             className={"ze-annotation-layer " + cursorClass}
             style={{ width: canvasSize.width, height: canvasSize.height }}
             onMouseDown={handleOverlayMouseDown}
+            onDoubleClick={handleOverlayDoubleClick}
           >
+            {annotations.filter((a) => a.type === "image").map((a) => (
+              <AnnotationImage
+                key={a.id}
+                ann={a}
+                tool={tool}
+                isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
+                isPrimary={a.id === selectedAnnId}
+                isCropping={a.id === croppingAnnId}
+                onSelect={onSelectAnnotation}
+                onUpdate={onUpdateAnnotation}
+                onToggleCrop={onToggleCrop}
+                pageFilter={pageFilter}
+              />
+            ))}
             <svg className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
               {annotations.filter((a) => a.type === "stroke").map((a) => (
-                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId} onSelect={onSelectAnnotation} />
+                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)} onSelect={onSelectAnnotation} />
               ))}
-              {drawingRef.current && (
-                <polyline
-                  points={drawingRef.current.points.map((p) => p.join(",")).join(" ")}
+              {drawingRef.current && (drawingRef.current.taper > 0 ? (
+                <path
+                  d={taperedPathD(drawingRef.current.points, drawingRef.current.width, drawingRef.current.taper)}
+                  fill={drawingRef.current.color}
+                  fillOpacity={drawingRef.current.tool === "highlighter" ? 0.45 : 1}
+                  stroke="none"
+                />
+              ) : (
+                <path
+                  d={smoothPathD(drawingRef.current.points)}
                   fill="none"
-                  stroke={drawingRef.current.tool === "highlighter" ? "#ffe066" : "#1a1a1a"}
-                  strokeWidth={drawingRef.current.tool === "highlighter" ? 14 : 2.5}
+                  stroke={drawingRef.current.color}
+                  strokeWidth={drawingRef.current.width}
                   strokeOpacity={drawingRef.current.tool === "highlighter" ? 0.45 : 1}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-              )}
+              ))}
             </svg>
             {annotations.filter((a) => a.type === "text").map((a) => (
               <AnnotationText
                 key={a.id}
                 ann={a}
                 tool={tool}
-                isSelected={a.id === selectedAnnId}
+                isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
                 startEditing={a.id === autoEditAnnId}
                 onSelect={onSelectAnnotation}
                 onUpdate={onUpdateAnnotation}
+                onSwitchToTextTool={onSwitchToTextTool}
               />
             ))}
           </div>
-          {guidesOn && <GuidesOverlay />}
+          {guidesOn && canvasSize.width > 0 && (
+            <GuidesOverlay
+              width={canvasSize.width}
+              height={canvasSize.height}
+              format={guideFormat}
+              marginIn={guideMarginIn}
+              bleedIn={guideBleedIn}
+            />
+          )}
         </div>
       );
     }
@@ -319,7 +1328,7 @@
         <div
           className={"ze-thumb" + (isSelected ? " is-selected" : "")}
           draggable="true"
-          onClick={() => onSelect(idx)}
+          onClick={(e) => onSelect(idx, e.shiftKey)}
           {...dragHandlers}
         >
           <div className="ze-thumb-img-wrap">
@@ -339,7 +1348,15 @@
                 className="log-btn"
                 title="Delete"
                 onClick={(e) => { e.stopPropagation(); onDelete(idx); }}
-              >×</button>
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 7h16" />
+                  <path d="M9 7V4h6v3" />
+                  <path d="M6 7l1 13h10l1-13" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -369,7 +1386,7 @@
     const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
     const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-    function Sidebar({ pages, selectedIdx, onSelect, onRotate, onDelete, onReorder, onLoadClick, onInsertBlank, loading }) {
+    function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onRotate, onDelete, onReorder, onLoadClick, onInsertPdfClick, onInsertBlank, loading }) {
       const dragIndexRef = useRef(null);
       const bodyRef = useRef(null);
       const scrollDirRef = useRef(0); // -1 up, 0 idle, 1 down
@@ -448,9 +1465,16 @@
         <aside className="ze-sidebar">
           <div className="ze-sidebar-head">
             <span>Pages{pages.length > 0 ? " (" + pages.length + ")" : ""}</span>
-            <button type="button" onClick={onLoadClick} disabled={loading}>
-              {loading ? "Loading…" : "Load PDF"}
-            </button>
+            <div className="ze-sidebar-head-actions">
+              {pages.length === 0 && (
+                <button type="button" onClick={onLoadClick} disabled={loading}>
+                  {loading ? "Loading…" : "Load PDF"}
+                </button>
+              )}
+              <button type="button" className="log-btn" onClick={onInsertPdfClick} disabled={loading || pages.length === 0} title="Insert another PDF's pages into this document">
+                Insert PDF
+              </button>
+            </div>
           </div>
           <div className="ze-sidebar-body" ref={bodyRef} onDragOver={handleContainerDragOver}>
             {pages.length === 0 && !loading ? (
@@ -469,7 +1493,7 @@
                       <Thumbnail
                         p={p}
                         idx={idx}
-                        isSelected={idx === selectedIdx}
+                        isSelected={idx === selectedIdx || selectedPageIndices.includes(idx)}
                         onSelect={onSelect}
                         onRotate={onRotate}
                         onDelete={onDelete}
@@ -489,24 +1513,930 @@
       );
     }
 
+    // ---- Searchable font picker, with an optional "load your system's
+    // fonts" button via the Local Font Access API (Chrome/Edge only, needs
+    // a permission grant) — same pattern Markdown-to-PDF uses.
+    function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
+      const [query, setQuery] = useState(value || "");
+      const [open, setOpen] = useState(false);
+      const [status, setStatus] = useState(null); // { type: 'success'|'error', message }
+      const [loadingFonts, setLoadingFonts] = useState(false);
+      const containerRef = useRef(null);
+
+      useEffect(() => { setQuery(value || ""); }, [value]);
+
+      useEffect(() => {
+        function handleClickOutside(e) {
+          if (containerRef.current && !containerRef.current.contains(e.target)) {
+            setOpen(false);
+            setQuery(value || "");
+          }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, [value]);
+
+      const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return fontOptions;
+        return fontOptions.filter((f) => f.toLowerCase().includes(q));
+      }, [fontOptions, query]);
+
+      function selectFont(font) {
+        onChange(font);
+        setQuery(font);
+        setOpen(false);
+      }
+
+      async function handleLoadLocalFonts() {
+        setStatus(null);
+        if (!("queryLocalFonts" in window)) {
+          setStatus({ type: "error", message: "Local Font Access isn't supported in this browser — try Chrome or Edge." });
+          return;
+        }
+        setLoadingFonts(true);
+        try {
+          const availableFonts = await window.queryLocalFonts();
+          const families = Array.from(new Set(availableFonts.map((f) => f.family))).sort((a, b) => a.localeCompare(b));
+          setFontOptions((prev) => Array.from(new Set([...prev, ...families])).sort((a, b) => a.localeCompare(b)));
+          setStatus({ type: "success", message: `Loaded ${families.length} local fonts.` });
+        } catch (err) {
+          const denied = err && (err.name === "NotAllowedError" || /permission/i.test(err.message || ""));
+          setStatus({ type: "error", message: denied ? "Permission to read local fonts was denied." : "Couldn't load local fonts." });
+        } finally {
+          setLoadingFonts(false);
+        }
+      }
+
+      return (
+        <div className="ze-fontbox" ref={containerRef}>
+          <div className="ze-fontbox-input-wrap">
+            <input
+              type="text"
+              className="ze-format-select ze-fontbox-input"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+              onFocus={() => setOpen(true)}
+              placeholder="Search fonts…"
+            />
+            <button type="button" className="ze-fontbox-caret" onClick={() => setOpen((o) => !o)} aria-label="Toggle font list">
+              <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 7.5l4.5 4.5 4.5-4.5" /></svg>
+            </button>
+          </div>
+          {open && (
+            <div className="ze-fontbox-list">
+              {filtered.length === 0 ? (
+                <div className="ze-fontbox-empty">No fonts match "{query}"</div>
+              ) : (
+                filtered.map((font) => (
+                  <button
+                    key={font}
+                    type="button"
+                    className={"ze-fontbox-item" + (font === value ? " active" : "")}
+                    style={{ fontFamily: `'${font}', sans-serif` }}
+                    onClick={() => selectFont(font)}
+                  >{font}</button>
+                ))
+              )}
+            </div>
+          )}
+          <button type="button" className="ze-fontbox-load" onClick={handleLoadLocalFonts} disabled={loadingFonts}>
+            {loadingFonts ? "Loading…" : "+ Load Local System Fonts"}
+          </button>
+          {status && (
+            <span className={"ze-format-hint" + (status.type === "error" ? " is-error" : "")}>{status.message}</span>
+          )}
+        </div>
+      );
+    }
+
+    // ---- Shared color-swatches + thickness-slider fields, used for both
+    // a tool's drawing defaults and an existing selected stroke's own
+    // properties — same controls, different get/set targets.
+    function StrokeFormatFields({ swatches, color, width, minWidth, maxWidth, taper, onColor, onWidth, onTaper }) {
+      return (
+        <React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Thickness ({Math.round(width)}px)</span>
+            <input
+              type="range"
+              className="ze-format-slider"
+              min={minWidth}
+              max={maxWidth}
+              step="0.5"
+              value={width}
+              onChange={(e) => onWidth(Number(e.target.value))}
+            />
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Taper ({Math.round((taper || 0) * 100 / 0.45)}%)</span>
+            <input
+              type="range"
+              className="ze-format-slider"
+              min="0"
+              max="0.45"
+              step="0.01"
+              value={taper || 0}
+              onChange={(e) => onTaper(Number(e.target.value))}
+            />
+            <span className="ze-format-hint">Thins each end toward a point. 0% keeps a constant, rounded-off width.</span>
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Color</span>
+            <div className="ze-format-row ze-format-swatches">
+              {swatches.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={"ze-format-swatch" + (color === c ? " active" : "")}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                  onClick={() => onColor(c)}
+                />
+              ))}
+              <input
+                type="color"
+                className="ze-format-color-input"
+                value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#000000"}
+                onChange={(e) => onColor(e.target.value)}
+                title="Custom color"
+              />
+            </div>
+          </div>
+        </React.Fragment>
+      );
+    }
+
+    // ---- Right-side panel. What it shows depends on context, in priority
+    // order: a selected annotation's own formatting first (text or
+    // stroke), then the active tool's drawing defaults (text/pen/
+    // highlighter), then an empty state. Clicking a toolbar tool clears
+    // any selection (see App's selectTool), so picking a tool reliably
+    // brings up that tool's own defaults here.
+    function FormatPanel({
+      tool, selectedAnn, onUpdate, fontOptions, setFontOptions, croppingAnnId, onToggleCrop,
+      textFontFamily, textFontSize, textBold, textItalic, textUnderline, textColor, textAlign,
+      onChangeTextFontFamily, onChangeTextFontSize, onChangeTextBold, onChangeTextItalic, onChangeTextUnderline, onChangeTextColor, onChangeTextAlign,
+      penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
+      highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
+    }) {
+      if (selectedAnn && selectedAnn.type === "text") {
+        const ann = selectedAnn;
+        const patch = (p) => onUpdate(ann.id, p);
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Format — Text</div>
+            <div className="ze-format-panel-body">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Font</span>
+                <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={ann.fontFamily} onChange={(v) => patch({ fontFamily: v })} />
+              </div>
+
+              <label className="ze-format-field">
+                <span className="ze-format-label">Size (px)</span>
+                <input
+                  type="number"
+                  className="ze-format-number"
+                  min="8"
+                  max="200"
+                  value={ann.fontSize || 16}
+                  onChange={(e) => patch({ fontSize: Number(e.target.value) || 16 })}
+                />
+              </label>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Style</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle" + (ann.bold ? " active" : "")} title="Bold" onClick={() => patch({ bold: !ann.bold })}><strong>B</strong></button>
+                  <button type="button" className={"ze-format-toggle" + (ann.italic ? " active" : "")} title="Italic" onClick={() => patch({ italic: !ann.italic })}><em>I</em></button>
+                  <button type="button" className={"ze-format-toggle" + (ann.underline ? " active" : "")} title="Underline" onClick={() => patch({ underline: !ann.underline })}><span style={{ textDecoration: "underline" }}>U</span></button>
+                </div>
+              </div>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Align</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle" + (ann.align === "left" ? " active" : "")} title="Align left" onClick={() => patch({ align: "left" })}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+                  </button>
+                  <button type="button" className={"ze-format-toggle" + (ann.align === "center" ? " active" : "")} title="Align center" onClick={() => patch({ align: "center" })}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
+                  </button>
+                  <button type="button" className={"ze-format-toggle" + (ann.align === "right" ? " active" : "")} title="Align right" onClick={() => patch({ align: "right" })}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
+                  </button>
+                </div>
+                <span className="ze-format-hint">Resize the box (drag its corner while editing) to see centering/right-align take effect.</span>
+              </div>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Color</span>
+                <div className="ze-format-row ze-format-swatches">
+                  {TEXT_COLOR_SWATCHES.map((c) => (
+                    <button key={c} type="button" className={"ze-format-swatch" + (ann.color === c ? " active" : "")} style={{ backgroundColor: c }} title={c} onClick={() => patch({ color: c })} />
+                  ))}
+                  <input
+                    type="color"
+                    className="ze-format-color-input"
+                    value={/^#[0-9a-fA-F]{6}$/.test(ann.color) ? ann.color : "#1a1a1a"}
+                    onChange={(e) => patch({ color: e.target.value })}
+                    title="Custom color"
+                  />
+                </div>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
+      if (selectedAnn && selectedAnn.type === "stroke") {
+        const ann = selectedAnn;
+        const isHi = ann.tool === "highlighter";
+        const patch = (p) => onUpdate(ann.id, p);
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Format — {isHi ? "Highlighter" : "Draw"} stroke</div>
+            <div className="ze-format-panel-body">
+              <StrokeFormatFields
+                swatches={isHi ? HIGHLIGHTER_COLOR_SWATCHES : PEN_COLOR_SWATCHES}
+                color={ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color)}
+                width={ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)}
+                minWidth={isHi ? 6 : 1}
+                maxWidth={isHi ? 40 : 20}
+                taper={ann.taper || 0}
+                onColor={(c) => patch({ color: c })}
+                onWidth={(w) => patch({ strokeWidth: w })}
+                onTaper={(t) => patch({ taper: t })}
+              />
+            </div>
+          </aside>
+        );
+      }
+
+      if (selectedAnn && selectedAnn.type === "image") {
+        const ann = selectedAnn;
+        const patch = (p) => onUpdate(ann.id, p);
+        const isCroppingThis = croppingAnnId === ann.id;
+        const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Format — Image</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block" }}>
+                Drag the image to move it. Drag the handle in its bottom-right corner to resize (aspect ratio locked).
+              </span>
+              <div className="ze-format-field" style={{ marginTop: 14 }}>
+                <span className="ze-format-label">Size</span>
+                <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Crop</span>
+                <div className="ze-format-row">
+                  <button
+                    type="button"
+                    className={"ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : "")}
+                    onClick={() => onToggleCrop(ann.id)}
+                  >
+                    {isCroppingThis ? "Done Cropping" : "Crop"}
+                  </button>
+                  {hasCrop && (
+                    <button
+                      type="button"
+                      className="ze-format-toggle ze-format-toggle-wide"
+                      onClick={() => patch({ cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined })}
+                    >
+                      Reset Crop
+                    </button>
+                  )}
+                </div>
+                <span className="ze-format-hint">While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop.</span>
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Filter</span>
+                <select
+                  className="ze-format-select"
+                  value={(ann.filter && ann.filter.type) || "match"}
+                  onChange={(e) => patch({ filter: { ...ann.filter, type: e.target.value } })}
+                >
+                  {IMAGE_FILTER_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                {ann.filter && ann.filter.type === "duotone" && (
+                  <React.Fragment>
+                    <div className="ze-format-field" style={{ marginTop: 10 }}>
+                      <span className="ze-format-label">Dark tone</span>
+                      <input
+                        type="color" className="ze-format-color-input"
+                        value={ann.filter.darkColor || DEFAULT_DUOTONE_DARK}
+                        onChange={(e) => patch({ filter: { ...ann.filter, darkColor: e.target.value } })}
+                      />
+                    </div>
+                    <div className="ze-format-field">
+                      <span className="ze-format-label">Light tone</span>
+                      <input
+                        type="color" className="ze-format-color-input"
+                        value={ann.filter.lightColor || DEFAULT_DUOTONE_LIGHT}
+                        onChange={(e) => patch({ filter: { ...ann.filter, lightColor: e.target.value } })}
+                      />
+                    </div>
+                  </React.Fragment>
+                )}
+                {ann.filter && ann.filter.type === "halftone" && (
+                  <React.Fragment>
+                    <div className="ze-format-field" style={{ marginTop: 10 }}>
+                      <span className="ze-format-label">Dot size ({ann.filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}px)</span>
+                      <input
+                        type="range" className="ze-format-slider" min={MIN_HALFTONE_CELL_SIZE} max="16" step="1"
+                        value={ann.filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}
+                        onChange={(e) => patch({ filter: { ...ann.filter, cellSize: Number(e.target.value) } })}
+                      />
+                    </div>
+                    <div className="ze-format-field">
+                      <span className="ze-format-label">Ink color</span>
+                      <input
+                        type="color" className="ze-format-color-input"
+                        value={ann.filter.color || DEFAULT_HALFTONE_COLOR}
+                        onChange={(e) => patch({ filter: { ...ann.filter, color: e.target.value } })}
+                      />
+                    </div>
+                  </React.Fragment>
+                )}
+                <span className="ze-format-hint">Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.</span>
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Effect</span>
+                <button
+                  type="button"
+                  className={"ze-format-toggle ze-format-toggle-wide" + (ann.tornEdge ? " active" : "")}
+                  onClick={() => patch({ tornEdge: !ann.tornEdge })}
+                >
+                  Torn Edge
+                </button>
+                <span className="ze-format-hint">A collage-style jagged edge, cut into the image itself. Baked into Export PDF too, using this same shape.</span>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
+      if (tool === "text") {
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Text</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the font, size, style, alignment and color for the next text box you add.</span>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Font</span>
+                <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={textFontFamily} onChange={onChangeTextFontFamily} />
+              </div>
+
+              <label className="ze-format-field">
+                <span className="ze-format-label">Size (px)</span>
+                <input
+                  type="number"
+                  className="ze-format-number"
+                  min="8"
+                  max="200"
+                  value={textFontSize}
+                  onChange={(e) => onChangeTextFontSize(Number(e.target.value) || 16)}
+                />
+              </label>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Style</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle" + (textBold ? " active" : "")} title="Bold" onClick={() => onChangeTextBold(!textBold)}><strong>B</strong></button>
+                  <button type="button" className={"ze-format-toggle" + (textItalic ? " active" : "")} title="Italic" onClick={() => onChangeTextItalic(!textItalic)}><em>I</em></button>
+                  <button type="button" className={"ze-format-toggle" + (textUnderline ? " active" : "")} title="Underline" onClick={() => onChangeTextUnderline(!textUnderline)}><span style={{ textDecoration: "underline" }}>U</span></button>
+                </div>
+              </div>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Align</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle" + (textAlign === "left" ? " active" : "")} title="Align left" onClick={() => onChangeTextAlign("left")}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+                  </button>
+                  <button type="button" className={"ze-format-toggle" + (textAlign === "center" ? " active" : "")} title="Align center" onClick={() => onChangeTextAlign("center")}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
+                  </button>
+                  <button type="button" className={"ze-format-toggle" + (textAlign === "right" ? " active" : "")} title="Align right" onClick={() => onChangeTextAlign("right")}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="ze-format-field">
+                <span className="ze-format-label">Color</span>
+                <div className="ze-format-row ze-format-swatches">
+                  {TEXT_COLOR_SWATCHES.map((c) => (
+                    <button key={c} type="button" className={"ze-format-swatch" + (textColor === c ? " active" : "")} style={{ backgroundColor: c }} title={c} onClick={() => onChangeTextColor(c)} />
+                  ))}
+                  <input
+                    type="color"
+                    className="ze-format-color-input"
+                    value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#1a1a1a"}
+                    onChange={(e) => onChangeTextColor(e.target.value)}
+                    title="Custom color"
+                  />
+                </div>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
+      if (tool === "pen") {
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Draw</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the color and thickness for the next stroke you draw.</span>
+              <StrokeFormatFields
+                swatches={PEN_COLOR_SWATCHES}
+                color={penColor}
+                width={penWidth}
+                minWidth={1}
+                maxWidth={20}
+                taper={penTaper}
+                onColor={onChangePenColor}
+                onWidth={onChangePenWidth}
+                onTaper={onChangePenTaper}
+              />
+            </div>
+          </aside>
+        );
+      }
+
+      if (tool === "highlighter") {
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Highlighter</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the color and thickness for the next stroke you draw.</span>
+              <StrokeFormatFields
+                swatches={HIGHLIGHTER_COLOR_SWATCHES}
+                color={highlighterColor}
+                width={highlighterWidth}
+                minWidth={6}
+                maxWidth={40}
+                taper={highlighterTaper}
+                onColor={onChangeHighlighterColor}
+                onWidth={onChangeHighlighterWidth}
+                onTaper={onChangeHighlighterTaper}
+              />
+            </div>
+          </aside>
+        );
+      }
+
+      return (
+        <aside className="ze-format-panel">
+          <div className="ze-format-panel-head">Format</div>
+          <div className="ze-format-panel-body">
+            <div className="ze-format-empty">
+              Select a text box, image, or stroke to edit it, or pick the Pen/Highlighter tool to set defaults for your next stroke.
+            </div>
+          </div>
+        </aside>
+      );
+    }
+
+    // ---- Guides control — the topbar toggle switch plus a settings
+    // caret that opens a popover for format/margin/bleed, same
+    // click-outside-closes pattern as FontCombobox.
+    function GuidesControl({ guidesOn, onToggleGuides, format, onFormatChange, marginIn, onMarginChange, bleedIn, onBleedChange }) {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        function handleClickOutside(e) {
+          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, []);
+
+      return (
+        <div className="ze-topbar-control" ref={containerRef}>
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <p>Guides</p>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={guidesOn} onChange={(e) => onToggleGuides(e.target.checked)} />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <button type="button" className="ze-guides-settings-btn" title="Guide settings" onClick={() => setOpen((o) => !o)}>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+            </svg>
+          </button>
+          {open && (
+            <div className="ze-topbar-popover">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Format</span>
+                <select className="ze-format-select" value={format} onChange={(e) => onFormatChange(e.target.value)}>
+                  {GUIDE_FORMAT_PRESETS.map((p) => (
+                    <option key={p.key} value={p.key}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Margin (in)</span>
+                <input
+                  type="number" className="ze-format-number" min="0" max="3" step="0.0625"
+                  value={marginIn}
+                  onChange={(e) => onMarginChange(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </label>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Bleed (in)</span>
+                <input
+                  type="number" className="ze-format-number" min="0" max="1" step="0.0625"
+                  value={bleedIn}
+                  onChange={(e) => onBleedChange(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </label>
+              <span className="ze-format-hint">
+                Trim is centered on the page; margin sits inside it, bleed extends outside. Pick "Match Page Size" if the page is already trimmed to its final size.
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ---- Filter control — a page-background treatment (grayscale/duotone/
+    // halftone), same popover shell as GuidesControl. Baked into Export
+    // PDF too via applyPageFilter, so preview and output always match.
+    function FilterControl({
+      filterType, onFilterTypeChange,
+      duotoneDark, duotoneLight, onDuotoneDarkChange, onDuotoneLightChange,
+      halftoneCellSize, onHalftoneCellSizeChange, halftoneColor, onHalftoneColorChange,
+    }) {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        function handleClickOutside(e) {
+          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, []);
+
+      const activeLabel = (PAGE_FILTER_OPTIONS.find((o) => o.key === filterType) || PAGE_FILTER_OPTIONS[0]).label;
+
+      return (
+        <div className="ze-topbar-control" ref={containerRef}>
+          <button
+            type="button"
+            className={"ze-filter-toggle-btn" + (filterType !== "none" ? " active" : "")}
+            onClick={() => setOpen((o) => !o)}
+          >
+            Filter: {activeLabel}
+          </button>
+          {open && (
+            <div className="ze-topbar-popover">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Filter</span>
+                <select className="ze-format-select" value={filterType} onChange={(e) => onFilterTypeChange(e.target.value)}>
+                  {PAGE_FILTER_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              {filterType === "duotone" && (
+                <React.Fragment>
+                  <div className="ze-format-field">
+                    <span className="ze-format-label">Dark tone</span>
+                    <input type="color" className="ze-format-color-input" value={duotoneDark} onChange={(e) => onDuotoneDarkChange(e.target.value)} />
+                  </div>
+                  <div className="ze-format-field">
+                    <span className="ze-format-label">Light tone</span>
+                    <input type="color" className="ze-format-color-input" value={duotoneLight} onChange={(e) => onDuotoneLightChange(e.target.value)} />
+                  </div>
+                </React.Fragment>
+              )}
+              {filterType === "halftone" && (
+                <React.Fragment>
+                  <div className="ze-format-field">
+                    <span className="ze-format-label">Dot size ({halftoneCellSize}px)</span>
+                    <input
+                      type="range" className="ze-format-slider" min={MIN_HALFTONE_CELL_SIZE} max="16" step="1"
+                      value={halftoneCellSize}
+                      onChange={(e) => onHalftoneCellSizeChange(Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="ze-format-field">
+                    <span className="ze-format-label">Ink color</span>
+                    <input type="color" className="ze-format-color-input" value={halftoneColor} onChange={(e) => onHalftoneColorChange(e.target.value)} />
+                  </div>
+                </React.Fragment>
+              )}
+              <span className="ze-format-hint">
+                Applies to this page's background and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too.
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ---- Onion-skin control — ghosts the previous page on top of the
+    // current one at reduced opacity, to help align content across a
+    // spread. Deliberately scoped to previous-page-only (no next-page or
+    // spread-aware left/right detection) and doesn't live-update while
+    // that previous page is still being edited — see the effect in App
+    // that builds onionGhostSrc for why.
+    function OnionSkinControl({ onionOn, onToggleOnion, opacity, onOpacityChange }) {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        function handleClickOutside(e) {
+          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, []);
+
+      return (
+        <div className="ze-topbar-control" ref={containerRef}>
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <p>Onion Skin</p>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={onionOn} onChange={(e) => onToggleOnion(e.target.checked)} />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <button type="button" className="ze-guides-settings-btn" title="Onion skin settings" onClick={() => setOpen((o) => !o)}>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+            </svg>
+          </button>
+          {open && (
+            <div className="ze-topbar-popover">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Opacity ({Math.round(opacity * 100)}%)</span>
+                <input
+                  type="range" className="ze-format-slider" min="0.05" max="0.8" step="0.05"
+                  value={opacity}
+                  onChange={(e) => onOpacityChange(Number(e.target.value))}
+                />
+              </div>
+              <span className="ze-format-hint">
+                Shows the previous page faintly on top, for aligning content across a spread. Switch pages and back to refresh it after editing that page.
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ---- Insert PDF dialog — asks where to splice the newly-chosen PDF's
+    // pages into the current document before actually doing it, rather
+    // than always appending at the end.
+    function InsertPdfDialog({ file, pageCount, afterPage, onChangeAfterPage, onConfirm, onCancel }) {
+      if (!file) return null;
+      return (
+        <div className="ze-modal-backdrop" onMouseDown={onCancel}>
+          <div className="ze-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="ze-modal-head">Insert PDF</div>
+            <div className="ze-modal-body">
+              <p className="ze-format-hint" style={{ margin: "0 0 14px" }}>
+                Inserting <strong>{file.name}</strong> into this document.
+              </p>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Insert after page (0 for the very beginning)</span>
+                <input
+                  type="number" className="ze-format-number" min="0" max={pageCount} autoFocus
+                  value={afterPage}
+                  onChange={(e) => onChangeAfterPage(Math.max(0, Math.min(pageCount, Number(e.target.value) || 0)))}
+                />
+              </label>
+              <span className="ze-format-hint">This document currently has {pageCount} page{pageCount === 1 ? "" : "s"}.</span>
+            </div>
+            <div className="ze-modal-actions">
+              <button type="button" onClick={onCancel}>Cancel</button>
+              <button type="button" className="btn-solid" onClick={onConfirm}>Insert</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ---- Two-step "this erases your work" confirmation — shared by New
+    // Project and Load Project. Step 1 states the consequence plainly;
+    // step 2 is a final, separate "are you sure" rather than a second copy
+    // of the same warning, so it can't be clicked through as a reflex.
+    function ConfirmDialog({ step, onProceed, onYes, onCancel }) {
+      if (!step) return null;
+      return (
+        <div className="ze-modal-backdrop" onMouseDown={onCancel}>
+          <div className="ze-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="ze-modal-head">{step === 1 ? "This will erase your unsaved edits" : "Confirm"}</div>
+            <div className="ze-modal-body">
+              <p className="ze-format-hint" style={{ margin: 0 }}>
+                {step === 1
+                  ? "This will ERASE all your current unsaved edits."
+                  : "Are you sure to proceed?"}
+              </p>
+            </div>
+            <div className="ze-modal-actions">
+              <button type="button" onClick={onCancel}>Back</button>
+              {step === 1 ? (
+                <button type="button" className="btn-solid" onClick={onProceed}>Proceed</button>
+              ) : (
+                <button type="button" className="btn-solid" onClick={onYes}>Yes</button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [guidesOn, setGuidesOn] = useState(false);
-      const [pages, setPages] = useState([]); // {key, pageNumber, rotation, dataUrl, isBlank, annotations}
+      const [guideFormat, setGuideFormat] = useState("match");
+      const [guideMarginIn, setGuideMarginIn] = useState(DEFAULT_GUIDE_MARGIN_IN);
+      const [guideBleedIn, setGuideBleedIn] = useState(DEFAULT_GUIDE_BLEED_IN);
+      const [onionSkinOn, setOnionSkinOn] = useState(false);
+      const [onionSkinOpacity, setOnionSkinOpacity] = useState(0.3);
+      const [onionGhostSrc, setOnionGhostSrc] = useState(null);
+      const [pages, setPages] = useState([]); // {key, pageNumber, rotation, dataUrl, isBlank, annotations, filter}
       const [selectedIdx, setSelectedIdx] = useState(null);
+      // Page filter (grayscale/duotone/halftone) is a per-page property
+      // (page.filter) rather than app-wide state — each page keeps its own
+      // look, and switching pages shows/edits that page's own setting
+      // instead of one filter bleeding onto every page.
+      const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
+      // Undo/redo — each entry is {pages, selectedIdx}, with each page's
+      // dataUrl thumbnail stripped out before storing (see stripDataUrls):
+      // it's fully derivable from pageNumber/rotation/isBlank, and at
+      // several KB–100KB+ per page as a base64 PNG, it's by far the
+      // heaviest part of a page object. Everything else (annotations
+      // included) is already produced through this app's existing
+      // immutable-update style — unrelated pages/annotations keep their
+      // same object references across a change — so these snapshots share
+      // structure with each other for free rather than deep-cloning.
+      const [undoStack, setUndoStack] = useState([]);
+      const [redoStack, setRedoStack] = useState([]);
+      const lastCommitRef = useRef({ time: 0, key: null });
+      const clipboardRef = useRef(null); // last copied annotation (Ctrl+C/Ctrl+V) — a plain ref, not state, since copying shouldn't trigger a re-render
       const [loading, setLoading] = useState(false);
       const [errorMsg, setErrorMsg] = useState(null);
-      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'pen' | 'highlighter'
+      const [exporting, setExporting] = useState(false);
+      const [sendingToArranger, setSendingToArranger] = useState(false);
+      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'pen' | 'highlighter' | 'eraser'
       const [selectedAnnId, setSelectedAnnId] = useState(null);
+      // Shift+Click multi-select — `selectedAnnId` stays the single
+      // "primary" item (the one resize/crop/drag/Ctrl+C/the FormatPanel's
+      // per-object editing all still act on, unchanged from before this
+      // existed); `selectedAnnIds` holds any ADDITIONAL items shift-clicked
+      // alongside it, purely for the shared selection outline and group
+      // delete. Dragging the primary does not drag the others — a
+      // deliberate scope cut, not an oversight.
+      const [selectedAnnIds, setSelectedAnnIds] = useState([]);
+      const [selectedPageIndices, setSelectedPageIndices] = useState([]);
       const [autoEditAnnId, setAutoEditAnnId] = useState(null);
+      const [croppingAnnId, setCroppingAnnId] = useState(null);
+      // Insert PDF — holds the chosen file while the "Insert after page"
+      // dialog is open; the actual insert only happens on confirm.
+      const [pendingInsertFile, setPendingInsertFile] = useState(null);
+      const [insertAfterPage, setInsertAfterPage] = useState(0);
+      const [savingProject, setSavingProject] = useState(false);
+      // Two-step "this erases your work" confirmation, shared by New
+      // Project and Load Project — action is null (closed), "newProject",
+      // or "loadProject"; step is 1 (first warning) or 2 (final check).
+      const [confirmAction, setConfirmAction] = useState(null);
+      const [confirmStep, setConfirmStep] = useState(1);
+      const [fontOptions, setFontOptions] = useState(DEFAULT_FONT_OPTIONS);
+      const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
+      const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
+      const [penTaper, setPenTaper] = useState(0);
+      const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
+      const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);
+      const [highlighterTaper, setHighlighterTaper] = useState(0);
+      // Text tool defaults — applied to each NEW text box; editing an
+      // existing one only changes that one annotation, same relationship
+      // pen/highlighter defaults already have to their own strokes.
+      const [textFontFamily, setTextFontFamily] = useState(DEFAULT_FONT_OPTIONS[0]);
+      const [textFontSize, setTextFontSize] = useState(16);
+      const [textBold, setTextBold] = useState(false);
+      const [textItalic, setTextItalic] = useState(false);
+      const [textUnderline, setTextUnderline] = useState(false);
+      const [textColor, setTextColor] = useState("#1a1a1a");
+      const [textAlign, setTextAlign] = useState("left");
 
-      const pdfDocRef = useRef(null);
+      // Clicking any toolbar tool switches the format panel to that tool's
+      // own settings — any previous selection is cleared so the panel
+      // can't keep showing a stale object's properties instead.
+      function selectTool(t) {
+        setTool(t);
+        setSelectedAnnId(null);
+        setSelectedAnnIds([]);
+        setAutoEditAnnId(null);
+      }
+
+      // Shift+Click toggles membership in a selection set, keeping one
+      // "primary" item (selectedAnnId/selectedIdx) for everything that
+      // only ever makes sense for a single object — resize, crop, drag,
+      // Ctrl+C, the FormatPanel's own property editing — and a side set of
+      // "also selected" ids purely for the shared outline and group
+      // delete. A plain click (no shift) always resets to that one item.
+      function handleSelectAnnotation(id, shiftKey) {
+        if (!shiftKey || id === null) {
+          setSelectedAnnId(id);
+          setSelectedAnnIds([]);
+          return;
+        }
+        const currentAll = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
+        if (currentAll.includes(id)) {
+          const next = currentAll.filter((x) => x !== id);
+          setSelectedAnnId(next.length > 0 ? next[0] : null);
+          setSelectedAnnIds(next.slice(1));
+        } else {
+          setSelectedAnnIds(currentAll);
+          setSelectedAnnId(id);
+        }
+      }
+
+      function handleSelectPage(idx, shiftKey) {
+        if (!shiftKey || idx === null) {
+          setSelectedIdx(idx);
+          setSelectedPageIndices([]);
+          return;
+        }
+        const currentAll = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : [...selectedPageIndices];
+        if (currentAll.includes(idx)) {
+          const next = currentAll.filter((x) => x !== idx);
+          setSelectedIdx(next.length > 0 ? next[0] : null);
+          setSelectedPageIndices(next.slice(1));
+        } else {
+          setSelectedPageIndices(currentAll);
+          setSelectedIdx(idx);
+        }
+      }
+
+      // Narrower than selectTool: switches the toolbar/panel to Text
+      // without clearing the current selection — used when clicking an
+      // existing text box to edit it, where that box should stay selected.
+      function switchToTextTool() {
+        setTool("text");
+      }
+
+      // Map of docId -> { doc, bytes } — a page can come from any one of
+      // several loaded source PDFs (the original load, plus anything
+      // brought in via Insert PDF), not just a single document.
+      const pdfDocsRef = useRef({});
       const fileInputRef = useRef(null);
+      const imageInputRef = useRef(null);
+      const insertPdfInputRef = useRef(null);
+      const projectInputRef = useRef(null);
       const nextKeyRef = useRef(1);
       const nextAnnIdRef = useRef(1);
+      const nextDocIdRef = useRef(1);
       const pageSizeRef = useRef(null); // captured from the first loaded PDF page; used as the default size for new blank pages
 
-      async function renderThumb(pageNumber, rotation) {
-        const pdfPage = await pdfDocRef.current.getPage(pageNumber);
+      const pageFilter = useMemo(() => (selectedPage && selectedPage.filter) || DEFAULT_PAGE_FILTER, [selectedPage]);
+      // Feeds the hidden SVG duotone filter (see the JSX below) — kept as
+      // plain values, not memoized, since hexToRgb is a cheap regex match.
+      const duotoneDarkRgb = hexToRgb(pageFilter.darkColor || DEFAULT_DUOTONE_DARK);
+      const duotoneLightRgb = hexToRgb(pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT);
+
+      // Builds the onion-skin ghost from the previous page's full composite
+      // (background + its own annotations, via the same renderPageToCanvas
+      // export uses) at MAIN_SCALE, using that previous page's OWN filter
+      // (each page carries its own now). Deliberately NOT re-run on every
+      // `pages` change — that would refire on every drag mousemove anywhere
+      // in the document — only when the toggle or selected page changes, so
+      // editing (or re-filtering) the previous page won't refresh its ghost
+      // until you navigate away and back to the current one.
+      useEffect(() => {
+        if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) { setOnionGhostSrc(null); return; }
+        const prevPage = pages[selectedIdx - 1];
+        if (!prevPage) { setOnionGhostSrc(null); return; }
+        let cancelled = false;
+        (async () => {
+          try {
+            const canvas = await renderPageToCanvas(prevPage, pdfDocsRef, MAIN_SCALE, prevPage.filter || DEFAULT_PAGE_FILTER);
+            if (!cancelled) setOnionGhostSrc(canvas.toDataURL());
+          } catch (err) {
+            if (!cancelled) setOnionGhostSrc(null);
+          }
+        })();
+        return () => { cancelled = true; };
+      }, [onionSkinOn, selectedIdx]);
+
+      async function renderThumb(doc, pageNumber, rotation) {
+        const pdfPage = await doc.getPage(pageNumber);
         const viewport = pdfPage.getViewport({ scale: THUMB_SCALE, rotation });
         const canvas = document.createElement("canvas");
         canvas.width = viewport.width;
@@ -521,14 +2451,17 @@
         setLoading(true);
         try {
           const buf = await file.arrayBuffer();
-          const loadingTask = pdfjsLib.getDocument({ data: buf });
-          const doc = await loadingTask.promise;
-          pdfDocRef.current = doc;
+          // A separate copy goes to pdf.js — it may take ownership of the
+          // buffer it's given, and `buf` itself needs to stay intact so
+          // Save Project can re-embed these exact original bytes later.
+          const doc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+          const docId = "doc" + nextDocIdRef.current++;
+          pdfDocsRef.current = { [docId]: { doc, bytes: buf } }; // fresh start — drop any previously loaded docs
 
           const newPages = [];
           for (let i = 1; i <= doc.numPages; i++) {
-            const dataUrl = await renderThumb(i, 0);
-            newPages.push({ key: nextKeyRef.current++, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
+            const dataUrl = await renderThumb(doc, i, 0);
+            newPages.push({ key: nextKeyRef.current++, docId, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
           }
           if (!pageSizeRef.current) {
             const p1 = await doc.getPage(1);
@@ -537,6 +2470,8 @@
           }
           setPages(newPages);
           setSelectedIdx(newPages.length > 0 ? 0 : null);
+          setUndoStack([]); // loading a document is a fresh start, not an undoable step
+          setRedoStack([]);
         } catch (err) {
           setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -554,12 +2489,291 @@
         if (file) handleFile(file);
       }
 
+      function handleInsertPdfClick() {
+        insertPdfInputRef.current && insertPdfInputRef.current.click();
+      }
+
+      // Picking a file doesn't insert it yet — it opens the "Insert after
+      // page" dialog first (see InsertPdfDialog), defaulting to right
+      // after whichever page is currently selected.
+      function handleInsertPdfInputChange(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        setInsertAfterPage(selectedIdx !== null ? selectedIdx + 1 : pages.length);
+        setPendingInsertFile(file);
+      }
+
+      async function handleConfirmInsertPdf() {
+        const file = pendingInsertFile;
+        const atIndex = Math.max(0, Math.min(pages.length, insertAfterPage));
+        setPendingInsertFile(null);
+        if (!file) return;
+        setErrorMsg(null);
+        setLoading(true);
+        try {
+          const buf = await file.arrayBuffer();
+          const doc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+          const docId = "doc" + nextDocIdRef.current++;
+          pdfDocsRef.current[docId] = { doc, bytes: buf }; // additive — existing docs stay loaded
+
+          const newPages = [];
+          for (let i = 1; i <= doc.numPages; i++) {
+            const dataUrl = await renderThumb(doc, i, 0);
+            newPages.push({ key: nextKeyRef.current++, docId, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
+          }
+          if (!pageSizeRef.current) {
+            const p1 = await doc.getPage(1);
+            const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+            pageSizeRef.current = { width: vp1.width, height: vp1.height };
+          }
+          recordUndoCheckpoint();
+          setPages((prev) => {
+            const next = prev.slice();
+            next.splice(atIndex, 0, ...newPages);
+            return next;
+          });
+          setSelectedIdx(atIndex);
+        } catch (err) {
+          setErrorMsg("Couldn't insert that PDF — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Shared by "Export PDF" and "Send to ZineArranger" — both need the
+      // exact same rendered bytes, just handed off differently afterward.
+      async function buildExportPdfBytes() {
+        const outDoc = await PDFLib.PDFDocument.create();
+        for (const page of pages) {
+          const canvas = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER);
+          const pngBytes = await canvasToArrayBuffer(canvas);
+          const pngImage = await outDoc.embedPng(pngBytes);
+          const pageWidthPts = canvas.width / EXPORT_SCALE;
+          const pageHeightPts = canvas.height / EXPORT_SCALE;
+          const outPage = outDoc.addPage([pageWidthPts, pageHeightPts]);
+          outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
+        }
+        return outDoc.save();
+      }
+
+      async function handleExportPdf() {
+        if (pages.length === 0 || exporting) return;
+        setErrorMsg(null);
+        setExporting(true);
+        try {
+          const pdfBytes = await buildExportPdfBytes();
+          await savePdfBytes(pdfBytes, "zine.pdf");
+        } catch (err) {
+          setErrorMsg("Couldn't export PDF — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setExporting(false);
+        }
+      }
+
+      // Saves everything needed to reopen and keep editing: every loaded
+      // source PDF's original bytes (base64, so the file is fully
+      // self-contained — no need to also keep track of and re-attach the
+      // original PDF(s) by hand), every page's annotations and own filter,
+      // and the document-wide Guides/Onion Skin settings. Thumbnails are
+      // regenerated on load instead of saved, same reasoning as the undo
+      // snapshots — they're the one part that's both heavy and fully
+      // derivable from everything else here.
+      async function handleSaveProject() {
+        if (pages.length === 0 || savingProject) return;
+        setErrorMsg(null);
+        setSavingProject(true);
+        try {
+          const docs = {};
+          for (const docId of Object.keys(pdfDocsRef.current)) {
+            docs[docId] = arrayBufferToBase64(pdfDocsRef.current[docId].bytes);
+          }
+          const project = {
+            version: 1,
+            docs,
+            pages: pages.map(({ dataUrl, ...rest }) => rest),
+            settings: {
+              guidesOn, guideFormat, guideMarginIn, guideBleedIn,
+              onionSkinOn, onionSkinOpacity,
+            },
+          };
+          // Plain JSON under the hood — .znow is just a distinct extension
+          // so a saved project doesn't get mistaken for a generic .json
+          // file (or opened by something else that happens to claim it).
+          await saveFile(JSON.stringify(project), "zine-project.znow", "application/json", "ZEditor project file", [".znow"]);
+        } catch (err) {
+          setErrorMsg("Couldn't save the project — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setSavingProject(false);
+        }
+      }
+
+      function openProjectPicker() {
+        projectInputRef.current && projectInputRef.current.click();
+      }
+
+      // "New Project" only ever appears once a project is already loaded
+      // (Load PDF covers the empty-state case), so it always needs the
+      // warning. "Load Project" appears at all times, but only needs it
+      // once there's actually something on screen to lose.
+      function handleNewProjectClick() {
+        setConfirmAction("newProject");
+        setConfirmStep(1);
+      }
+
+      function handleLoadProjectClick() {
+        if (pages.length > 0) {
+          setConfirmAction("loadProject");
+          setConfirmStep(1);
+        } else {
+          openProjectPicker();
+        }
+      }
+
+      function handleConfirmProceed() {
+        setConfirmStep(2);
+      }
+
+      function handleConfirmCancel() {
+        setConfirmAction(null);
+        setConfirmStep(1);
+      }
+
+      function handleConfirmYes() {
+        const action = confirmAction;
+        setConfirmAction(null);
+        setConfirmStep(1);
+        if (action === "newProject") handleLoadClick();
+        else if (action === "loadProject") openProjectPicker();
+      }
+
+      function handleProjectInputChange(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (file) handleLoadProjectFile(file);
+      }
+
+      async function handleLoadProjectFile(file) {
+        setErrorMsg(null);
+        setLoading(true);
+        try {
+          const text = await file.text();
+          const project = JSON.parse(text);
+          if (!project || !Array.isArray(project.pages)) throw new Error("That doesn't look like a ZEditor project file.");
+
+          const newDocsMap = {};
+          for (const docId of Object.keys(project.docs || {})) {
+            const bytes = base64ToArrayBuffer(project.docs[docId]);
+            const doc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+            newDocsMap[docId] = { doc, bytes };
+          }
+          pdfDocsRef.current = newDocsMap;
+
+          const newPages = await Promise.all(project.pages.map(async (p) => {
+            const dataUrl = p.isBlank
+              ? makeBlankThumb(p.width, p.height, p.rotation)
+              : await renderThumb(newDocsMap[p.docId].doc, p.pageNumber, p.rotation);
+            return { ...p, key: nextKeyRef.current++, dataUrl };
+          }));
+
+          // Keep the id counters past anything restored, so new pages,
+          // annotations, or an Insert PDF afterward never collide with ids
+          // that came from this project file.
+          let maxDocNum = 0;
+          Object.keys(newDocsMap).forEach((id) => {
+            const m = /^doc(\d+)$/.exec(id);
+            if (m) maxDocNum = Math.max(maxDocNum, Number(m[1]));
+          });
+          nextDocIdRef.current = maxDocNum + 1;
+          let maxAnnId = 0;
+          newPages.forEach((p) => (p.annotations || []).forEach((a) => { maxAnnId = Math.max(maxAnnId, a.id || 0); }));
+          nextAnnIdRef.current = maxAnnId + 1;
+
+          if (!pageSizeRef.current) {
+            const firstReal = newPages.find((p) => !p.isBlank);
+            if (firstReal) {
+              const p1 = await newDocsMap[firstReal.docId].doc.getPage(firstReal.pageNumber);
+              const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+              pageSizeRef.current = { width: vp1.width, height: vp1.height };
+            } else if (newPages.length > 0) {
+              pageSizeRef.current = { width: newPages[0].width, height: newPages[0].height };
+            }
+          }
+
+          setPages(newPages);
+          setSelectedIdx(newPages.length > 0 ? 0 : null);
+          setUndoStack([]);
+          setRedoStack([]);
+
+          const s = project.settings || {};
+          if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn);
+          if (s.guideFormat !== undefined) setGuideFormat(s.guideFormat);
+          if (s.guideMarginIn !== undefined) setGuideMarginIn(s.guideMarginIn);
+          if (s.guideBleedIn !== undefined) setGuideBleedIn(s.guideBleedIn);
+          if (s.onionSkinOn !== undefined) setOnionSkinOn(s.onionSkinOn);
+          if (s.onionSkinOpacity !== undefined) setOnionSkinOpacity(s.onionSkinOpacity);
+        } catch (err) {
+          setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Skips the manual export-then-reopen round trip: opens ZineArranger
+      // in a new tab, waits for it to announce it's ready (its own script
+      // posts back once loaded — see its "ZEditor handoff" block), then
+      // hands the exported bytes over via postMessage. ZineArranger feeds
+      // them into its own file input under the hood, so from there it's
+      // exactly as if the user had picked the file themselves.
+      async function handleSendToZineArranger() {
+        if (pages.length === 0 || exporting || sendingToArranger) return;
+        setErrorMsg(null);
+        setSendingToArranger(true);
+        let win = null;
+        try {
+          win = window.open("../ZineArranger/index.html", "_blank");
+          if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
+
+          // Attach the listener BEFORE any other await — ZineArranger starts
+          // loading the instant window.open() returns, and can finish and
+          // fire its "ready" ping while we're still off rendering pages for
+          // export. postMessage doesn't queue for a listener that isn't
+          // attached yet, so arriving early would mean losing it for good.
+          // (ZineArranger also repeats its ready ping for a few seconds
+          // rather than sending it once, as a second line of defense.)
+          const readyPromise = new Promise((resolve, reject) => {
+            const timeoutId = setTimeout(() => {
+              window.removeEventListener("message", onMessage);
+              reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
+            }, 15000);
+            function onMessage(event) {
+              if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
+              clearTimeout(timeoutId);
+              window.removeEventListener("message", onMessage);
+              resolve();
+            }
+            window.addEventListener("message", onMessage);
+          });
+
+          const pdfBytes = await buildExportPdfBytes();
+          const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+
+          await readyPromise;
+          win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename: "zine.pdf" }, "*", [buffer]);
+        } catch (err) {
+          setErrorMsg("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
+        } finally {
+          setSendingToArranger(false);
+        }
+      }
+
       async function handleRotate(idx) {
         const target = pages[idx];
         const newRotation = (target.rotation + 90) % 360;
         const dataUrl = target.isBlank
           ? makeBlankThumb(target.width, target.height, newRotation)
-          : await renderThumb(target.pageNumber, newRotation);
+          : await renderThumb(docFor(pdfDocsRef, target), target.pageNumber, newRotation);
+        recordUndoCheckpoint();
         setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, rotation: newRotation, dataUrl } : p)));
       }
 
@@ -574,6 +2788,7 @@
           dataUrl: makeBlankThumb(size.width, size.height, 0),
           annotations: [],
         };
+        recordUndoCheckpoint();
         setPages((prev) => {
           const next = prev.slice();
           next.splice(atIndex, 0, newPage);
@@ -583,6 +2798,7 @@
       }
 
       function handleDelete(idx) {
+        recordUndoCheckpoint();
         setPages((prev) => {
           const next = prev.filter((_, i) => i !== idx);
           return next;
@@ -595,7 +2811,31 @@
         });
       }
 
+      // Deletes every currently shift-selected page at once, rather than
+      // one at a time — unlike a single delete, there's no single obvious
+      // "next" page to land on afterward, so this just clears selection.
+      function handleDeleteSelectedPages() {
+        if (selectedIdx === null) return;
+        const idxToDelete = new Set([selectedIdx, ...selectedPageIndices]);
+        recordUndoCheckpoint();
+        setPages((prev) => prev.filter((_, i) => !idxToDelete.has(i)));
+        setSelectedIdx(null);
+        setSelectedPageIndices([]);
+      }
+
+      // Routes a specific thumbnail's own trash-icon click: deletes just
+      // that page normally, unless it's part of an active multi-selection,
+      // in which case the whole selection goes together.
+      function handleDeleteThumbnail(idx) {
+        if (selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx))) {
+          handleDeleteSelectedPages();
+        } else {
+          handleDelete(idx);
+        }
+      }
+
       function handleReorder(fromIdx, toIdx) {
+        recordUndoCheckpoint();
         setPages((prev) => {
           const next = prev.slice();
           const [moved] = next.splice(fromIdx, 1);
@@ -611,15 +2851,186 @@
         });
       }
 
+      // ---- Undo/redo -------------------------------------------------------
+      function stripDataUrls(pagesArr) {
+        return pagesArr.map(({ dataUrl, ...rest }) => rest);
+      }
+
+      // Call BEFORE a mutating setPages, with the CURRENT (pre-mutation)
+      // pages/selectedIdx still in scope, to snapshot what Undo should
+      // restore. `coalesceKey` lets repeated calls from the same ongoing
+      // gesture (same key, within UNDO_COALESCE_MS of the last one) skip
+      // pushing another entry — so a whole drag, slider tug, or burst of
+      // keystrokes lands as one undo step instead of one per event. Pass
+      // no key for anything that's already a single discrete action
+      // (a click, a drop) — it always gets its own step.
+      function recordUndoCheckpoint(coalesceKey) {
+        const now = Date.now();
+        if (coalesceKey && lastCommitRef.current.key === coalesceKey && now - lastCommitRef.current.time < UNDO_COALESCE_MS) {
+          lastCommitRef.current.time = now;
+          return;
+        }
+        lastCommitRef.current = { time: now, key: coalesceKey || null };
+        setUndoStack((stack) => {
+          const next = [...stack, { pages: stripDataUrls(pages), selectedIdx }];
+          return next.length > MAX_UNDO_HISTORY ? next.slice(next.length - MAX_UNDO_HISTORY) : next;
+        });
+        setRedoStack([]);
+      }
+
+      // Re-attaches each restored page's thumbnail — reusing the current
+      // page with the same key/rotation/size when it's unchanged (the
+      // common case for an undo/redo that only touched one page) instead
+      // of re-rendering every thumbnail on every step.
+      async function restoreSnapshot(snapshot) {
+        const currentByKey = new Map(pages.map((p) => [p.key, p]));
+        const withThumbs = await Promise.all(snapshot.pages.map(async (p) => {
+          const existing = currentByKey.get(p.key);
+          const reusable = existing && existing.dataUrl && existing.rotation === p.rotation &&
+            existing.isBlank === p.isBlank && existing.pageNumber === p.pageNumber &&
+            existing.docId === p.docId && existing.width === p.width && existing.height === p.height;
+          if (reusable) return { ...p, dataUrl: existing.dataUrl };
+          const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderThumb(docFor(pdfDocsRef, p), p.pageNumber, p.rotation);
+          return { ...p, dataUrl };
+        }));
+        setPages(withThumbs);
+        setSelectedIdx(snapshot.selectedIdx);
+      }
+
+      function handleUndo() {
+        if (undoStack.length === 0) return;
+        const entry = undoStack[undoStack.length - 1];
+        setUndoStack((stack) => stack.slice(0, -1));
+        setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx }]);
+        lastCommitRef.current = { time: 0, key: null }; // next edit shouldn't coalesce with whatever came before the undo
+        restoreSnapshot(entry);
+      }
+
+      function handleRedo() {
+        if (redoStack.length === 0) return;
+        const entry = redoStack[redoStack.length - 1];
+        setRedoStack((stack) => stack.slice(0, -1));
+        setUndoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx }]);
+        lastCommitRef.current = { time: 0, key: null };
+        restoreSnapshot(entry);
+      }
+
+      useEffect(() => {
+        function handleKeyDown(e) {
+          const tag = (e.target && e.target.tagName) || "";
+          if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return; // let native undo/typing run inside text fields
+          if (pendingInsertFile || confirmAction) return; // a modal is up — its own buttons handle input
+          const key = e.key.toLowerCase();
+          const mod = e.ctrlKey || e.metaKey;
+
+          if (mod) {
+            if (key === "z" && !e.shiftKey) { e.preventDefault(); handleUndo(); return; }
+            if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); handleRedo(); return; }
+            if (key === "r") { e.preventDefault(); if (selectedIdx !== null) handleRotate(selectedIdx); return; }
+            if (key === "c") {
+              if (selectedIdx !== null && selectedAnnId !== null) {
+                const ann = (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
+                if (ann) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(ann)); }
+              }
+              return;
+            }
+            if (key === "v") {
+              if (clipboardRef.current && selectedIdx !== null) {
+                e.preventDefault();
+                const clip = clipboardRef.current;
+                const id = nextAnnIdRef.current++;
+                // Offset the paste from the original so it's visibly a
+                // second copy, not sitting invisibly on top of the first —
+                // a stroke's whole point list has to shift together, not
+                // just some single x/y the way text/image annotations work.
+                const newAnn = clip.type === "stroke"
+                  ? { ...clip, id, points: clip.points.map(([px, py]) => [px + 20, py + 20]) }
+                  : { ...clip, id, x: clip.x + 20, y: clip.y + 20 };
+                updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
+                setSelectedAnnId(id);
+              }
+              return;
+            }
+            return; // any other Ctrl/Cmd combo — leave the browser's own default alone
+          }
+
+          if (key === "delete") {
+            e.preventDefault();
+            if (selectedAnnId !== null) handleDeleteAnnotation();
+            else if (selectedIdx !== null) {
+              if (selectedPageIndices.length > 0) handleDeleteSelectedPages();
+              else handleDelete(selectedIdx);
+            }
+            return;
+          }
+          if (key === " ") { e.preventDefault(); selectTool("select"); return; }
+          if (key === "t") { selectTool("text"); return; }
+          if (key === "i") { handleImageToolClick(); return; }
+          if (key === "h") { selectTool("highlighter"); return; }
+          if (key === "d") { selectTool("pen"); return; } // "Draw" in the UI — see the toolbar button below
+          if (key === "arrowup") { e.preventDefault(); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
+          if (key === "arrowdown") { e.preventDefault(); setSelectedIdx((cur) => (cur === null ? cur : Math.min(pages.length - 1, cur + 1))); return; }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+      }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction]);
+
+      // Ctrl+V with an image on the system clipboard (a screenshot, or an
+      // image copied from another app/page) drops it onto the current page
+      // as a new image annotation — separate from the keydown handler's
+      // Ctrl+V, which only replays an annotation this app itself copied.
+      // Native `paste` is the only event that actually exposes clipboard
+      // file contents, hence its own listener rather than folding into
+      // handleKeyDown above.
+      useEffect(() => {
+        function handlePaste(e) {
+          const tag = (e.target && e.target.tagName) || "";
+          if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return;
+          if (pendingInsertFile || confirmAction || selectedIdx === null) return;
+          const items = e.clipboardData && e.clipboardData.items;
+          if (!items) return;
+          const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
+          if (!imageItem) return;
+          e.preventDefault();
+          addImageAnnotationFromFile(imageItem.getAsFile(), selectedIdx);
+        }
+        window.addEventListener("paste", handlePaste);
+        return () => window.removeEventListener("paste", handlePaste);
+      }, [selectedIdx, pendingInsertFile, confirmAction]);
+
       // ---- Annotations (Compose mode) ------------------------------------
-      function updateAnnotationsFor(pageIdx, updater) {
+      function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
+        recordUndoCheckpoint(coalesceKey);
         setPages((prev) => prev.map((p, i) => (i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p)));
+      }
+
+      // Patches just the given page's own filter — coalesced per-page so a
+      // slider drag or color-picker tug lands as one undo step, same as
+      // handleUpdateAnnotation's per-id coalescing.
+      function updatePageFilter(pageIdx, patch) {
+        if (pageIdx === null) return;
+        recordUndoCheckpoint("pagefilter:" + pageIdx);
+        setPages((prev) => prev.map((p, i) => (i === pageIdx ? { ...p, filter: { ...(p.filter || DEFAULT_PAGE_FILTER), ...patch } } : p)));
       }
 
       function handleAddText(x, y) {
         if (selectedIdx === null) return;
         const id = nextAnnIdRef.current++;
-        updateAnnotationsFor(selectedIdx, (anns) => [...anns, { id, type: "text", x, y, text: "" }]);
+        // Shares handleUpdateAnnotation's coalesce key for this same id —
+        // a brand-new box immediately followed by typing into it (the
+        // normal flow, since autoEditAnnId focuses it right away) collapses
+        // into one undo step, instead of "empty box" being its own step.
+        updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+          id, type: "text", x, y, text: "",
+          fontFamily: textFontFamily,
+          fontSize: textFontSize,
+          bold: textBold,
+          italic: textItalic,
+          underline: textUnderline,
+          color: textColor,
+          align: textAlign,
+        }], "ann:" + id);
+        setTool("text"); // creating text implies you're now in Text mode, same as clicking an existing box to edit it
         setSelectedAnnId(id);
         setAutoEditAnnId(id);
       }
@@ -627,17 +3038,82 @@
       function handleAddStroke(stroke) {
         if (selectedIdx === null) return;
         const id = nextAnnIdRef.current++;
-        updateAnnotationsFor(selectedIdx, (anns) => [...anns, { id, type: "stroke", tool: stroke.tool, points: stroke.points }]);
+        updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+          id, type: "stroke", tool: stroke.tool, points: stroke.points,
+          color: stroke.color, strokeWidth: stroke.strokeWidth, taper: stroke.taper || 0,
+        }]);
+      }
+
+      // Image tool is a one-shot action now, not a persistent mode: click
+      // the toolbar icon and the file picker opens immediately.
+      function handleImageToolClick() {
+        if (selectedIdx === null) return;
+        imageInputRef.current && imageInputRef.current.click();
+      }
+
+      // Shared by the Image tool's file picker and pasting an image straight
+      // from the system clipboard (Ctrl+V) — both just need a File/Blob and
+      // the page to drop it on.
+      function addImageAnnotationFromFile(file, pageIdx) {
+        if (!file || pageIdx === null) return;
+        const pageAtChooseTime = pages[pageIdx];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const src = reader.result;
+          const img = new Image();
+          img.onload = async () => {
+            const MAX_W = 260; // a sensible starting size — the resize handle takes it from there
+            const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
+            const width = img.naturalWidth * scale;
+            const height = img.naturalHeight * scale;
+            const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
+            const x = Math.max(0, (display.width - width) / 2);
+            const y = Math.max(0, (display.height - height) / 2);
+            const id = nextAnnIdRef.current++;
+            updateAnnotationsFor(pageIdx, (anns) => [...anns, {
+              id, type: "image", x, y, width, height,
+              naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, src,
+            }]);
+            selectTool("select");
+            setSelectedAnnId(id);
+          };
+          img.src = src;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function handleImageFileChosen(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        addImageAnnotationFromFile(file, selectedIdx);
       }
 
       function handleUpdateAnnotation(id, patch) {
         if (selectedIdx === null) return;
-        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+        // Coalesced per-annotation: a drag's mousemoves, a resize, a
+        // slider tug, or a burst of keystrokes editing this same
+        // annotation all land in one undo step instead of one per event.
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, ...patch } : a)), "ann:" + id);
       }
 
-      function handleDeleteAnnotation(id) {
+      // Deletes the whole current selection (the primary item plus any
+      // shift-selected extras), not just one id — see handleSelectAnnotation.
+      function handleDeleteAnnotation() {
+        if (selectedIdx === null || selectedAnnId === null) return;
+        const idsToDelete = [selectedAnnId, ...selectedAnnIds];
+        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => !idsToDelete.includes(a.id)));
+        setSelectedAnnId(null);
+        setSelectedAnnIds([]);
+      }
+
+      // Eraser tool — same removal as handleDeleteAnnotation, kept as its
+      // own function since it's triggered by a drag gesture over many
+      // strokes in one go, not a single explicit delete click. Coalesced
+      // under one shared key so a whole erase swipe (which can touch
+      // several different stroke ids) is one undo step, not one per stroke.
+      function handleEraseStroke(id) {
         if (selectedIdx === null) return;
-        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id));
+        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id), "eraser");
         setSelectedAnnId((cur) => (cur === id ? null : cur));
       }
 
@@ -645,7 +3121,17 @@
       // a selection outline shouldn't survive a page switch.
       useEffect(() => { setSelectedAnnId(null); }, [selectedIdx]);
 
-      const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
+      // Cropping only makes sense while its image stays selected — picking
+      // a different tool or annotation (both of which change selectedAnnId)
+      // should fall out of crop mode automatically rather than leaving it
+      // stuck open on a no-longer-selected image.
+      useEffect(() => {
+        if (croppingAnnId !== null && croppingAnnId !== selectedAnnId) setCroppingAnnId(null);
+      }, [selectedAnnId]);
+
+      function handleToggleCrop(id) {
+        setCroppingAnnId((cur) => (cur === id ? null : id));
+      }
 
       return (
         <div className="ze-shell">
@@ -658,19 +3144,91 @@
               </div>
             </div>
             <div className="topbar-actions">
-              <div className="toggle-row">
-                <div className="toggle-row-text">
-                  <p>Guides</p>
-                </div>
-                <label className="toggle-switch">
-                  <input
-                    type="checkbox"
-                    checked={guidesOn}
-                    onChange={(e) => setGuidesOn(e.target.checked)}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
+              <div className="ze-tool-bar-group">
+                <button type="button" className="ze-tool-icon-btn" title="Undo (Ctrl+Z)" disabled={undoStack.length === 0} onClick={handleUndo}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 7L4 12l5 5" />
+                    <path d="M4 12h11a5 5 0 0 1 0 10h-1" />
+                  </svg>
+                </button>
+                <button type="button" className="ze-tool-icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={redoStack.length === 0} onClick={handleRedo}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M15 7l5 5-5 5" />
+                    <path d="M20 12H9a5 5 0 0 0 0 10h1" />
+                  </svg>
+                </button>
               </div>
+              {selectedPage && (
+                <FilterControl
+                  filterType={pageFilter.type}
+                  onFilterTypeChange={(type) => updatePageFilter(selectedIdx, { type })}
+                  duotoneDark={pageFilter.darkColor || DEFAULT_DUOTONE_DARK}
+                  duotoneLight={pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT}
+                  onDuotoneDarkChange={(darkColor) => updatePageFilter(selectedIdx, { darkColor })}
+                  onDuotoneLightChange={(lightColor) => updatePageFilter(selectedIdx, { lightColor })}
+                  halftoneCellSize={pageFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}
+                  onHalftoneCellSizeChange={(cellSize) => updatePageFilter(selectedIdx, { cellSize })}
+                  halftoneColor={pageFilter.color || DEFAULT_HALFTONE_COLOR}
+                  onHalftoneColorChange={(color) => updatePageFilter(selectedIdx, { color })}
+                />
+              )}
+              <OnionSkinControl
+                onionOn={onionSkinOn}
+                onToggleOnion={setOnionSkinOn}
+                opacity={onionSkinOpacity}
+                onOpacityChange={setOnionSkinOpacity}
+              />
+              <GuidesControl
+                guidesOn={guidesOn}
+                onToggleGuides={setGuidesOn}
+                format={guideFormat}
+                onFormatChange={setGuideFormat}
+                marginIn={guideMarginIn}
+                onMarginChange={setGuideMarginIn}
+                bleedIn={guideBleedIn}
+                onBleedChange={setGuideBleedIn}
+              />
+              {pages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleNewProjectClick}
+                  title="Start over by loading a different PDF — erases the current unsaved project"
+                >
+                  New Project
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={pages.length === 0 || savingProject}
+                onClick={handleSaveProject}
+                title="Saves an editable project file — pages, text, images, and settings — to reopen and keep editing later"
+              >
+                {savingProject ? "Saving…" : "Save Project"}
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleLoadProjectClick}
+                title="Reopen a saved ZEditor project file"
+              >
+                Load Project
+              </button>
+              <button
+                type="button"
+                disabled={pages.length === 0 || exporting || sendingToArranger}
+                onClick={handleSendToZineArranger}
+                title="Exports the current zine and opens it directly in ZineArranger — no manual save/reopen step"
+              >
+                {sendingToArranger ? "Sending…" : "Send to ZineArranger"}
+              </button>
+              <button
+                type="button"
+                className="btn-solid"
+                disabled={pages.length === 0 || exporting}
+                onClick={handleExportPdf}
+              >
+                {exporting ? "Exporting…" : "Export PDF"}
+              </button>
             </div>
           </header>
 
@@ -680,72 +3238,145 @@
             <Sidebar
               pages={pages}
               selectedIdx={selectedIdx}
-              onSelect={setSelectedIdx}
+              selectedPageIndices={selectedPageIndices}
+              onSelect={handleSelectPage}
               onRotate={handleRotate}
-              onDelete={handleDelete}
+              onDelete={handleDeleteThumbnail}
               onReorder={handleReorder}
               onLoadClick={handleLoadClick}
+              onInsertPdfClick={handleInsertPdfClick}
               onInsertBlank={handleInsertBlank}
               loading={loading}
             />
             <div className="ze-compose-area">
               {selectedPage && (
                 <div className="ze-tool-bar">
-                  <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Select" onClick={() => setTool("select")}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3l6.5 16 2-6.5L19 10.5z" fill="currentColor" /></svg>
-                  </button>
-                  <button type="button" className={"ze-tool-icon-btn" + (tool === "text" ? " active" : "")} title="Text" onClick={() => setTool("text")}>
-                    <span className="ze-tool-icon-text">T</span>
-                  </button>
-                  <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Pen" onClick={() => setTool("pen")}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M4 20l1-4L16 5l3 3L8 19z" />
-                      <path d="M14 7l3 3" />
-                    </svg>
-                  </button>
-                  <button type="button" className={"ze-tool-icon-btn" + (tool === "highlighter" ? " active" : "")} title="Highlighter" onClick={() => setTool("highlighter")}>
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M6 20l1-3.5 8-8 3.5 3.5-8 8z" />
-                      <path d="M14 9l3.5 3.5" />
-                      <path d="M3 21h5" />
-                    </svg>
-                  </button>
-                  <div className="ze-tool-divider" />
-                  <button
-                    type="button"
-                    className="ze-tool-icon-btn"
-                    title="Delete selected"
-                    disabled={selectedAnnId === null}
-                    onClick={() => handleDeleteAnnotation(selectedAnnId)}
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M4 7h16" />
-                      <path d="M9 7V4h6v3" />
-                      <path d="M6 7l1 13h10l1-13" />
-                      <path d="M10 11v6" />
-                      <path d="M14 11v6" />
-                    </svg>
-                  </button>
+                  <div className="ze-tool-bar-group">
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Select (Space)" onClick={() => selectTool("select")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3l6.5 16 2-6.5L19 10.5z" fill="currentColor" /></svg>
+                    </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "text" ? " active" : "")} title="Text (T)" onClick={() => selectTool("text")}>
+                      <span className="ze-tool-icon-text">T</span>
+                    </button>
+                    <button type="button" className="ze-tool-icon-btn" title="Insert Image (I)" onClick={handleImageToolClick}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" stroke="none" />
+                        <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" />
+                      </svg>
+                    </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Draw (D)" onClick={() => selectTool("pen")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M4 20l1-4L16 5l3 3L8 19z" />
+                        <path d="M14 7l3 3" />
+                      </svg>
+                    </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "highlighter" ? " active" : "")} title="Highlight (H)" onClick={() => selectTool("highlighter")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M6 20l1-3.5 8-8 3.5 3.5-8 8z" />
+                        <path d="M14 9l3.5 3.5" />
+                        <path d="M3 21h5" />
+                      </svg>
+                    </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "eraser" ? " active" : "")} title="Eraser" onClick={() => selectTool("eraser")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M17 3l4 4-9.5 9.5H7L3 12z" />
+                        <path d="M7 21h13" />
+                        <path d="M9.5 5.5l6 6" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="ze-tool-bar-group">
+                    <button
+                      type="button"
+                      className="ze-tool-icon-btn"
+                      title="Delete selected (Delete)"
+                      disabled={selectedAnnId === null}
+                      onClick={handleDeleteAnnotation}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M4 7h16" />
+                        <path d="M9 7V4h6v3" />
+                        <path d="M6 7l1 13h10l1-13" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="preview-pane">
                 <div className="preview-canvas-wrapper">
                   <ComposeCanvas
-                    pdfDocRef={pdfDocRef}
+                    pdfDocsRef={pdfDocsRef}
                     page={selectedPage}
                     guidesOn={guidesOn}
+                    guideFormat={guideFormat}
+                    guideMarginIn={guideMarginIn}
+                    guideBleedIn={guideBleedIn}
+                    pageFilter={pageFilter}
+                    onionGhostSrc={onionSkinOn ? onionGhostSrc : null}
+                    onionSkinOpacity={onionSkinOpacity}
                     tool={tool}
+                    penColor={penColor}
+                    penWidth={penWidth}
+                    penTaper={penTaper}
+                    highlighterColor={highlighterColor}
+                    highlighterWidth={highlighterWidth}
+                    highlighterTaper={highlighterTaper}
                     annotations={selectedPage ? (selectedPage.annotations || []) : []}
                     selectedAnnId={selectedAnnId}
+                    selectedAnnIds={selectedAnnIds}
                     autoEditAnnId={autoEditAnnId}
-                    onSelectAnnotation={setSelectedAnnId}
+                    croppingAnnId={croppingAnnId}
+                    onSelectAnnotation={handleSelectAnnotation}
                     onAddText={handleAddText}
                     onAddStroke={handleAddStroke}
                     onUpdateAnnotation={handleUpdateAnnotation}
+                    onEraseStroke={handleEraseStroke}
+                    onSwitchToTextTool={switchToTextTool}
+                    onToggleCrop={handleToggleCrop}
                   />
                 </div>
               </div>
             </div>
+            {selectedPage && (
+              <FormatPanel
+                tool={tool}
+                selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+                onUpdate={handleUpdateAnnotation}
+                fontOptions={fontOptions}
+                setFontOptions={setFontOptions}
+                croppingAnnId={croppingAnnId}
+                onToggleCrop={handleToggleCrop}
+                textFontFamily={textFontFamily}
+                textFontSize={textFontSize}
+                textBold={textBold}
+                textItalic={textItalic}
+                textUnderline={textUnderline}
+                textColor={textColor}
+                textAlign={textAlign}
+                onChangeTextFontFamily={setTextFontFamily}
+                onChangeTextFontSize={setTextFontSize}
+                onChangeTextBold={setTextBold}
+                onChangeTextItalic={setTextItalic}
+                onChangeTextUnderline={setTextUnderline}
+                onChangeTextColor={setTextColor}
+                onChangeTextAlign={setTextAlign}
+                penColor={penColor}
+                penWidth={penWidth}
+                penTaper={penTaper}
+                onChangePenColor={setPenColor}
+                onChangePenWidth={setPenWidth}
+                onChangePenTaper={setPenTaper}
+                highlighterColor={highlighterColor}
+                highlighterWidth={highlighterWidth}
+                highlighterTaper={highlighterTaper}
+                onChangeHighlighterColor={setHighlighterColor}
+                onChangeHighlighterWidth={setHighlighterWidth}
+                onChangeHighlighterTaper={setHighlighterTaper}
+              />
+            )}
           </div>
 
           <input
@@ -755,6 +3386,64 @@
             style={{ display: "none" }}
             onChange={handleFileInputChange}
           />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleImageFileChosen}
+          />
+          <input
+            ref={insertPdfInputRef}
+            type="file"
+            accept="application/pdf"
+            style={{ display: "none" }}
+            onChange={handleInsertPdfInputChange}
+          />
+          <input
+            ref={projectInputRef}
+            type="file"
+            accept=".znow"
+            style={{ display: "none" }}
+            onChange={handleProjectInputChange}
+          />
+
+          <InsertPdfDialog
+            file={pendingInsertFile}
+            pageCount={pages.length}
+            afterPage={insertAfterPage}
+            onChangeAfterPage={setInsertAfterPage}
+            onConfirm={handleConfirmInsertPdf}
+            onCancel={() => setPendingInsertFile(null)}
+          />
+
+          <ConfirmDialog
+            step={confirmAction ? confirmStep : 0}
+            onProceed={handleConfirmProceed}
+            onYes={handleConfirmYes}
+            onCancel={handleConfirmCancel}
+          />
+
+          {/* Grayscale/duotone SVG filters for live image previews — see
+              AnnotationImage. color-interpolation-filters="sRGB" keeps the
+              math in the same byte space applyColorRemap uses on canvas
+              (browsers default filter primitives to linearRGB, which would
+              throw preview and Export PDF out of sync). */}
+          <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+            <defs>
+              <filter id="ze-filter-grayscale" colorInterpolationFilters="sRGB">
+                <feColorMatrix type="matrix" values={LUMINANCE_MATRIX_VALUES} />
+              </filter>
+              <filter id="ze-filter-duotone" colorInterpolationFilters="sRGB">
+                <feColorMatrix type="matrix" values={LUMINANCE_MATRIX_VALUES} />
+                <feComponentTransfer>
+                  <feFuncR type="linear" slope={(duotoneLightRgb.r - duotoneDarkRgb.r) / 255} intercept={duotoneDarkRgb.r / 255} />
+                  <feFuncG type="linear" slope={(duotoneLightRgb.g - duotoneDarkRgb.g) / 255} intercept={duotoneDarkRgb.g / 255} />
+                  <feFuncB type="linear" slope={(duotoneLightRgb.b - duotoneDarkRgb.b) / 255} intercept={duotoneDarkRgb.b / 255} />
+                </feComponentTransfer>
+              </filter>
+            </defs>
+          </svg>
         </div>
       );
     }
