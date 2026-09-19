@@ -25,6 +25,7 @@
     --md2ebook-canvas-fg: #b5b5b5;
 
     --ze-sidebar-width: 240px;
+    --ze-format-panel-width: 220px;
     --ze-page-w: 420px;
     --ze-page-h: 594px; /* ~A5 ratio placeholder */
 }
@@ -250,20 +251,71 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-guides-overlay {
     position: absolute;
-    inset: 28px;
-    border: 1px dashed color-mix(in srgb, var(--ui-accent) 70%, #000);
+    top: 0;
+    left: 0;
     pointer-events: none;
+}
+
+/* ---- Topbar popover controls (Guides, Filter, Onion Skin) — shared
+   shell: a small trigger in the topbar plus an absolutely-positioned
+   panel of ze-format-* fields, same click-outside-closes pattern as
+   FontCombobox. */
+.ze-topbar-control { position: relative; display: flex; align-items: center; gap: 6px; }
+.ze-guides-settings-btn {
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-fg-muted);
+}
+.ze-topbar-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 230px;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+    padding: 14px;
+}
+.ze-topbar-popover .ze-format-field:last-of-type { margin-bottom: 0; }
+
+.ze-filter-toggle-btn.active {
+    color: #fff;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    border-color: var(--ui-accent);
+}
+
+/* ---- Onion-skin ghost — the previous page's flattened composite, faded
+   in on top of the current page. mix-blend-mode: multiply lets its own
+   white paper disappear into the current page's background instead of
+   washing it out, so only the ghost's actual ink shows through. */
+.ze-onion-ghost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
 }
 
 /* ---- Load-PDF button + error bar -------------------------------------------
    Load PDF intentionally uses the plain base `button` style from
-   component-kit — no custom variant. */
+   component-kit — no custom variant. Insert PDF / Load Project are
+   secondary actions, so they use .log-btn instead of a second variant. */
 .ze-sidebar-head {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
 }
+.ze-sidebar-head-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ze-sidebar-head-actions .log-btn { margin: 0; }
 
 .ze-error-bar {
     flex: 0 0 auto;
@@ -383,10 +435,11 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 4px;
+    justify-content: space-between;
     padding: 8px 12px;
     border-bottom: 1px solid var(--ui-border);
 }
+.ze-tool-bar-group { display: flex; align-items: center; gap: 4px; }
 
 .ze-tool-icon-btn {
     width: 32px;
@@ -409,14 +462,6 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 
 .ze-tool-icon-text { font-size: 15px; font-weight: 700; line-height: 1; }
 
-.ze-tool-divider {
-    width: 1px;
-    height: 20px;
-    background-color: var(--ui-border);
-    margin: 0 4px;
-    flex: 0 0 auto;
-}
-
 /* ---- Annotation layer (Compose mode) ------------------------------------
    Sits absolutely positioned directly on top of the rendered page canvas,
    pixel-for-pixel — see .ze-page (position:relative) and the canvas's own
@@ -429,6 +474,66 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-tool-text { cursor: text; }
 .ze-tool-draw { cursor: crosshair; }
+.ze-tool-erase { cursor: cell; }
+
+/* ---- Placed images -------------------------------------------------------- */
+.ze-ann-image {
+    position: absolute;
+    cursor: move;
+    border: 1px dashed transparent;
+}
+.ze-ann-image.is-selected { border-color: var(--ui-accent); }
+.ze-ann-image img, .ze-ann-image canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none; /* the wrapper div handles drag; the media element itself shouldn't intercept */
+    -webkit-user-drag: none;
+}
+.ze-ann-image-handle {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background-color: var(--ui-accent);
+    border: 2px solid #fff;
+    cursor: nwse-resize;
+}
+
+/* ---- Image crop (frame for the normal display, editor for crop mode) ---- */
+.ze-ann-image-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+.ze-ann-image--cropping {
+    cursor: default; /* the crop window/handles below carry their own cursors; the surrounding dimmed area isn't draggable */
+}
+.ze-crop-mask {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+}
+.ze-crop-window {
+    position: absolute;
+    outline: 1px dashed #fff;
+    cursor: move;
+}
+.ze-crop-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background-color: var(--ui-accent);
+    border: 2px solid #fff;
+    border-radius: 2px;
+}
+.ze-crop-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.ze-crop-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.ze-crop-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ze-crop-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
 
 .ze-stroke-svg {
     position: absolute;
@@ -440,7 +545,6 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-ann-text {
     position: absolute;
     min-width: 40px;
-    max-width: 320px;
     padding: 2px 4px;
     font-size: 16px;
     line-height: 1.3;
@@ -467,7 +571,230 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     cursor: text;
 }
 
+/* ---- Right-side format panel ------------------------------------------- */
+.ze-format-panel {
+    width: var(--ze-format-panel-width);
+    flex: 0 0 auto;
+    border-left: 1px solid var(--ui-border);
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.ze-format-panel-head {
+    flex: 0 0 auto;
+    padding: 14px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ui-fg-muted);
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-format-panel-body { flex: 1 1 auto; overflow-y: auto; padding: 16px; }
+.ze-format-empty { font-size: 12px; color: var(--ui-fg-muted); line-height: 1.6; }
+
+.ze-format-field { display: block; margin-bottom: 16px; }
+.ze-format-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ui-fg-muted);
+    margin-bottom: 6px;
+}
+.ze-format-hint {
+    display: block;
+    font-size: 10px;
+    color: var(--ui-fg-muted);
+    opacity: 0.75;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.ze-format-select,
+.ze-format-number {
+    width: 100%;
+    background-color: #0c0c0cab;
+    color: var(--ui-fg);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--ui-font);
+    font-size: 12px;
+}
+.ze-format-select:focus,
+.ze-format-number:focus {
+    outline: 2px solid var(--ui-accent-text);
+    outline-offset: 1px;
+}
+
+.ze-format-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.ze-format-toggle {
+    width: 30px;
+    height: 30px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+.ze-format-toggle.active {
+    color: #fff;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    border-color: var(--ui-accent);
+}
+.ze-format-toggle-wide { width: auto; padding: 0 12px; }
+
+.ze-format-swatches { row-gap: 8px; }
+.ze-format-swatch {
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--ui-border);
+}
+.ze-format-swatch.active { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.ze-format-color-input {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--ui-border);
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+}
+.ze-format-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.ze-format-color-input::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+.ze-format-hint.is-error { color: #ff9b81; }
+
+/* ---- Thickness slider --------------------------------------------------- */
+.ze-format-slider {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--ui-border);
+    border-radius: 999px;
+    outline: none;
+}
+.ze-format-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--ui-accent);
+    cursor: pointer;
+    border: 2px solid #fff;
+}
+.ze-format-slider::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--ui-accent);
+    cursor: pointer;
+    border: 2px solid #fff;
+}
+
+/* ---- Font combobox (searchable, + local system fonts) -------------------- */
+.ze-fontbox { position: relative; }
+.ze-fontbox-input-wrap { position: relative; }
+.ze-fontbox-input { padding-right: 26px; }
+.ze-fontbox-caret {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--ui-fg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ze-fontbox-caret:hover { color: var(--ui-fg); background: none; }
+
+.ze-fontbox-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    max-height: 220px;
+    overflow-y: auto;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 6;
+    padding: 4px;
+}
+.ze-fontbox-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 8px;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--ui-fg);
+}
+.ze-fontbox-item:hover { background-color: var(--ui-bg); }
+.ze-fontbox-item.active { color: var(--ui-accent-text); background-color: var(--ui-bg); }
+.ze-fontbox-empty { padding: 8px; font-size: 12px; color: var(--ui-fg-muted); }
+
+.ze-fontbox-load {
+    width: 100%;
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 6px 8px;
+}
+
+/* ---- Modal dialog (Insert PDF) ---------------------------------------------- */
+.ze-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+.ze-modal {
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+}
+.ze-modal-head {
+    padding: 16px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-modal-body { padding: 20px; }
+.ze-modal-body p { font-size: 12px; line-height: 1.5; }
+.ze-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--ui-border);
+}
+
 /* ---- Responsive ------------------------------------------------------------- */
 @media (max-width: 640px) {
-    :root { --ze-sidebar-width: 180px; }
+    :root { --ze-sidebar-width: 180px; --ze-format-panel-width: 180px; }
 }

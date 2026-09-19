@@ -13,6 +13,9 @@
      - window.MD2eBook.normalizeConfig(config)
      - window.MD2eBook.renderHtmlDocument(markdownText, config) -> string
      - window.MD2eBook.exportToPdf(markdownText, config) -> Promise<void>
+     - window.MD2eBook.convertMuseToMarkdown(museText) -> string
+     - window.MD2eBook.convertDocxToMarkdown(arrayBuffer) -> Promise<string>
+     - window.MD2eBook.convertEpubToMarkdown(arrayBuffer) -> Promise<string>
 
    Depends on the global `marked`, loaded via a CDN <script> tag in
    index.html before this file. PDF export uses the browser's own native
@@ -23,6 +26,16 @@
    generated document so the on-screen preview can show real page
    breaks too — see the comment on renderHtmlDocument() for why that
    needs a separate approach from the print/export path.
+
+   The three convert*ToMarkdown functions back the "Upload" button in
+   App.jsx (import an existing document, converting it to Markdown in
+   place of the editor's contents). convertDocxToMarkdown and
+   convertEpubToMarkdown additionally depend on three more CDN
+   <script> tags in index.html — window.mammoth, window.JSZip, and
+   window.TurndownService — loaded separately from marked/React because
+   they're only needed if the user actually imports a .docx or .epub,
+   not for the app's core functionality. See requireGlobal() below for
+   what happens if one of them didn't load.
    ========================================================================== */
 
 (function (window) {
@@ -205,6 +218,39 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  /* ------------------------------------------------------------------
+   * PAGE_BREAK_MARKER / applyPageBreakMarkers(markdownText)
+   * ------------------------------------------------------------------
+   * Manual page breaks: a line containing only `\pagebreak` (optional
+   * surrounding whitespace, its own line) forces a break at that point
+   * in the document — the toolbar button above the editor (see App.jsx)
+   * inserts exactly this. Handled as a markdown *preprocessing* step,
+   * not a marked.js extension: swapped out for a standalone block of
+   * raw HTML (`<div class="md2ebook-pagebreak"></div>`) before the text
+   * ever reaches marked.parse(), padded with blank lines on both sides
+   * so marked's block-level HTML detection reliably treats it as its
+   * own block instead of folding it into a surrounding paragraph.
+   * marked.js passes raw HTML blocks through untouched (same mechanism
+   * already relied on elsewhere for pasted raw HTML), so this needs no
+   * marked extension/plugin API at all. The div itself is zero-size —
+   * see the .md2ebook-pagebreak CSS rule in generateStyleBlock — its
+   * only job is to carry `break-before: page`, which both the export's
+   * native Chrome print engine and the preview's Paged.js polyfill
+   * honor directly (this is core CSS Fragmentation, the thing Paged.js
+   * is fundamentally built to implement — unlike the reserved `page`
+   * counter's `counter-reset` handling, which is a separate, documented
+   * Paged.js bug elsewhere in this file).
+   * ------------------------------------------------------------------ */
+  var PAGE_BREAK_MARKER = '\\pagebreak';
+  var PAGE_BREAK_LINE_RE = /^[ \t]*\\pagebreak[ \t]*$/gm;
+
+  function applyPageBreakMarkers(markdownText) {
+    return String(markdownText).replace(
+      PAGE_BREAK_LINE_RE,
+      '\n\n<div class="md2ebook-pagebreak"></div>\n\n'
+    );
   }
 
   /* ------------------------------------------------------------------
@@ -437,11 +483,26 @@
       '      page-break-inside: avoid;\n' +
       '      break-inside: avoid;\n' +
       '    }\n\n' +
+      // Manual page break, inserted by applyPageBreakMarkers() above in
+      // place of a standalone `\pagebreak` line. Zero footprint of its
+      // own (no height/margin/border) — it exists purely to carry the
+      // break-before, so the content right after it is what visibly
+      // starts the new page, with nothing before it shifted or spaced
+      // out on the page it's leaving.
+      '    .md2ebook-pagebreak {\n' +
+      '      height: 0;\n' +
+      '      margin: 0;\n' +
+      '      padding: 0;\n' +
+      '      border: 0;\n' +
+      '      page-break-before: always;\n' +
+      '      break-before: page;\n' +
+      '    }\n\n' +
       '    @media print {\n' +
       '      html, body { background: #ffffff; }\n' +
       '      .page { box-shadow: none; }\n' +
       '      .page h1, .page h2, .page h3 { page-break-after: avoid; break-after: avoid; }\n' +
       '      .page pre, .page blockquote, .page table, .page img { page-break-inside: avoid; break-inside: avoid; }\n' +
+      '      .md2ebook-pagebreak { page-break-before: always; break-before: page; }\n' +
       '    }\n'
     );
   }
@@ -582,10 +643,13 @@
       } catch (e) {
         /* older marked builds may not expose setOptions the same way */
       }
-      bodyHtml = markedFn(markdownText || '');
+      bodyHtml = markedFn(applyPageBreakMarkers(markdownText || ''));
     } else {
       // Extremely defensive fallback if marked.js failed to load for any
-      // reason — avoids a hard crash and shows the raw text instead.
+      // reason — avoids a hard crash and shows the raw text instead. The
+      // \pagebreak marker isn't specially handled here: without marked
+      // there's no HTML structure to break, so it's left visible as
+      // plain text in the <pre> block along with everything else.
       bodyHtml = '<pre>' + escapeHtml(markdownText || '') + '</pre>';
     }
 
@@ -711,6 +775,172 @@
       '<body>\n' +
       '  <div class="page md2ebook-doc">' +
       parts.bodyHtml +
+      '</div>\n' +
+      '</body>\n' +
+      '</html>'
+    );
+  }
+
+  /* ------------------------------------------------------------------
+   * renderRasterizationDocument(markdownText, config) -> string
+   * ------------------------------------------------------------------
+   * Used only by "Send to ZineArranger" (see handleSendToZineArranger in
+   * App.jsx) — a from-scratch sibling of renderHtmlDocument, NOT a
+   * variant fed through the live preview's own iframe. ZineArranger
+   * needs an actual PDF (real bytes to hand off via postMessage, exactly
+   * like ZEditor's own "Send to ZineArranger"), but this app's normal
+   * export has no PDF bytes anywhere in JS to give it — exportToPdf
+   * above hands the document to the browser's native print engine
+   * instead, which never returns anything back to script. Getting real
+   * bytes here means rendering the document ourselves, page by page,
+   * and rasterizing it — the very approach exportToPdf's own comment
+   * explains was dropped for the main export, for a well-documented
+   * html2canvas bug: an element rendered far off-screen (the standard
+   * "hidden export copy" trick) gets captured at the wrong offset.
+   *
+   * That bug is specifically about html2canvas measuring *its own
+   * document's* scroll/viewport position — it has nothing to do with
+   * where the iframe *element* sits on the outer page. So instead of
+   * rasterizing a hidden div positioned off-screen within this app's own
+   * document (the old, bug-prone approach), this renders into a
+   * completely separate nested document — same as the live preview's
+   * `srcDoc` iframe — and does the html2canvas capture *from inside
+   * that document*, against its own normal in-flow layout (Paged.js
+   * lays out physical pages top-to-bottom starting at its own origin,
+   * never off-screen). Wherever the outer <iframe> element itself is
+   * positioned in THIS document (handleSendToZineArranger tucks it off
+   * the visible page) is irrelevant to that capture.
+   *
+   * Reuses buildDocumentParts/buildPageBoxRule and the Paged.js-based
+   * pagination approach documented on renderHtmlDocument above, with
+   * three differences: buildPageBoxRuleForCapture drops the live
+   * preview's visual page-separator styling (a border baked into
+   * .pagedjs_page would otherwise show up along the bottom edge of every
+   * captured page image); the pagination script's `after` hook captures
+   * and posts back rasterized page images instead of just a height/page
+   * count; and the body HTML is run through DOMPurify first.
+   *
+   * That last one is required, not optional: html2canvas confirmed hangs
+   * indefinitely inside an opaque-origin iframe (the live preview's own
+   * `sandbox="allow-scripts"`, no `allow-same-origin`), so
+   * handleSendToZineArranger grants this iframe `allow-same-origin` too.
+   * Without the live preview's opaque origin standing between it and the
+   * parent, a <script> smuggled through pasted raw HTML (marked.js
+   * passes raw HTML through by default) would otherwise be able to reach
+   * out via `allow-same-origin` and manipulate this app directly.
+   * DOMPurify strips that content outright before it ever reaches the
+   * iframe, which holds regardless of sandboxing — a stronger guarantee
+   * than isolation alone, and what makes allow-same-origin safe to grant
+   * here specifically.
+   * ------------------------------------------------------------------ */
+  function buildPageBoxRuleForCapture(parts) {
+    var pageNumbers = buildPageNumberCss(parts.normalized);
+    return (
+      '\n@page {\n' +
+      '  size: ' + parts.paper.widthIn + 'in ' + parts.paper.heightIn + 'in;\n' +
+      '  margin: ' + parts.normalized.marginVerticalIn + 'in ' + parts.normalized.marginHorizontalIn + 'in;\n' +
+      pageNumbers.marginBox +
+      '}\n' +
+      pageNumbers.rootReset +
+      pageNumbers.overrideRule +
+      '.page {\n' +
+      '  width: 100%;\n' +
+      '  min-height: 0;\n' +
+      '  padding: 0;\n' +
+      '  box-shadow: none;\n' +
+      '}\n' +
+      // No visible seam between pages here (unlike buildPageBoxRule) —
+      // each .pagedjs_page is captured on its own as one PDF page, so a
+      // border baked into its own box would bake a stray line into the
+      // exported image instead of just separating pages on screen.
+      '.pagedjs_page {\n' +
+      '  margin-bottom: 0 !important;\n' +
+      '  border-bottom: none !important;\n' +
+      '}\n'
+    );
+  }
+
+  function renderRasterizationDocument(markdownText, config) {
+    var parts = buildDocumentParts(markdownText, config);
+    // See the comment above — this iframe runs with allow-same-origin
+    // (unlike the live preview's), so sanitizing here is the thing that
+    // actually keeps a smuggled <script> in pasted raw HTML from
+    // reaching out to the parent app, not the sandbox by itself.
+    var sanitizedBodyHtml = DOMPurify.sanitize(parts.bodyHtml);
+
+    var script =
+      '<script>\n' +
+      '  window.PagedConfig = {\n' +
+      '    after: function (flow) {\n' +
+      '      try {\n' +
+      (parts.normalized.pageNumbersEnabled
+        ? '        var __pages = document.querySelectorAll(".pagedjs_page");\n' +
+          '        for (var __i = 0; __i < __pages.length; __i++) {\n' +
+          '          var __box = __pages[__i].querySelector(".pagedjs_margin-bottom-center .pagedjs_margin-content");\n' +
+          '          if (__box) {\n' +
+          '            __box.setAttribute("data-md2ebook-pagenum", String(' +
+          parts.normalized.pageStartFrom +
+          ' + __i));\n' +
+          '          }\n' +
+          '        }\n'
+        : '') +
+      '      } catch (e) {}\n' +
+      '      var pages = document.querySelectorAll(".pagedjs_page");\n' +
+      '      var images = [];\n' +
+      '      var i = 0;\n' +
+      '      function fail(err) {\n' +
+      '        try {\n' +
+      '          window.parent.postMessage({ source: "md2ebook-rasterize", error: String((err && err.message) || err) }, "*");\n' +
+      '        } catch (e) {}\n' +
+      '      }\n' +
+      '      function captureNext() {\n' +
+      '        if (i >= pages.length) {\n' +
+      '          try {\n' +
+      '            var buffers = images.map(function (b) { return b.buffer; });\n' +
+      '            window.parent.postMessage({\n' +
+      '              source: "md2ebook-rasterize",\n' +
+      '              images: images,\n' +
+      '              widthIn: ' + parts.paper.widthIn + ',\n' +
+      '              heightIn: ' + parts.paper.heightIn + '\n' +
+      '            }, "*", buffers);\n' +
+      '          } catch (e) { fail(e); }\n' +
+      '          return;\n' +
+      '        }\n' +
+      // scale: 2 renders at ~192 DPI (double the 96 DPI the page is laid
+      // out at) — sharp enough for print without the file size a much
+      // higher factor would add.
+      '        html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff", useCORS: true })\n' +
+      '          .then(function (canvas) { return new Promise(function (resolve) { canvas.toBlob(resolve, "image/png"); }); })\n' +
+      '          .then(function (blob) { return blob.arrayBuffer(); })\n' +
+      '          .then(function (buffer) { images.push({ buffer: buffer }); i++; captureNext(); })\n' +
+      '          .catch(fail);\n' +
+      '      }\n' +
+      '      try { captureNext(); } catch (e) { fail(e); }\n' +
+      '    }\n' +
+      '  };\n' +
+      '</script>\n' +
+      '<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>\n' +
+      '<script src="https://cdn.jsdelivr.net/npm/pagedjs@0.4.3/dist/paged.polyfill.js"></script>\n';
+
+    return (
+      '<!DOCTYPE html>\n' +
+      '<html lang="en">\n' +
+      '<head>\n' +
+      '  <meta charset="UTF-8">\n' +
+      '  <title>Md to PDF Converter — Export</title>\n' +
+      '  ' +
+      googleFontLinkTag(parts.normalized.fontFamily) +
+      '\n' +
+      '  <style>' +
+      parts.styleText +
+      buildPageBoxRuleForCapture(parts) +
+      '  </style>\n' +
+      '  ' +
+      script +
+      '</head>\n' +
+      '<body>\n' +
+      '  <div class="page md2ebook-doc">' +
+      sanitizedBodyHtml +
       '</div>\n' +
       '</body>\n' +
       '</html>'
@@ -927,6 +1157,249 @@
     });
   }
 
+  /* ------------------------------------------------------------------
+   * requireGlobal(name, featureLabel)
+   * ------------------------------------------------------------------
+   * convertDocxToMarkdown/convertEpubToMarkdown depend on CDN-loaded
+   * libraries that, unlike marked.js, aren't needed for the app to
+   * work at all — only if the user actually imports one of those
+   * formats. If one failed to load (no internet the first time, a
+   * blocked request, an ad blocker), calling it directly would throw
+   * an opaque "X is not a function" deep inside this file. This turns
+   * that into one clear, actionable error message instead.
+   * ------------------------------------------------------------------ */
+  function requireGlobal(name, featureLabel) {
+    if (typeof window[name] === 'undefined') {
+      throw new Error(
+        featureLabel + ' needs the "' + name + '" library, which did not load ' +
+        '(this app loads it from a CDN, so it needs internet access the first ' +
+        'time). Try again once you are online, or reload the page.'
+      );
+    }
+    return window[name];
+  }
+
+  /* ------------------------------------------------------------------
+   * htmlToMarkdown(html)
+   * ------------------------------------------------------------------
+   * Shared HTML -> Markdown step for both the .docx and .epub import
+   * paths below (mammoth.js and the unzipped EPUB chapters both land
+   * as HTML first; this is where both convert the rest of the way).
+   * ------------------------------------------------------------------ */
+  function htmlToMarkdown(html) {
+    var TurndownService = requireGlobal('TurndownService', 'Document import');
+    var td = new TurndownService({
+      headingStyle: 'atx',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced',
+    });
+    return td.turndown(html || '');
+  }
+
+  /* ------------------------------------------------------------------
+   * convertMuseToMarkdown(museText)
+   * ------------------------------------------------------------------
+   * Hand-written, line-based translation from Muse (the lightweight
+   * markup language from Emacs Muse / Text::Amuse) to Markdown — there
+   * is no maintained JS library for Muse, unlike docx/epub below.
+   * Covers the constructs in common everyday use: headings (1-5 `*` at
+   * the start of a line), bold/italic (already valid Markdown syntax,
+   * left as-is), underline (`_x_`, converted to `<u>x</u>` since
+   * Markdown has no native underline, but marked.js — this app's
+   * renderer — passes raw inline HTML straight through), inline
+   * teletype (`=x=` -> `` `x` ``), `[[url][description]]` / `[[url]]`
+   * links, unordered/ordered lists, horizontal rules, blockquotes
+   * (indented text), and <example>/<verbatim> blocks (-> fenced code).
+   * Directives this doesn't recognize (footnotes, tables, definition
+   * lists, `#title`/`#author` headers) are passed through unchanged
+   * rather than mangled, so at worst they need manual cleanup after
+   * import instead of silently losing content.
+   * ------------------------------------------------------------------ */
+  function convertMuseInline(s) {
+    var result = String(s);
+
+    // Links: [[url][description]] or [[url]] -> Markdown [text](url).
+    result = result.replace(/\[\[([^\]\[]+)\]\[([^\]\[]+)\]\]/g, '[$2]($1)');
+    result = result.replace(/\[\[([^\]\[]+)\]\]/g, '[$1]($1)');
+
+    // Underline has no Markdown equivalent — kept as real underline via
+    // raw HTML rather than silently becoming italic or disappearing.
+    result = result.replace(/_([^_]+)_/g, '<u>$1</u>');
+
+    // Inline teletype/fixed-width -> Markdown inline code.
+    result = result.replace(/=([^=]+)=/g, '`$1`');
+
+    // *emphasis*, **strong**, ***both*** are already valid Markdown
+    // syntax as-is — no conversion needed for those.
+    return result;
+  }
+
+  function convertMuseToMarkdown(museText) {
+    var text = String(museText || '').replace(/\r\n?/g, '\n');
+    var lines = text.split('\n');
+    var out = [];
+    var inBlock = false; // inside <example>...</example> or <verbatim>...</verbatim>
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      if (/^\s*<(example|verbatim)>\s*$/i.test(line)) {
+        inBlock = true;
+        out.push('```');
+        continue;
+      }
+      if (/^\s*<\/(example|verbatim)>\s*$/i.test(line)) {
+        inBlock = false;
+        out.push('```');
+        continue;
+      }
+      if (inBlock) {
+        out.push(line);
+        continue;
+      }
+
+      // Directive lines (#title, #author, ...) and blank lines pass
+      // through untouched.
+      if (line.trim() === '' || /^#\w+\s/.test(line)) {
+        out.push(line);
+        continue;
+      }
+
+      // Horizontal rule: 4+ hyphens alone on a line.
+      if (/^-{4,}\s*$/.test(line)) {
+        out.push('---');
+        continue;
+      }
+
+      // Headings: 1-5 leading asterisks + a space, at column 0.
+      var headingMatch = line.match(/^(\*{1,5})\s+(.*)$/);
+      if (headingMatch) {
+        var level = Math.min(headingMatch[1].length, 6);
+        out.push(new Array(level + 1).join('#') + ' ' + convertMuseInline(headingMatch[2]));
+        continue;
+      }
+
+      // Unordered list item: optionally-indented "- ".
+      var ulMatch = line.match(/^(\s*)-\s+(.*)$/);
+      if (ulMatch) {
+        out.push(ulMatch[1] + '- ' + convertMuseInline(ulMatch[2]));
+        continue;
+      }
+
+      // Ordered list item: optionally-indented "1. ", "2. ", etc.
+      var olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
+      if (olMatch) {
+        out.push(olMatch[1] + olMatch[2] + '. ' + convertMuseInline(olMatch[3]));
+        continue;
+      }
+
+      // Blockquote: text indented two or more spaces (and not one of
+      // the list forms just checked) reads as quoted in Muse.
+      if (/^ {2,}\S/.test(line)) {
+        out.push('> ' + convertMuseInline(line.trim()));
+        continue;
+      }
+
+      out.push(convertMuseInline(line));
+    }
+
+    return out.join('\n');
+  }
+
+  /* ------------------------------------------------------------------
+   * convertDocxToMarkdown(arrayBuffer)
+   * ------------------------------------------------------------------
+   * mammoth.js unpacks the .docx directly into HTML (headings, lists,
+   * bold/italic, tables translate reasonably well; footnotes, tracked
+   * changes, and embedded objects don't survive), which then goes
+   * through the same htmlToMarkdown() step as the EPUB path below.
+   * ------------------------------------------------------------------ */
+  function convertDocxToMarkdown(arrayBuffer) {
+    var mammoth = requireGlobal('mammoth', 'Word (.docx) import');
+    return mammoth.convertToHtml({ arrayBuffer: arrayBuffer }).then(function (result) {
+      return htmlToMarkdown(result.value);
+    });
+  }
+
+  /* ------------------------------------------------------------------
+   * convertEpubToMarkdown(arrayBuffer)
+   * ------------------------------------------------------------------
+   * An EPUB is a zip of individual XHTML chapter files plus a manifest
+   * (the OPF file, pointed to by META-INF/container.xml) that lists
+   * every file and the spine — the chapters' actual reading order.
+   * This unzips it (JSZip), reads the spine in order, converts each
+   * chapter's HTML to Markdown (already-structured HTML, so fidelity
+   * here is better than the raw-text-only PDF path this app doesn't
+   * have), and joins the chapters with the same manual page-break
+   * marker the toolbar's "+ Page Break" button inserts — so a
+   * multi-chapter book imports as one continuous document that still
+   * paginates the way the original chapters did.
+   * ------------------------------------------------------------------ */
+  function convertEpubToMarkdown(arrayBuffer) {
+    var JSZip = requireGlobal('JSZip', 'EPUB import');
+
+    return JSZip.loadAsync(arrayBuffer).then(function (zip) {
+      var containerFile = zip.file('META-INF/container.xml');
+      if (!containerFile) {
+        throw new Error('This file does not look like a valid EPUB (missing META-INF/container.xml).');
+      }
+
+      return containerFile.async('string').then(function (containerXml) {
+        var containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+        var rootfileEl = containerDoc.querySelector('rootfile');
+        var rootfilePath = rootfileEl ? rootfileEl.getAttribute('full-path') : null;
+        if (!rootfilePath) {
+          throw new Error('Could not find the EPUB\'s content file (rootfile) in container.xml.');
+        }
+
+        var opfFile = zip.file(rootfilePath);
+        if (!opfFile) {
+          throw new Error('The EPUB\'s content file ("' + rootfilePath + '") is missing from the archive.');
+        }
+        var opfDir = rootfilePath.indexOf('/') > -1
+          ? rootfilePath.slice(0, rootfilePath.lastIndexOf('/') + 1)
+          : '';
+
+        return opfFile.async('string').then(function (opfText) {
+          var opfDoc = new DOMParser().parseFromString(opfText, 'application/xml');
+
+          var manifest = {};
+          var manifestItems = opfDoc.querySelectorAll('manifest > item');
+          for (var m = 0; m < manifestItems.length; m++) {
+            manifest[manifestItems[m].getAttribute('id')] = manifestItems[m].getAttribute('href');
+          }
+
+          var spineEls = opfDoc.querySelectorAll('spine > itemref');
+          var spinePaths = [];
+          for (var s = 0; s < spineEls.length; s++) {
+            var href = manifest[spineEls[s].getAttribute('idref')];
+            if (href) spinePaths.push(opfDir + href);
+          }
+          if (spinePaths.length === 0) {
+            throw new Error('This EPUB\'s spine (chapter reading order) is empty or could not be read.');
+          }
+
+          var chapterPromises = spinePaths.map(function (path) {
+            var file = zip.file(path) || zip.file(decodeURIComponent(path));
+            if (!file) return Promise.resolve('');
+            return file.async('string').then(function (xhtml) {
+              // Parsed as text/html (not application/xhtml+xml): more
+              // forgiving of the slightly-malformed markup real-world
+              // EPUBs sometimes ship, while still giving a normal DOM
+              // to read .body.innerHTML from.
+              var doc = new DOMParser().parseFromString(xhtml, 'text/html');
+              return doc.body ? htmlToMarkdown(doc.body.innerHTML).trim() : '';
+            });
+          });
+
+          return Promise.all(chapterPromises).then(function (chapters) {
+            return chapters.filter(Boolean).join('\n\n' + PAGE_BREAK_MARKER + '\n\n');
+          });
+        });
+      });
+    });
+  }
+
   window.MD2eBook = {
     PAPER_SIZES: PAPER_SIZES,
     FONT_STACKS: FONT_STACKS,
@@ -934,6 +1407,10 @@
     ALLOWED_BOLD_WEIGHTS: ALLOWED_BOLD_WEIGHTS,
     normalizeConfig: normalizeConfig,
     renderHtmlDocument: renderHtmlDocument,
+    renderRasterizationDocument: renderRasterizationDocument,
     exportToPdf: exportToPdf,
+    convertMuseToMarkdown: convertMuseToMarkdown,
+    convertDocxToMarkdown: convertDocxToMarkdown,
+    convertEpubToMarkdown: convertEpubToMarkdown,
   };
 })(window);

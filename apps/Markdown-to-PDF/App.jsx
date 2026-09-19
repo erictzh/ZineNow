@@ -73,11 +73,17 @@ function ControlField({ label, hint, children }) {
         children,
         hint ? React.createElement("span", { className: "block text-[11px] text-fg-muted opacity-70 mt-1" }, hint) : null));
 }
+// Colors/border/radius/padding/focus outline all come from component-kit.css's
+// input[type="text"], input[type="number"] rule — only layout (w-full) and
+// what the kit leaves unset (font-size, placeholder color) are added here.
 function TextInput({ value, onChange, placeholder, type = 'text', inputMode }) {
-    return (React.createElement("input", { type: type, inputMode: inputMode, value: value, onChange: (e) => onChange(e.target.value), placeholder: placeholder, className: "w-full rounded-md border border-line bg-ink px-3 py-1.5 text-sm text-fg\n                 placeholder-fg-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent" }));
+    return (React.createElement("input", { type: type, inputMode: inputMode, value: value, onChange: (e) => onChange(e.target.value), placeholder: placeholder, className: "w-full text-sm placeholder-fg-muted" }));
 }
+// <select> isn't one of component-kit.css's covered elements — styled here
+// (in styles.css, see the "select" rule) to match its input look using the
+// same --ui-* tokens, rather than inventing a different visual language.
 function SelectInput({ value, onChange, children }) {
-    return (React.createElement("select", { value: value, onChange: (e) => onChange(e.target.value), className: "w-full rounded-md border border-line bg-ink px-3 py-1.5 text-sm text-fg\n                 focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent" }, children));
+    return (React.createElement("select", { value: value, onChange: (e) => onChange(e.target.value), className: "w-full text-sm" }, children));
 }
 /* ==========================================================================
    Font combobox — searchable, supports typing to filter, plus a button
@@ -147,8 +153,12 @@ function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
             React.createElement("input", { type: "text", value: query, onChange: (e) => {
                     setQuery(e.target.value);
                     setOpen(true);
-                }, onFocus: () => setOpen(true), placeholder: "Search fonts\u2026", className: "w-full rounded-md border border-line bg-ink px-3 py-1.5 pr-8 text-sm text-fg\n                     placeholder-fg-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent" }),
-            React.createElement("button", { type: "button", onClick: () => setOpen((o) => !o), className: "absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg", "aria-label": "Toggle font list" },
+                }, onFocus: () => setOpen(true), placeholder: "Search fonts\u2026", className: "w-full text-sm pr-8 placeholder-fg-muted" }),
+            React.createElement("button", { type: "button", onClick: () => setOpen((o) => !o), 
+                // bg-transparent/border-0/p-0 neutralize component-kit.css's
+                // plain `button` rule (bordered/padded by default) — this is a
+                // bare icon toggle overlapping the input, not a kit-style button.
+                className: "absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg bg-transparent border-0 p-0", "aria-label": "Toggle font list" },
                 React.createElement("svg", { width: "14", height: "14", viewBox: "0 0 20 20", fill: "currentColor" },
                     React.createElement("path", { fillRule: "evenodd", d: "M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z", clipRule: "evenodd" })))),
         open ? (React.createElement("div", { className: "absolute z-20 mt-1 w-full rounded-md border border-line bg-ink-card shadow-lg" },
@@ -156,10 +166,15 @@ function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
                 "No fonts match \"",
                 query,
                 "\"")) : (filtered.map((font) => (React.createElement("li", { key: font },
-                React.createElement("button", { type: "button", onClick: () => selectFont(font), style: { fontFamily: `'${font}', sans-serif` }, className: 'w-full text-left px-3 py-1.5 text-sm hover:bg-ink-alt ' +
-                        (font === value ? 'bg-ink-alt text-accent font-medium' : 'text-fg') }, font)))))))) : null,
+                React.createElement("button", { type: "button", onClick: () => selectFont(font), style: { fontFamily: `'${font}', sans-serif` }, 
+                    // border-0 neutralizes component-kit.css's plain
+                    // `button` rule — these are listbox rows, not
+                    // kit-style buttons; bg-transparent/hover:bg-ink-alt
+                    // below still give the usual row-hover feedback.
+                    className: 'w-full text-left px-3 py-1.5 text-sm border-0 hover:bg-ink-alt ' +
+                        (font === value ? 'bg-ink-alt text-accent font-medium' : 'bg-transparent text-fg font-normal') }, font)))))))) : null,
         React.createElement("div", { className: "mt-2 flex items-center gap-2" },
-            React.createElement("button", { type: "button", onClick: handleLoadLocalFonts, disabled: loadingFonts, className: "inline-flex items-center gap-1.5 rounded-md border border-line bg-ink-card px-2.5 py-1\n                     text-xs font-medium text-fg-muted hover:bg-ink-alt hover:text-fg disabled:opacity-50" },
+            React.createElement("button", { type: "button", onClick: handleLoadLocalFonts, disabled: loadingFonts, className: "inline-flex items-center gap-1.5 disabled:opacity-50" },
                 loadingFonts ? (React.createElement("svg", { className: "md2ebook-spinner", width: "12", height: "12", viewBox: "0 0 24 24", fill: "none" },
                     React.createElement("circle", { cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4", opacity: "0.25" }),
                     React.createElement("path", { d: "M22 12a10 10 0 0 0-10-10", stroke: "currentColor", strokeWidth: "4", strokeLinecap: "round" }))) : (React.createElement("svg", { width: "12", height: "12", viewBox: "0 0 20 20", fill: "currentColor" },
@@ -172,8 +187,14 @@ function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
    ========================================================================== */
 function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions, }) {
     const configFileInputRef = useRef(null);
+    const editorTextareaRef = useRef(null);
+    const documentFileInputRef = useRef(null);
     const [configFilename, setConfigFilename] = useState('config.json');
     const [configStatus, setConfigStatus] = useState(null); // { type: 'success'|'error', message }
+    const [docStatus, setDocStatus] = useState(null); // { type: 'success'|'error', message }
+    // Separate from CONFIG_PICKER_ID below — Upload/Save remember their
+    // own last-used folder (your documents), not the config picker's.
+    const DOCUMENT_PICKER_ID = 'md2ebook-document';
     // Open and Save both pass this same `id` to the File System Access
     // API pickers below. Neither this app nor any web page can silently
     // point a native file dialog at an arbitrary folder on disk (like a
@@ -336,23 +357,244 @@ function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updat
             downloadConfigFallback(json, filename);
         }
     }
+    // Inserts a standalone `\pagebreak` line at the caret (or replaces the
+    // current selection) in the Markdown editor — see PAGE_BREAK_MARKER /
+    // applyPageBreakMarkers() in pdfGenerator.js for how that line turns
+    // into a real forced page break in both the preview and the export.
+    // The marker has to land on its own line, blank lines on both sides,
+    // regardless of where the caret happens to be (start of doc, mid
+    // paragraph, end of doc, already-blank surroundings) — the padding
+    // logic below only adds what's actually missing on each side, so it
+    // never piles up extra blank lines when some are already there.
+    function handleInsertPageBreak() {
+        const el = editorTextareaRef.current;
+        const start = el ? el.selectionStart : markdown.length;
+        const end = el ? el.selectionEnd : markdown.length;
+        const before = markdown.slice(0, start);
+        const after = markdown.slice(end);
+        const prefix = before.length === 0 ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+        const suffix = after.length === 0 ? '' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+        const insertion = prefix + '\\pagebreak' + suffix;
+        const caret = (before + insertion).length;
+        // flushSync (not requestAnimationFrame) forces this state update to
+        // commit to the real DOM before the restore call below runs. The
+        // textarea's value is controlled by React state, and browsers reset
+        // a textarea's cursor to the end whenever its value is reassigned —
+        // requestAnimationFrame doesn't reliably run *after* React's commit,
+        // so the restore could fire while the DOM still had the old
+        // (shorter) text, get clamped short, and then get stomped a moment
+        // later when React's real commit landed and reset the cursor to the
+        // end of the document. flushSync removes the race entirely.
+        ReactDOM.flushSync(() => {
+            setMarkdown(before + insertion + after);
+        });
+        if (editorTextareaRef.current) {
+            editorTextareaRef.current.focus();
+            editorTextareaRef.current.setSelectionRange(caret, caret);
+        }
+    }
+    // Reads a File (from either the native picker or the hidden <input>
+    // fallback below) and, based on its extension, converts it to
+    // Markdown and replaces the editor's contents outright — an import,
+    // not an insert. .md/.markdown/.txt need no conversion; the other
+    // formats are handled by pdfGenerator.js (window.MD2eBook), which
+    // isolates the actual per-format parsing/conversion logic from this
+    // UI layer the same way it already owns HTML generation/PDF export.
+    async function handleImportFile(file) {
+        setDocStatus(null);
+        const name = (file && file.name) || 'document';
+        const dot = name.lastIndexOf('.');
+        const ext = dot > -1 ? name.slice(dot + 1).toLowerCase() : '';
+        try {
+            let converted;
+            if (ext === 'md' || ext === 'markdown' || ext === 'txt') {
+                converted = await file.text();
+            }
+            else if (ext === 'muse') {
+                converted = window.MD2eBook.convertMuseToMarkdown(await file.text());
+            }
+            else if (ext === 'docx') {
+                converted = await window.MD2eBook.convertDocxToMarkdown(await file.arrayBuffer());
+            }
+            else if (ext === 'epub') {
+                converted = await window.MD2eBook.convertEpubToMarkdown(await file.arrayBuffer());
+            }
+            else {
+                throw new Error(`Unsupported file type ".${ext || '?'}" — supported: .md, .txt, .muse, .docx, .epub.`);
+            }
+            // Same flushSync reasoning as handleInsertPageBreak above — forces
+            // the new (much longer) document to actually be in the DOM before
+            // this scrolls/positions the textarea against it.
+            ReactDOM.flushSync(() => {
+                setMarkdown(converted);
+            });
+            if (editorTextareaRef.current) {
+                editorTextareaRef.current.focus();
+                editorTextareaRef.current.setSelectionRange(0, 0);
+                editorTextareaRef.current.scrollTop = 0;
+            }
+            setDocStatus({ type: 'success', message: `Imported "${name}", replacing the editor's contents.` });
+        }
+        catch (err) {
+            setDocStatus({
+                type: 'error',
+                message: 'Could not import that file: ' + (err && err.message ? err.message : String(err)),
+            });
+        }
+    }
+    function handleDocumentFileSelected(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = ''; // reset so re-selecting the same file still fires onChange
+        if (!file)
+            return;
+        handleImportFile(file);
+    }
+    // Same native "Open" dialog approach as handleOpenConfigClick above —
+    // shares DOCUMENT_PICKER_ID with handleSaveMarkdown below so Upload
+    // and Save remember the same last-used folder, separate from the
+    // config file picker's own remembered folder.
+    async function handleImportClick() {
+        setDocStatus(null);
+        if (typeof window.showOpenFilePicker !== 'function') {
+            if (documentFileInputRef.current)
+                documentFileInputRef.current.click();
+            return;
+        }
+        try {
+            const handles = await window.showOpenFilePicker({
+                id: DOCUMENT_PICKER_ID,
+                multiple: false,
+                types: [
+                    {
+                        description: 'Markdown, Word, EPUB, or Muse document',
+                        accept: {
+                            'text/markdown': ['.md', '.markdown'],
+                            'text/plain': ['.txt'],
+                            'text/x-muse': ['.muse'],
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+                            'application/epub+zip': ['.epub'],
+                        },
+                    },
+                ],
+            });
+            const file = await handles[0].getFile();
+            await handleImportFile(file);
+        }
+        catch (err) {
+            if (err && err.name === 'AbortError')
+                return;
+            if (documentFileInputRef.current)
+                documentFileInputRef.current.click();
+        }
+    }
+    // Falls back to a forced browser download for browsers without the
+    // native Save As dialog — same pattern as downloadConfigFallback.
+    function downloadMarkdownFallback(text, filename) {
+        try {
+            const blob = new Blob([text], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setDocStatus({
+                type: 'success',
+                message: `Downloaded "${filename}" (this browser doesn't support a Save As dialog).`,
+            });
+        }
+        catch (err) {
+            setDocStatus({ type: 'error', message: 'Could not save the Markdown file.' });
+        }
+    }
+    // Saves the editor's current Markdown as a .md file via the native
+    // Save As dialog — a source-text round-trip, separate from PDF export
+    // and separate from Save… in the Typography tab (which saves the
+    // typography *config*, not the document content).
+    async function handleSaveMarkdown() {
+        setDocStatus(null);
+        const text = markdown || '';
+        const filename = 'document.md';
+        if (typeof window.showSaveFilePicker !== 'function') {
+            downloadMarkdownFallback(text, filename);
+            return;
+        }
+        try {
+            const handle = await window.showSaveFilePicker({
+                id: DOCUMENT_PICKER_ID,
+                suggestedName: filename,
+                types: [
+                    {
+                        description: 'Markdown file',
+                        accept: { 'text/markdown': ['.md'] },
+                    },
+                ],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            setDocStatus({ type: 'success', message: `Saved "${handle.name}".` });
+        }
+        catch (err) {
+            if (err && err.name === 'AbortError')
+                return;
+            downloadMarkdownFallback(text, filename);
+        }
+    }
+    // Copies the raw Markdown source (not rendered HTML) to the
+    // clipboard. navigator.clipboard needs a secure context, which
+    // file:// already is here (same reason the File System Access API
+    // works — see CONFIG_PICKER_ID above) — but an execCommand('copy')
+    // fallback covers any browser/context where it's still unavailable.
+    async function handleCopyAll() {
+        setDocStatus(null);
+        const text = markdown || '';
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            }
+            else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (!ok)
+                    throw new Error('The browser blocked the copy.');
+            }
+            setDocStatus({ type: 'success', message: 'Copied the Markdown source to the clipboard.' });
+        }
+        catch (err) {
+            setDocStatus({
+                type: 'error',
+                message: 'Could not copy to the clipboard: ' + (err && err.message ? err.message : String(err)),
+            });
+        }
+    }
     return (React.createElement("aside", { className: "md2ebook-sidebar" },
-        React.createElement("div", { className: "flex border-b border-line flex-none" },
-            React.createElement("button", { type: "button", onClick: () => setActiveTab('editor'), className: 'md2ebook-tab-btn flex-1 px-4 py-3 text-sm font-medium border-b-2 ' +
-                    (activeTab === 'editor'
-                        ? 'border-accent text-accent'
-                        : 'border-transparent text-fg-muted hover:text-fg') }, "Editor"),
-            React.createElement("button", { type: "button", onClick: () => setActiveTab('typography'), className: 'md2ebook-tab-btn flex-1 px-4 py-3 text-sm font-medium border-b-2 ' +
-                    (activeTab === 'typography'
-                        ? 'border-accent text-accent'
-                        : 'border-transparent text-fg-muted hover:text-fg') }, "Typography")),
+        React.createElement("div", { className: "tabbar" },
+            React.createElement("button", { type: "button", onClick: () => setActiveTab('editor'), className: 'tab' + (activeTab === 'editor' ? ' active' : '') }, "Editor"),
+            React.createElement("button", { type: "button", onClick: () => setActiveTab('typography'), className: 'tab' + (activeTab === 'typography' ? ' active' : '') }, "Typography")),
         React.createElement("div", { className: "md2ebook-sidebar-content" }, activeTab === 'editor' ? (React.createElement("div", { className: "h-full flex flex-col p-3" },
-            React.createElement("textarea", { className: "md2ebook-editor-textarea flex-1 w-full min-h-[60vh] rounded-md border border-line\n                         bg-ink p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent", value: markdown, onChange: (e) => setMarkdown(e.target.value), spellCheck: false, placeholder: "# Start writing your Markdown here\u2026" }))) : (React.createElement("div", { className: "p-4" },
+            React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-2 mb-2" },
+                React.createElement("button", { type: "button", onClick: handleImportClick, className: "log-btn", title: "Import a Markdown, Word (.docx), EPUB, or Muse (.muse) file \u2014 replaces the editor's contents" }, "Upload\u2026"),
+                React.createElement("button", { type: "button", onClick: handleSaveMarkdown, className: "log-btn", title: "Save the editor's Markdown as a .md file" }, "Save\u2026"),
+                React.createElement("button", { type: "button", onClick: handleCopyAll, className: "log-btn", title: "Copy the Markdown source to the clipboard" }, "Copy All"),
+                React.createElement("button", { type: "button", onClick: handleInsertPageBreak, className: "log-btn", title: "Insert a manual page break at the cursor (\\pagebreak)" }, "+ Page Break"),
+                React.createElement("input", { ref: documentFileInputRef, type: "file", accept: ".md,.markdown,.txt,.muse,.docx,.epub", onChange: handleDocumentFileSelected, className: "hidden" })),
+            docStatus ? (React.createElement("p", { className: 'mb-2 text-[11px] ' + (docStatus.type === 'error' ? 'text-red-400' : 'text-success') }, docStatus.message)) : null,
+            React.createElement("textarea", { ref: editorTextareaRef, className: "md2ebook-editor-textarea flex-1 w-full min-h-[60vh] rounded-md border border-line\n                         bg-ink p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent", value: markdown, onChange: (e) => setMarkdown(e.target.value), spellCheck: false, placeholder: "# Start writing your Markdown here\u2026" }))) : (React.createElement("div", { className: "p-4" },
             React.createElement(SectionLabel, null, "Saved Config Files"),
             React.createElement("div", { className: "flex items-center gap-2 mb-1.5" },
-                React.createElement("button", { type: "button", onClick: handleOpenConfigClick, className: "rounded-md border border-line bg-ink-card px-2.5 py-1 text-[11px] font-medium text-fg-muted hover:bg-ink hover:text-fg" }, "Open\u2026"),
-                React.createElement("button", { type: "button", onClick: handleSaveConfig, className: "rounded-md border border-line bg-ink-card px-2.5 py-1 text-[11px] font-medium text-fg-muted hover:bg-ink hover:text-fg" }, "Save\u2026"),
-                React.createElement("input", { type: "text", value: configFilename, onChange: (e) => setConfigFilename(e.target.value), placeholder: "config.json", className: "min-w-0 flex-1 rounded-md border border-line bg-ink px-2 py-1 text-[11px] text-fg\n                           placeholder-fg-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent" }),
+                React.createElement("button", { type: "button", onClick: handleOpenConfigClick, className: "log-btn" }, "Open\u2026"),
+                React.createElement("button", { type: "button", onClick: handleSaveConfig, className: "log-btn" }, "Save\u2026"),
+                React.createElement("input", { type: "text", value: configFilename, onChange: (e) => setConfigFilename(e.target.value), placeholder: "config.json", className: "min-w-0 flex-1 text-[11px] placeholder-fg-muted" }),
                 React.createElement("input", { ref: configFileInputRef, type: "file", accept: "application/json,.json", onChange: handleConfigFileSelected, className: "hidden" })),
             configStatus ? (React.createElement("p", { className: 'mb-3 text-[11px] ' + (configStatus.type === 'error' ? 'text-red-400' : 'text-success') }, configStatus.message)) : (React.createElement("p", { className: "mb-3 text-[11px] leading-relaxed text-fg-muted opacity-70" },
                 "Open a previously saved settings file, or save the settings below as a new one.",
@@ -405,9 +647,12 @@ function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updat
                 React.createElement(ControlField, { label: "H3 Weight", hint: `Default: ${DEFAULTS.h3Weight}` },
                     React.createElement(SelectInput, { value: config.h3Weight, onChange: (v) => updateConfig('h3Weight', v) }, BOLD_WEIGHT_OPTIONS.map((w) => (React.createElement("option", { key: w, value: w }, w)))))),
             React.createElement(SectionLabel, null, "Page Numbers"),
-            React.createElement("label", { className: "flex items-center gap-2 mb-3 text-sm text-fg cursor-pointer select-none" },
-                React.createElement("input", { type: "checkbox", checked: config.pageNumbersEnabled, onChange: (e) => updateConfig('pageNumbersEnabled', e.target.checked), className: "h-4 w-4 rounded border-line accent-accent" }),
-                "Show page number on every page"),
+            React.createElement("div", { className: "toggle-row mb-3" },
+                React.createElement("label", { className: "toggle-switch" },
+                    React.createElement("input", { type: "checkbox", checked: config.pageNumbersEnabled, onChange: (e) => updateConfig('pageNumbersEnabled', e.target.checked) }),
+                    React.createElement("span", { className: "toggle-slider" })),
+                React.createElement("div", { className: "toggle-row-text" },
+                    React.createElement("p", { style: { margin: 0, color: 'var(--ui-fg)', fontSize: '13px' } }, "Show page number on every page"))),
             config.pageNumbersEnabled ? (React.createElement(ControlField, { label: "Page Start From", hint: `Default: ${DEFAULTS.pageStartFrom}` },
                 React.createElement(TextInput, { value: config.pageStartFrom, onChange: (v) => updateConfig('pageStartFrom', v), placeholder: String(DEFAULTS.pageStartFrom), inputMode: "numeric" }))) : null)))));
 }
@@ -560,7 +805,7 @@ function PreviewCanvas({ markdown, config }) {
                         // completely separate, still fully non-scripted iframe (see
                         // exportToPdf in pdfGenerator.js), so it's unaffected either way.
                         sandbox: "allow-scripts" })))),
-        React.createElement("div", { className: "md2ebook-no-print md2ebook-preview-statusbar px-6 py-2 text-center text-xs text-[color:var(--md2ebook-canvas-fg)]" },
+        React.createElement("div", { className: "md2ebook-no-print md2ebook-preview-statusbar" },
             paper.label,
             " \u00B7 ",
             Math.round(scale * 100),
@@ -574,22 +819,29 @@ function PreviewCanvas({ markdown, config }) {
 /* ==========================================================================
    Header
    ========================================================================== */
-function Header({ onLoadSample, onClear, onExport, isExporting }) {
-    return (React.createElement("header", { className: "md2ebook-header md2ebook-no-print flex items-center justify-between gap-4 border-b border-line bg-ink-alt px-5" },
-        React.createElement("div", { className: "flex items-center gap-2.5 min-w-0" },
-            React.createElement("div", { className: "flex h-8 min-w-[2rem] flex-none items-center justify-center rounded-lg bg-accent px-1.5 text-white font-bold text-sm" }, "Md"),
-            React.createElement("div", { className: "min-w-0" },
-                React.createElement("h1", { className: "text-sm font-semibold text-fg leading-tight truncate" }, "Md to PDF Converter"),
-                React.createElement("p", { className: "text-[11px] text-fg-muted leading-tight truncate" }, "Markdown \u2192 Publication-ready PDF"))),
-        React.createElement("div", { className: "flex items-center gap-2 flex-none" },
-            React.createElement("button", { type: "button", onClick: onLoadSample, className: "rounded-md border border-line bg-ink-card px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-ink hover:text-fg" }, "Load Sample Markdown"),
-            React.createElement("button", { type: "button", onClick: onClear, className: "rounded-md border border-line bg-ink-card px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-ink hover:text-fg" }, "Clear Editor"),
-            React.createElement("button", { type: "button", onClick: onExport, disabled: isExporting, title: "Opens your browser's print dialog \u2014 choose \"Save as PDF\" as the destination", className: "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-1.5 text-xs font-semibold text-white\n                     shadow-sm hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed" },
+function Header({ onLoadSample, onClear, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
+    // .topbar and its children come straight from component-kit.css — see
+    // component-kit-demo.html's "Top menu bar" section, which this markup
+    // matches structurally so the kit's CSS applies with no overrides
+    // needed. md2ebook-header/md2ebook-no-print are this app's own
+    // functional classes (flex sizing in the app's column layout, and
+    // print-media hiding) layered on top, not competing visual styling.
+    return (React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" },
+        React.createElement("div", { className: "topbar-brand" },
+            React.createElement("div", { className: "topbar-logo" }, "Md"),
+            React.createElement("div", { className: "topbar-brand-text" },
+                React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"),
+                React.createElement("div", { className: "topbar-subtitle" }, "Markdown \u2192 Publication-ready PDF"))),
+        React.createElement("div", { className: "topbar-actions" },
+            React.createElement("button", { type: "button", className: "log-btn", onClick: onLoadSample }, "Load Sample Markdown"),
+            React.createElement("button", { type: "button", className: "log-btn", onClick: onClear }, "Clear Editor"),
+            React.createElement("button", { type: "button", className: "log-btn", onClick: onSendToZineArranger, disabled: isSendingToArranger, title: "Exports the current document and opens it directly in ZineArranger \u2014 no manual save/reopen step" }, isSendingToArranger ? 'Sending\u2026' : 'Send to ZineArranger'),
+            React.createElement("button", { type: "button", onClick: onExport, disabled: isExporting, title: "Opens your browser's print dialog \u2014 choose \"Save as PDF\" as the destination", className: "btn-solid inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed" },
                 isExporting ? (React.createElement("svg", { className: "md2ebook-spinner", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none" },
                     React.createElement("circle", { cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4", opacity: "0.3" }),
                     React.createElement("path", { d: "M22 12a10 10 0 0 0-10-10", stroke: "currentColor", strokeWidth: "4", strokeLinecap: "round" }))) : (React.createElement("svg", { width: "14", height: "14", viewBox: "0 0 20 20", fill: "currentColor" },
                     React.createElement("path", { fillRule: "evenodd", d: "M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.046.752.097 1.126.153A2.212 2.212 0 0118 8.653v4.097A2.25 2.25 0 0115.75 15h-.241l.305 2.14A.75.75 0 0115.023 18H4.977a.75.75 0 01-.79-.86L4.492 15H4.25A2.25 2.25 0 012 12.75V8.653c0-1.082.784-2.005 1.874-2.198.374-.056.75-.107 1.126-.153V2.75zM6.5 6.11c1.649-.176 3.319-.266 5-.266s3.351.09 5 .266V2.75a.25.25 0 00-.25-.25h-6.5a.25.25 0 00-.25-.25v3.61zm5.5 6.14v-1.25a.75.75 0 00-.75-.75h-1.5a.75.75 0 00-.75.75v1.25a.75.75 0 00.75.75h1.5a.75.75 0 00.75-.75z", clipRule: "evenodd" }))),
-                isExporting ? 'Opening Print Dialog…' : 'Download PDF'))));
+                isExporting ? 'Opening Print Dialog…' : 'Download PDF eBook'))));
 }
 /* ==========================================================================
    Root App component
@@ -601,6 +853,7 @@ function App() {
     const [fontOptions, setFontOptions] = useState(DEFAULT_FONT_OPTIONS);
     const [isExporting, setIsExporting] = useState(false);
     const [exportError, setExportError] = useState(null);
+    const [isSendingToArranger, setIsSendingToArranger] = useState(false);
     const updateConfig = useCallback((key, value) => {
         setConfig((prev) => ({ ...prev, [key]: value }));
     }, []);
@@ -659,13 +912,128 @@ function App() {
             setIsExporting(false);
         }
     }
+    // Skips the manual export-then-reopen round trip, same idea as
+    // ZEditor's own "Send to ZineArranger": opens ZineArranger in a new
+    // tab, waits for its "ready" ping, and hands it a real PDF — built
+    // here by rendering the document into a hidden, Paged.js-paginated
+    // iframe (renderRasterizationDocument) and rasterizing each physical
+    // page, since normal export (handleExport above) never produces PDF
+    // bytes in JS to send (see the note on exportToPdf in
+    // pdfGenerator.js). ZineArranger then feeds the bytes into its own
+    // file input, exactly as if the user had picked the file themselves.
+    async function handleSendToZineArranger() {
+        if (isSendingToArranger)
+            return;
+        setExportError(null);
+        setIsSendingToArranger(true);
+        let win = null;
+        let iframe = null;
+        try {
+            win = window.open('../ZineArranger/index.html', '_blank');
+            if (!win)
+                throw new Error('The browser blocked the new tab — allow popups for this page and try again.');
+            // Attach the "ready" listener before anything else — see
+            // ZEditor's own handleSendToZineArranger for why (ZineArranger
+            // can finish loading and fire its ready ping while we're still
+            // off rendering/rasterizing pages here).
+            const readyPromise = new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    window.removeEventListener('message', onReady);
+                    reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
+                }, 15000);
+                function onReady(event) {
+                    if (event.source !== win || !event.data || event.data.type !== 'zinearranger-ready')
+                        return;
+                    clearTimeout(timeoutId);
+                    window.removeEventListener('message', onReady);
+                    resolve();
+                }
+                window.addEventListener('message', onReady);
+            });
+            const paper = window.MD2eBook.PAPER_SIZES[config.paperSize] || window.MD2eBook.PAPER_SIZES.a4;
+            const DPI = 96;
+            const rasterResult = await new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    window.removeEventListener('message', onRasterMessage);
+                    reject(new Error('Rendering the document for export timed out.'));
+                }, 60000);
+                function onRasterMessage(event) {
+                    if (!iframe || event.source !== iframe.contentWindow)
+                        return;
+                    const data = event.data;
+                    if (!data || data.source !== 'md2ebook-rasterize')
+                        return;
+                    if (data.error) {
+                        clearTimeout(timeoutId);
+                        window.removeEventListener('message', onRasterMessage);
+                        reject(new Error(data.error));
+                        return;
+                    }
+                    if (!Array.isArray(data.images))
+                        return; // not the final message yet
+                    clearTimeout(timeoutId);
+                    window.removeEventListener('message', onRasterMessage);
+                    resolve(data);
+                }
+                window.addEventListener('message', onRasterMessage);
+                // Unlike the live preview's iframe, this one needs
+                // allow-same-origin alongside allow-scripts — confirmed
+                // html2canvas hangs indefinitely without it. That's safe
+                // here specifically because renderRasterizationDocument
+                // sanitizes the rendered HTML with DOMPurify first (see
+                // its comment in pdfGenerator.js), which is what actually
+                // keeps a smuggled <script> in pasted raw HTML from
+                // reaching out to this app, not the sandbox by itself.
+                // Positioned off-page rather than sized to 0 (needs real
+                // pixel dimensions for Paged.js to lay pages out against)
+                // — harmless, since that positioning has no bearing on
+                // the html2canvas capture happening inside the iframe's
+                // own separate document.
+                iframe = document.createElement('iframe');
+                iframe.setAttribute('aria-hidden', 'true');
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+                iframe.style.position = 'fixed';
+                iframe.style.left = '-99999px';
+                iframe.style.top = '0';
+                iframe.style.border = '0';
+                iframe.width = String(Math.round(paper.widthIn * DPI));
+                iframe.height = String(Math.round(paper.heightIn * DPI));
+                iframe.srcdoc = window.MD2eBook.renderRasterizationDocument(markdown, config);
+                document.body.appendChild(iframe);
+            });
+            const { PDFDocument } = window.PDFLib;
+            const outDoc = await PDFDocument.create();
+            const pageWidthPts = rasterResult.widthIn * 72;
+            const pageHeightPts = rasterResult.heightIn * 72;
+            for (const img of rasterResult.images) {
+                const pngImage = await outDoc.embedPng(img.buffer);
+                const outPage = outDoc.addPage([pageWidthPts, pageHeightPts]);
+                outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
+            }
+            const pdfBytes = await outDoc.save();
+            const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+            await readyPromise;
+            win.postMessage({ type: 'zeditor-handoff-pdf', buffer, filename: deriveFilename(markdown) }, '*', [buffer]);
+        }
+        catch (err) {
+            setExportError('Couldn\'t send to ZineArranger — ' + (err && err.message ? err.message : 'unknown error'));
+        }
+        finally {
+            if (iframe && iframe.parentNode)
+                iframe.parentNode.removeChild(iframe);
+            setIsSendingToArranger(false);
+        }
+    }
     return (React.createElement("div", { className: "md2ebook-app" },
-        React.createElement(Header, { onLoadSample: handleLoadSample, onClear: handleClear, onExport: handleExport, isExporting: isExporting }),
+        React.createElement(Header, { onLoadSample: handleLoadSample, onClear: handleClear, onExport: handleExport, isExporting: isExporting, onSendToZineArranger: handleSendToZineArranger, isSendingToArranger: isSendingToArranger }),
         exportError ? (React.createElement("div", { className: "md2ebook-no-print flex-none bg-red-950/40 border-b border-red-900 text-red-300 text-xs px-5 py-2 flex items-center justify-between" },
             React.createElement("span", null,
                 "PDF export failed: ",
                 exportError),
-            React.createElement("button", { type: "button", onClick: () => setExportError(null), className: "text-red-400 hover:text-red-300 font-medium ml-4" }, "Dismiss"))) : null,
+            React.createElement("button", { type: "button", onClick: () => setExportError(null), 
+                // bg-transparent/border-0/p-0 neutralize component-kit.css's
+                // plain `button` rule — this is a plain text dismiss link.
+                className: "text-red-400 hover:text-red-300 font-medium ml-4 bg-transparent border-0 p-0" }, "Dismiss"))) : null,
         React.createElement("div", { className: "md2ebook-body" },
             React.createElement(Sidebar, { activeTab: activeTab, setActiveTab: setActiveTab, markdown: markdown, setMarkdown: setMarkdown, config: config, updateConfig: updateConfig, applyConfig: applyConfig, fontOptions: fontOptions, setFontOptions: setFontOptions }),
             React.createElement(PreviewCanvas, { markdown: markdown, config: config }))));
