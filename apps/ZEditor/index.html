@@ -243,14 +243,21 @@
       ctx.fillRect(0, 0, width, height);
       ctx.fillStyle = color;
       const maxRadius = cellSize * 0.62;
+      // cellSize is fractional at export scale (editor px × scaleFactor),
+      // so the grid steps in fractional units but pixel sampling has to use
+      // whole-pixel bounds — a fractional index into `data` is undefined,
+      // which turned every cell after the first into NaN and left exported
+      // halftones almost blank.
       for (let cy = 0; cy < height; cy += cellSize) {
-        const ch = Math.min(cellSize, height - cy);
+        const y0 = Math.floor(cy);
+        const y1 = Math.min(height, Math.max(y0 + 1, Math.floor(cy + cellSize)));
         for (let cx = 0; cx < width; cx += cellSize) {
-          const cw = Math.min(cellSize, width - cx);
+          const x0 = Math.floor(cx);
+          const x1 = Math.min(width, Math.max(x0 + 1, Math.floor(cx + cellSize)));
           let sum = 0, count = 0;
-          for (let y = 0; y < ch; y++) {
-            const rowStart = ((cy + y) * width + cx) * 4;
-            for (let x = 0; x < cw; x++) {
+          for (let y = y0; y < y1; y++) {
+            const rowStart = y * width * 4;
+            for (let x = x0; x < x1; x++) {
               const idx = rowStart + x * 4;
               sum += data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
               count++;
@@ -260,7 +267,7 @@
           const radius = (1 - avgLum) * maxRadius;
           if (radius > 0.4) {
             ctx.beginPath();
-            ctx.arc(cx + cw / 2, cy + ch / 2, radius, 0, Math.PI * 2);
+            ctx.arc(cx + Math.min(cellSize, width - cx) / 2, cy + Math.min(cellSize, height - cy) / 2, radius, 0, Math.PI * 2);
             ctx.fill();
           }
         }
