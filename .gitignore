@@ -1,0 +1,12 @@
+﻿# OS / editor
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Local Claude Code state (keep CLAUDE.md / HANDOFF.md)
+.claude/settings.local.json
+.claude/launch.json
+
+# Temp test files
+test-temp.pdf
+*.tmp

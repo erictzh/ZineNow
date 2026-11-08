@@ -1,0 +1,394 @@
+/* ==========================================================================
+   Md to PDF Converter — App shell & preview styles
+   ==========================================================================
+   This file styles the AUTHORING APP (editor, sidebar, preview chrome).
+   The generated eBook document itself (headings, paragraphs, tables, code
+   blocks, page dimensions, etc.) is styled separately, inline, by
+   pdfGenerator.js — so it can be embedded verbatim into the exported PDF
+   and into the live preview <iframe srcDoc>. This keeps "what you see" and
+   "what you export" byte-for-byte identical.
+
+   Colors, fonts, and reusable component styles (top bar, buttons, tabs,
+   cards, toggle switch, inputs, preview pane, scrollbars) now live in
+   component-kit.css, linked in index.html before this file — including
+   the --ui-*/--md2ebook-* custom properties this file's rules read below
+   (there's no separate :root block here anymore; component-kit.css is
+   the one source of truth for those). What's left here is genuinely
+   app-specific: overall page layout, the editor textarea, the scaled
+   preview canvas (iframe sizing/positioning has no kit equivalent), the
+   manual/automatic page-break rules, and the print media query.
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  /* Background/text color and font already come from component-kit.css's
+     html, body rule — this just adds the smoothing preference it doesn't
+     cover. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* component-kit.css doesn't style <select> (only input[type="text"] and
+   input[type="number"]) — matched here to the same look, using the same
+   tokens, rather than leaving it in a different visual language. */
+select {
+  background-color: #0c0c0cab;
+  color: var(--ui-fg);
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  /* Form controls don't inherit the page's font by default in any
+     browser — without these two lines, the closed select box falls
+     back to the OS/browser's native control font and size instead of
+     matching the text inputs sitting right next to it. */
+  font-family: inherit;
+  font-size: 14px;
+}
+select:focus {
+  outline: 2px solid var(--ui-accent-text);
+  outline-offset: 1px;
+}
+
+/* component-kit.css's blanket `button {}` rule sets font-size/weight
+   but never font-family, so every plain button in the app — including
+   Load Sample Markdown/Clear Editor in the top bar — falls back to
+   that same native control font. (Its own
+   input[type="file"]::file-selector-button rule sets font-family
+   explicitly, which is what made the omission on plain buttons
+   noticeable — this restores the same behavior for <button>.) */
+button {
+  font-family: inherit;
+}
+
+/* --------------------------------------------------------------------
+   Layout scaffolding
+   -------------------------------------------------------------------- */
+
+.md2ebook-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.md2ebook-header {
+  flex: 0 0 auto;
+  height: var(--md2ebook-header-height);
+}
+
+.md2ebook-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.md2ebook-sidebar {
+  flex: 0 0 var(--md2ebook-sidebar-width);
+  max-width: var(--md2ebook-sidebar-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--md2ebook-border);
+  background: var(--ui-bg-alt);
+}
+
+.md2ebook-sidebar-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.md2ebook-editor-textarea {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  tab-size: 2;
+  /* pre-wrap (not pre): still preserves whitespace/indentation exactly
+     like typed, but wraps long lines onto the next row instead of
+     overflowing — pre alone caused a long pasted paragraph to run off
+     the right edge with a horizontal scrollbar instead of wrapping.
+     overflow-wrap handles the one case wrapping alone doesn't: a single
+     very long unbreakable token (e.g. a long URL with no spaces). */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  resize: none;
+}
+
+/* Outline-based focus, matching component-kit.css's input[type="text"]
+   focus treatment (textareas aren't one of its covered selectors, so
+   this isn't inherited automatically). */
+.md2ebook-editor-textarea:focus {
+  outline: 2px solid var(--ui-accent-text);
+  outline-offset: 1px;
+}
+
+/* Same backdrop as component-kit.css's .preview-pane (same tokens, same
+   dot pattern) — kept as its own rule rather than renamed to that class,
+   since this element also carries this app's own scroll/sizing role. */
+.md2ebook-preview-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--md2ebook-canvas-bg);
+  background-image: radial-gradient(circle, #4e4e4e 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* --------------------------------------------------------------------
+   Preview status bar — pinned to the bottom of the preview pane's own
+   scroll viewport (not the whole app) via position: sticky, so it stays
+   visible while scrolling through a long document instead of scrolling
+   away with the pages. Needs an opaque background since it now overlays
+   whatever page content is scrolled underneath it.
+   -------------------------------------------------------------------- */
+
+/* Matches component-kit.css's .preview-statusbar property-for-property
+   (including --preview-bar, not --md2ebook-canvas-bg — a deliberate kit
+   choice, see component-kit-demo.html's note) — padding/text-align/
+   color/font-size included here too, so the JSX no longer needs to
+   supply them separately via Tailwind utilities. */
+.md2ebook-preview-statusbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  width: 100%;
+  text-align: center;
+  padding: 8px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--preview-bar);
+  color: var(--md2ebook-canvas-fg);
+  font-size: 12px;
+}
+
+/* --------------------------------------------------------------------
+   Preview canvas — the scaled "sheet of paper"
+   -------------------------------------------------------------------- */
+
+.md2ebook-canvas-wrapper {
+  display: flex;
+  /* flex-start, not center — matches component-kit.css's
+     .preview-canvas-wrapper (see its "not center" note in
+     component-kit-demo.html: centering a CSS-transform-scaled child
+     centers its pre-transform size, not its visible size, and can
+     overflow). This app's own scale box is pre-sized to the already-
+     scaled dimensions before the transform is applied to its child, so
+     it doesn't hit that specific bug — flex-start is adopted anyway for
+     consistency with the kit. */
+  justify-content: flex-start;
+  padding: 40px 24px 80px;
+  min-height: 100%;
+}
+
+.md2ebook-canvas-scale-box {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.md2ebook-page-shadow {
+  /* No background/shadow of its own: the content is now one or more
+     Paged.js page boxes (see App.jsx's PreviewCanvas and the comment on
+     renderHtmlDocument in pdfGenerator.js), each already a separate
+     white box with its own visual framing — this wrapper just supplies
+     the scale transform and sizing math around however many of them
+     stack up, and the preview-pane's own backdrop shows through as the
+     gutter between pages. */
+  transform-origin: top left;
+  overflow: hidden;
+}
+
+.md2ebook-page-iframe {
+  display: block;
+  border: 0;
+  /* Transparent (not white): the embedded document is one or more
+     Paged.js page boxes with gaps between them (see .md2ebook-page-shadow
+     above) — leaving this transparent lets the preview-pane's gray
+     backdrop show through those gaps as the gutter between pages,
+     instead of the iframe itself painting them white. */
+  background: transparent;
+  /* Intentionally interactive (no pointer-events:none): the iframe's own
+     height is kept in sync with its actual content height (see App.jsx's
+     PreviewCanvas), so it never needs an internal scrollbar of its own —
+     but disabling pointer events here previously also blocked normal
+     mouse-wheel scrolling from reaching this element, which was mistaken
+     for "the preview's scrollbar doesn't work." Leaving pointer events on
+     keeps scrolling reliable; the only side effect is that preview text
+     becomes selectable, which is harmless. */
+}
+
+/* --------------------------------------------------------------------
+   Font combobox
+   -------------------------------------------------------------------- */
+
+.md2ebook-combobox-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar,
+.md2ebook-sidebar-content::-webkit-scrollbar,
+.md2ebook-preview-pane::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* Combobox dropdown and sidebar sit on the dark app chrome; the preview
+   pane sits on its own separate gray canvas backdrop (see
+   --md2ebook-canvas-bg above). Both are dark-ish surfaces now, but this
+   stays a separate, later rule for the preview pane so its thumb color
+   can be tuned independently if the canvas backdrop ever changes. */
+.md2ebook-combobox-list::-webkit-scrollbar-thumb,
+.md2ebook-sidebar-content::-webkit-scrollbar-thumb {
+  background: var(--ui-border);
+  border-radius: 9999px;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar-thumb:hover,
+.md2ebook-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-fg-muted);
+}
+
+.md2ebook-preview-pane::-webkit-scrollbar-thumb {
+  background: #6b6b6b;
+  border-radius: 9999px;
+}
+
+.md2ebook-combobox-list::-webkit-scrollbar-track,
+.md2ebook-sidebar-content::-webkit-scrollbar-track,
+.md2ebook-preview-pane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Tabs now use component-kit.css's .tabbar/.tab/.tab.active directly
+   (see Sidebar in App.jsx) — no app-specific tab rule needed here
+   anymore. */
+
+/* --------------------------------------------------------------------
+   Spinner for the export button
+   -------------------------------------------------------------------- */
+
+@keyframes md2ebook-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.md2ebook-spinner {
+  animation: md2ebook-spin 0.8s linear infinite;
+}
+
+/* --------------------------------------------------------------------
+   Page-break rules for the exported document
+   --------------------------------------------------------------------
+   These mirror the rules pdfGenerator.js injects inline into the
+   generated document's own <style> block. They are duplicated here so
+   that if this stylesheet is ever loaded directly inside the generated
+   document (or the document is printed straight from the browser via
+   Ctrl/Cmd+P instead of the html2pdf export pipeline), page breaks still
+   behave correctly.
+   ========================================================================== */
+
+.md2ebook-doc h1,
+.md2ebook-doc h2,
+.md2ebook-doc h3 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.md2ebook-doc pre,
+.md2ebook-doc blockquote,
+.md2ebook-doc table,
+.md2ebook-doc img,
+.md2ebook-doc figure {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.md2ebook-doc p {
+  orphans: 3;
+  widows: 3;
+}
+
+/* Manual page break marker — see applyPageBreakMarkers() in
+   pdfGenerator.js, which turns a standalone `\pagebreak` line into
+   exactly this element. */
+.md2ebook-pagebreak {
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  page-break-before: always;
+  break-before: page;
+}
+
+/* ==========================================================================
+   Print media query
+   ==========================================================================
+   Applies when the generated document (rendered inside the preview
+   iframe, or opened standalone) is printed directly from the browser as
+   a fallback to the html2pdf export pipeline. Hides any non-document
+   chrome and forces exact page sizing.
+   ========================================================================== */
+
+@media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .md2ebook-app,
+  .md2ebook-header,
+  .md2ebook-sidebar,
+  .md2ebook-preview-pane,
+  .md2ebook-canvas-wrapper {
+    all: unset;
+  }
+
+  .md2ebook-no-print {
+    display: none !important;
+  }
+
+  .md2ebook-doc h1,
+  .md2ebook-doc h2,
+  .md2ebook-doc h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .md2ebook-doc pre,
+  .md2ebook-doc blockquote,
+  .md2ebook-doc table,
+  .md2ebook-doc img,
+  .md2ebook-doc figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .md2ebook-pagebreak {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  .md2ebook-page-shadow {
+    box-shadow: none !important;
+    transform: none !important;
+  }
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZineNow</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="zn-topbar">
+    <div class="zn-wordmark"><span class="zn-w-zine">Zine</span><span class="zn-w-now">Now</span></div>
+  </header>
+
+  <main class="zn-main">
+    <div id="grid" class="zn-grid"></div>
+  </main>
+
+  <button id="fab-add" class="zn-fab" type="button" title="Generate a config snippet" aria-label="Generate a config snippet">+</button>
+
+  <div id="overlay" class="zn-overlay"></div>
+
+  <!-- Readme sidebar -->
+  <aside id="sidebar" class="zn-sidebar" aria-hidden="true">
+    <div class="zn-sidebar-head">
+      <div id="sidebar-title" class="zn-sidebar-title">App</div>
+      <button id="sidebar-close" class="zn-sidebar-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <div id="sidebar-body" class="zn-sidebar-body"></div>
+  </aside>
+
+  <!-- "+" snippet-generator modal: builds the JS object text to paste into
+       config/apps-config.js — nothing here writes to disk. -->
+  <div id="add-modal" class="zn-modal" role="dialog" aria-labelledby="add-modal-title">
+    <div class="zn-modal-head" id="add-modal-title">New app snippet</div>
+    <div class="zn-modal-body">
+      <label class="zn-modal-label" for="add-folder-input">Folder name (must match exactly)</label>
+      <input type="text" id="add-folder-input" placeholder="e.g. ZineArranger" autocomplete="off">
+
+      <label class="zn-modal-label" style="margin-top:12px" for="add-desc-input">Description (optional)</label>
+      <input type="text" id="add-desc-input" placeholder="e.g. Impose PDFs into zines" autocomplete="off">
+
+      <label class="zn-modal-label" style="margin-top:12px" for="add-readme-input">Readme (optional, markdown)</label>
+      <textarea id="add-readme-input" rows="4" placeholder="# App name&#10;&#10;What it does..."></textarea>
+
+      <div id="add-hint" class="zn-modal-hint">Fill in a folder name to generate the snippet.</div>
+      <pre id="add-snippet" class="zn-snippet" style="display:none"></pre>
+    </div>
+    <div class="zn-modal-actions">
+      <button id="add-cancel" type="button">Close</button>
+      <button id="add-copy" class="btn-solid" type="button" disabled>Copy snippet</button>
+    </div>
+  </div>
+
+  <div id="toast" class="zn-toast"></div>
+
+  <script src="config/apps-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
