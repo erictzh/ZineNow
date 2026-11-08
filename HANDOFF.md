@@ -93,3 +93,36 @@ Things that looked like bugs but weren't:
 2. Claude Code's auto-memory and session transcripts are local to the old machine and do **not** transfer — this file is the substitute. Consider renaming/copying it to `CLAUDE.md` in the project root so a new session loads it automatically.
 3. Start with pending item #1 (group page drag) unless priorities changed, then item #2 (real-browser test of the Md-to-PDF handoff).
 4. Working conventions carried over from the previous sessions: keep edits inside the existing single-file structure, preserve immutable state updates in ZEditor, default to no code comments unless the *why* is non-obvious, and test UI changes in a browser before calling them done.
+
+## 7. Step-by-step: continuing on another PC
+
+Repo: https://github.com/erictzh/ZineNow (branch `main`).
+
+### Before leaving the main PC
+In PowerShell inside the project folder:
+```
+git add -A
+git commit -m "describe what changed"
+git push
+```
+Check https://github.com/erictzh/ZineNow/commits/main shows your latest commit.
+
+### First time on the new PC
+1. Install Git: `winget install --id Git.Git -e --source winget` (click Yes on the admin prompt), then close and reopen PowerShell. Verify with `git --version`.
+2. Install and sign in to Claude Code (desktop app or CLI).
+3. Clone: `git clone https://github.com/erictzh/ZineNow.git` — sign in as `erictzh` in the browser window that opens.
+4. Set the commit identity once (so pushes are attributed to you):
+   `git config --global user.name "TSANG ZHI HAO"` and `git config --global user.email "ericzhihaotsang@gmail.com"`.
+5. Open the cloned `ZineNow` folder in Claude Code.
+6. First message: "Read HANDOFF.md and continue from the pending tasks."
+
+### Every later session on any PC
+1. Start: `git pull` (always, before editing).
+2. Work as usual. Run the apps by double-clicking `index.html`, or serve the folder: `python -m http.server 8000` then open http://localhost:8000. Md to PDF needs internet (CDN libraries).
+3. End: `git add -A`, `git commit -m "..."`, `git push`.
+
+### If something goes wrong
+- `git push` rejected ("non-fast-forward"): the other PC pushed first. Run `git pull`, resolve any conflicts (ask Claude Code), then `git push`.
+- Never edit on two PCs without pull/push in between — that is what causes conflicts.
+- Browser still shows old code after a pull: hard-refresh (Ctrl+F5) or use a new port / `?v=2` (see section 5, sticky cache).
+- Never use `git push --force` unless you are certain.
