@@ -542,6 +542,23 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     cursor: grab;
     z-index: 11;
 }
+/* Live preview of the page number that Export prints. */
+.ze-page-number {
+    position: absolute;
+    font-family: 'Inter', sans-serif;
+    line-height: 1;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+}
+
+/* The dashed box around a multi-item selection (the rotate knob sits above it). */
+.ze-group-outline {
+    position: absolute;
+    border: 1px dashed var(--ui-accent);
+    pointer-events: none;
+    z-index: 10;
+}
 .ze-rotate-handle::before {
     content: "";
     position: absolute;

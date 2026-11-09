@@ -97,6 +97,36 @@
         : { ...ann, x: ann.x + dx, y: ann.y + dy };
     }
 
+    // The page area an item covers (x, y, width, height), allowing for its
+    // own rotation. Used to find the middle of a selection.
+    function annotationBounds(ann) {
+      if (ann.type === "stroke") {
+        const box = bboxOf(ann);
+        const pad = (ann.strokeWidth || (ann.tool === "highlighter" ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)) / 2;
+        return { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 };
+      }
+      const size = ann.type === "text" ? measureTextBox(ann) : ann;
+      const centerX = ann.x + size.width / 2, centerY = ann.y + size.height / 2;
+      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
+        const [rx, ry] = rotatePoint(sx * size.width / 2, sy * size.height / 2, angleOf(ann));
+        return [centerX + rx, centerY + ry];
+      });
+      const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+      return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+    }
+
+    // An item turned `degrees` about the page point (cx, cy). A stroke has no
+    // angle of its own, so its points are moved; a box keeps its shape, turns
+    // about its own centre and swings that centre around (cx, cy).
+    function rotatedAnnotation(ann, degrees, cx, cy) {
+      if (ann.type === "stroke") {
+        return { ...ann, points: ann.points.map(([px, py]) => { const [rx, ry] = rotatePoint(px - cx, py - cy, degrees); return [cx + rx, cy + ry]; }) };
+      }
+      const size = ann.type === "text" ? measureTextBox(ann) : ann;
+      const [rx, ry] = rotatePoint(ann.x + size.width / 2 - cx, ann.y + size.height / 2 - cy, degrees);
+      return { ...ann, x: cx + rx - size.width / 2, y: cy + ry - size.height / 2, angle: (((angleOf(ann) + degrees) % 360) + 360) % 360 };
+    }
+
     // A box after dragging one of its handles. `handle` is a compass name
     // ("e", "nw"...); the opposite side or corner stays where it is.
     // For a rotated box, pass its `angle` and `dx`/`dy` measured in its own
@@ -1847,7 +1877,7 @@
     }
 
     async function drawAnnotationOnCanvas(ctx, ann, scaleFactor, pageFilter) {
-      if (ann.type === "stroke") drawStrokeOnCanvas(ctx, ann, scaleFactor);
+      if (ann.type === "stroke") await drawWithOpacity(ctx, 1, (target) => drawStrokeOnCanvas(target, ann, scaleFactor), blendOf(ann));
       else if (ann.type === "text") await drawWithOpacity(ctx, 1, (target) => drawTextOnCanvas(target, ann, scaleFactor), blendOf(ann));
       else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor), blendOf(ann));
       else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter), blendOf(ann));
@@ -2016,7 +2046,52 @@
       return { width: viewport.width, height: viewport.height };
     }
 
-    async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter) {
+    // ---- Page numbers. One document-wide setting: which pages carry a number
+    // (from / to, counted by position in the document; to = 0 means the last
+    // page), what number the first of them shows, and how it looks. Drawn
+    // last on each exported page, and shown as a live overlay in the editor.
+    const DEFAULT_PAGE_NUMBERS = { on: false, from: 1, to: 0, first: 1, position: "bottom-outside", format: "n", size: 10, color: "#1a1a1a", marginIn: 0.4 };
+    const PAGE_NUMBER_POSITIONS = [
+      { key: "bottom-outside", label: "Bottom, outer corner" },
+      { key: "bottom-center", label: "Bottom, center" },
+      { key: "bottom-left", label: "Bottom left" },
+      { key: "bottom-right", label: "Bottom right" },
+      { key: "top-outside", label: "Top, outer corner" },
+      { key: "top-center", label: "Top, center" },
+      { key: "top-left", label: "Top left" },
+      { key: "top-right", label: "Top right" },
+    ];
+    const PAGE_NUMBER_FORMATS = [{ key: "n", label: "1" }, { key: "dash", label: "– 1 –" }, { key: "page", label: "Page 1" }];
+
+    // What to print on the page at `pageIdx` (0-based), or null when it has no
+    // number. "Outer corner" puts odd pages (right-hand, as in a printed
+    // booklet) at the right edge and even pages at the left.
+    function pageNumberSpec(settings, pageIdx, pageCount) {
+      if (!settings.on || pageIdx === null || pageIdx < 0) return null;
+      const position = pageIdx + 1;
+      const last = settings.to > 0 ? Math.min(settings.to, pageCount) : pageCount;
+      if (position < settings.from || position > last) return null;
+      const number = settings.first + (position - settings.from);
+      const text = settings.format === "dash" ? `– ${number} –` : settings.format === "page" ? `Page ${number}` : String(number);
+      let place = settings.position;
+      if (place.endsWith("-outside")) place = place.replace("outside", position % 2 === 1 ? "right" : "left");
+      const [vertical, horizontal] = place.split("-");
+      return { text, vertical, horizontal, size: settings.size, color: settings.color, marginIn: settings.marginIn };
+    }
+
+    function drawPageNumber(ctx, spec, width, height, pxPerPt) {
+      const margin = spec.marginIn * 72 * pxPerPt;
+      ctx.save();
+      ctx.font = `${spec.size * pxPerPt}px 'Inter', sans-serif`;
+      ctx.fillStyle = spec.color;
+      ctx.textBaseline = spec.vertical === "top" ? "top" : "bottom";
+      ctx.textAlign = spec.horizontal === "left" ? "left" : spec.horizontal === "right" ? "right" : "center";
+      const x = spec.horizontal === "left" ? margin : spec.horizontal === "right" ? width - margin : width / 2;
+      ctx.fillText(spec.text, x, spec.vertical === "top" ? margin : height - margin);
+      ctx.restore();
+    }
+
+    async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter, numberSpec) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       let w, h;
@@ -2041,6 +2116,7 @@
       for (const a of page.annotations || []) {
         if (!a.hidden) await drawAnnotationOnCanvas(ctx, a, scaleFactor, pageFilter);
       }
+      if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
       return canvas;
     }
 
@@ -2852,10 +2928,10 @@
     // top of it.
     function ComposeCanvas({
       pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn, tool,
-      pageFilter, onionGhostSrc, onionSkinOpacity,
+      pageFilter, onionGhostSrc, onionSkinOpacity, pageNumberSpec: numberSpec,
       penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
       annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
-      onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
+      onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
       onStartTextEdit, onFinishTextEdit,
       zoom,
     }) {
@@ -3040,6 +3116,33 @@
       }
 
       const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
+
+      // Strokes and groups have no rotate knob of their own (a box does), so a
+      // selection of several items, or of one stroke, gets one here, turning
+      // everything about the middle of the whole selection.
+      const selectedItems = tool === "select"
+        ? annotations.filter((a) => (a.id === selectedAnnId || selectedAnnIds.includes(a.id)) && !a.hidden && !a.locked)
+        : [];
+      const needsSelectionKnob = selectedItems.length > 1 || (selectedItems.length === 1 && selectedItems[0].type === "stroke");
+      let selectionTurn = null;
+      if (needsSelectionKnob && !editingAnnId) {
+        const bounds = selectedItems.map(annotationBounds);
+        const x0 = Math.min(...bounds.map((b) => b.x)), y0 = Math.min(...bounds.map((b) => b.y));
+        const x1 = Math.max(...bounds.map((b) => b.x + b.width)), y1 = Math.max(...bounds.map((b) => b.y + b.height));
+        selectionTurn = { items: selectedItems, box: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+      }
+      function startSelectionTurn(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const { items, cx, cy } = selectionTurn;
+        const pointerAngle = (ev) => { const p = overlayPoint(ev); return Math.atan2(p.y - cy, p.x - cx) * 180 / Math.PI; };
+        const startAngle = pointerAngle(e);
+        trackPointerDrag((ev) => {
+          let delta = pointerAngle(ev) - startAngle;
+          delta = ev.shiftKey ? Math.round(delta / 15) * 15 : delta;
+          onRotateAnnotations(items, delta, cx, cy);
+        });
+      }
       const cursorClass =
         tool === "text" ? "ze-tool-text" :
         (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse") ? "ze-tool-draw" :
@@ -3111,7 +3214,7 @@
                 );
               }
               return (
-                <svg key={a.id} className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
+                <svg key={a.id} className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height} style={blendOf(a) !== "normal" ? { mixBlendMode: blendOf(a) } : undefined}>
                   <StrokeShape ann={a} tool={tool} isSelected={isSelected} onPress={pressAnnotation} />
                 </svg>
               );
@@ -3136,10 +3239,37 @@
                 />
               ))}
             </svg>
+            {selectionTurn && (
+              <React.Fragment>
+                {selectionTurn.items.length > 1 && (
+                  <div className="ze-group-outline" style={{ left: selectionTurn.box.x, top: selectionTurn.box.y, width: selectionTurn.box.width, height: selectionTurn.box.height }} />
+                )}
+                <div
+                  className="ze-rotate-handle"
+                  title="Rotate the selection (hold Shift to snap to 15°)"
+                  style={{ left: selectionTurn.cx, top: selectionTurn.box.y - 22 / zoom }}
+                  onMouseDown={startSelectionTurn}
+                />
+              </React.Fragment>
+            )}
             {dragRect && (
               <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
             )}
           </div>
+          {numberSpec && canvasSize.width > 0 && (
+            // Shows where the page number will print; the real one is drawn at Export.
+            <div
+              className="ze-page-number"
+              style={{
+                fontSize: numberSpec.size * MAIN_SCALE,
+                color: numberSpec.color,
+                [numberSpec.vertical]: numberSpec.marginIn * 72 * MAIN_SCALE,
+                ...(numberSpec.horizontal === "center"
+                  ? { left: 0, right: 0, textAlign: "center" }
+                  : { [numberSpec.horizontal]: numberSpec.marginIn * 72 * MAIN_SCALE }),
+              }}
+            >{numberSpec.text}</div>
+          )}
           {guidesOn && canvasSize.width > 0 && (
             <GuidesOverlay
               width={canvasSize.width}
@@ -4086,6 +4216,8 @@
                 onWidth={(w) => patch({ strokeWidth: w })}
                 onTaper={(t) => patch({ taper: t })}
               />
+              <ControlList controls={[BLEND_CONTROL]} source={ann} onPatch={patch} />
+              <span className="ze-format-hint">Drag the round knob above the stroke to rotate it.</span>
             </div>
           </aside>
         );
@@ -4420,6 +4552,80 @@
       );
     }
 
+    // ---- Page numbers control — topbar toggle plus a popover for which pages
+    // are numbered (from / to), the first number, and the look.
+    function PageNumbersControl({ settings, pageCount, onChange }) {
+      const [open, setOpen] = useState(false);
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        function handleClickOutside(e) {
+          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }, []);
+
+      const whole = (value, fallback, min = 0) => Math.max(min, Math.round(Number(value)) || fallback);
+      return (
+        <div className="ze-topbar-control" ref={containerRef}>
+          <div className="toggle-row">
+            <div className="toggle-row-text">
+              <p>Page Numbers</p>
+            </div>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={settings.on} onChange={(e) => onChange({ on: e.target.checked })} />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <button type="button" className="ze-guides-settings-btn" title="Page number settings" onClick={() => setOpen((o) => !o)}>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+            </svg>
+          </button>
+          {open && (
+            <div className="ze-topbar-popover">
+              <label className="ze-format-field">
+                <span className="ze-format-label">Start numbering on page</span>
+                <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} value={settings.from} onChange={(e) => onChange({ from: whole(e.target.value, 1, 1) })} />
+              </label>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Stop after page (empty = last)</span>
+                <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} placeholder="last" value={settings.to || ""} onChange={(e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) })} />
+              </label>
+              <label className="ze-format-field">
+                <span className="ze-format-label">First page shows number</span>
+                <input type="number" className="ze-format-number" step="1" value={settings.first} onChange={(e) => onChange({ first: Math.round(Number(e.target.value)) || 0 })} />
+              </label>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Position</span>
+                <SelectInput options={PAGE_NUMBER_POSITIONS} value={settings.position} onChange={(position) => onChange({ position })} />
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Style</span>
+                <SelectInput options={PAGE_NUMBER_FORMATS} value={settings.format} onChange={(format) => onChange({ format })} />
+              </div>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Size (pt)</span>
+                <input type="number" className="ze-format-number" min="4" max="48" value={settings.size} onChange={(e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) })} />
+              </label>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Distance from edge (in)</span>
+                <input type="number" className="ze-format-number" min="0" max="3" step="0.05" value={settings.marginIn} onChange={(e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) })} />
+              </label>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Color</span>
+                <input type="color" className="ze-format-color-input" value={settings.color} onChange={(e) => onChange({ color: e.target.value })} />
+              </div>
+              <span className="ze-format-hint">
+                Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.
+              </span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     // ---- Filter control — a page-background treatment (grayscale/duotone/
     // halftone), same popover shell as GuidesControl. Baked into Export
     // PDF too via applyPageFilter, so preview and output always match.
@@ -4740,6 +4946,7 @@
       const [guideFormat, setGuideFormat] = useState("match");
       const [guideMarginIn, setGuideMarginIn] = useState(DEFAULT_GUIDE_MARGIN_IN);
       const [guideBleedIn, setGuideBleedIn] = useState(DEFAULT_GUIDE_BLEED_IN);
+      const [pageNumbers, setPageNumbers] = useState(DEFAULT_PAGE_NUMBERS);
       const [onionSkinOn, setOnionSkinOn] = useState(false);
       const [onionSkinOpacity, setOnionSkinOpacity] = useState(0.3);
       const [onionGhostSrc, setOnionGhostSrc] = useState(null);
@@ -4874,6 +5081,12 @@
         const all = [...new Set([...existing, ...ids])];
         setSelectedAnnId(all.length > 0 ? all[0] : null);
         setSelectedAnnIds(all.slice(1));
+      }
+
+      function handleRotateAnnotations(originals, degrees, cx, cy) {
+        if (selectedIdx === null) return;
+        const turned = new Map(originals.map((a) => [a.id, rotatedAnnotation(a, degrees, cx, cy)]));
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => turned.get(a.id) || a), "rotate:" + [...turned.keys()].join());
       }
 
       function handleMoveAnnotations(originals, dx, dy) {
@@ -5142,8 +5355,9 @@
       // exact same rendered bytes, just handed off differently afterward.
       async function buildExportPdfBytes() {
         const outDoc = await PDFLib.PDFDocument.create();
-        for (const page of pages) {
-          const canvas = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER);
+        for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+          const page = pages[pageIdx];
+          const canvas = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
           const pngBytes = await canvasToArrayBuffer(canvas);
           const pngImage = await outDoc.embedPng(pngBytes);
           const pageWidthPts = canvas.width / EXPORT_SCALE;
@@ -5197,7 +5411,7 @@
             pages: pages.map(({ dataUrl, ...rest }) => rest),
             settings: {
               guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
-              onionSkinOn, onionSkinOpacity,
+              onionSkinOn, onionSkinOpacity, pageNumbers,
             },
           };
           // Plain JSON under the hood — .znow is just a distinct extension
@@ -5336,6 +5550,7 @@
           if (s.guideBleedIn !== undefined) setGuideBleedIn(s.guideBleedIn);
           if (s.onionSkinOn !== undefined) setOnionSkinOn(s.onionSkinOn);
           if (s.onionSkinOpacity !== undefined) setOnionSkinOpacity(s.onionSkinOpacity);
+          setPageNumbers({ ...DEFAULT_PAGE_NUMBERS, ...(s.pageNumbers || {}) });
         } catch (err) {
           setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -5871,6 +6086,11 @@
                 opacity={onionSkinOpacity}
                 onOpacityChange={setOnionSkinOpacity}
               />
+              <PageNumbersControl
+                settings={pageNumbers}
+                pageCount={pages.length}
+                onChange={(patch) => setPageNumbers((current) => ({ ...current, ...patch }))}
+              />
               <GuidesControl
                 guidesOn={guidesOn}
                 onToggleGuides={setGuidesOn}
@@ -6067,6 +6287,7 @@
                     pageFilter={pageFilter}
                     onionGhostSrc={onionSkinOn ? onionGhostSrc : null}
                     onionSkinOpacity={onionSkinOpacity}
+                    pageNumberSpec={pageNumberSpec(pageNumbers, selectedIdx, pages.length)}
                     tool={tool}
                     penColor={penColor}
                     penWidth={penWidth}
@@ -6082,6 +6303,7 @@
                     onFinishTextEdit={finishTextEdit}
                     onSelectAnnotations={handleSelectAnnotations}
                     onMoveAnnotations={handleMoveAnnotations}
+                    onRotateAnnotations={handleRotateAnnotations}
                     croppingAnnId={croppingAnnId}
                     onSelectAnnotation={handleSelectAnnotation}
                     onAddText={handleAddText}
