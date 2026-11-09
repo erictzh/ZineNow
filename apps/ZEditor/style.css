@@ -661,6 +661,7 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 /* Lays out the box while hidden; the extra sliver stops the input
    wrapping a line a pixel too early. */
 .ze-ann-text-mirror { display: inline-block; visibility: hidden; padding-right: 2px; }
+.ze-ann-text-mirror.is-visible { visibility: visible; }
 .ze-ann-text-input {
     position: absolute;
     inset: 0;
