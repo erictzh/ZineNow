@@ -780,6 +780,50 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-format-color-input::-webkit-color-swatch-wrapper { padding: 0; }
 .ze-format-color-input::-webkit-color-swatch { border: none; border-radius: 50%; }
 
+/* The custom-colour picker next to a row of swatches: a rainbow ring around
+   the chosen colour, with an eyedropper on top. The real colour input sits
+   invisibly over all of it so the whole circle opens the picker. */
+.ze-custom-color {
+    position: relative;
+    display: block;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 3px;
+    border-radius: 50%;
+    background: conic-gradient(#ff3b30, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff3b30);
+    cursor: pointer;
+}
+.ze-custom-color:hover { filter: brightness(1.15); }
+.ze-custom-color input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.ze-custom-color-face {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.45);
+}
+.ze-custom-color svg {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 13px;
+    height: 13px;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    mix-blend-mode: difference;
+    pointer-events: none;
+}
+
 .ze-format-hint.is-error { color: #ff9b81; }
 
 /* ---- Thickness slider --------------------------------------------------- */
