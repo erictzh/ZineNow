@@ -857,7 +857,21 @@
         const { width, height } = canvas;
         const imageData = ctx.getImageData(0, 0, width, height);
         const { cellSize } = controlValues(filter, HALFTONE_FILTER_CONTROLS);
+        // The screen is painted as a white sheet with marks on it, so an image
+        // with see-through parts keeps its own alpha afterwards: the paper and
+        // dots only show where the image did.
+        const sourceAlpha = new Uint8ClampedArray(width * height);
+        let hasTransparency = false;
+        for (let p = 0; p < sourceAlpha.length; p++) {
+          sourceAlpha[p] = imageData.data[p * 4 + 3];
+          if (sourceAlpha[p] < 255) hasTransparency = true;
+        }
         drawHalftoneScreen(ctx, imageData, width, height, Math.max(MIN_HALFTONE_CELL_SIZE, cellSize * scaleFactor), filter);
+        if (hasTransparency) {
+          const result = ctx.getImageData(0, 0, width, height);
+          for (let p = 0; p < sourceAlpha.length; p++) result.data[p * 4 + 3] = sourceAlpha[p];
+          ctx.putImageData(result, 0, 0);
+        }
       } else if (filter.type === "xerox") {
         applyXerox(ctx, canvas, filter, scaleFactor);
       }
