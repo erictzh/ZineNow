@@ -504,7 +504,10 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     inset: 0;
     border: 1px dashed var(--ui-accent);
     pointer-events: none;
+    z-index: 10; /* stays visible when the item sits under another layer */
 }
+.ze-ann-rect-fill { width: 100%; height: 100%; }
+.is-locked { pointer-events: none; }
 .ze-ann-image img, .ze-ann-image canvas {
     width: 100%;
     height: 100%;
@@ -521,6 +524,7 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     background-color: #fff;
     border: 2px solid var(--ui-accent);
     transform: translate(-50%, -50%) scale(calc(1 / var(--ze-zoom, 1)));
+    z-index: 11; /* reachable even when the item sits under another layer */
 }
 .ze-resize-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
 .ze-resize-handle-n { left: 50%; top: 0; cursor: ns-resize; }
@@ -571,6 +575,7 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-ann-image--cropping {
     cursor: default; /* the crop window/handles below carry their own cursors; the surrounding dimmed area isn't draggable */
+    z-index: 10; /* cropping a lower layer brings it to the front while it lasts */
 }
 .ze-crop-mask {
     position: absolute;
@@ -646,10 +651,16 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 
 /* ---- Right-side format panel ------------------------------------------- */
-.ze-format-panel {
+.ze-right-rail {
     width: var(--ze-format-panel-width);
     flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     border-left: 1px solid var(--ui-border);
+}
+.ze-format-panel {
+    flex: 1 1 0;
     background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
     display: flex;
     flex-direction: column;
@@ -798,6 +809,93 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-effect-card .ze-format-field { margin-bottom: 12px; }
 .ze-effect-card .ze-format-field:last-of-type { margin-bottom: 0; }
+
+/* ---- Layers panel --------------------------------------------------------- */
+.ze-layers-panel {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--ui-border);
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+}
+.ze-layers-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px 8px 16px;
+}
+.ze-layers-list {
+    height: min(240px, 36vh);
+    overflow-y: auto;
+    padding: 6px;
+    border-top: 1px solid var(--ui-border);
+}
+.ze-layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.ze-layer-row:hover { background-color: var(--ui-bg); }
+.ze-layer-row.is-selected {
+    border-color: var(--ui-accent);
+    background-color: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+}
+.ze-layer-row.is-hidden .ze-layer-thumb,
+.ze-layer-row.is-hidden .ze-layer-name { opacity: 0.4; }
+.ze-layer-row--page { cursor: default; }
+.ze-layer-row--page:hover { background-color: transparent; }
+.ze-layer-row--page .ze-layer-name { color: var(--ui-fg-muted); }
+.ze-layer-thumb {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid var(--ui-border);
+    border-radius: 3px;
+    background-color: #dbdbdb;
+}
+.ze-layer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ze-layer-thumb-fill { width: 100%; height: 100%; }
+.ze-layer-thumb-text { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.ze-layer-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ui-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ze-layer-name-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 4px;
+    font-family: var(--ui-font);
+    font-size: 12px;
+    color: var(--ui-fg);
+    background-color: #0c0c0cab;
+    border: 1px solid var(--ui-accent);
+    border-radius: 3px;
+    outline: none;
+}
+.ze-layer-icon-btn {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+}
+.ze-layer-icon-btn.active { color: var(--ui-accent-text); }
 
 /* ---- Font combobox (searchable, + local system fonts) -------------------- */
 .ze-fontbox { position: relative; }
