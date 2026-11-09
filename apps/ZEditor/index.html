@@ -337,6 +337,18 @@
       kind: "select", prop: "strike", label: "Strike-through", fallback: "none",
       options: [{ key: "none", label: "None" }, { key: "line", label: "Line" }, { key: "double", label: "Double" }, { key: "wavy", label: "Wavy" }],
     };
+    const CASE_CONTROL = {
+      kind: "select", prop: "textCase", label: "Letter case", fallback: "none",
+      options: [{ key: "none", label: "As typed" }, { key: "upper", label: "UPPERCASE" }, { key: "lower", label: "lowercase" }, { key: "title", label: "Title Case" }, { key: "small", label: "Small caps" }],
+    };
+    // The text as it shows once the box's letter case is applied (canvas
+    // drawing; the live box gets the same result from CSS).
+    function caseText(text, mode) {
+      if (mode === "upper") return text.toUpperCase();
+      if (mode === "lower") return text.toLowerCase();
+      if (mode === "title") return text.replace(/(^|[^\p{L}\p{N}'’])(\p{L})/gu, (m, before, letter) => before + letter.toUpperCase());
+      return text;
+    }
     const TEXT_FILL_ALPHA_CONTROL = { kind: "slider", prop: "fillAlpha", label: "Fill opacity (%)", min: 0, max: 100, fallback: 100 };
     const TEXT_GRADIENT_EFFECT = {
       key: "textGradient",
@@ -407,6 +419,47 @@
     ];
     const TEXT_PHOTO_PROPS = ["fillSrc", "fillNatW", "fillNatH", ...TEXT_PHOTO_CONTROLS.map((c) => c.prop)];
 
+    // ---- Saved text styles: a name plus the look of a text box (font, size,
+    // colour, spacing, case and every effect), but not its words, position,
+    // rotation, per-letter colours or photo.
+    const TEXT_STYLE_BASICS = ["fontFamily", "fontSize", "bold", "italic", "underline", "color", "align"];
+    const TEXT_STYLE_PROPS = [
+      ...TEXT_STYLE_BASICS, "lineSpacing", "letterSpacing", "strike", "textCase", "fillAlpha",
+      ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+    ];
+    const BUILT_IN_TEXT_STYLES = [
+      { name: "Title", builtIn: true, props: { fontSize: 56, bold: true, align: "center", letterSpacing: 4, lineSpacing: 100, textCase: "upper" } },
+      { name: "Subtitle", builtIn: true, props: { fontSize: 28, italic: true, align: "center", letterSpacing: 1 } },
+      { name: "Remark", builtIn: true, props: { fontSize: 12, italic: true } },
+    ];
+    function captureTextStyle(ann) {
+      const props = {};
+      TEXT_STYLE_PROPS.forEach((prop) => { if (ann[prop] !== undefined) props[prop] = ann[prop]; });
+      return props;
+    }
+    // The patch that gives a text box a style's look. The font, size and
+    // colour a style doesn't mention (a built-in leaves the font and colour
+    // alone) are kept; every other look setting is reset, so the style fully
+    // decides the rest.
+    const TEXT_STYLE_KEEP_IF_MISSING = ["fontFamily", "fontSize", "color"];
+    const TEXT_STYLE_RESETS = { bold: false, italic: false, underline: false, align: "left" };
+    function textStylePatch(style) {
+      const patch = {};
+      TEXT_STYLE_PROPS.forEach((prop) => {
+        if (style.props[prop] !== undefined) patch[prop] = style.props[prop];
+        else if (prop in TEXT_STYLE_RESETS) patch[prop] = TEXT_STYLE_RESETS[prop];
+        else if (!TEXT_STYLE_KEEP_IF_MISSING.includes(prop)) patch[prop] = undefined;
+      });
+      return patch;
+    }
+    const TEXT_STYLES_STORAGE_KEY = "zeditor.textStyles";
+    function readStoredTextStyles() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(TEXT_STYLES_STORAGE_KEY) || "[]");
+        return Array.isArray(saved) ? saved.filter((s) => s && s.name && s.props) : [];
+      } catch (err) { return []; }
+    }
+
     // Rotation of a text box, image, rectangle or ellipse, in degrees clockwise
     // about its centre. The box's own x/y/width/height stay unrotated.
     const ANGLE_CONTROL = { kind: "slider", prop: "angle", label: "Rotation (°)", min: 0, max: 359, fallback: 0 };
@@ -474,6 +527,7 @@
         lineHeight: controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
         letterSpacingPx: fontSize * spacing / 100,
         strike: controlValues(ann, [STRIKE_CONTROL]).strike,
+        textCase: controlValues(ann, [CASE_CONTROL]).textCase,
         color, fillAlpha,
         stroke: ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null,
         shadow: imageShadowOffset(ann),
@@ -1307,11 +1361,14 @@
     // measuring that Rasterize needs.
     function layoutText(ctx, ann, scaleFactor) {
       const look = textLook(ann);
+      const shownText = caseText(ann.text || "", look.textCase);
       const fontSize = (ann.fontSize || 16) * scaleFactor;
       const weight = ann.bold ? "700" : "400";
       const styleStr = ann.italic ? "italic" : "normal";
       const family = ann.fontFamily || "sans-serif";
-      ctx.font = `${styleStr} ${weight} ${fontSize}px '${family}', sans-serif`;
+      // Small caps has to be part of the font string: setting `font` resets the variant.
+      const variant = look.textCase === "small" ? "small-caps " : "";
+      ctx.font = `${styleStr} ${variant}${weight} ${fontSize}px '${family}', sans-serif`;
       if ("letterSpacing" in ctx) ctx.letterSpacing = `${look.letterSpacingPx * scaleFactor}px`;
       ctx.textBaseline = "alphabetic";
 
@@ -1319,9 +1376,9 @@
       // (line height - font box) / 2 plus the font's ascent below the line top.
       // The browser rounds a font's ascent and descent to whole editor px
       // when laying out, so they're measured at editor size, rounded, then scaled.
-      ctx.font = `${styleStr} ${weight} ${ann.fontSize || 16}px '${family}', sans-serif`;
+      ctx.font = `${styleStr} ${variant}${weight} ${ann.fontSize || 16}px '${family}', sans-serif`;
       const metrics = ctx.measureText("Hg");
-      ctx.font = `${styleStr} ${weight} ${fontSize}px '${family}', sans-serif`;
+      ctx.font = `${styleStr} ${variant}${weight} ${fontSize}px '${family}', sans-serif`;
       const ascent = (metrics.fontBoundingBoxAscent != null ? Math.round(metrics.fontBoundingBoxAscent) : (ann.fontSize || 16) * 0.8) * scaleFactor;
       const descent = (metrics.fontBoundingBoxDescent != null ? Math.round(metrics.fontBoundingBoxDescent) : (ann.fontSize || 16) * 0.2) * scaleFactor;
       const lineHeight = fontSize * look.lineHeight;
@@ -1344,11 +1401,11 @@
       if (ann.width) {
         boxWidth = ann.width * scaleFactor;
       } else {
-        const naturalWidth = Math.max(10, ...(ann.text || "").split("\n").map(measure));
+        const naturalWidth = Math.max(10, ...shownText.split("\n").map(measure));
         boxWidth = Math.min(naturalWidth + padX * 2, maxWidthCap);
       }
       const innerWidth = Math.max(4, boxWidth - padX * 2);
-      const lines = wrapTextLines(ctx, ann.text || "", innerWidth, measure);
+      const lines = wrapTextLines(ctx, shownText, innerWidth, measure);
       // Where each wrapped line begins in the text (a wrap or newline swallows
       // one character), so per-letter colours can be matched to lines.
       const lineStarts = [];
@@ -1356,7 +1413,7 @@
       for (const line of lines) {
         lineStarts.push(cursor);
         cursor += line.length;
-        const next = (ann.text || "")[cursor];
+        const next = shownText[cursor];
         if (next === "\n" || next === " ") cursor += 1;
       }
       const textHeight = lines.length * lineHeight;
@@ -1825,7 +1882,7 @@
       const box = { ...ann, width: size.width + 1, height: size.height };
       const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
       if (!baked) return null;
-      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
+      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
       const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
       const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
       // Text never followed the page filter, so the image shouldn't either.
@@ -2274,6 +2331,8 @@
         fontStyle: ann.italic ? "italic" : "normal",
         lineHeight: look.lineHeight,
         letterSpacing: look.letterSpacingPx ? look.letterSpacingPx + "px" : undefined,
+        textTransform: { upper: "uppercase", lower: "lowercase", title: "capitalize" }[look.textCase],
+        fontVariantCaps: look.textCase === "small" ? "small-caps" : undefined,
         textDecorationLine: decorations.length ? decorations.join(" ") : "none",
         textDecorationStyle: look.strike === "double" || look.strike === "wavy" ? look.strike : "solid",
         textDecorationColor: look.color,
@@ -3818,6 +3877,42 @@
       );
     }
 
+    // The text panel's saved-styles section: click a style to give this text
+    // its look, or name the current look and save it.
+    function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle }) {
+      const [name, setName] = useState("");
+      const [message, setMessage] = useState(null);
+      function save() {
+        const clean = name.trim();
+        if (!clean) { setMessage("Type a name for the style first."); return; }
+        if (BUILT_IN_TEXT_STYLES.some((s) => s.name.toLowerCase() === clean.toLowerCase())) { setMessage("That name is used by a built-in style."); return; }
+        onSaveStyle(clean, ann);
+        setName("");
+        setMessage(`Saved "${clean}".`);
+      }
+      return (
+        <div className="ze-format-field">
+          <span className="ze-format-label">Styles</span>
+          <div className="ze-style-chips">
+            {BUILT_IN_TEXT_STYLES.map((style) => (
+              <button key={style.name} type="button" className="ze-format-toggle" title={`Give this text the ${style.name} look`} onClick={() => { setMessage(null); patch(textStylePatch(style)); }}>{style.name}</button>
+            ))}
+            {textStyles.map((style) => (
+              <span key={style.name} className="ze-style-chip">
+                <button type="button" className="ze-format-toggle" title={`Give this text the "${style.name}" look`} onClick={() => { setMessage(null); patch(textStylePatch(style)); }}>{style.name}</button>
+                <button type="button" className="ze-style-chip-delete" title={`Delete "${style.name}"`} aria-label={`Delete style ${style.name}`} onClick={() => onDeleteStyle(style.name)}>×</button>
+              </span>
+            ))}
+          </div>
+          <div className="ze-format-row">
+            <input type="text" className="ze-format-number ze-style-name" placeholder="Name this look…" maxLength="30" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            <button type="button" className="ze-format-toggle" onClick={save}>Save</button>
+          </div>
+          <span className="ze-format-hint">{message || "Saves the font, size, color, spacing, case and effects (not the words). Your styles are remembered in this browser and saved inside the project."}</span>
+        </div>
+      );
+    }
+
     // The text panel's "colour individual letters" section. It colours
     // whatever was last selected inside this box's editor; the swatches don't
     // take focus when pressed, so the selection stays put while you pick.
@@ -3862,6 +3957,7 @@
       penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
       highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
       onFlattenImage, onRasterizeRect, onRasterizeText,
+      textStyles, onSaveTextStyle, onDeleteTextStyle,
     }) {
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
@@ -3870,6 +3966,7 @@
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">Format — Text</div>
             <div className="ze-format-panel-body">
+              <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={onSaveTextStyle} onDeleteStyle={onDeleteTextStyle} />
               <div className="ze-format-field">
                 <span className="ze-format-label">Font</span>
                 <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={ann.fontFamily} onChange={(v) => patch({ fontFamily: v })} />
@@ -3923,7 +4020,7 @@
               </div>
               <LetterColors ann={ann} patch={patch} />
               <TextPhotoFill ann={ann} patch={patch} />
-              <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
+              <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
               <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
               <div className="ze-format-field">
@@ -4696,6 +4793,18 @@
         pane.scrollTop = anchor.y * zoomPercent + board.offsetTop - pane.clientHeight / 2;
       }, [zoomPercent]);
       const [fontOptions, setFontOptions] = useState(DEFAULT_FONT_OPTIONS);
+      // The user's saved text styles: kept in this browser between visits and
+      // inside each saved project, so they follow the project to another PC.
+      const [textStyles, setTextStyles] = useState(readStoredTextStyles);
+      useEffect(() => {
+        try { localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles)); } catch (err) { /* storage blocked: styles last for this visit */ }
+      }, [textStyles]);
+      function handleSaveTextStyle(name, ann) {
+        setTextStyles((prev) => [...prev.filter((s) => s.name !== name), { name, props: captureTextStyle(ann) }]);
+      }
+      function handleDeleteTextStyle(name) {
+        setTextStyles((prev) => prev.filter((s) => s.name !== name));
+      }
       const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
       const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
       const [penTaper, setPenTaper] = useState(0);
@@ -5052,6 +5161,7 @@
             version: 2, // 2: the annotation list is the stacking order
             docs,
             fonts,
+            textStyles,
             pages: pages.map(({ dataUrl, ...rest }) => rest),
             settings: {
               guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
@@ -5140,6 +5250,11 @@
               customFontStore.push({ family: font.family, data: font.data });
               loadedFamilies.push(font.family);
             } catch (err) { /* a damaged font falls back to the default; the text is still there */ }
+          }
+          // Styles the project carried join the ones already here (same name: the project's wins).
+          if (Array.isArray(project.textStyles) && project.textStyles.length) {
+            const incoming = project.textStyles.filter((s) => s && s.name && s.props);
+            setTextStyles((prev) => [...prev.filter((s) => !incoming.some((i) => i.name === s.name)), ...incoming]);
           }
           if (loadedFamilies.length) setFontOptions((prev) => Array.from(new Set([...prev, ...loadedFamilies])).sort((a, b) => a.localeCompare(b)));
 
@@ -5958,6 +6073,9 @@
                 onFlattenImage={handleFlattenImage}
                 onRasterizeRect={handleRasterizeRect}
                 onRasterizeText={handleRasterizeText}
+                textStyles={textStyles}
+                onSaveTextStyle={handleSaveTextStyle}
+                onDeleteTextStyle={handleDeleteTextStyle}
                 fontOptions={fontOptions}
                 setFontOptions={setFontOptions}
                 croppingAnnId={croppingAnnId}

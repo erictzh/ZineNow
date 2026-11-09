@@ -662,6 +662,24 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
    wrapping a line a pixel too early. */
 .ze-ann-text-mirror { display: inline-block; visibility: hidden; padding-right: 2px; }
 .ze-ann-text-mirror.is-visible { visibility: visible; }
+
+/* Saved text styles in the text panel */
+.ze-style-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ze-style-chip { display: inline-flex; align-items: stretch; }
+.ze-style-chip .ze-format-toggle { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ze-style-chip-delete {
+    border: 1px solid var(--ui-border);
+    border-left: 0;
+    border-radius: 0 4px 4px 0;
+    background: transparent;
+    color: inherit;
+    padding: 0 6px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+}
+.ze-style-chip-delete:hover { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.ze-style-name { flex: 1 1 auto; min-width: 0; width: auto; text-align: left; }
 .ze-ann-text-input {
     position: absolute;
     inset: 0;
@@ -677,6 +695,8 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     color: inherit;
     font: inherit;
     letter-spacing: inherit;
+    text-transform: inherit;
+    font-variant-caps: inherit;
     text-align: inherit;
     text-decoration: inherit;
     white-space: inherit;
