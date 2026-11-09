@@ -65,7 +65,7 @@ Md to PDF Converter:
 
 ## 4. Pending / known gaps (priority order)
 
-1. **Group drag-reorder of multi-selected pages — NOT implemented.** Request: when several pages are Shift-selected and one is dragged in the sidebar, the whole selected set moves together to the drop position. Plan: in `Sidebar.dragHandlersFor(idx).onDrop`, if the dragged page is part of a multi-selection, call a new `handleReorderGroup(sortedFromIndices, toIdx)` in `App` (pattern: `recordUndoCheckpoint()`, immutable `setPages` that removes all selected as a block preserving relative order and reinserts at the adjusted target, then recompute `selectedIdx`/`selectedPageIndices`). Needs a new `onReorderGroup` prop or reuse `onReorder`. Existing single-page `handleReorder` is at ~line 2846 of ZEditor's `index.html`.
+1. ~~Group drag-reorder of multi-selected pages.~~ Done 2026-11-09: `handleReorder(fromIndices, insertBefore)` now handles single and group moves. Verified with scripted drag events; not yet tried by hand with a real mouse drag.
 2. **Md-to-PDF "Send to ZineArranger" is not verified end-to-end through the real handoff.** The rasterize → PDF pipeline and the sanitization were verified in isolation; the actual `window.open` + postMessage round trip could not be exercised in the test browser (see §5). Test it once in a normal Chrome/Edge window.
 3. Md-to-PDF rasterization with Markdown images (`![](url)`): cross-origin images could taint the canvas (`useCORS: true` is set, untested with remote images).
 4. Group drag/resize of multi-selected **annotations** was deliberately cut (only highlight + group Delete work).
@@ -91,7 +91,7 @@ Things that looked like bugs but weren't:
 
 1. Copy the whole `ZineNow` folder (this file included). It is plain files; no install step.
 2. Claude Code's auto-memory and session transcripts are local to the old machine and do **not** transfer — this file is the substitute. Consider renaming/copying it to `CLAUDE.md` in the project root so a new session loads it automatically.
-3. Start with pending item #1 (group page drag) unless priorities changed, then item #2 (real-browser test of the Md-to-PDF handoff).
+3. Start with pending item #2 (real-browser test of the Md-to-PDF handoff) unless priorities changed.
 4. Working conventions carried over from the previous sessions: keep edits inside the existing single-file structure, preserve immutable state updates in ZEditor, default to no code comments unless the *why* is non-obvious, and test UI changes in a browser before calling them done.
 
 ## 7. Step-by-step: continuing on another PC

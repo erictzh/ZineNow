@@ -235,19 +235,16 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     max-width: 100%;
     background-color: #dbdbdb;
     border-radius: 2px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     flex: 0 0 auto;
 }
 .ze-page--rendered {
     width: auto;
     height: auto;
     background-color: transparent;
-    box-shadow: none;
 }
 .ze-page--rendered canvas {
     display: block;
     border-radius: 2px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 .ze-guides-overlay {
     position: absolute;
@@ -480,9 +477,16 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-ann-image {
     position: absolute;
     cursor: move;
-    border: 1px dashed transparent;
 }
-.ze-ann-image.is-selected { border-color: var(--ui-accent); }
+/* An overlay rather than a border, so the image area is exactly the
+   annotation's size and edge outlines line up with it. */
+.ze-ann-image.is-selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px dashed var(--ui-accent);
+    pointer-events: none;
+}
 .ze-ann-image img, .ze-ann-image canvas {
     width: 100%;
     height: 100%;
@@ -500,6 +504,24 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     background-color: var(--ui-accent);
     border: 2px solid #fff;
     cursor: nwse-resize;
+}
+
+.ze-ann-image-shadow {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.ze-ann-image-texture {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.ze-ann-image-stroke {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
 }
 
 /* ---- Image crop (frame for the normal display, editor for crop mode) ---- */
@@ -701,6 +723,29 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     cursor: pointer;
     border: 2px solid #fff;
 }
+
+.ze-format-slider-row { display: flex; align-items: center; gap: 8px; }
+.ze-format-slider-row .ze-format-slider { flex: 1 1 auto; min-width: 0; }
+.ze-format-slider-row .ze-format-number { flex: 0 0 auto; width: 76px; }
+.ze-format-slider-row input[type="number"].ze-format-number { width: 58px; }
+.ze-format-slider-row .ze-format-color-input { flex: 0 0 auto; }
+
+/* ---- Image effect cards -------------------------------------------------- */
+.ze-effect-card {
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+.ze-effect-card-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ui-fg);
+    margin-bottom: 10px;
+}
+.ze-effect-card .ze-format-field { margin-bottom: 12px; }
+.ze-effect-card .ze-format-field:last-of-type { margin-bottom: 0; }
 
 /* ---- Font combobox (searchable, + local system fonts) -------------------- */
 .ze-fontbox { position: relative; }

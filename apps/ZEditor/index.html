@@ -79,23 +79,132 @@
       { key: "grayscale", label: "Grayscale" },
       { key: "duotone", label: "Duotone" },
       { key: "halftone", label: "Halftone" },
+      { key: "threshold", label: "Threshold" },
     ];
-    // Same four treatments, plus "Match Page" — an image's own filter
+    // Same treatments, plus "Match Page" — an image's own filter
     // defaults to following whatever the page filter is, same as before
     // this existed, rather than starting every image at "None".
     const IMAGE_FILTER_OPTIONS = [
       { key: "match", label: "Match Page" },
-      { key: "none", label: "None" },
-      { key: "grayscale", label: "Grayscale" },
-      { key: "duotone", label: "Duotone" },
-      { key: "halftone", label: "Halftone" },
+      ...PAGE_FILTER_OPTIONS,
+      { key: "xerox", label: "Xerox" }, // per-image only
+    ];
+    const INK_COLOR_CONTROL = { kind: "color", prop: "inkColor", label: "Ink color", fallback: "#000000" };
+    const PAPER_COLOR_CONTROL = { kind: "color", prop: "paperColor", label: "Paper color", fallback: "#ffffff" };
+    const THRESHOLD_FILTER_CONTROLS = [
+      { kind: "slider", prop: "level", label: "Cutoff", min: 0, max: 255, fallback: 128 },
+      INK_COLOR_CONTROL,
+      PAPER_COLOR_CONTROL,
+    ];
+    const XEROX_FILTER_CONTROLS = [
+      { kind: "slider", prop: "contrast", label: "Contrast", min: 0, max: 100, fallback: 75 },
+      { kind: "slider", prop: "exposure", label: "Exposure", min: 0, max: 100, fallback: 50 },
+      { kind: "slider", prop: "speckle", label: "Toner speckle", min: 0, max: 100, fallback: 35 },
+      { kind: "slider", prop: "streaks", label: "Streaks", min: 0, max: 100, fallback: 25 },
+      { kind: "slider", prop: "edgeWear", label: "Edge wear", min: 0, max: 100, fallback: 30 },
+      { kind: "slider", prop: "xeroxVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      INK_COLOR_CONTROL,
+      PAPER_COLOR_CONTROL,
     ];
     const DEFAULT_DUOTONE_DARK = "#1a1a1a";
     const DEFAULT_DUOTONE_LIGHT = "#ffe066";
-    const DEFAULT_HALFTONE_CELL_SIZE = 6;
     const MIN_HALFTONE_CELL_SIZE = 1;
-    const DEFAULT_HALFTONE_COLOR = "#1a1a1a";
+    const HALFTONE_FILTER_CONTROLS = [
+      {
+        kind: "select", prop: "screen", label: "Screen", fallback: "dotsLines",
+        options: [{ key: "dotsLines", label: "Dots / Lines" }, { key: "dither", label: "1-Bit Dither" }],
+      },
+      { kind: "slider", prop: "lineBlend", label: "Dots ↔ Lines (%)", min: 0, max: 100, fallback: 0, showIf: (v) => v.screen !== "dither" },
+      { kind: "slider", prop: "cellSize", label: "Size (px)", min: MIN_HALFTONE_CELL_SIZE, max: 16, fallback: 6 },
+      { kind: "slider", prop: "angle", label: "Angle (°)", min: 0, max: 180, fallback: 0 },
+      { kind: "color", prop: "color", label: "Ink color", fallback: "#1a1a1a" },
+    ];
+    // Filters whose settings are built from a control list (keyed by filter
+    // type). These all replace pixels, so images preview them on a canvas.
+    const FILTER_CONTROLS = {
+      threshold: THRESHOLD_FILTER_CONTROLS,
+      halftone: HALFTONE_FILTER_CONTROLS,
+      xerox: XEROX_FILTER_CONTROLS,
+    };
     const DEFAULT_PAGE_FILTER = { type: "none" };
+    // Image effects — the one place an effect and its settings are defined.
+    // `key` is the on/off flag on the annotation, each control's `prop` is
+    // where its value lives. The Format panel's buttons and cards are built
+    // from these, and rendering reads values through effectSettings, so
+    // adding a setting here is all the panel needs. An `outline` makes the
+    // effect an edge shape: only one can be active on an image at a time.
+    // Edge sizes are percentages of the image's short side, so a shape
+    // keeps its look when the image is resized or exported.
+    const ROUNDED_EFFECT = {
+      key: "rounded",
+      label: "Rounded",
+      outline: roundedOutline,
+      controls: [
+        { kind: "slider", prop: "roundedRadius", label: "Radius (%)", min: 0, max: 50, fallback: 12 },
+      ],
+    };
+    const TORN_EDGE_EFFECT = {
+      key: "tornEdge",
+      label: "Torn Edge",
+      outline: tornEdgeOutline,
+      controls: [
+        { kind: "slider", prop: "tornSize", label: "Tooth size (%)", min: 2, max: 40, fallback: 10 },
+        { kind: "slider", prop: "tornDepth", label: "Depth (%)", min: 0, max: 30, fallback: 6 },
+        { kind: "slider", prop: "tornVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      ],
+    };
+    const SCISSOR_CUT_EFFECT = {
+      key: "scissorCut",
+      label: "Scissor Cut",
+      outline: scissorCutOutline,
+      controls: [
+        { kind: "slider", prop: "scissorCuts", label: "Cuts per side", min: 1, max: 12, fallback: 2 },
+        { kind: "slider", prop: "scissorDepth", label: "Depth (%)", min: 0, max: 25, fallback: 8 },
+        { kind: "slider", prop: "scissorVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      ],
+    };
+    const STROKE_EFFECT = {
+      key: "stroke",
+      label: "Stroke",
+      controls: [
+        { kind: "color", prop: "strokeColor", label: "Color", fallback: "#000000" },
+        { kind: "slider", prop: "strokeThickness", label: "Thickness (px)", min: 1, max: 40, fallback: 4 },
+      ],
+    };
+    const STROKE_MITER_LIMIT = 4; // set explicitly so the live SVG and export canvas agree
+    const SHADOW_EFFECT = {
+      key: "shadow",
+      label: "Shadow",
+      controls: [
+        { kind: "color", prop: "shadowColor", label: "Color", fallback: "#000000" },
+        { kind: "slider", prop: "shadowThickness", label: "Thickness (px)", min: 0, max: 60, fallback: 6 },
+        { kind: "slider", prop: "shadowDirection", label: "Direction (°)", min: 0, max: 360, fallback: 135 },
+        { kind: "slider", prop: "shadowBlur", label: "Blur (px)", min: 0, max: 40, fallback: 0 },
+      ],
+      hint: "Direction: 0° is up, 90° right, 180° down, 270° left.",
+    };
+    const TEXTURE_EFFECT = {
+      key: "texture",
+      label: "Texture",
+      controls: [
+        { kind: "color", prop: "textureColor", label: "Color", fallback: "#1a1a1a" },
+        { kind: "slider", prop: "textureGrit", label: "Grit", min: 0, max: 100, fallback: 40 },
+        { kind: "slider", prop: "textureDust", label: "Dust", min: 0, max: 100, fallback: 20 },
+        { kind: "slider", prop: "textureScratches", label: "Scratches", min: 0, max: 100, fallback: 15 },
+        { kind: "slider", prop: "textureVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      ],
+    };
+    const IMAGE_EFFECTS = [ROUNDED_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+
+    // Current values for a list of controls, keyed by each control's
+    // `prop`, with the control's fallback for anything not set yet.
+    function controlValues(source, controls) {
+      return Object.fromEntries(controls.map((c) => [c.prop, source[c.prop] != null ? source[c.prop] : c.fallback]));
+    }
+
+    function effectSettings(ann, effect) {
+      return controlValues(ann, effect.controls);
+    }
 
     // Resolves what an image annotation should actually be filtered with:
     // no `ann.filter` (or type "match") follows the page filter, exactly
@@ -233,27 +342,73 @@
     // grayscale/duotone preview).
     const LUMINANCE_MATRIX_VALUES = "0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0 0 0 1 0";
 
-    // Classic newsprint halftone: samples average luminance per grid cell
-    // from the source pixels, then redraws that cell as a single dot whose
-    // radius tracks darkness, on a white background — replaces the
-    // continuous-tone image entirely, same as a real halftone plate.
-    function drawHalftoneDots(ctx, sourceImageData, width, height, cellSize, color) {
+    const BAYER_8X8 = [
+      [0, 32, 8, 40, 2, 34, 10, 42],
+      [48, 16, 56, 24, 50, 18, 58, 26],
+      [12, 44, 4, 36, 14, 46, 6, 38],
+      [60, 28, 52, 20, 62, 30, 54, 22],
+      [3, 35, 11, 43, 1, 33, 9, 41],
+      [51, 19, 59, 27, 49, 17, 57, 25],
+      [15, 47, 7, 39, 13, 45, 5, 37],
+      [63, 31, 55, 23, 61, 29, 53, 21],
+    ];
+
+    // Screen-print halftone: samples average luminance per grid cell from
+    // the source pixels, then redraws that cell as a single mark on a white
+    // background — replaces the continuous-tone image entirely, same as a
+    // real plate. The grid can be rotated, and the mark is either a shape
+    // morphing from a dot into a stretch of line (its size tracks darkness)
+    // or, for dither, a solid square chosen by an ordered Bayer pattern.
+    function drawHalftoneScreen(ctx, sourceImageData, width, height, cellSize, filter) {
       const data = sourceImageData.data;
+      const { screen, lineBlend, angle, color } = controlValues(filter, HALFTONE_FILTER_CONTROLS);
+      const isDither = screen === "dither";
+      const toLine = lineBlend / 100;
+      const maxRadius = cellSize * 0.62;
+      const rotated = angle !== 0;
+      const radians = angle * Math.PI / 180;
+      const cos = Math.cos(radians), sin = Math.sin(radians);
+
+      // The grid lives in rotated (u, v) space; find what covers the canvas.
+      const corners = [[0, 0], [width, 0], [0, height], [width, height]];
+      const us = corners.map(([x, y]) => x * cos + y * sin);
+      const vs = corners.map(([x, y]) => y * cos - x * sin);
+      const maxU = Math.max(...us), maxV = Math.max(...vs);
+
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, width, height);
+      ctx.save();
       ctx.fillStyle = color;
-      const maxRadius = cellSize * 0.62;
-      // cellSize is fractional at export scale (editor px × scaleFactor),
-      // so the grid steps in fractional units but pixel sampling has to use
-      // whole-pixel bounds — a fractional index into `data` is undefined,
-      // which turned every cell after the first into NaN and left exported
-      // halftones almost blank.
-      for (let cy = 0; cy < height; cy += cellSize) {
-        const y0 = Math.floor(cy);
-        const y1 = Math.min(height, Math.max(y0 + 1, Math.floor(cy + cellSize)));
-        for (let cx = 0; cx < width; cx += cellSize) {
-          const x0 = Math.floor(cx);
+      ctx.rotate(radians);
+      ctx.beginPath();
+      // Lines and dither squares are filled together so neighbours join
+      // without seams, in batches so a very fine screen doesn't build one
+      // enormous path. Pure dots are filled one by one: where they overlap,
+      // that's what gives a dot screen its tone (batching lightens it).
+      const isPureDots = !isDither && toLine === 0;
+      const batchSize = isPureDots ? 1 : 4096;
+      let batched = 0;
+      const markAdded = () => {
+        if (++batched < batchSize) return;
+        ctx.fill();
+        ctx.beginPath();
+        batched = 0;
+      };
+
+      for (let gridV = Math.floor(Math.min(...vs) / cellSize); gridV * cellSize < maxV; gridV++) {
+        for (let gridU = Math.floor(Math.min(...us) / cellSize); gridU * cellSize < maxU; gridU++) {
+          const centerU = (gridU + 0.5) * cellSize;
+          const centerV = (gridV + 0.5) * cellSize;
+          const cx = centerU * cos - centerV * sin - cellSize / 2;
+          const cy = centerU * sin + centerV * cos - cellSize / 2;
+          // cellSize is fractional at export scale (editor px × scaleFactor),
+          // so the grid steps in fractional units but pixel sampling has to
+          // use whole-pixel bounds — a fractional index into `data` is
+          // undefined, which would turn the average into NaN.
+          const x0 = Math.max(0, Math.floor(cx));
+          const y0 = Math.max(0, Math.floor(cy));
           const x1 = Math.min(width, Math.max(x0 + 1, Math.floor(cx + cellSize)));
+          const y1 = Math.min(height, Math.max(y0 + 1, Math.floor(cy + cellSize)));
           let sum = 0, count = 0;
           for (let y = y0; y < y1; y++) {
             const rowStart = y * width * 4;
@@ -263,15 +418,32 @@
               count++;
             }
           }
-          const avgLum = count ? sum / count / 255 : 1;
+          if (!count) continue;
+          const avgLum = sum / count / 255;
+
+          if (isDither) {
+            if (avgLum < (BAYER_8X8[gridV & 7][gridU & 7] + 0.5) / 64) {
+              ctx.rect(centerU - cellSize / 2, centerV - cellSize / 2, cellSize, cellSize);
+              markAdded();
+            }
+            continue;
+          }
+
           const radius = (1 - avgLum) * maxRadius;
-          if (radius > 0.4) {
-            ctx.beginPath();
-            ctx.arc(cx + Math.min(cellSize, width - cx) / 2, cy + Math.min(cellSize, height - cy) / 2, radius, 0, Math.PI * 2);
-            ctx.fill();
+          const halfLength = radius + (cellSize / 2 + 0.25 - radius) * toLine;
+          const halfHeight = radius + ((1 - avgLum) * cellSize / 2 - radius) * toLine;
+          if (halfHeight > 0.4) {
+            // Cells cut off by the canvas edge center on their visible part.
+            const u = rotated ? centerU : cx + Math.min(cellSize, width - cx) / 2;
+            const v = rotated ? centerV : cy + Math.min(cellSize, height - cy) / 2;
+            if (isPureDots) ctx.arc(u, v, radius, 0, Math.PI * 2);
+            else ctx.roundRect(u - halfLength, v - halfHeight, halfLength * 2, halfHeight * 2, Math.min(halfLength, halfHeight) * (1 - toLine));
+            markAdded();
           }
         }
       }
+      ctx.fill();
+      ctx.restore();
     }
 
     // Grayscale/duotone pixel remap, in place on whatever's painted on
@@ -279,7 +451,7 @@
     // drawImageOnCanvas (a placed image, remapped on its own offscreen
     // canvas before compositing, so the remap never bleeds into
     // surrounding page pixels). Halftone isn't a simple per-pixel remap
-    // (it replaces pixels with dots via drawHalftoneDots), so both call
+    // (it replaces pixels with marks via drawHalftoneScreen), so both call
     // sites branch around this function for that case instead.
     function applyColorRemap(ctx, canvas, filter) {
       const { width, height } = canvas;
@@ -300,6 +472,17 @@
           data[i + 1] = dark.g + (light.g - dark.g) * lum;
           data[i + 2] = dark.b + (light.b - dark.b) * lum;
         }
+      } else if (filter.type === "threshold") {
+        const { level, inkColor, paperColor } = controlValues(filter, THRESHOLD_FILTER_CONTROLS);
+        const ink = hexToRgb(inkColor);
+        const paper = hexToRgb(paperColor);
+        for (let i = 0; i < data.length; i += 4) {
+          const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          const c = lum >= level ? paper : ink;
+          data[i] = c.r;
+          data[i + 1] = c.g;
+          data[i + 2] = c.b;
+        }
       }
       ctx.putImageData(imageData, 0, 0);
     }
@@ -312,49 +495,249 @@
     // on export), same convention drawStrokeOnCanvas uses for strokeWidth.
     function applyPageFilter(ctx, canvas, filter, scaleFactor) {
       if (!filter || filter.type === "none" || canvas.width === 0 || canvas.height === 0) return;
-      if (filter.type === "grayscale" || filter.type === "duotone") {
+      if (filter.type === "grayscale" || filter.type === "duotone" || filter.type === "threshold") {
         applyColorRemap(ctx, canvas, filter);
       } else if (filter.type === "halftone") {
         const { width, height } = canvas;
         const imageData = ctx.getImageData(0, 0, width, height);
-        const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, (filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE) * scaleFactor);
-        drawHalftoneDots(ctx, imageData, width, height, cellSize, filter.color || DEFAULT_HALFTONE_COLOR);
+        const { cellSize } = controlValues(filter, HALFTONE_FILTER_CONTROLS);
+        drawHalftoneScreen(ctx, imageData, width, height, Math.max(MIN_HALFTONE_CELL_SIZE, cellSize * scaleFactor), filter);
+      } else if (filter.type === "xerox") {
+        applyXerox(ctx, canvas, filter, scaleFactor);
       }
     }
 
-    // ---- Torn-edge clip — a deterministic jagged boundary (a sine-based
-    // hash instead of Math.random(), so the exact same shape is available
-    // to both the live CSS clip-path and the export canvas's Path2D clip,
-    // with no seed needing to be stored on the annotation). Points are in
-    // the image's own 0..width/0..height space.
-    function tornEdgePoints(width, height) {
-      const step = Math.max(6, Math.min(width, height) / 10);
-      const jitter = step * 0.6;
-      function noise(i) {
-        const v = Math.sin(i * 12.9898) * 43758.5453;
-        return v - Math.floor(v);
+    // Photocopier look: a steep contrast curve, then toner speckle, feed
+    // streaks running down the page and ink worn away near the edges. Noise
+    // is keyed to image-space cells (not canvas pixels), so the preview and
+    // the higher-resolution export show the same pattern.
+    function applyXerox(ctx, canvas, filter, scaleFactor) {
+      const { width, height } = canvas;
+      const { contrast, exposure, speckle, streaks, edgeWear, xeroxVariation, inkColor, paperColor } = controlValues(filter, XEROX_FILTER_CONTROLS);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      const ink = hexToRgb(inkColor);
+      const paper = hexToRgb(paperColor);
+      const gain = 1 + contrast / 100 * 15;
+      const cutoff = 1 - exposure / 100;
+      const speckleAmount = speckle / 100;
+      const wearAmount = edgeWear / 100;
+      const imageW = width / scaleFactor;
+      const imageH = height / scaleFactor;
+      const wearZone = Math.min(imageW, imageH) * 0.1;
+
+      // Some columns get a dark toner line, fewer a pale starved band. The
+      // slider sets how many; a column's own noise sets how strong it is.
+      const darkShare = 0.2 * streaks / 100;
+      const paleShare = darkShare / 2;
+      const streakShift = new Float32Array(width);
+      for (let x = 0; x < width; x++) {
+        const h = seededNoise(Math.floor(x / scaleFactor / 2.5), xeroxVariation);
+        if (h > 1 - darkShare) streakShift[x] = -(0.5 + 0.5 * (h - (1 - darkShare)) / darkShare);
+        else if (h < paleShare) streakShift[x] = 0.5 + 0.5 * (paleShare - h) / paleShare;
       }
+
+      for (let y = 0; y < height; y++) {
+        const imageY = y / scaleFactor;
+        const cellY = Math.floor(imageY);
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const imageX = x / scaleFactor;
+          const cellX = Math.floor(imageX);
+          const lum = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+
+          // Limited first, or the steep curve would leave solid blacks and
+          // whites so far out of range that speckle and streaks can't show.
+          let tone = Math.min(1, Math.max(0, (lum - cutoff) * gain + 0.5));
+          tone += (seededNoise(cellX, xeroxVariation, cellY) - 0.5) * speckleAmount;
+          tone += streakShift[x];
+          // Pinholes: stray toner on white, gaps in solid black.
+          if (seededNoise(cellX + 7919, xeroxVariation, cellY + 104729) < speckleAmount * 0.03) {
+            tone = tone > 0.5 ? 0 : 1;
+          }
+          const edgeDistance = Math.min(imageX, imageY, imageW - imageX, imageH - imageY);
+          if (edgeDistance < wearZone) {
+            const worn = wearAmount * (1 - edgeDistance / wearZone) ** 2;
+            if (seededNoise(cellX + 15485, xeroxVariation, cellY + 32452) < worn) tone = 1;
+          }
+
+          tone = Math.min(1, Math.max(0, tone));
+          data[i] = ink.r + (paper.r - ink.r) * tone;
+          data[i + 1] = ink.g + (paper.g - ink.g) * tone;
+          data[i + 2] = ink.b + (paper.b - ink.b) * tone;
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // ---- Edge outlines — each edge shape is one SVG path string in the
+    // image's own 0..width/0..height space, used as-is by the live CSS
+    // clip-path, the live stroke, and the export canvas's Path2D. Jagged
+    // shapes use a deterministic sine-based hash instead of Math.random(),
+    // so no seed needs storing on the annotation. Variation shifts where
+    // the hash starts reading, giving a different shape at the same settings.
+    function seededNoise(i, variation, j = 0) {
+      const v = Math.sin((i + variation * 97) * 12.9898 + j * 78.233) * 43758.5453;
+      return v - Math.floor(v);
+    }
+
+    // A repeatable sequence of noise values; each `stream` is independent.
+    function noiseStream(variation, stream = 0) {
+      let n = 0;
+      return () => seededNoise(stream * 100000 + n++, variation);
+    }
+
+    function pointsToOutline(points) {
+      return "M" + points.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join("L") + "Z";
+    }
+
+    function rectOutline({ width, height }) {
+      return `M0 0H${width}V${height}H0Z`;
+    }
+
+    // The active edge shape's outline, or null for a plain rectangle.
+    function imageEdgeOutline(ann) {
+      const edge = IMAGE_EFFECTS.find((effect) => effect.outline && ann[effect.key]);
+      return edge ? edge.outline(ann) : null;
+    }
+
+    function roundedOutline(ann) {
+      const { width: w, height: h } = ann;
+      const r = Math.min(w, h) * effectSettings(ann, ROUNDED_EFFECT).roundedRadius / 100;
+      const corner = (x, y) => `A${r} ${r} 0 0 1 ${x} ${y}`;
+      return `M${r} 0H${w - r}${corner(w, r)}V${h - r}${corner(w - r, h)}H${r}${corner(0, h - r)}V${r}${corner(r, 0)}Z`;
+    }
+
+    // A few long straight cuts: each side is split into segments whose
+    // corners land at uneven spots, nudged inward by a varying amount.
+    function scissorCutOutline(ann) {
+      const { width: w, height: h } = ann;
+      const { scissorCuts, scissorDepth, scissorVariation } = effectSettings(ann, SCISSOR_CUT_EFFECT);
+      const jitter = Math.min(w, h) * scissorDepth / 100;
+      const noise = noiseStream(scissorVariation);
+      const onSide = [
+        (t, inset) => [w * t, inset],
+        (t, inset) => [w - inset, h * t],
+        (t, inset) => [w * (1 - t), h - inset],
+        (t, inset) => [inset, h * (1 - t)],
+      ];
+      const points = [];
+      onSide.forEach((place) => {
+        for (let cut = 0; cut < scissorCuts; cut++) {
+          const t = cut === 0 ? 0 : (cut + (noise() - 0.5) * 0.6) / scissorCuts;
+          points.push(place(t, noise() * jitter));
+        }
+      });
+      return pointsToOutline(points);
+    }
+
+    function tornEdgeOutline(ann) {
+      const { width, height } = ann;
+      const shortSide = Math.min(width, height);
+      const { tornSize, tornDepth, tornVariation } = effectSettings(ann, TORN_EDGE_EFFECT);
+      const step = Math.max(0.5, shortSide * tornSize / 100);
+      const jitter = shortSide * tornDepth / 100;
+      // Once tuned, teeth are fitted to land on each corner, or large teeth
+      // would slice the corners off. An untuned tear keeps its original shape.
+      const tuned = ann.tornSize != null || ann.tornDepth != null;
+      const stepX = tuned ? width / Math.max(1, Math.round(width / step)) : step;
+      const stepY = tuned ? height / Math.max(1, Math.round(height / step)) : step;
+      const eps = 1e-6; // keeps the last point when float steps overshoot a corner
+      const noise = (i) => seededNoise(i, tornVariation);
       const points = [];
       let i = 0;
-      for (let x = 0; x <= width; x += step) points.push([x, noise(i++) * jitter]);
-      for (let y = step; y <= height; y += step) points.push([width - noise(i++) * jitter, y]);
-      for (let x = width - step; x >= 0; x -= step) points.push([x, height - noise(i++) * jitter]);
-      for (let y = height - step; y >= step; y -= step) points.push([noise(i++) * jitter, y]);
-      return points;
+      for (let x = 0; x <= width + eps; x += stepX) points.push([x, noise(i++) * jitter]);
+      for (let y = stepY; y <= height + eps; y += stepY) points.push([width - noise(i++) * jitter, y]);
+      for (let x = width - stepX; x >= -eps; x -= stepX) points.push([x, height - noise(i++) * jitter]);
+      for (let y = height - stepY; y >= stepY - eps; y -= stepY) points.push([noise(i++) * jitter, y]);
+      return pointsToOutline(points);
     }
 
-    function tornEdgeClipPathCss(width, height) {
-      if (width <= 0 || height <= 0) return undefined;
-      const pts = tornEdgePoints(width, height);
-      return "polygon(" + pts.map(([x, y]) => `${(x / width * 100).toFixed(2)}% ${(y / height * 100).toFixed(2)}%`).join(", ") + ")";
+    // ---- Drop shadow — thickness is how far the shadow sits from the image,
+    // direction is which way it falls, blur softens its edge. Returns null
+    // when the image has no visible shadow. Values are in the image's own
+    // page-space, so the live CSS drop-shadow and the export canvas shadow
+    // share one source (both treat blur as twice the Gaussian std deviation).
+    function imageShadowOffset(ann) {
+      if (!ann.shadow) return null;
+      const { shadowThickness, shadowDirection, shadowBlur, shadowColor } = effectSettings(ann, SHADOW_EFFECT);
+      if (shadowThickness <= 0 && shadowBlur <= 0) return null;
+      const radians = shadowDirection * Math.PI / 180;
+      return {
+        x: Math.sin(radians) * shadowThickness,
+        y: -Math.cos(radians) * shadowThickness,
+        blur: shadowBlur,
+        color: shadowColor,
+      };
     }
 
-    function clipTornEdge(ctx, width, height) {
-      const pts = tornEdgePoints(width, height);
-      ctx.beginPath();
-      pts.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
-      ctx.closePath();
-      ctx.clip();
+    // ---- Texture marks — grit, dust and scratches, drawn in the image's
+    // own coordinate space. Counts depend only on the amounts and positions
+    // are relative to the image, so the pattern scales with it instead of
+    // reshuffling on resize, and the preview and export get the same marks.
+    function drawTextureMarks(ctx, ann) {
+      const { width: w, height: h } = ann;
+      const shortSide = Math.min(w, h);
+      const longSide = Math.max(w, h);
+      const { textureColor, textureGrit, textureDust, textureScratches, textureVariation } = effectSettings(ann, TEXTURE_EFFECT);
+      const atLeast = (minimum, size) => Math.max(minimum, size);
+
+      // Marks of one kind share a path, painted once at that kind's opacity.
+      const paintMarks = (stream, count, alpha, paint, addMark) => {
+        const noise = noiseStream(textureVariation, stream);
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        for (let i = 0; i < Math.round(count); i++) addMark(noise);
+        paint();
+      };
+      const fill = () => ctx.fill();
+      const stroke = () => ctx.stroke();
+
+      ctx.save();
+      ctx.fillStyle = textureColor;
+      ctx.strokeStyle = textureColor;
+      ctx.lineCap = "round";
+
+      paintMarks(1, textureGrit * 60, 0.85, fill, (noise) => {
+        const size = atLeast(0.5, shortSide * (0.002 + noise() * 0.006));
+        ctx.rect(noise() * w, noise() * h, size, size);
+      });
+
+      paintMarks(2, textureDust * 1.5, 0.75, fill, (noise) => {
+        const radius = atLeast(0.4, shortSide * (0.002 + noise() ** 2 * 0.012));
+        const x = noise() * w, y = noise() * h;
+        ctx.moveTo(x + radius, y);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+      });
+
+      // A stray hair or fibre: short and strongly curved.
+      ctx.lineWidth = atLeast(0.4, shortSide * 0.002);
+      paintMarks(3, textureDust * 0.8, 0.75, stroke, (noise) => {
+        const x = noise() * w, y = noise() * h;
+        const heading = noise() * Math.PI * 2;
+        const length = shortSide * (0.02 + noise() * 0.08);
+        const bend = (noise() - 0.5) * 1.6;
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(
+          x + Math.cos(heading + bend) * length * 0.6, y + Math.sin(heading + bend) * length * 0.6,
+          x + Math.cos(heading) * length, y + Math.sin(heading) * length,
+        );
+      });
+
+      // Long and nearly straight, running mostly up and down the image.
+      ctx.lineWidth = atLeast(0.4, shortSide * 0.0015);
+      paintMarks(4, textureScratches * 0.3, 0.6, stroke, (noise) => {
+        const x = noise() * w, y = noise() * h;
+        const heading = -Math.PI / 2 + (noise() - 0.5) * 0.7;
+        const length = longSide * (0.15 + noise() * 0.6);
+        const bend = (noise() - 0.5) * 0.08;
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(
+          x + Math.cos(heading + bend) * length * 0.5, y + Math.sin(heading + bend) * length * 0.5,
+          x + Math.cos(heading) * length, y + Math.sin(heading) * length,
+        );
+      });
+      ctx.restore();
     }
 
     function drawStrokeOnCanvas(ctx, ann, scaleFactor) {
@@ -482,32 +865,56 @@
       // into surrounding page pixels.
       const imgFilter = effectiveImageFilter(ann, pageFilter);
       const filterType = imgFilter.type;
-      if (filterType === "grayscale" || filterType === "duotone" || filterType === "halftone") {
+      if (filterType && filterType !== "none") {
         const off = document.createElement("canvas");
         off.width = Math.max(1, Math.round(w));
         off.height = Math.max(1, Math.round(h));
         const octx = off.getContext("2d");
         octx.drawImage(img, sx, sy, sw, sh, 0, 0, off.width, off.height);
-        if (filterType === "halftone") {
-          const imageData = octx.getImageData(0, 0, off.width, off.height);
-          const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, (imgFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE) * scaleFactor);
-          drawHalftoneDots(octx, imageData, off.width, off.height, cellSize, imgFilter.color || DEFAULT_HALFTONE_COLOR);
-        } else {
-          applyColorRemap(octx, off, imgFilter);
-        }
+        applyPageFilter(octx, off, imgFilter, scaleFactor);
         source = off;
         sx = 0; sy = 0; sw = off.width; sh = off.height;
       }
 
-      if (ann.tornEdge) {
-        ctx.save();
-        ctx.translate(x, y);
-        clipTornEdge(ctx, w, h);
-        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h);
-        ctx.restore();
+      ctx.save();
+      const shadow = imageShadowOffset(ann);
+      if (shadow) {
+        ctx.shadowColor = shadow.color;
+        ctx.shadowOffsetX = shadow.x * scaleFactor;
+        ctx.shadowOffsetY = shadow.y * scaleFactor;
+        ctx.shadowBlur = shadow.blur * scaleFactor;
+      }
+      const outline = imageEdgeOutline(ann);
+      const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
+      if (outline || stroke || ann.texture) {
+        // Composed on its own canvas first: clipping on the page's context
+        // would also clip away the shadow, and this way the shadow falls
+        // from the stroke too. Drawn in the image's own coordinate space,
+        // where the outline is defined; `pad` leaves room for the stroke.
+        const pad = stroke ? Math.ceil(stroke.strokeThickness * STROKE_MITER_LIMIT / 2 * scaleFactor) + 2 : 0;
+        const cut = document.createElement("canvas");
+        cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
+        cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
+        const cctx = cut.getContext("2d");
+        cctx.translate(pad, pad);
+        cctx.scale(scaleFactor, scaleFactor);
+        cctx.save();
+        if (outline) cctx.clip(new Path2D(outline));
+        cctx.drawImage(source, sx, sy, sw, sh, 0, 0, ann.width, ann.height);
+        if (ann.texture) drawTextureMarks(cctx, ann);
+        cctx.restore();
+        if (stroke) {
+          cctx.strokeStyle = stroke.strokeColor;
+          cctx.lineWidth = stroke.strokeThickness;
+          cctx.lineJoin = "miter";
+          cctx.miterLimit = STROKE_MITER_LIMIT;
+          cctx.stroke(new Path2D(outline || rectOutline(ann)));
+        }
+        ctx.drawImage(cut, x - pad, y - pad);
       } else {
         ctx.drawImage(source, sx, sy, sw, sh, x, y, w, h);
       }
+      ctx.restore();
     }
 
     // Resolves which loaded pdf.js document a page belongs to. Pages can
@@ -829,6 +1236,7 @@
 
     function AnnotationImage({ ann, tool, isSelected, isPrimary, isCropping, onSelect, onUpdate, onToggleCrop, pageFilter }) {
       const halftoneCanvasRef = useRef(null);
+      const textureCanvasRef = useRef(null);
       const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
       // Crop is a sub-rect of the source image, in ITS OWN natural pixel
       // space — undefined/missing fields mean "no crop yet" (the full
@@ -943,15 +1351,26 @@
       // Halftone has no CSS-filter equivalent (it replaces pixels with
       // dots, not a per-pixel remap), so that case swaps the <img> for a
       // <canvas> the effect below draws the dot pattern onto directly,
-      // same drawHalftoneDots the background and Export use — sourced from
+      // same drawHalftoneScreen the background and Export use — sourced from
       // the crop sub-rect via drawImage's source-rect args, which crops
       // "for free" without a separate step.
       const imgFilter = effectiveImageFilter(ann, pageFilter);
       const filterType = imgFilter.type;
-      const isHalftone = filterType === "halftone";
+      const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]);
+      const filterCanvasKey = usesFilterCanvas ? JSON.stringify(imgFilter) : null;
+      const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
 
       useEffect(() => {
-        if (!isHalftone || isCropping) return;
+        if (!textureKey || isCropping) return;
+        const canvas = textureCanvasRef.current;
+        if (!canvas) return;
+        canvas.width = Math.max(1, Math.ceil(ann.width));
+        canvas.height = Math.max(1, Math.ceil(ann.height));
+        drawTextureMarks(canvas.getContext("2d"), ann);
+      }, [textureKey, isCropping, ann.width, ann.height]);
+
+      useEffect(() => {
+        if (!usesFilterCanvas || isCropping) return;
         let cancelled = false;
         (async () => {
           const img = await loadImageElement(ann.src);
@@ -964,12 +1383,10 @@
           canvas.height = h;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
-          const imageData = ctx.getImageData(0, 0, w, h);
-          const cellSize = Math.max(MIN_HALFTONE_CELL_SIZE, imgFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE);
-          drawHalftoneDots(ctx, imageData, w, h, cellSize, imgFilter.color || DEFAULT_HALFTONE_COLOR);
+          applyPageFilter(ctx, canvas, imgFilter, 1);
         })();
         return () => { cancelled = true; };
-      }, [isHalftone, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH, imgFilter.cellSize, imgFilter.color]);
+      }, [filterCanvasKey, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH]);
 
       // Crop-editing view — shows the WHOLE source image (dimmed outside
       // the current crop window) at the scale the crop rect is already
@@ -1011,8 +1428,12 @@
         filterType === "grayscale" ? "url(#ze-filter-grayscale)" :
         filterType === "duotone" ? `url(#${duotoneFilterId})` : undefined;
       const frameStyle = {};
-      if (ann.tornEdge) frameStyle.clipPath = tornEdgeClipPathCss(ann.width, ann.height);
+      const edgeOutline = imageEdgeOutline(ann);
+      if (edgeOutline) frameStyle.clipPath = `path("${edgeOutline}")`;
       if (cssFilter) frameStyle.filter = cssFilter;
+      const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
+      const shadow = imageShadowOffset(ann);
+      const shadowStyle = shadow ? { filter: `drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color})` } : undefined;
       const ownDuotoneDarkRgb = hasOwnDuotone ? hexToRgb(imgFilter.darkColor || DEFAULT_DUOTONE_DARK) : null;
       const ownDuotoneLightRgb = hasOwnDuotone ? hexToRgb(imgFilter.lightColor || DEFAULT_DUOTONE_LIGHT) : null;
 
@@ -1027,18 +1448,39 @@
           style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
           onMouseDown={(e) => { if (tool === "select") startDrag(e); else e.stopPropagation(); }}
         >
-          {isHalftone ? (
-            <canvas ref={halftoneCanvasRef} style={frameStyle} />
-          ) : (
-            <div className="ze-ann-image-frame" style={frameStyle}>
-              <img
-                src={ann.src}
-                alt=""
-                draggable="false"
-                style={{ position: "absolute", left: -cropX * scale, top: -cropY * scale, width: naturalW * scale, height: naturalH * scale }}
-              />
-            </div>
-          )}
+          {/* Shadow sits on this wrapper, outside the edge clip so the clip
+              can't cut it off, and away from the resize handle. It stays
+              mounted when there's no shadow so toggling one never remounts
+              (and blanks) the filter canvas. */}
+          <div className="ze-ann-image-shadow" style={shadowStyle}>
+            {usesFilterCanvas ? (
+              <canvas ref={halftoneCanvasRef} style={frameStyle} />
+            ) : (
+              <div className="ze-ann-image-frame" style={frameStyle}>
+                <img
+                  src={ann.src}
+                  alt=""
+                  draggable="false"
+                  style={{ position: "absolute", left: -cropX * scale, top: -cropY * scale, width: naturalW * scale, height: naturalH * scale }}
+                />
+              </div>
+            )}
+            {ann.texture && (
+              <canvas ref={textureCanvasRef} className="ze-ann-image-texture" style={{ clipPath: frameStyle.clipPath }} />
+            )}
+            {stroke && (
+              <svg className="ze-ann-image-stroke" width={ann.width} height={ann.height} aria-hidden="true">
+                <path
+                  d={edgeOutline || rectOutline(ann)}
+                  fill="none"
+                  stroke={stroke.strokeColor}
+                  strokeWidth={stroke.strokeThickness}
+                  strokeLinejoin="miter"
+                  strokeMiterlimit={STROKE_MITER_LIMIT}
+                />
+              </svg>
+            )}
+          </div>
           {isPrimary && tool === "select" && (
             <div className="ze-ann-image-handle" onMouseDown={startResize} title="Drag to resize" />
           )}
@@ -1393,7 +1835,7 @@
     const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
     const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-    function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onRotate, onDelete, onReorder, onLoadClick, onInsertPdfClick, onInsertBlank, loading }) {
+    function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onInsertPdfClick, onInsertBlank, loading }) {
       const dragIndexRef = useRef(null);
       const bodyRef = useRef(null);
       const scrollDirRef = useRef(0); // -1 up, 0 idle, 1 down
@@ -1458,12 +1900,8 @@
             dragIndexRef.current = null;
             stopAutoScroll();
             if (from === null || !info || from === idx) return;
-            // Target's index once the dragged page has already been
-            // removed from the list — matches how onReorder applies the
-            // move (remove at `from`, then insert at `to`).
-            const targetAfterRemoval = idx > from ? idx - 1 : idx;
-            const to = targetAfterRemoval + (info.before ? 0 : 1);
-            onReorder(from, to);
+            const selection = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : selectedPageIndices;
+            onReorder(selection.includes(from) ? selection : [from], idx + (info.before ? 0 : 1));
           },
         };
       }
@@ -1480,6 +1918,9 @@
               )}
               <button type="button" className="log-btn" onClick={onInsertPdfClick} disabled={loading || pages.length === 0} title="Insert another PDF's pages into this document">
                 Insert PDF
+              </button>
+              <button type="button" className="log-btn" onClick={onSelectAll} disabled={loading || pages.length === 0} title="Select every page">
+                Select All
               </button>
             </div>
           </div>
@@ -1680,6 +2121,84 @@
     // highlighter), then an empty state. Clicking a toolbar tool clears
     // any selection (see App's selectTool), so picking a tool reliably
     // brings up that tool's own defaults here.
+    // Props for a text-style input paired with another control: it keeps
+    // its own text while being typed in, so it can be cleared or hold a
+    // partial value, and `commitText` decides when that text is usable.
+    function useDraftInputProps(value, commitText) {
+      const [draft, setDraft] = useState(null);
+      return {
+        value: draft != null ? draft : value,
+        onChange: (e) => { setDraft(e.target.value); commitText(e.target.value); },
+        onBlur: () => setDraft(null),
+      };
+    }
+
+    function SliderNumberInput({ min, max, value, onChange }) {
+      const numberProps = useDraftInputProps(value, (text) => {
+        const n = Number(text);
+        if (text.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))));
+      });
+      return (
+        <div className="ze-format-slider-row">
+          <input
+            type="range" className="ze-format-slider" min={min} max={max} step="1"
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+          />
+          <input type="number" className="ze-format-number" min={min} max={max} step="1" {...numberProps} />
+        </div>
+      );
+    }
+
+    function HexColorInput({ value, onChange }) {
+      const hexProps = useDraftInputProps(value, (text) => {
+        const hex = "#" + text.trim().replace(/^#/, "");
+        if (/^#[0-9a-f]{6}$/i.test(hex)) onChange(hex.toLowerCase());
+      });
+      return (
+        <div className="ze-format-slider-row">
+          <input type="color" className="ze-format-color-input" value={value} onChange={(e) => onChange(e.target.value)} />
+          <input type="text" className="ze-format-number" spellCheck="false" maxLength="7" aria-label="Hex color" {...hexProps} />
+        </div>
+      );
+    }
+
+    function SelectInput({ options, value, onChange }) {
+      return (
+        <select className="ze-format-select" value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+        </select>
+      );
+    }
+
+    const EFFECT_CONTROL_INPUTS = { slider: SliderNumberInput, color: HexColorInput, select: SelectInput };
+
+    // Labelled inputs for a list of controls, reading from and patching
+    // whichever object holds their values (an annotation or a filter).
+    function ControlList({ controls, source, onPatch }) {
+      const values = controlValues(source, controls);
+      return controls.filter((c) => !c.showIf || c.showIf(values)).map(({ kind, prop, label, min, max, options }) => {
+        const ControlInput = EFFECT_CONTROL_INPUTS[kind];
+        return (
+          <div className="ze-format-field" key={prop}>
+            <span className="ze-format-label">{label}</span>
+            <ControlInput min={min} max={max} options={options} value={values[prop]} onChange={(v) => onPatch({ [prop]: v })} />
+          </div>
+        );
+      });
+    }
+
+    // One active image effect: its name above the controls defined for it.
+    function EffectCard({ effect, ann, onPatch }) {
+      return (
+        <section className="ze-effect-card">
+          <div className="ze-effect-card-title">{effect.label}</div>
+          <ControlList controls={effect.controls} source={ann} onPatch={onPatch} />
+          {effect.hint && <span className="ze-format-hint">{effect.hint}</span>}
+        </section>
+      );
+    }
+
     function FormatPanel({
       tool, selectedAnn, onUpdate, fontOptions, setFontOptions, croppingAnnId, onToggleCrop,
       textFontFamily, textFontSize, textBold, textItalic, textUnderline, textColor, textAlign,
@@ -1785,6 +2304,13 @@
         const patch = (p) => onUpdate(ann.id, p);
         const isCroppingThis = croppingAnnId === ann.id;
         const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
+        const toggleEffect = (effect) => {
+          const on = !ann[effect.key];
+          const otherEdgesOff = effect.outline && on
+            ? Object.fromEntries(IMAGE_EFFECTS.filter((e) => e.outline).map((e) => [e.key, false]))
+            : {};
+          patch({ ...otherEdgesOff, [effect.key]: on });
+        };
         return (
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">Format — Image</div>
@@ -1849,39 +2375,36 @@
                     </div>
                   </React.Fragment>
                 )}
-                {ann.filter && ann.filter.type === "halftone" && (
-                  <React.Fragment>
-                    <div className="ze-format-field" style={{ marginTop: 10 }}>
-                      <span className="ze-format-label">Dot size ({ann.filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}px)</span>
-                      <input
-                        type="range" className="ze-format-slider" min={MIN_HALFTONE_CELL_SIZE} max="16" step="1"
-                        value={ann.filter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}
-                        onChange={(e) => patch({ filter: { ...ann.filter, cellSize: Number(e.target.value) } })}
-                      />
-                    </div>
-                    <div className="ze-format-field">
-                      <span className="ze-format-label">Ink color</span>
-                      <input
-                        type="color" className="ze-format-color-input"
-                        value={ann.filter.color || DEFAULT_HALFTONE_COLOR}
-                        onChange={(e) => patch({ filter: { ...ann.filter, color: e.target.value } })}
-                      />
-                    </div>
-                  </React.Fragment>
+                {ann.filter && FILTER_CONTROLS[ann.filter.type] && (
+                  <div style={{ marginTop: 10 }}>
+                    <ControlList
+                      controls={FILTER_CONTROLS[ann.filter.type]}
+                      source={ann.filter}
+                      onPatch={(p) => patch({ filter: { ...ann.filter, ...p } })}
+                    />
+                  </div>
                 )}
                 <span className="ze-format-hint">Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.</span>
               </div>
               <div className="ze-format-field">
                 <span className="ze-format-label">Effect</span>
-                <button
-                  type="button"
-                  className={"ze-format-toggle ze-format-toggle-wide" + (ann.tornEdge ? " active" : "")}
-                  onClick={() => patch({ tornEdge: !ann.tornEdge })}
-                >
-                  Torn Edge
-                </button>
-                <span className="ze-format-hint">A collage-style jagged edge, cut into the image itself. Baked into Export PDF too, using this same shape.</span>
+                <div className="ze-format-row">
+                  {IMAGE_EFFECTS.map((effect) => (
+                    <button
+                      key={effect.key}
+                      type="button"
+                      className={"ze-format-toggle ze-format-toggle-wide" + (ann[effect.key] ? " active" : "")}
+                      onClick={() => toggleEffect(effect)}
+                    >
+                      {effect.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="ze-format-hint">Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too.</span>
               </div>
+              {IMAGE_EFFECTS.filter((effect) => ann[effect.key]).map((effect) => (
+                <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={patch} />
+              ))}
             </div>
           </aside>
         );
@@ -2083,7 +2606,7 @@
     function FilterControl({
       filterType, onFilterTypeChange,
       duotoneDark, duotoneLight, onDuotoneDarkChange, onDuotoneLightChange,
-      halftoneCellSize, onHalftoneCellSizeChange, halftoneColor, onHalftoneColorChange,
+      filter, onFilterPatch,
     }) {
       const [open, setOpen] = useState(false);
       const containerRef = useRef(null);
@@ -2129,24 +2652,11 @@
                   </div>
                 </React.Fragment>
               )}
-              {filterType === "halftone" && (
-                <React.Fragment>
-                  <div className="ze-format-field">
-                    <span className="ze-format-label">Dot size ({halftoneCellSize}px)</span>
-                    <input
-                      type="range" className="ze-format-slider" min={MIN_HALFTONE_CELL_SIZE} max="16" step="1"
-                      value={halftoneCellSize}
-                      onChange={(e) => onHalftoneCellSizeChange(Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="ze-format-field">
-                    <span className="ze-format-label">Ink color</span>
-                    <input type="color" className="ze-format-color-input" value={halftoneColor} onChange={(e) => onHalftoneColorChange(e.target.value)} />
-                  </div>
-                </React.Fragment>
+              {FILTER_CONTROLS[filterType] && (
+                <ControlList controls={FILTER_CONTROLS[filterType]} source={filter} onPatch={onFilterPatch} />
               )}
               <span className="ze-format-hint">
-                Applies to this page's background and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too.
+                Applies to the selected pages' backgrounds and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too.
               </span>
             </div>
           )}
@@ -2392,6 +2902,22 @@
         }
       }
 
+      // Keeps the page currently open as the primary, so selecting all
+      // doesn't jump the preview to page 1.
+      function handleSelectAllPages() {
+        if (pages.length === 0) return;
+        const primary = selectedIdx !== null ? selectedIdx : 0;
+        setSelectedIdx(primary);
+        setSelectedPageIndices(pages.map((_, i) => i).filter((i) => i !== primary));
+      }
+
+      // A page action targets the whole selection only when the page it
+      // was invoked on is part of an active multi-selection.
+      function pagesActedOn(idx) {
+        const inMultiSelection = selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx));
+        return inMultiSelection ? [selectedIdx, ...selectedPageIndices] : [idx];
+      }
+
       // Narrower than selectTool: switches the toolbar/panel to Text
       // without clearing the current selection — used when clicking an
       // existing text box to edit it, where that box should stay selected.
@@ -2477,6 +3003,7 @@
           }
           setPages(newPages);
           setSelectedIdx(newPages.length > 0 ? 0 : null);
+          setSelectedPageIndices([]);
           setUndoStack([]); // loading a document is a fresh start, not an undoable step
           setRedoStack([]);
         } catch (err) {
@@ -2541,6 +3068,7 @@
             return next;
           });
           setSelectedIdx(atIndex);
+          setSelectedPageIndices([]);
         } catch (err) {
           setErrorMsg("Couldn't insert that PDF — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -2709,6 +3237,7 @@
 
           setPages(newPages);
           setSelectedIdx(newPages.length > 0 ? 0 : null);
+          setSelectedPageIndices([]);
           setUndoStack([]);
           setRedoStack([]);
 
@@ -2775,13 +3304,17 @@
       }
 
       async function handleRotate(idx) {
-        const target = pages[idx];
-        const newRotation = (target.rotation + 90) % 360;
-        const dataUrl = target.isBlank
-          ? makeBlankThumb(target.width, target.height, newRotation)
-          : await renderThumb(docFor(pdfDocsRef, target), target.pageNumber, newRotation);
+        const updatesByKey = new Map();
+        for (const i of pagesActedOn(idx)) {
+          const target = pages[i];
+          const rotation = (target.rotation + 90) % 360;
+          const dataUrl = target.isBlank
+            ? makeBlankThumb(target.width, target.height, rotation)
+            : await renderThumb(docFor(pdfDocsRef, target), target.pageNumber, rotation);
+          updatesByKey.set(target.key, { rotation, dataUrl });
+        }
         recordUndoCheckpoint();
-        setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, rotation: newRotation, dataUrl } : p)));
+        setPages((prev) => prev.map((p) => (updatesByKey.has(p.key) ? { ...p, ...updatesByKey.get(p.key) } : p)));
       }
 
       function handleInsertBlank(atIndex) {
@@ -2802,6 +3335,7 @@
           return next;
         });
         setSelectedIdx(atIndex);
+        setSelectedPageIndices([]);
       }
 
       function handleDelete(idx) {
@@ -2841,21 +3375,24 @@
         }
       }
 
-      function handleReorder(fromIdx, toIdx) {
+      // `insertBefore` is a slot in the current, pre-move page list. Moved
+      // pages keep their document order, not the order they were selected.
+      function handleReorder(fromIndices, insertBefore) {
+        const moving = new Set(fromIndices);
+        const allIndices = pages.map((_, i) => i);
+        const block = allIndices.filter((i) => moving.has(i));
+        const rest = allIndices.filter((i) => !moving.has(i));
+        const insertAt = rest.filter((i) => i < insertBefore).length;
+        const newOrder = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
+        if (newOrder.every((oldIdx, newIdx) => oldIdx === newIdx)) return;
+
+        const newIdxOf = new Array(newOrder.length);
+        newOrder.forEach((oldIdx, newIdx) => { newIdxOf[oldIdx] = newIdx; });
+
         recordUndoCheckpoint();
-        setPages((prev) => {
-          const next = prev.slice();
-          const [moved] = next.splice(fromIdx, 1);
-          next.splice(toIdx, 0, moved);
-          return next;
-        });
-        setSelectedIdx((prevSel) => {
-          if (prevSel === null) return null;
-          if (prevSel === fromIdx) return toIdx;
-          if (fromIdx < prevSel && toIdx >= prevSel) return prevSel - 1;
-          if (fromIdx > prevSel && toIdx <= prevSel) return prevSel + 1;
-          return prevSel;
-        });
+        setPages((prev) => newOrder.map((oldIdx) => prev[oldIdx]));
+        setSelectedIdx((prevSel) => (prevSel === null ? null : newIdxOf[prevSel]));
+        setSelectedPageIndices((prevSel) => prevSel.map((oldIdx) => newIdxOf[oldIdx]));
       }
 
       // ---- Undo/redo -------------------------------------------------------
@@ -2879,7 +3416,7 @@
         }
         lastCommitRef.current = { time: now, key: coalesceKey || null };
         setUndoStack((stack) => {
-          const next = [...stack, { pages: stripDataUrls(pages), selectedIdx }];
+          const next = [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }];
           return next.length > MAX_UNDO_HISTORY ? next.slice(next.length - MAX_UNDO_HISTORY) : next;
         });
         setRedoStack([]);
@@ -2902,13 +3439,14 @@
         }));
         setPages(withThumbs);
         setSelectedIdx(snapshot.selectedIdx);
+        setSelectedPageIndices(snapshot.selectedPageIndices);
       }
 
       function handleUndo() {
         if (undoStack.length === 0) return;
         const entry = undoStack[undoStack.length - 1];
         setUndoStack((stack) => stack.slice(0, -1));
-        setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx }]);
+        setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
         lastCommitRef.current = { time: 0, key: null }; // next edit shouldn't coalesce with whatever came before the undo
         restoreSnapshot(entry);
       }
@@ -2917,7 +3455,7 @@
         if (redoStack.length === 0) return;
         const entry = redoStack[redoStack.length - 1];
         setRedoStack((stack) => stack.slice(0, -1));
-        setUndoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx }]);
+        setUndoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
         lastCommitRef.current = { time: 0, key: null };
         restoreSnapshot(entry);
       }
@@ -2975,8 +3513,8 @@
           if (key === "i") { handleImageToolClick(); return; }
           if (key === "h") { selectTool("highlighter"); return; }
           if (key === "d") { selectTool("pen"); return; } // "Draw" in the UI — see the toolbar button below
-          if (key === "arrowup") { e.preventDefault(); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
-          if (key === "arrowdown") { e.preventDefault(); setSelectedIdx((cur) => (cur === null ? cur : Math.min(pages.length - 1, cur + 1))); return; }
+          if (key === "arrowup") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
+          if (key === "arrowdown") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.min(pages.length - 1, cur + 1))); return; }
         }
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
@@ -3011,13 +3549,14 @@
         setPages((prev) => prev.map((p, i) => (i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p)));
       }
 
-      // Patches just the given page's own filter — coalesced per-page so a
-      // slider drag or color-picker tug lands as one undo step, same as
-      // handleUpdateAnnotation's per-id coalescing.
-      function updatePageFilter(pageIdx, patch) {
-        if (pageIdx === null) return;
-        recordUndoCheckpoint("pagefilter:" + pageIdx);
-        setPages((prev) => prev.map((p, i) => (i === pageIdx ? { ...p, filter: { ...(p.filter || DEFAULT_PAGE_FILTER), ...patch } } : p)));
+      // Patches the filter of every selected page — coalesced per-selection
+      // so a slider drag or color-picker tug lands as one undo step, same
+      // as handleUpdateAnnotation's per-id coalescing.
+      function updatePageFilter(patch) {
+        if (selectedIdx === null) return;
+        const targets = new Set([selectedIdx, ...selectedPageIndices]);
+        recordUndoCheckpoint("pagefilter:" + [...targets].sort((a, b) => a - b).join(","));
+        setPages((prev) => prev.map((p, i) => (targets.has(i) ? { ...p, filter: { ...(p.filter || DEFAULT_PAGE_FILTER), ...patch } } : p)));
       }
 
       function handleAddText(x, y) {
@@ -3168,15 +3707,13 @@
               {selectedPage && (
                 <FilterControl
                   filterType={pageFilter.type}
-                  onFilterTypeChange={(type) => updatePageFilter(selectedIdx, { type })}
+                  onFilterTypeChange={(type) => updatePageFilter({ type })}
                   duotoneDark={pageFilter.darkColor || DEFAULT_DUOTONE_DARK}
                   duotoneLight={pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT}
-                  onDuotoneDarkChange={(darkColor) => updatePageFilter(selectedIdx, { darkColor })}
-                  onDuotoneLightChange={(lightColor) => updatePageFilter(selectedIdx, { lightColor })}
-                  halftoneCellSize={pageFilter.cellSize || DEFAULT_HALFTONE_CELL_SIZE}
-                  onHalftoneCellSizeChange={(cellSize) => updatePageFilter(selectedIdx, { cellSize })}
-                  halftoneColor={pageFilter.color || DEFAULT_HALFTONE_COLOR}
-                  onHalftoneColorChange={(color) => updatePageFilter(selectedIdx, { color })}
+                  onDuotoneDarkChange={(darkColor) => updatePageFilter({ darkColor })}
+                  onDuotoneLightChange={(lightColor) => updatePageFilter({ lightColor })}
+                  filter={pageFilter}
+                  onFilterPatch={updatePageFilter}
                 />
               )}
               <OnionSkinControl
@@ -3247,6 +3784,7 @@
               selectedIdx={selectedIdx}
               selectedPageIndices={selectedPageIndices}
               onSelect={handleSelectPage}
+              onSelectAll={handleSelectAllPages}
               onRotate={handleRotate}
               onDelete={handleDeleteThumbnail}
               onReorder={handleReorder}
