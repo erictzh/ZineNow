@@ -266,10 +266,25 @@
     const IMAGE_EFFECTS = [ROUNDED_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
 
     const OPACITY_CONTROL = { kind: "slider", prop: "opacity", label: "Opacity (%)", min: 0, max: 100, fallback: 100 };
+    // A rectangle's fill is solid, or a two-colour gradient. Each colour has
+    // its own opacity, so a gradient can fade out to nothing; the plain
+    // Opacity control below still fades the whole rectangle as one piece.
+    const isGradientFill = (v) => v.fillType !== "solid";
     const RECT_CONTROLS = [
+      {
+        kind: "select", prop: "fillType", label: "Fill", fallback: "solid",
+        options: [{ key: "solid", label: "Solid" }, { key: "linear", label: "Linear gradient" }, { key: "radial", label: "Radial gradient" }],
+      },
       { kind: "color", prop: "fillColor", label: "Fill color", fallback: "#1a1a1a" },
+      { kind: "slider", prop: "fillAlpha", label: "Fill opacity (%)", min: 0, max: 100, fallback: 100 },
+      { kind: "color", prop: "gradientColor", label: "Gradient color", fallback: "#ffe066", showIf: isGradientFill },
+      { kind: "slider", prop: "gradientAlpha", label: "Gradient opacity (%)", min: 0, max: 100, fallback: 100, showIf: isGradientFill },
+      { kind: "slider", prop: "gradientAngle", label: "Angle (°)", min: 0, max: 360, fallback: 90, showIf: (v) => v.fillType === "linear" },
+      { kind: "slider", prop: "gradientStart", label: "Start (%)", min: 0, max: 100, fallback: 0, showIf: isGradientFill },
+      { kind: "slider", prop: "gradientEnd", label: "End (%)", min: 0, max: 100, fallback: 100, showIf: isGradientFill },
       OPACITY_CONTROL,
     ];
+    const RECT_FILL_PROPS = RECT_CONTROLS.map((c) => c.prop).filter((p) => p !== OPACITY_CONTROL.prop);
     const MIN_RECT_SIZE = 2; // small enough to use a rectangle as a thin rule
     const DEFAULT_RECT_SIZE = { width: 160, height: 110 }; // for a click without a drag
 
@@ -285,6 +300,83 @@
 
     function opacityOf(ann) {
       return controlValues(ann, [OPACITY_CONTROL]).opacity / 100;
+    }
+
+    // The colour stops of a rectangle's gradient. When the two ends differ
+    // in opacity, the in-between stops are worked out here with
+    // premultiplied-alpha blending and written out densely: CSS blends that
+    // way but canvas gradients don't, so two bare end stops would look
+    // different on screen and in Export PDF. Dense explicit stops make both
+    // paint the same ramp.
+    function rectGradientStops(ann) {
+      const v = controlValues(ann, RECT_CONTROLS);
+      const c1 = hexToRgb(v.fillColor), c2 = hexToRgb(v.gradientColor);
+      const a1 = v.fillAlpha / 100, a2 = v.gradientAlpha / 100;
+      const start = v.gradientStart, end = Math.max(v.gradientStart, v.gradientEnd);
+      const steps = a1 === a2 ? 1 : 16;
+      const stops = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const a = a1 + (a2 - a1) * t;
+        const channel = (p, q) => {
+          const premultiplied = p * a1 + (q * a2 - p * a1) * t;
+          return Math.round(a > 0 ? premultiplied / a : p + (q - p) * t);
+        };
+        stops.push({
+          percent: start + (end - start) * t,
+          color: `rgba(${channel(c1.r, c2.r)},${channel(c1.g, c2.g)},${channel(c1.b, c2.b)},${+a.toFixed(4)})`,
+        });
+      }
+      return stops;
+    }
+
+    // A rectangle's fill as a CSS background, for the live editor.
+    function rectFillCss(ann) {
+      const v = controlValues(ann, RECT_CONTROLS);
+      if (v.fillType === "solid") {
+        const { r, g, b } = hexToRgb(v.fillColor);
+        return `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
+      }
+      const stops = rectGradientStops(ann).map((s) => `${s.color} ${s.percent}%`).join(", ");
+      return v.fillType === "linear"
+        ? `linear-gradient(${v.gradientAngle}deg, ${stops})`
+        : `radial-gradient(ellipse farthest-corner at 50% 50%, ${stops})`;
+    }
+
+    // The same fill painted onto a canvas, in the box's own 0..width/
+    // 0..height space. The linear gradient line follows CSS: through the
+    // centre, long enough that the corners land exactly on its two ends.
+    function paintRectFill(ctx, ann) {
+      const v = controlValues(ann, RECT_CONTROLS);
+      const w = ann.width, h = ann.height;
+      if (v.fillType === "solid") {
+        const { r, g, b } = hexToRgb(v.fillColor);
+        ctx.fillStyle = `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
+        ctx.fillRect(0, 0, w, h);
+        return;
+      }
+      const stops = rectGradientStops(ann);
+      if (v.fillType === "linear") {
+        const radians = v.gradientAngle * Math.PI / 180;
+        const dx = Math.sin(radians), dy = -Math.cos(radians);
+        const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+        const gradient = ctx.createLinearGradient(w / 2 - dx * half, h / 2 - dy * half, w / 2 + dx * half, h / 2 + dy * half);
+        stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, w, h);
+      } else {
+        // CSS "ellipse farthest-corner": an ellipse with the box's aspect
+        // ratio reaching the corners. Drawn as a unit circle, stretched.
+        const reach = Math.SQRT2;
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(w / 2 * reach, h / 2 * reach);
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(-1 / reach, -1 / reach, 2 / reach, 2 / reach);
+        ctx.restore();
+      }
     }
 
     // Resolves what an image annotation should actually be filtered with:
@@ -676,8 +768,20 @@
       return `M0 0H${width}V${height}H0Z`;
     }
 
+    // An ellipse is a rectangle annotation with `shape: "ellipse"`: it takes
+    // everything a rectangle does, and its outline is simply the ellipse, so
+    // the clip, stroke, shadow and texture all follow it with no special
+    // cases. The rectangle-only edge shapes (Rounded, Torn Edge, Scissor
+    // Cut) don't apply to it.
+    const isEllipse = (ann) => ann.shape === "ellipse";
+    function ellipseOutline({ width, height }) {
+      const rx = width / 2, ry = height / 2;
+      return `M0 ${ry}A${rx} ${ry} 0 1 1 ${width} ${ry}A${rx} ${ry} 0 1 1 0 ${ry}Z`;
+    }
+
     // The active edge shape's outline, or null for a plain rectangle.
     function imageEdgeOutline(ann) {
+      if (isEllipse(ann)) return ellipseOutline(ann);
       const edge = IMAGE_EFFECTS.find((effect) => effect.outline && ann[effect.key]);
       return edge ? edge.outline(ann) : null;
     }
@@ -963,11 +1067,7 @@
     }
 
     function drawRectOnCanvas(ctx, ann, scaleFactor) {
-      const { fillColor } = controlValues(ann, RECT_CONTROLS);
-      drawBoxWithEffects(ctx, ann, scaleFactor, (target) => {
-        target.fillStyle = fillColor;
-        target.fillRect(0, 0, ann.width, ann.height);
-      });
+      drawBoxWithEffects(ctx, ann, scaleFactor, (target) => paintRectFill(target, ann));
     }
 
     // Draws a box's content with its edge shape, stroke, shadow and texture.
@@ -1053,6 +1153,46 @@
       const sourceScale = (ann.cropW || ann.naturalWidth || ann.width) / ann.width;
       const scale = hasLook ? exportScale : Math.min(exportScale, sourceScale);
 
+      const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawImageOnCanvas(ctx, box, scale, pageFilter));
+      if (!baked) return null;
+
+      const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => [
+        [effect.key, undefined],
+        ...effect.controls.map((c) => [c.prop, undefined]),
+      ]));
+      return {
+        ...clearedEffects,
+        ...baked,
+        cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined,
+        // Any filter is baked in now; an unfiltered image can keep following the page.
+        filter: filter.type === "none" ? ann.filter : { type: "none" },
+      };
+    }
+
+    // Turns a rectangle into an ordinary image annotation holding what it
+    // looks like now — fill, gradient, edge shape, stroke, shadow, texture —
+    // so image-only tools (filters, crop, effects stacked on top) apply to
+    // it. Its Opacity setting is kept; it applies to the image the same way.
+    async function rasterizedRectPatch(ann) {
+      const scale = EXPORT_SCALE / MAIN_SCALE;
+      const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawRectOnCanvas(ctx, box, scale));
+      if (!baked) return null;
+      // `shape` must go too: an image with shape "ellipse" would be clipped to one.
+      const cleared = Object.fromEntries([
+        "shape",
+        ...RECT_FILL_PROPS,
+        ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+      ].map((prop) => [prop, undefined]));
+      // A rectangle never followed the page filter, so neither should the image.
+      return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
+    }
+
+    // Draws a box with `draw` at `scale`, trims it to the visible pixels and
+    // returns the image fields to store. The canvas has room around the box
+    // for a shadow or stroke that spills past it; the new box shrinks or
+    // grows to match, keeping the artwork where it was on the page. Returns
+    // null when nothing visible remains.
+    async function bakeBoxToImage(ann, scale, draw) {
       const shadow = imageShadowOffset(ann);
       const strokeReach = ann.stroke ? effectSettings(ann, STROKE_EFFECT).strokeThickness * STROKE_MITER_LIMIT / 2 : 0;
       const shadowReach = shadow ? Math.hypot(shadow.x, shadow.y) + shadow.blur * 2 : 0;
@@ -1066,7 +1206,7 @@
       canvas.width = widthPx + marginPx * 2;
       canvas.height = heightPx + marginPx * 2;
       const ctx = canvas.getContext("2d");
-      await drawImageOnCanvas(ctx, { ...ann, x: marginPx / scale, y: marginPx / scale, width: widthPx / scale, height: heightPx / scale }, scale, pageFilter);
+      await draw(ctx, { ...ann, x: marginPx / scale, y: marginPx / scale, width: widthPx / scale, height: heightPx / scale });
 
       const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const alphaAt = (x, y) => data[(y * canvas.width + x) * 4 + 3];
@@ -1095,12 +1235,7 @@
       const jpeg = opaque ? trimmed.toDataURL("image/jpeg", 0.92) : null;
       const src = jpeg && jpeg.length < png.length ? jpeg : png;
 
-      const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => [
-        [effect.key, undefined],
-        ...effect.controls.map((c) => [c.prop, undefined]),
-      ]));
       return {
-        ...clearedEffects,
         src,
         x: ann.x + (left - marginPx) / scale,
         y: ann.y + (top - marginPx) / scale,
@@ -1108,9 +1243,6 @@
         height: trimmedH / scale,
         naturalWidth: trimmedW,
         naturalHeight: trimmedH,
-        cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined,
-        // Any filter is baked in now; an unfiltered image can keep following the page.
-        filter: filter.type === "none" ? ann.filter : { type: "none" },
       };
     }
 
@@ -1498,7 +1630,6 @@
       }
 
       const edgeOutline = imageEdgeOutline(ann);
-      const { fillColor } = controlValues(ann, RECT_CONTROLS);
       return (
         <div
           data-ann-id={ann.id}
@@ -1507,7 +1638,7 @@
           onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
         >
           <div className="ze-ann-image-shadow" style={boxGroupStyle(ann)}>
-            <div className="ze-ann-rect-fill" style={{ backgroundColor: fillColor, clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
+            <div className="ze-ann-rect-fill" style={{ background: rectFillCss(ann), clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
             <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
           </div>
           {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
@@ -1904,7 +2035,7 @@
             // A click makes a text box that fits its text; a drag sets its width.
             if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
             else onAddText(start.x, start.y);
-          } else if (tool === "rect") {
+          } else if (tool === "rect" || tool === "ellipse") {
             onAddRect(rect || {
               ...DEFAULT_RECT_SIZE,
               x: start.x - DEFAULT_RECT_SIZE.width / 2,
@@ -1968,7 +2099,7 @@
       const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
       const cursorClass =
         tool === "text" ? "ze-tool-text" :
-        (tool === "pen" || tool === "highlighter" || tool === "rect") ? "ze-tool-draw" :
+        (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse") ? "ze-tool-draw" :
         tool === "eraser" ? "ze-tool-erase" : "";
 
       // The page is scaled visually; this outer box takes up the scaled
@@ -2063,7 +2194,7 @@
               ))}
             </svg>
             {dragRect && (
-              <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height }} />
+              <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
             )}
           </div>
           {guidesOn && canvasSize.width > 0 && (
@@ -2517,12 +2648,14 @@
           : {};
         onPatch({ ...otherEdgesOff, [effect.key]: on });
       };
+      // An ellipse already has its own outline, so the rectangle edge shapes are left out.
+      const available = IMAGE_EFFECTS.filter((effect) => !(effect.outline && isEllipse(ann)));
       return (
         <React.Fragment>
           <div className="ze-format-field">
             <span className="ze-format-label">Effect</span>
             <div className="ze-format-row">
-              {IMAGE_EFFECTS.map((effect) => (
+              {available.map((effect) => (
                 <button
                   key={effect.key}
                   type="button"
@@ -2533,9 +2666,11 @@
                 </button>
               ))}
             </div>
-            <span className="ze-format-hint">Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too.</span>
+            <span className="ze-format-hint">
+              {isEllipse(ann) ? "All effects are baked into Export PDF too." : "Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too."}
+            </span>
           </div>
-          {IMAGE_EFFECTS.filter((effect) => ann[effect.key]).map((effect) => (
+          {available.filter((effect) => ann[effect.key]).map((effect) => (
             <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={onPatch} />
           ))}
         </React.Fragment>
@@ -2547,12 +2682,13 @@
       if (ann.name) return ann.name;
       if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
       if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-      return ann.type === "rect" ? "Rectangle" : "Image";
+      if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
+      return "Image";
     }
 
     function LayerThumb({ ann }) {
       if (ann.type === "image") return <span className="ze-layer-thumb"><img src={ann.src} alt="" draggable="false" /></span>;
-      if (ann.type === "rect") return <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ backgroundColor: controlValues(ann, RECT_CONTROLS).fillColor }} /></span>;
+      if (ann.type === "rect") return <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : undefined }} /></span>;
       if (ann.type === "text") return <span className="ze-layer-thumb ze-layer-thumb-text">T</span>;
       const isHi = ann.tool === "highlighter";
       return (
@@ -2726,7 +2862,7 @@
       onChangeTextFontFamily, onChangeTextFontSize, onChangeTextBold, onChangeTextItalic, onChangeTextUnderline, onChangeTextColor, onChangeTextAlign,
       penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
       highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
-      onFlattenImage,
+      onFlattenImage, onRasterizeRect,
     }) {
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
@@ -2925,10 +3061,12 @@
         const patch = (p) => onUpdate(ann.id, p);
         return (
           <aside className="ze-format-panel">
-            <div className="ze-format-panel-head">Format — Rectangle</div>
+            <div className="ze-format-panel-head">{isEllipse(ann) ? "Format — Ellipse" : "Format — Rectangle"}</div>
             <div className="ze-format-panel-body">
               <span className="ze-format-hint" style={{ display: "block" }}>
-                Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border.
+                {isEllipse(ann)
+                  ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline."
+                  : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border."}
               </span>
               <div className="ze-format-field" style={{ marginTop: 14 }}>
                 <span className="ze-format-label">Size</span>
@@ -2936,17 +3074,25 @@
               </div>
               <ControlList controls={RECT_CONTROLS} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} />
+              <div className="ze-format-field">
+                <span className="ze-format-label">Rasterize</span>
+                <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => onRasterizeRect(ann)}>
+                  Rasterize to Image
+                </button>
+                <span className="ze-format-hint">Turns this shape into an image of what it looks like now — gradient, edge shape, stroke and shadow included — so image filters and effects can be applied to it. Undo brings the shape back.</span>
+              </div>
             </div>
           </aside>
         );
       }
 
-      if (tool === "rect") {
+      if (tool === "rect" || tool === "ellipse") {
+        const shapeName = tool === "ellipse" ? "ellipse" : "rectangle";
         return (
           <aside className="ze-format-panel">
-            <div className="ze-format-panel-head">Rectangle</div>
+            <div className="ze-format-panel-head">{tool === "ellipse" ? "Ellipse" : "Rectangle"}</div>
             <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Drag on the page to draw, or click for a default size. Sets the fill for the next rectangle.</span>
+              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Drag on the page to draw, or click for a default size. Sets the fill for the next {shapeName} (rectangles and ellipses share these settings).</span>
               <ControlList controls={RECT_CONTROLS} source={rectDefaults} onPatch={onChangeRectDefaults} />
             </div>
           </aside>
@@ -3305,6 +3451,7 @@
           ["T", "Text tool"],
           ["I", "Add an image"],
           ["R", "Rectangle tool"],
+          ["E", "Ellipse tool"],
           ["D", "Draw tool"],
           ["H", "Highlighter tool"],
         ],
@@ -3433,7 +3580,7 @@
       const [errorMsg, setErrorMsg] = useState(null);
       const [exporting, setExporting] = useState(false);
       const [sendingToArranger, setSendingToArranger] = useState(false);
-      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'pen' | 'highlighter' | 'eraser'
+      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser'
       const [selectedAnnId, setSelectedAnnId] = useState(null);
       // Shift+Click multi-select — `selectedAnnId` stays the single
       // "primary" item (the one resize/crop/drag/Ctrl+C/the FormatPanel's
@@ -4193,6 +4340,7 @@
           if (key === "t") { selectTool("text"); return; }
           if (key === "i") { handleImageToolClick(); return; }
           if (key === "r") { selectTool("rect"); return; }
+          if (key === "e") { selectTool("ellipse"); return; }
           if (key === "h") { selectTool("highlighter"); return; }
           if (key === "d") { selectTool("pen"); return; } // "Draw" in the UI — see the toolbar button below
           if (key === "arrowup") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
@@ -4267,7 +4415,7 @@
         if (selectedIdx === null) return;
         const id = nextAnnIdRef.current++;
         updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
-          id, type: "rect", x: box.x, y: box.y,
+          id, type: "rect", shape: tool === "ellipse" ? "ellipse" : undefined, x: box.x, y: box.y,
           width: Math.max(MIN_RECT_SIZE, box.width),
           height: Math.max(MIN_RECT_SIZE, box.height),
           ...rectDefaults,
@@ -4364,6 +4512,13 @@
       async function handleFlattenImage(ann) {
         const pageIdx = selectedIdx;
         const patch = await flattenedImagePatch(ann, pageFilter);
+        if (!patch) return;
+        updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
+      }
+
+      async function handleRasterizeRect(ann) {
+        const pageIdx = selectedIdx;
+        const patch = await rasterizedRectPatch(ann);
         if (!patch) return;
         updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
       }
@@ -4541,6 +4696,11 @@
                         <rect x="3.5" y="6" width="17" height="12" />
                       </svg>
                     </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "ellipse" ? " active" : "")} title="Ellipse (E)" onClick={() => selectTool("ellipse")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                        <ellipse cx="12" cy="12" rx="8.5" ry="6" />
+                      </svg>
+                    </button>
                     <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Draw (D)" onClick={() => selectTool("pen")}>
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M4 20l1-4L16 5l3 3L8 19z" />
@@ -4660,6 +4820,7 @@
                 selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
                 onUpdate={handleUpdateAnnotation}
                 onFlattenImage={handleFlattenImage}
+                onRasterizeRect={handleRasterizeRect}
                 fontOptions={fontOptions}
                 setFontOptions={setFontOptions}
                 croppingAnnId={croppingAnnId}
