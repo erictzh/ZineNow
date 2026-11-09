@@ -36,11 +36,20 @@
     Markdown-to-PDF's precompiled App.jsx, different mechanism.
   -->
   <script type="text/babel">
-    const { useState, useRef, useEffect, useMemo } = React;
+    const { useState, useRef, useEffect, useLayoutEffect, useMemo } = React;
 
     const THUMB_SCALE = 0.3;
     const MAIN_SCALE = 1.1;
     const DEFAULT_PAGE_SIZE = { width: 420, height: 594 }; // used only if no PDF has been loaded yet
+    const ZOOM_PERCENT = { min: 25, max: 400, initial: 100 };
+
+    // For a drag started by `startEvent`: turns a later mouse event into how
+    // far the pointer has moved in artboard px (annotations' own space),
+    // whatever the current zoom is.
+    function dragDeltaFrom(startEvent, zoom) {
+      const { clientX: startX, clientY: startY } = startEvent;
+      return (ev) => ({ dx: (ev.clientX - startX) / zoom, dy: (ev.clientY - startY) / zoom });
+    }
 
     // Guides — trim/margin/bleed presets, in inches. Page geometry
     // (page.width/height, canvas px at MAIN_SCALE) is already in points
@@ -917,6 +926,81 @@
       ctx.restore();
     }
 
+    // Bakes an image's crop, filter and effects into one new image and
+    // returns the annotation fields to apply, or null if nothing would
+    // remain. Uses the export renderer, so the result is what Export PDF
+    // would have drawn; the box grows to fit a shadow or stroke and shrinks
+    // to the visible pixels, keeping the artwork where it was on the page.
+    async function flattenedImagePatch(ann, pageFilter) {
+      const filter = effectiveImageFilter(ann, pageFilter);
+      const exportScale = EXPORT_SCALE / MAIN_SCALE;
+      // Effects and filters are drawn at export resolution. With neither,
+      // there's no point upscaling a source smaller than that.
+      const hasLook = filter.type !== "none" || IMAGE_EFFECTS.some((effect) => ann[effect.key]);
+      const sourceScale = (ann.cropW || ann.naturalWidth || ann.width) / ann.width;
+      const scale = hasLook ? exportScale : Math.min(exportScale, sourceScale);
+
+      const shadow = imageShadowOffset(ann);
+      const strokeReach = ann.stroke ? effectSettings(ann, STROKE_EFFECT).strokeThickness * STROKE_MITER_LIMIT / 2 : 0;
+      const shadowReach = shadow ? Math.hypot(shadow.x, shadow.y) + shadow.blur * 2 : 0;
+      const marginPx = Math.ceil((strokeReach + shadowReach + 1) * scale);
+
+      // Snapped to whole canvas pixels: an edge landing partway across a
+      // pixel would be slightly transparent, ruling out JPEG for a photo.
+      const widthPx = Math.max(1, Math.round(ann.width * scale));
+      const heightPx = Math.max(1, Math.round(ann.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = widthPx + marginPx * 2;
+      canvas.height = heightPx + marginPx * 2;
+      const ctx = canvas.getContext("2d");
+      await drawImageOnCanvas(ctx, { ...ann, x: marginPx / scale, y: marginPx / scale, width: widthPx / scale, height: heightPx / scale }, scale, pageFilter);
+
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const alphaAt = (x, y) => data[(y * canvas.width + x) * 4 + 3];
+      let left = canvas.width, top = canvas.height, right = -1, bottom = -1;
+      for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+          if (alphaAt(x, y) === 0) continue;
+          left = Math.min(left, x); right = Math.max(right, x);
+          top = Math.min(top, y); bottom = Math.max(bottom, y);
+        }
+      }
+      if (right < 0) return null;
+      let opaque = true;
+      for (let y = top; y <= bottom && opaque; y++) {
+        for (let x = left; x <= right && opaque; x++) opaque = alphaAt(x, y) === 255;
+      }
+      const trimmedW = right - left + 1, trimmedH = bottom - top + 1;
+      const trimmed = document.createElement("canvas");
+      trimmed.width = trimmedW;
+      trimmed.height = trimmedH;
+      trimmed.getContext("2d").drawImage(canvas, -left, -top);
+
+      // PNG keeps transparency and suits hard-edged screens; JPEG is far
+      // smaller for photos. Keep whichever comes out lighter.
+      const png = trimmed.toDataURL("image/png");
+      const jpeg = opaque ? trimmed.toDataURL("image/jpeg", 0.92) : null;
+      const src = jpeg && jpeg.length < png.length ? jpeg : png;
+
+      const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => [
+        [effect.key, undefined],
+        ...effect.controls.map((c) => [c.prop, undefined]),
+      ]));
+      return {
+        ...clearedEffects,
+        src,
+        x: ann.x + (left - marginPx) / scale,
+        y: ann.y + (top - marginPx) / scale,
+        width: trimmedW / scale,
+        height: trimmedH / scale,
+        naturalWidth: trimmedW,
+        naturalHeight: trimmedH,
+        cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined,
+        // Any filter is baked in now; an unfiltered image can keep following the page.
+        filter: filter.type === "none" ? ann.filter : { type: "none" },
+      };
+    }
+
     // Resolves which loaded pdf.js document a page belongs to. Pages can
     // now come from more than one source PDF (the original load, plus any
     // PDFs brought in via Insert PDF), so `pdfDocsRef` is a map of
@@ -1118,7 +1202,7 @@
     // dragging" without fighting a native text cursor); swaps to a real
     // <textarea> only while editing. Double-click (or any click while the
     // Text tool is active) enters edit mode.
-    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate, onSwitchToTextTool }) {
+    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate, onSwitchToTextTool, zoom }) {
       const [editing, setEditing] = useState(!!startEditing);
 
       // Click vs. drag are told apart by movement, not by click count: a
@@ -1132,13 +1216,13 @@
         e.preventDefault();
         e.stopPropagation();
         onSelect(ann.id, e.shiftKey);
-        const startX = e.clientX, startY = e.clientY;
+        const dragDelta = dragDeltaFrom(e, zoom);
         const origX = ann.x, origY = ann.y;
         let moved = false;
-        const DRAG_THRESHOLD = 4;
+        const DRAG_THRESHOLD = 4; // screen px, so it feels the same at any zoom
         const move = (ev) => {
-          const dx = ev.clientX - startX, dy = ev.clientY - startY;
-          if (!moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) moved = true;
+          const { dx, dy } = dragDelta(ev);
+          if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
           if (moved) onUpdate(ann.id, { x: origX + dx, y: origY + dy });
         };
         const up = () => {
@@ -1234,7 +1318,7 @@
     // add/move/resize/select/delete only, deliberately scoped that way.
     const MIN_CROP_SIZE = 20; // natural px — keeps a crop drag from collapsing to nothing
 
-    function AnnotationImage({ ann, tool, isSelected, isPrimary, isCropping, onSelect, onUpdate, onToggleCrop, pageFilter }) {
+    function AnnotationImage({ ann, tool, isSelected, isPrimary, isCropping, onSelect, onUpdate, onToggleCrop, pageFilter, zoom }) {
       const halftoneCanvasRef = useRef(null);
       const textureCanvasRef = useRef(null);
       const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
@@ -1250,10 +1334,11 @@
         e.preventDefault();
         e.stopPropagation();
         onSelect(ann.id, e.shiftKey);
-        const startX = e.clientX, startY = e.clientY;
+        const dragDelta = dragDeltaFrom(e, zoom);
         const origX = ann.x, origY = ann.y;
         const move = (ev) => {
-          onUpdate(ann.id, { x: origX + (ev.clientX - startX), y: origY + (ev.clientY - startY) });
+          const { dx, dy } = dragDelta(ev);
+          onUpdate(ann.id, { x: origX + dx, y: origY + dy });
         };
         const up = () => {
           window.removeEventListener("mousemove", move);
@@ -1266,11 +1351,11 @@
       function startResize(e) {
         e.preventDefault();
         e.stopPropagation();
-        const startX = e.clientX;
+        const dragDelta = dragDeltaFrom(e, zoom);
         const origWidth = ann.width;
         const aspect = cropH / cropW; // the CROPPED aspect ratio, not the source image's
         const move = (ev) => {
-          const newWidth = Math.max(20, origWidth + (ev.clientX - startX));
+          const newWidth = Math.max(20, origWidth + dragDelta(ev).dx);
           onUpdate(ann.id, { width: newWidth, height: newWidth * aspect });
         };
         const up = () => {
@@ -1290,11 +1375,12 @@
         e.preventDefault();
         e.stopPropagation();
         const scale = ann.width / cropW;
-        const startX = e.clientX, startY = e.clientY;
+        const dragDelta = dragDeltaFrom(e, zoom);
         const origCropX = cropX, origCropY = cropY;
         const move = (ev) => {
-          const dxNat = (ev.clientX - startX) / scale;
-          const dyNat = (ev.clientY - startY) / scale;
+          const { dx, dy } = dragDelta(ev);
+          const dxNat = dx / scale;
+          const dyNat = dy / scale;
           const newCropX = Math.min(Math.max(0, origCropX - dxNat), Math.max(0, naturalW - cropW));
           const newCropY = Math.min(Math.max(0, origCropY - dyNat), Math.max(0, naturalH - cropH));
           onUpdate(ann.id, { cropX: newCropX, cropY: newCropY });
@@ -1313,11 +1399,12 @@
         const scale = ann.width / cropW;
         const imageOriginX = ann.x - cropX * scale;
         const imageOriginY = ann.y - cropY * scale;
-        const startX = e.clientX, startY = e.clientY;
+        const dragDelta = dragDeltaFrom(e, zoom);
         const orig = { cropX, cropY, cropW, cropH };
         const move = (ev) => {
-          const dxNat = (ev.clientX - startX) / scale;
-          const dyNat = (ev.clientY - startY) / scale;
+          const { dx, dy } = dragDelta(ev);
+          const dxNat = dx / scale;
+          const dyNat = dy / scale;
           let cx = orig.cropX, cy = orig.cropY, cw = orig.cropW, ch = orig.cropH;
           if (corner === "se") { cw = orig.cropW + dxNat; ch = orig.cropH + dyNat; }
           else if (corner === "ne") { cy = orig.cropY + dyNat; cw = orig.cropW + dxNat; ch = orig.cropH - dyNat; }
@@ -1560,6 +1647,7 @@
       penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
       annotations, selectedAnnId, selectedAnnIds, autoEditAnnId, croppingAnnId,
       onSelectAnnotation, onAddText, onAddStroke, onUpdateAnnotation, onEraseStroke, onSwitchToTextTool, onToggleCrop,
+      zoom,
     }) {
       const canvasRef = useRef(null);
       const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -1604,7 +1692,7 @@
 
       function overlayPoint(e) {
         const rect = canvasRef.current.getBoundingClientRect();
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
       }
 
       function handleOverlayMouseDown(e) {
@@ -1696,8 +1784,11 @@
         (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" :
         tool === "eraser" ? "ze-tool-erase" : "";
 
+      // The page is scaled visually; this outer box takes up the scaled
+      // size, which is what gives the pane something to scroll.
       return (
-        <div className="ze-page ze-page--rendered">
+        <div className="ze-artboard-zoom" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
+        <div className="ze-page ze-page--rendered" style={{ transform: zoom === 1 ? undefined : `scale(${zoom})` }}>
           <canvas ref={canvasRef} />
           {onionGhostSrc && (
             <img className="ze-onion-ghost" src={onionGhostSrc} alt="" style={{ opacity: onionSkinOpacity }} />
@@ -1720,6 +1811,7 @@
                 onUpdate={onUpdateAnnotation}
                 onToggleCrop={onToggleCrop}
                 pageFilter={pageFilter}
+                zoom={zoom}
               />
             ))}
             <svg className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
@@ -1755,6 +1847,7 @@
                 onSelect={onSelectAnnotation}
                 onUpdate={onUpdateAnnotation}
                 onSwitchToTextTool={onSwitchToTextTool}
+                zoom={zoom}
               />
             ))}
           </div>
@@ -1767,6 +1860,7 @@
               bleedIn={guideBleedIn}
             />
           )}
+        </div>
         </div>
       );
     }
@@ -2205,6 +2299,7 @@
       onChangeTextFontFamily, onChangeTextFontSize, onChangeTextBold, onChangeTextItalic, onChangeTextUnderline, onChangeTextColor, onChangeTextAlign,
       penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
       highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
+      onFlattenImage,
     }) {
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
@@ -2343,6 +2438,18 @@
                   )}
                 </div>
                 <span className="ze-format-hint">While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop.</span>
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Flatten</span>
+                <button
+                  type="button"
+                  className="ze-format-toggle ze-format-toggle-wide"
+                  disabled={isCroppingThis}
+                  onClick={() => onFlattenImage(ann)}
+                >
+                  Flatten Image
+                </button>
+                <span className="ze-format-hint">Bakes the crop, filter and effects into one image, so you can stack new effects on top. Undo brings them back. Currently {Math.round(ann.src.length * 0.75 / 1024)} KB.</span>
               </div>
               <div className="ze-format-field">
                 <span className="ze-format-label">Filter</span>
@@ -2753,6 +2860,79 @@
     // Project and Load Project. Step 1 states the consequence plainly;
     // step 2 is a final, separate "are you sure" rather than a second copy
     // of the same warning, so it can't be clicked through as a reflex.
+    // Keep in step with handleKeyDown and the other input handlers in App.
+    const KEYBOARD_SHORTCUTS = [
+      {
+        group: "Tools",
+        rows: [
+          ["Space", "Select tool"],
+          ["T", "Text tool"],
+          ["I", "Add an image"],
+          ["D", "Draw tool"],
+          ["H", "Highlighter tool"],
+        ],
+      },
+      {
+        group: "Editing",
+        rows: [
+          ["Ctrl + Z", "Undo"],
+          ["Ctrl + Shift + Z, or Ctrl + Y", "Redo"],
+          ["Ctrl + C", "Copy the selected item"],
+          ["Ctrl + V", "Paste a copied item, or an image from the clipboard"],
+          ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
+          ["Esc", "Stop editing a text box"],
+        ],
+      },
+      {
+        group: "Pages and selection",
+        rows: [
+          ["↑ / ↓", "Previous / next page"],
+          ["Ctrl + R", "Rotate the selected page"],
+          ["Shift + click", "Add to or remove from the selection (pages and items)"],
+        ],
+      },
+    ];
+
+    function ShortcutsDialog({ open, onClose }) {
+      useEffect(() => {
+        if (!open) return;
+        const closeOnEscape = (e) => { if (e.key === "Escape") onClose(); };
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+      }, [open]);
+      if (!open) return null;
+      return (
+        <div className="ze-modal-backdrop" onMouseDown={onClose}>
+          <div className="ze-modal ze-modal--shortcuts" role="dialog" aria-label="Keyboard shortcuts" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="ze-modal-head ze-modal-head--with-close">
+              Keyboard Shortcuts
+              <button type="button" className="ze-tool-icon-btn ze-tool-icon-btn--round" title="Close (Esc)" aria-label="Close" onClick={onClose}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+            <div className="ze-shortcuts-scroll">
+              <table className="ze-shortcuts-table">
+                {KEYBOARD_SHORTCUTS.map(({ group, rows }) => (
+                  <tbody key={group}>
+                    <tr><th colSpan="2">{group}</th></tr>
+                    {rows.map(([keys, action]) => (
+                      <tr key={keys}>
+                        <td><kbd>{keys}</kbd></td>
+                        <td>{action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                ))}
+              </table>
+              <span className="ze-format-hint">On a Mac, use Cmd instead of Ctrl. Shortcuts pause while you're typing in a text box or field.</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function ConfirmDialog({ step, onProceed, onYes, onCancel }) {
       if (!step) return null;
       return (
@@ -2834,6 +3014,36 @@
       // or "loadProject"; step is 1 (first warning) or 2 (final check).
       const [confirmAction, setConfirmAction] = useState(null);
       const [confirmStep, setConfirmStep] = useState(1);
+      const [shortcutsOpen, setShortcutsOpen] = useState(false);
+      const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT.initial);
+      const previewPaneRef = useRef(null);
+      const zoomAnchorRef = useRef(null);
+
+      // Zooming holds the point at the middle of the view in place: note
+      // where it is on the page now, then scroll back to it after the
+      // page has been laid out at its new size.
+      function artboardElement() {
+        return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
+      }
+
+      function handleZoomChange(percent) {
+        const pane = previewPaneRef.current, board = artboardElement();
+        if (board) {
+          zoomAnchorRef.current = {
+            x: (pane.scrollLeft + pane.clientWidth / 2 - board.offsetLeft) / zoomPercent,
+            y: (pane.scrollTop + pane.clientHeight / 2 - board.offsetTop) / zoomPercent,
+          };
+        }
+        setZoomPercent(percent);
+      }
+
+      useLayoutEffect(() => {
+        const anchor = zoomAnchorRef.current, pane = previewPaneRef.current, board = artboardElement();
+        if (!anchor || !board) return;
+        zoomAnchorRef.current = null;
+        pane.scrollLeft = anchor.x * zoomPercent + board.offsetLeft - pane.clientWidth / 2;
+        pane.scrollTop = anchor.y * zoomPercent + board.offsetTop - pane.clientHeight / 2;
+      }, [zoomPercent]);
       const [fontOptions, setFontOptions] = useState(DEFAULT_FONT_OPTIONS);
       const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
       const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
@@ -3464,7 +3674,7 @@
         function handleKeyDown(e) {
           const tag = (e.target && e.target.tagName) || "";
           if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return; // let native undo/typing run inside text fields
-          if (pendingInsertFile || confirmAction) return; // a modal is up — its own buttons handle input
+          if (pendingInsertFile || confirmAction || shortcutsOpen) return; // a modal is up — its own buttons handle input
           const key = e.key.toLowerCase();
           const mod = e.ctrlKey || e.metaKey;
 
@@ -3518,7 +3728,7 @@
         }
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-      }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction]);
+      }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction, shortcutsOpen]);
 
       // Ctrl+V with an image on the system clipboard (a screenshot, or an
       // image copied from another app/page) drops it onto the current page
@@ -3531,7 +3741,7 @@
         function handlePaste(e) {
           const tag = (e.target && e.target.tagName) || "";
           if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return;
-          if (pendingInsertFile || confirmAction || selectedIdx === null) return;
+          if (pendingInsertFile || confirmAction || shortcutsOpen || selectedIdx === null) return;
           const items = e.clipboardData && e.clipboardData.items;
           if (!items) return;
           const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
@@ -3541,7 +3751,7 @@
         }
         window.addEventListener("paste", handlePaste);
         return () => window.removeEventListener("paste", handlePaste);
-      }, [selectedIdx, pendingInsertFile, confirmAction]);
+      }, [selectedIdx, pendingInsertFile, confirmAction, shortcutsOpen]);
 
       // ---- Annotations (Compose mode) ------------------------------------
       function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
@@ -3640,6 +3850,15 @@
         // slider tug, or a burst of keystrokes editing this same
         // annotation all land in one undo step instead of one per event.
         updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, ...patch } : a)), "ann:" + id);
+      }
+
+      // Its own undo step: no coalesce key, so it can't merge with a
+      // slider tug made just before it.
+      async function handleFlattenImage(ann) {
+        const pageIdx = selectedIdx;
+        const patch = await flattenedImagePatch(ann, pageFilter);
+        if (!patch) return;
+        updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
       }
 
       // Deletes the whole current selection (the primary item plus any
@@ -3831,6 +4050,10 @@
                       </svg>
                     </button>
                   </div>
+                  <div className="ze-zoom-control">
+                    <span className="ze-format-label">Zoom (%)</span>
+                    <SliderNumberInput min={ZOOM_PERCENT.min} max={ZOOM_PERCENT.max} value={zoomPercent} onChange={handleZoomChange} />
+                  </div>
                   <div className="ze-tool-bar-group">
                     <button
                       type="button"
@@ -3847,12 +4070,25 @@
                         <path d="M14 11v6" />
                       </svg>
                     </button>
+                    <button
+                      type="button"
+                      className="ze-tool-icon-btn ze-tool-icon-btn--round"
+                      title="Keyboard shortcuts"
+                      aria-label="Keyboard shortcuts"
+                      onClick={() => setShortcutsOpen(true)}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <path d="M12 11v7" />
+                        <path d="M12 6.5v.01" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               )}
-              <div className="preview-pane">
+              <div className="preview-pane" ref={previewPaneRef}>
                 <div className="preview-canvas-wrapper">
                   <ComposeCanvas
+                    zoom={zoomPercent / 100}
                     pdfDocsRef={pdfDocsRef}
                     page={selectedPage}
                     guidesOn={guidesOn}
@@ -3890,6 +4126,7 @@
                 tool={tool}
                 selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
                 onUpdate={handleUpdateAnnotation}
+                onFlattenImage={handleFlattenImage}
                 fontOptions={fontOptions}
                 setFontOptions={setFontOptions}
                 croppingAnnId={croppingAnnId}
@@ -3962,6 +4199,7 @@
             onCancel={() => setPendingInsertFile(null)}
           />
 
+          <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
           <ConfirmDialog
             step={confirmAction ? confirmStep : 0}
             onProceed={handleConfirmProceed}
