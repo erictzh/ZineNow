@@ -362,6 +362,16 @@
       hint: "A filled box behind the text — a black bar, a highlighter strip, a tape label.",
     };
     const TEXT_EFFECTS = [STROKE_EFFECT, SHADOW_EFFECT, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT];
+    // A photo shown through the letters. 100% scale covers the text box; X/Y
+    // move it by that percent of the box's size (0 = centred). The photo itself
+    // lives on the text box as fillSrc/fillNatW/fillNatH and replaces the
+    // colour and gradient while it's set.
+    const TEXT_PHOTO_CONTROLS = [
+      { kind: "slider", prop: "fillScale", label: "Photo scale (%)", min: 20, max: 400, fallback: 100 },
+      { kind: "slider", prop: "fillX", label: "Photo X (%)", min: -100, max: 100, fallback: 0 },
+      { kind: "slider", prop: "fillY", label: "Photo Y (%)", min: -100, max: 100, fallback: 0 },
+    ];
+    const TEXT_PHOTO_PROPS = ["fillSrc", "fillNatW", "fillNatH", ...TEXT_PHOTO_CONTROLS.map((c) => c.prop)];
 
     // Rotation of a text box, image, rectangle or ellipse, in degrees clockwise
     // about its centre. The box's own x/y/width/height stay unrotated.
@@ -420,9 +430,11 @@
       const spacing = controlValues(ann, [LETTER_SPACING_CONTROL]).letterSpacing;
       const color = ann.color || "#1a1a1a";
       const fillAlpha = controlValues(ann, [TEXT_FILL_ALPHA_CONTROL]).fillAlpha;
-      const gradient = ann.textGradient ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
+      const photo = ann.fillSrc ? { src: ann.fillSrc, natW: ann.fillNatW, natH: ann.fillNatH, ...controlValues(ann, TEXT_PHOTO_CONTROLS) } : null;
+      const gradient = ann.textGradient && !photo ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
       const label = ann.labelBox ? effectSettings(ann, TEXT_LABEL_EFFECT) : null;
       return {
+        photo,
         lineHeight: controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
         letterSpacingPx: fontSize * spacing / 100,
         strike: controlValues(ann, [STRIKE_CONTROL]).strike,
@@ -434,6 +446,19 @@
         // The box's inner padding grows by the label's padding so the bar sits around the text.
         padX: 4 + (label ? label.labelPadding : 0),
         padY: 2 + (label ? label.labelPadding : 0),
+      };
+    }
+
+    // Where a text's fill photo sits inside the text area (w x h px), as the
+    // size and top-left of the photo: it covers the area at 100% scale, and
+    // fillX/fillY shift it by that percent of the area.
+    function photoPlacement(photo, w, h) {
+      const cover = Math.max(w / photo.natW, h / photo.natH) * photo.fillScale / 100;
+      const photoW = photo.natW * cover, photoH = photo.natH * cover;
+      return {
+        width: photoW, height: photoH,
+        left: (w - photoW) / 2 + photo.fillX / 100 * w,
+        top: (h - photoH) / 2 + photo.fillY / 100 * h,
       };
     }
 
@@ -1200,14 +1225,16 @@
       return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight };
     }
 
-    // A text box's size in editor px, as Export lays it out.
+    // A text box's size in editor px, as Export lays it out, plus the size of
+    // the text area inside its padding (where a gradient or photo fill sits).
     function measureTextBox(ann) {
       const ctx = document.createElement("canvas").getContext("2d");
-      const { boxWidth, boxHeight } = layoutText(ctx, ann, 1);
-      return { width: boxWidth, height: boxHeight };
+      const { boxWidth, boxHeight, innerWidth, textHeight } = layoutText(ctx, ann, 1);
+      return { width: boxWidth, height: boxHeight, contentWidth: innerWidth, contentHeight: textHeight };
     }
 
-    function drawTextOnCanvas(ctx, ann, scaleFactor) {
+    async function drawTextOnCanvas(ctx, ann, scaleFactor) {
+      const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
       ctx.save();
       const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight } = layoutText(ctx, ann, scaleFactor);
 
@@ -1227,16 +1254,23 @@
 
       // Stroke goes under the fill, like the live box's paint-order, so only
       // the outer half of the line shows.
-      const paintText = (c) => {
+      const setFont = (c) => {
         c.font = ctx.font;
         c.textBaseline = "alphabetic";
         if ("letterSpacing" in c) c.letterSpacing = ctx.letterSpacing;
+      };
+      // Where each line's text starts, on canvas `c` (whose font is set).
+      const lineOrigin = (c, line, i) => {
+        const lineWidth = c.measureText(line).width;
+        let lineX = x + padX;
+        if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
+        else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
+        return { lineWidth, lineX, baselineY: y + padY + i * lineHeight + baselineOffset };
+      };
+      const paintText = (c) => {
+        setFont(c);
         lines.forEach((line, i) => {
-          const lineWidth = c.measureText(line).width;
-          let lineX = x + padX;
-          if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
-          else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
-          const baselineY = y + padY + i * lineHeight + baselineOffset;
+          const { lineWidth, lineX, baselineY } = lineOrigin(c, line, i);
           if (look.stroke) {
             c.save();
             c.strokeStyle = look.stroke.strokeColor;
@@ -1246,12 +1280,37 @@
             c.strokeText(line, lineX, baselineY);
             c.restore();
           }
-          c.fillStyle = fill;
-          c.fillText(line, lineX, baselineY);
+          if (!photoImg) {
+            c.fillStyle = fill;
+            c.fillText(line, lineX, baselineY);
+          }
           if (!line) return;
           if (ann.underline) drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY + fontSize * 0.12, fontSize, look.color);
           if (look.strike !== "none") drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY - fontSize * 0.3, fontSize, look.color);
         });
+        if (!photoImg) return;
+        // Photo fill: the letters drawn solid on a scratch layer, then the
+        // photo painted into them only (source-in), then that layer laid over
+        // the stroke. The scratch layer shares this canvas's transform, so the
+        // photo turns with a rotated box.
+        const letters = document.createElement("canvas");
+        letters.width = c.canvas.width;
+        letters.height = c.canvas.height;
+        const lctx = letters.getContext("2d");
+        lctx.setTransform(c.getTransform());
+        setFont(lctx);
+        lctx.fillStyle = "#000";
+        lines.forEach((line, i) => {
+          const { lineX, baselineY } = lineOrigin(lctx, line, i);
+          lctx.fillText(line, lineX, baselineY);
+        });
+        const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
+        lctx.globalCompositeOperation = "source-in";
+        lctx.drawImage(photoImg, x + padX + place.left * scaleFactor, y + padY + place.top * scaleFactor, place.width * scaleFactor, place.height * scaleFactor);
+        c.save();
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.drawImage(letters, 0, 0);
+        c.restore();
       };
 
       if (look.shadow) {
@@ -1477,7 +1536,7 @@
       const box = { ...ann, width: size.width + 1, height: size.height };
       const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
       if (!baked) return null;
-      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha"];
+      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha", ...TEXT_PHOTO_PROPS];
       const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
       const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
       // Text never followed the page filter, so the image shouldn't either.
@@ -1878,7 +1937,18 @@
       // gradient spans the text area. They're left off while typing, which
       // shows plain text in the box's own colour.
       const fillStyle = {};
-      if (look.gradient) {
+      if (look.photo) {
+        const area = measureTextBox(ann);
+        const place = photoPlacement(look.photo, area.contentWidth, area.contentHeight);
+        Object.assign(fillStyle, {
+          backgroundImage: `url("${look.photo.src}")`,
+          backgroundSize: `${place.width}px ${place.height}px`,
+          backgroundPosition: `${place.left}px ${place.top}px`,
+          backgroundRepeat: "no-repeat",
+          WebkitBackgroundClip: "text", backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+        });
+      } else if (look.gradient) {
         // backgroundImage, not the `background` shorthand: when only the
         // colours change, React re-sets just that property, and the
         // shorthand would reset background-clip and fill the whole box.
@@ -1906,7 +1976,7 @@
       // bury the gradient. So with a gradient the outline and shadow go on a
       // copy of the text underneath and the gradient copy sits on top, as in
       // Export (stroke first, fill over it).
-      const layered = Boolean(look.gradient && (look.stroke || look.shadow) && ann.text);
+      const layered = Boolean((look.gradient || look.photo) && (look.stroke || look.shadow) && ann.text);
       const bodyStyle = layered ? { display: "block", position: "relative" } : { display: "block", ...fillStyle, ...outlineStyle };
 
       return (
@@ -3052,6 +3122,69 @@
       });
     }
 
+    // Reads a chosen photo for a text fill: scaled down to at most 2000 px on a
+    // side (it only shows through letters, and it's stored in the project file).
+    function readPhotoFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Couldn't read that photo."));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("That file isn't an image the browser can open."));
+          img.onload = () => {
+            const shrink = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+            const width = Math.max(1, Math.round(img.naturalWidth * shrink));
+            const height = Math.max(1, Math.round(img.naturalHeight * shrink));
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+            resolve({ src: canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.92), width, height });
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // The text panel's "photo through the letters" section.
+    function TextPhotoFill({ ann, patch }) {
+      const inputRef = useRef(null);
+      const [error, setError] = useState(null);
+      const hasPhoto = Boolean(ann.fillSrc);
+      async function handleChosen(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        try {
+          setError(null);
+          const { src, width, height } = await readPhotoFile(file);
+          patch({ fillSrc: src, fillNatW: width, fillNatH: height });
+        } catch (err) {
+          setError(err.message);
+        }
+      }
+      return (
+        <div className="ze-format-field">
+          <span className="ze-format-label">Photo fill</span>
+          <div className="ze-format-row">
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => inputRef.current && inputRef.current.click()}>
+              {hasPhoto ? "Change photo…" : "Choose photo…"}
+            </button>
+            {hasPhoto && (
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => patch(Object.fromEntries(TEXT_PHOTO_PROPS.map((prop) => [prop, undefined])))}>
+                Remove
+              </button>
+            )}
+          </div>
+          <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleChosen} />
+          {hasPhoto && <ControlList controls={TEXT_PHOTO_CONTROLS} source={ann} onPatch={patch} />}
+          {error && <span className="ze-format-hint is-error">{error}</span>}
+          <span className="ze-format-hint">Shows a photo through the letters. While it's set it replaces the text color and gradient.</span>
+        </div>
+      );
+    }
+
     // One active image effect: its name above the controls defined for it.
     function EffectCard({ effect, ann, onPatch }) {
       return (
@@ -3348,6 +3481,7 @@
                   <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(ann.color) ? ann.color : "#1a1a1a"} onChange={(color) => patch({ color })} />
                 </div>
               </div>
+              <TextPhotoFill ann={ann} patch={patch} />
               <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
               <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
