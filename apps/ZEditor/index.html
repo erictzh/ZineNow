@@ -361,7 +361,41 @@
       ],
       hint: "A filled box behind the text — a black bar, a highlighter strip, a tape label.",
     };
-    const TEXT_EFFECTS = [STROKE_EFFECT, SHADOW_EFFECT, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT];
+    // Ransom-note lettering: each letter gets its own seeded tilt, up/down
+    // shift and size, optionally on a cut-out paper tile. Tilt, shift and size
+    // are maximums; the actual values per letter come from the Variation seed.
+    const RANSOM_EFFECT = {
+      key: "ransom",
+      label: "Ransom",
+      controls: [
+        { kind: "slider", prop: "ransomTilt", label: "Tilt (°)", min: 0, max: 45, fallback: 8 },
+        { kind: "slider", prop: "ransomShift", label: "Up/down (%)", min: 0, max: 50, fallback: 10 },
+        { kind: "slider", prop: "ransomSize", label: "Size variation (%)", min: 0, max: 60, fallback: 12 },
+        {
+          kind: "select", prop: "ransomTiles", label: "Letter tiles", fallback: "none",
+          options: [{ key: "none", label: "None" }, { key: "paper", label: "Cut-out paper" }],
+        },
+        { kind: "slider", prop: "ransomVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      ],
+      hint: "Each letter gets its own tilt, height and size, like letters cut from a magazine.",
+    };
+    // Worn-away text: nicks, specks and scratches knocked out of the letters.
+    const DISTRESS_EFFECT = {
+      key: "distress",
+      label: "Distress",
+      controls: [
+        { kind: "slider", prop: "distressGrit", label: "Nicks", min: 0, max: 100, fallback: 40 },
+        { kind: "slider", prop: "distressDust", label: "Specks", min: 0, max: 100, fallback: 25 },
+        { kind: "slider", prop: "distressScratches", label: "Scratches", min: 0, max: 100, fallback: 20 },
+        { kind: "slider", prop: "distressVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
+      ],
+    };
+    const TEXT_EFFECTS = [STROKE_EFFECT, SHADOW_EFFECT, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, RANSOM_EFFECT, DISTRESS_EFFECT];
+    const RANSOM_PAPER_COLORS = ["#f4efe1", "#ffe066", "#ff8fa3", "#8ecae6", "#b7e4c7", "#ffffff"];
+    // These looks are drawn with the export renderer in the live editor too
+    // (see AnnotationText), because per-letter jitter and knocked-out marks
+    // have no clean CSS equivalent; one renderer means no editor/export drift.
+    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress);
     // A photo shown through the letters. 100% scale covers the text box; X/Y
     // move it by that percent of the box's size (0 = centred). The photo itself
     // lives on the text box as fillSrc/fillNatW/fillNatH and replaces the
@@ -435,6 +469,8 @@
       const label = ann.labelBox ? effectSettings(ann, TEXT_LABEL_EFFECT) : null;
       return {
         photo,
+        ransom: ann.ransom ? effectSettings(ann, RANSOM_EFFECT) : null,
+        distress: ann.distress ? effectSettings(ann, DISTRESS_EFFECT) : null,
         lineHeight: controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
         letterSpacingPx: fontSize * spacing / 100,
         strike: controlValues(ann, [STRIKE_CONTROL]).strike,
@@ -1145,7 +1181,7 @@
 
     // Word-based wrapping (canvas has no auto-wrap) — also respects
     // explicit newlines, matching the editor's `white-space: pre-wrap`.
-    function wrapTextLines(ctx, text, maxWidth) {
+    function wrapTextLines(ctx, text, maxWidth, measure = (s) => ctx.measureText(s).width) {
       const paragraphs = (text || "").split("\n");
       const lines = [];
       for (const para of paragraphs) {
@@ -1154,7 +1190,7 @@
         let current = "";
         for (const word of words) {
           const test = current ? current + " " + word : word;
-          if (current && ctx.measureText(test).width > maxWidth) {
+          if (current && measure(test) > maxWidth) {
             lines.push(current);
             current = word;
           } else {
@@ -1225,18 +1261,35 @@
       const padX = (look.padX + TEXT_BORDER_PX) * scaleFactor, padY = (look.padY + TEXT_BORDER_PX) * scaleFactor;
       const maxWidthCap = AUTO_TEXT_MAX_WIDTH * scaleFactor;
 
+      // Letters placed one by one (ransom) lose kerning, so their widths are
+      // the sum of each letter's own advance.
+      const measure = look.ransom
+        ? (s) => Array.from(s).reduce((width, ch) => width + ctx.measureText(ch).width, 0)
+        : (s) => ctx.measureText(s).width;
+
       let boxWidth;
       if (ann.width) {
         boxWidth = ann.width * scaleFactor;
       } else {
-        const naturalWidth = Math.max(10, ...(ann.text || "").split("\n").map((l) => ctx.measureText(l).width));
+        const naturalWidth = Math.max(10, ...(ann.text || "").split("\n").map(measure));
         boxWidth = Math.min(naturalWidth + padX * 2, maxWidthCap);
       }
       const innerWidth = Math.max(4, boxWidth - padX * 2);
-      const lines = wrapTextLines(ctx, ann.text || "", innerWidth);
+      const lines = wrapTextLines(ctx, ann.text || "", innerWidth, measure);
       const textHeight = lines.length * lineHeight;
       const boxHeight = textHeight + padY * 2;
-      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight };
+      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight, measure, ascent, descent };
+    }
+
+    // How far a canvas-drawn text box paints past its own edges (editor px):
+    // stroke, shadow and the tilt/shift/size of ransom letters.
+    function textCanvasMargin(ann, look) {
+      const fontSize = ann.fontSize || 16;
+      let margin = 2;
+      if (look.stroke) margin += look.stroke.strokeThickness * 2;
+      if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
+      if (look.ransom) margin += fontSize * (look.ransom.ransomShift / 100 + 0.35 + look.ransom.ransomSize / 100);
+      return Math.ceil(margin);
     }
 
     // A text box's size in editor px, as Export lays it out, plus the size of
@@ -1250,7 +1303,7 @@
     async function drawTextOnCanvas(ctx, ann, scaleFactor) {
       const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
       ctx.save();
-      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight } = layoutText(ctx, ann, scaleFactor);
+      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight, measure, ascent, descent } = layoutText(ctx, ann, scaleFactor);
 
       rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
 
@@ -1266,87 +1319,192 @@
         : rgbaCss(look.color, look.fillAlpha);
       const decoStyle = look.strike === "double" || look.strike === "wavy" ? look.strike : "solid";
 
-      // Stroke goes under the fill, like the live box's paint-order, so only
-      // the outer half of the line shows.
       const setFont = (c) => {
         c.font = ctx.font;
         c.textBaseline = "alphabetic";
         if ("letterSpacing" in c) c.letterSpacing = ctx.letterSpacing;
       };
-      // Where each line's text starts, on canvas `c` (whose font is set).
-      const lineOrigin = (c, line, i) => {
-        const lineWidth = c.measureText(line).width;
+
+      // Everything to draw as text, as "runs": a whole line normally, or a
+      // single letter for ransom lettering (with its own tilt/shift/size and
+      // maybe a paper tile). Positions are worked out once and shared by
+      // every pass below (tiles, stroke, fill, the fill layer).
+      const runs = [];
+      const lineExtents = [];
+      let letterIndex = 0;
+      lines.forEach((line, i) => {
+        const lineWidth = measure(line);
         let lineX = x + padX;
         if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
         else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
-        return { lineWidth, lineX, baselineY: y + padY + i * lineHeight + baselineOffset };
+        const lineTop = y + padY + i * lineHeight;
+        const baselineY = lineTop + baselineOffset;
+        lineExtents.push({ line, lineX, lineWidth, baselineY });
+        if (!look.ransom) { runs.push({ text: line, x: lineX, baselineY }); return; }
+        let cursor = lineX;
+        for (const ch of Array.from(line)) {
+          const advance = ctx.measureText(ch).width;
+          const k = letterIndex++;
+          const run = { text: ch, x: cursor, baselineY };
+          if (ch !== " ") {
+            const seed = look.ransom.ransomVariation;
+            run.cx = cursor + advance / 2;
+            run.cy = lineTop + lineHeight / 2;
+            run.tilt = (seededNoise(k * 4, seed) - 0.5) * 2 * look.ransom.ransomTilt * Math.PI / 180;
+            run.dy = (seededNoise(k * 4 + 1, seed) - 0.5) * 2 * fontSize * look.ransom.ransomShift / 100;
+            run.scale = 1 + (seededNoise(k * 4 + 2, seed) - 0.5) * 2 * look.ransom.ransomSize / 100;
+            run.advance = advance;
+            if (look.ransom.ransomTiles === "paper") {
+              run.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
+            }
+          }
+          runs.push(run);
+          cursor += advance;
+        }
+      });
+      // Draws one run under its own turn about its centre, like a CSS
+      // `translateY() rotate() scale()` on an inline-block letter.
+      const withRun = (c, run, draw) => {
+        c.save();
+        if (run.tilt !== undefined) {
+          c.translate(run.cx, run.cy + run.dy);
+          c.rotate(run.tilt);
+          c.scale(run.scale, run.scale);
+          c.translate(-run.cx, -run.cy);
+        }
+        draw(run);
+        c.restore();
       };
+
+      // A photo, or a gradient on jittered letters (whose own turns would
+      // turn a gradient with them), fills through a scratch layer: the
+      // letters drawn solid, then the fill painted into them only.
+      const fillsThroughLayer = Boolean(photoImg || (look.gradient && look.ransom));
+      const tilePad = fontSize * 0.06;
+
       const paintText = (c) => {
         setFont(c);
-        lines.forEach((line, i) => {
-          const { lineWidth, lineX, baselineY } = lineOrigin(c, line, i);
-          if (look.stroke) {
-            c.save();
+        runs.forEach((run) => {
+          if (!run.tile) return;
+          withRun(c, run, () => {
+            c.fillStyle = run.tile;
+            c.fillRect(run.x - tilePad, run.baselineY - ascent - tilePad, run.advance + tilePad * 2, ascent + descent + tilePad * 2);
+          });
+        });
+        // Stroke goes under the fill, like the live box's paint-order, so only
+        // the outer half of the line shows.
+        if (look.stroke) {
+          runs.forEach((run) => withRun(c, run, () => {
             c.strokeStyle = look.stroke.strokeColor;
             c.lineWidth = look.stroke.strokeThickness * scaleFactor;
             c.lineJoin = "miter"; // browsers join text strokes with sharp corners
             c.miterLimit = 4;
-            c.strokeText(line, lineX, baselineY);
-            c.restore();
-          }
-          if (!photoImg) {
+            c.strokeText(run.text, run.x, run.baselineY);
+          }));
+        }
+        if (!fillsThroughLayer) {
+          runs.forEach((run) => withRun(c, run, () => {
             c.fillStyle = fill;
-            c.fillText(line, lineX, baselineY);
+            c.fillText(run.text, run.x, run.baselineY);
+          }));
+        } else {
+          const letters = document.createElement("canvas");
+          letters.width = c.canvas.width;
+          letters.height = c.canvas.height;
+          const lctx = letters.getContext("2d");
+          lctx.setTransform(c.getTransform());
+          setFont(lctx);
+          lctx.fillStyle = "#000";
+          runs.forEach((run) => withRun(lctx, run, () => lctx.fillText(run.text, run.x, run.baselineY)));
+          lctx.globalCompositeOperation = "source-in";
+          if (photoImg) {
+            const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
+            lctx.drawImage(photoImg, x + padX + place.left * scaleFactor, y + padY + place.top * scaleFactor, place.width * scaleFactor, place.height * scaleFactor);
+          } else {
+            // Painted well past the box so letters that jitter outside it still fill.
+            lctx.fillStyle = makeLinearGradient(lctx, look.gradient.gradientAngle, rectGradientStops(textGradientView(ann, look)), x + padX, y + padY, innerWidth, textHeight);
+            lctx.fillRect(x - fontSize * 2, y - fontSize * 2, boxWidth + fontSize * 4, boxHeight + fontSize * 4);
           }
+          c.save();
+          c.setTransform(1, 0, 0, 1, 0, 0);
+          c.drawImage(letters, 0, 0);
+          c.restore();
+        }
+        lineExtents.forEach(({ line, lineX, lineWidth, baselineY }) => {
           if (!line) return;
           if (ann.underline) drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY + fontSize * 0.12, fontSize, look.color);
           if (look.strike !== "none") drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY - fontSize * 0.3, fontSize, look.color);
         });
-        if (!photoImg) return;
-        // Photo fill: the letters drawn solid on a scratch layer, then the
-        // photo painted into them only (source-in), then that layer laid over
-        // the stroke. The scratch layer shares this canvas's transform, so the
-        // photo turns with a rotated box.
-        const letters = document.createElement("canvas");
-        letters.width = c.canvas.width;
-        letters.height = c.canvas.height;
-        const lctx = letters.getContext("2d");
-        lctx.setTransform(c.getTransform());
-        setFont(lctx);
-        lctx.fillStyle = "#000";
-        lines.forEach((line, i) => {
-          const { lineX, baselineY } = lineOrigin(lctx, line, i);
-          lctx.fillText(line, lineX, baselineY);
-        });
-        const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
-        lctx.globalCompositeOperation = "source-in";
-        lctx.drawImage(photoImg, x + padX + place.left * scaleFactor, y + padY + place.top * scaleFactor, place.width * scaleFactor, place.height * scaleFactor);
-        c.save();
-        c.setTransform(1, 0, 0, 1, 0, 0);
-        c.drawImage(letters, 0, 0);
-        c.restore();
       };
 
-      if (look.shadow) {
+      if (look.shadow || look.distress) {
         // The shadow is cast by the finished text (stroke and fill together),
-        // so the text is drawn on its own layer first. The layer is drawn
-        // back at the page's own orientation: canvas shadow offsets aren't
-        // rotated with the text, so the light stays fixed on the page.
+        // and distress marks are erased from it, so the text is drawn on its
+        // own layer first. The layer is drawn back at the page's own
+        // orientation: canvas shadow offsets aren't rotated with the text, so
+        // the light stays fixed on the page.
         const layer = document.createElement("canvas");
         layer.width = ctx.canvas.width;
         layer.height = ctx.canvas.height;
         const layerCtx = layer.getContext("2d");
         layerCtx.setTransform(ctx.getTransform());
         paintText(layerCtx);
+        if (look.distress) {
+          layerCtx.save();
+          layerCtx.globalCompositeOperation = "destination-out";
+          drawDistressMarks(layerCtx, x, y, boxWidth, boxHeight, fontSize, look.distress);
+          layerCtx.restore();
+        }
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.shadowColor = look.shadow.color; // the layer's own opacity already fades it, as in the live box
-        ctx.shadowOffsetX = look.shadow.x * scaleFactor;
-        ctx.shadowOffsetY = look.shadow.y * scaleFactor;
-        ctx.shadowBlur = look.shadow.blur * scaleFactor;
+        if (look.shadow) {
+          ctx.shadowColor = look.shadow.color; // the layer's own opacity already fades it, as in the live box
+          ctx.shadowOffsetX = look.shadow.x * scaleFactor;
+          ctx.shadowOffsetY = look.shadow.y * scaleFactor;
+          ctx.shadowBlur = look.shadow.blur * scaleFactor;
+        }
         ctx.drawImage(layer, 0, 0);
       } else {
         paintText(ctx);
       }
+      ctx.restore();
+    }
+
+    // Nicks, specks and scratches to knock out of a text box (drawn with
+    // destination-out). Sizes follow the font size and counts follow the box
+    // area, so the wear looks the same on any size of text, and each stream is
+    // seeded so the editor and export wear identically.
+    function drawDistressMarks(ctx, x, y, w, h, fontSize, settings) {
+      const { distressGrit, distressDust, distressScratches, distressVariation } = settings;
+      const area = (w * h) / (fontSize * fontSize);
+      ctx.save();
+      ctx.fillStyle = "#000";
+      ctx.strokeStyle = "#000";
+      ctx.lineCap = "round";
+      const marks = (stream, count, alpha, paint, addMark) => {
+        const noise = noiseStream(distressVariation, stream);
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        for (let i = 0; i < Math.round(count); i++) addMark(noise);
+        paint();
+      };
+      marks(11, distressGrit * 0.9 * area, 0.95, () => ctx.fill(), (noise) => {
+        const size = fontSize * (0.015 + noise() * 0.05);
+        ctx.rect(x + noise() * w, y + noise() * h, size, size * (0.5 + noise()));
+      });
+      marks(12, distressDust * 0.35 * area, 0.8, () => ctx.fill(), (noise) => {
+        const radius = fontSize * (0.01 + noise() ** 2 * 0.06);
+        const cx = x + noise() * w, cy = y + noise() * h;
+        ctx.moveTo(cx + radius, cy);
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      });
+      ctx.lineWidth = Math.max(0.5, fontSize * 0.022);
+      marks(13, distressScratches * 0.12 * area, 0.9, () => ctx.stroke(), (noise) => {
+        const startX = x + noise() * w, startY = y + noise() * h;
+        const heading = (noise() - 0.5) * Math.PI;
+        const length = fontSize * (0.3 + noise() * 0.9);
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(startX + Math.cos(heading) * length, startY + Math.sin(heading) * length);
+      });
       ctx.restore();
     }
 
@@ -1878,6 +2036,7 @@
       const boxRef = useRef(null);
       const inputRef = useRef(null);
       const pendingCaretRef = useRef(null);
+      const liveCanvasRef = useRef(null);
 
       useLayoutEffect(() => {
         if (!isEditing || !inputRef.current) return;
@@ -1920,6 +2079,38 @@
       }
 
       const look = textLook(ann);
+
+      // Ransom lettering and distress are drawn on a canvas by Export's own
+      // text renderer, so what you see is exactly what exports. (Plain text
+      // is shown while typing.) The box is sized from that renderer's layout,
+      // and the canvas extends past it for strokes, shadows and tilted letters.
+      const canvasMode = usesCanvasText(ann) && !isEditing && Boolean(ann.text);
+      const liveBox = canvasMode ? measureTextBox(ann) : null;
+      const canvasMargin = canvasMode ? textCanvasMargin(ann, look) : 0;
+      const liveDrawKey = canvasMode
+        ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: undefined, hidden: undefined, name: undefined, blend: undefined })
+        : "";
+      useEffect(() => {
+        if (!canvasMode) return undefined;
+        let cancelled = false;
+        (async () => {
+          const scale = Math.min(4, Math.max(1, zoom * (window.devicePixelRatio || 1)));
+          const offscreen = document.createElement("canvas");
+          offscreen.width = Math.ceil((liveBox.width + canvasMargin * 2) * scale);
+          offscreen.height = Math.ceil((liveBox.height + canvasMargin * 2) * scale);
+          // The box turns with CSS, which would also turn a shadow painted
+          // into the canvas; the direction is pre-turned so it stays fixed on the page.
+          const shadowDirection = controlValues(ann, SHADOW_EFFECT.controls).shadowDirection - angleOf(ann);
+          await drawTextOnCanvas(offscreen.getContext("2d"), { ...ann, x: canvasMargin, y: canvasMargin, angle: 0, shadowDirection }, scale);
+          const canvas = liveCanvasRef.current;
+          if (cancelled || !canvas) return;
+          canvas.width = offscreen.width;
+          canvas.height = offscreen.height;
+          canvas.getContext("2d").drawImage(offscreen, 0, 0);
+        })();
+        return () => { cancelled = true; };
+      }, [liveDrawKey, zoom, canvasMode]);
+
       const decorations = [ann.underline && "underline", look.strike !== "none" && "line-through"].filter(Boolean);
       const style = {
         left: ann.x,
@@ -1939,12 +2130,18 @@
         mixBlendMode: blendOf(ann) !== "normal" ? blendOf(ann) : undefined,
         transform: rotationCss(ann),
       };
-      if (look.label) {
+      if (look.label && !canvasMode) {
         style.background = rgbaCss(look.label.labelColor, look.label.labelAlpha);
         style.borderRadius = look.label.labelRadius;
       }
       if (ann.width) style.width = ann.width;
       else style.maxWidth = AUTO_TEXT_MAX_WIDTH;
+      if (canvasMode) {
+        style.width = liveBox.width;
+        style.height = liveBox.height;
+        style.maxWidth = undefined;
+        style.color = "transparent";
+      }
 
       // Fill, stroke and shadow go on an inner block rather than the box, so
       // the label background isn't clipped away by a gradient fill and the
@@ -2022,6 +2219,12 @@
                 }}
               />
             </React.Fragment>
+          ) : canvasMode ? (
+            <canvas
+              ref={liveCanvasRef}
+              className="ze-ann-text-canvas"
+              style={{ left: -(canvasMargin + TEXT_BORDER_PX), top: -(canvasMargin + TEXT_BORDER_PX), width: liveBox.width + canvasMargin * 2, height: liveBox.height + canvasMargin * 2 }}
+            />
           ) : (
             <span style={bodyStyle}>
               {layered && (

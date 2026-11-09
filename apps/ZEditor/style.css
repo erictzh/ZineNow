@@ -653,6 +653,8 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     font-family: var(--ui-font);
 }
 .ze-ann-text.is-selected { border-color: var(--ui-accent); }
+/* Ransom/distress text is painted on a canvas that reaches past the box. */
+.ze-ann-text-canvas { position: absolute; pointer-events: none; }
 .ze-ann-text-placeholder { color: rgba(0, 0, 0, 0.35); font-style: italic; }
 
 .ze-ann-text.is-editing { border: 1px solid var(--ui-accent); cursor: text; }
