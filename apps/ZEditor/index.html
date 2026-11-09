@@ -656,6 +656,16 @@
       return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
     }
 
+    // Luminance (0-255) of the pixel at `index` in canvas ImageData, as if the
+    // image sat on white paper. A see-through pixel stores black (0, 0, 0, 0),
+    // so reading its colour alone would make transparent areas come out black
+    // under halftone, threshold and xerox; blended over white they read white.
+    function lumaOverWhite(data, index) {
+      const alpha = data[index + 3] / 255;
+      const luma = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
+      return luma * alpha + 255 * (1 - alpha);
+    }
+
     // Same Rec.601 coefficients applyColorRemap uses, as an SVG
     // feColorMatrix — puts luminance into R, G, and B alike so a
     // feComponentTransfer right after it can remap that single value per
@@ -735,7 +745,7 @@
             const rowStart = y * width * 4;
             for (let x = x0; x < x1; x++) {
               const idx = rowStart + x * 4;
-              sum += data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
+              sum += lumaOverWhite(data, idx);
               count++;
             }
           }
@@ -798,7 +808,7 @@
         const ink = hexToRgb(inkColor);
         const paper = hexToRgb(paperColor);
         for (let i = 0; i < data.length; i += 4) {
-          const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          const lum = lumaOverWhite(data, i);
           const c = lum >= level ? paper : ink;
           data[i] = c.r;
           data[i + 1] = c.g;
@@ -865,7 +875,7 @@
           const i = (y * width + x) * 4;
           const imageX = x / scaleFactor;
           const cellX = Math.floor(imageX);
-          const lum = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+          const lum = lumaOverWhite(data, i) / 255;
 
           // Limited first, or the steep curve would leave solid blacks and
           // whites so far out of range that speckle and streaks can't show.
@@ -1143,13 +1153,16 @@
       ctx.restore();
     }
 
-    function drawTextOnCanvas(ctx, ann, scaleFactor) {
+    // Where a text box's lines fall, in canvas px at `scaleFactor`: sets the
+    // font on `ctx` (callers draw with it afterwards) and returns the box's
+    // size, padding, wrapped lines and baseline. Shared by Export and by the
+    // measuring that Rasterize needs.
+    function layoutText(ctx, ann, scaleFactor) {
       const look = textLook(ann);
       const fontSize = (ann.fontSize || 16) * scaleFactor;
       const weight = ann.bold ? "700" : "400";
       const styleStr = ann.italic ? "italic" : "normal";
       const family = ann.fontFamily || "sans-serif";
-      ctx.save();
       ctx.font = `${styleStr} ${weight} ${fontSize}px '${family}', sans-serif`;
       if ("letterSpacing" in ctx) ctx.letterSpacing = `${look.letterSpacingPx * scaleFactor}px`;
       ctx.textBaseline = "alphabetic";
@@ -1184,6 +1197,19 @@
       const lines = wrapTextLines(ctx, ann.text || "", innerWidth);
       const textHeight = lines.length * lineHeight;
       const boxHeight = textHeight + padY * 2;
+      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight };
+    }
+
+    // A text box's size in editor px, as Export lays it out.
+    function measureTextBox(ann) {
+      const ctx = document.createElement("canvas").getContext("2d");
+      const { boxWidth, boxHeight } = layoutText(ctx, ann, 1);
+      return { width: boxWidth, height: boxHeight };
+    }
+
+    function drawTextOnCanvas(ctx, ann, scaleFactor) {
+      ctx.save();
+      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight } = layoutText(ctx, ann, scaleFactor);
 
       rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
 
@@ -1435,6 +1461,26 @@
         ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
       ].map((prop) => [prop, undefined]));
       // A rectangle never followed the page filter, so neither should the image.
+      return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
+    }
+
+    // Turns a text box into an image of how it looks now — spacing, stroke,
+    // shadow, gradient, label, rotation — so image filters (halftone, xerox,
+    // threshold), crop and effects can be applied to it. The words can't be
+    // edited afterwards; Undo brings the text box back.
+    async function rasterizedTextPatch(ann) {
+      if (!ann.text) return null;
+      const scale = EXPORT_SCALE / MAIN_SCALE;
+      const size = measureTextBox(ann);
+      // The measured width, plus a little slack so a line that just fits can't
+      // wrap differently at export scale; the height comes from the lines.
+      const box = { ...ann, width: size.width + 1, height: size.height };
+      const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
+      if (!baked) return null;
+      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha"];
+      const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+      const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
+      // Text never followed the page filter, so the image shouldn't either.
       return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
     }
 
@@ -3242,7 +3288,7 @@
       onChangeTextFontFamily, onChangeTextFontSize, onChangeTextBold, onChangeTextItalic, onChangeTextUnderline, onChangeTextColor, onChangeTextAlign,
       penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
       highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
-      onFlattenImage, onRasterizeRect,
+      onFlattenImage, onRasterizeRect, onRasterizeText,
     }) {
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
@@ -3305,6 +3351,13 @@
               <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
               <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+              <div className="ze-format-field">
+                <span className="ze-format-label">Rasterize</span>
+                <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text} onClick={() => onRasterizeText(ann)}>
+                  Rasterize to Image
+                </button>
+                <span className="ze-format-hint">Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.</span>
+              </div>
             </div>
           </aside>
         );
@@ -4984,6 +5037,13 @@
         updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
       }
 
+      async function handleRasterizeText(ann) {
+        const pageIdx = selectedIdx;
+        const patch = await rasterizedTextPatch(ann);
+        if (!patch) return;
+        updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
+      }
+
       async function handleRasterizeRect(ann) {
         const pageIdx = selectedIdx;
         const patch = await rasterizedRectPatch(ann);
@@ -5304,6 +5364,7 @@
                 onUpdate={handleUpdateAnnotation}
                 onFlattenImage={handleFlattenImage}
                 onRasterizeRect={handleRasterizeRect}
+                onRasterizeText={handleRasterizeText}
                 fontOptions={fontOptions}
                 setFontOptions={setFontOptions}
                 croppingAnnId={croppingAnnId}
