@@ -4458,17 +4458,6 @@
                 bleedIn={guideBleedIn}
                 onBleedChange={setGuideBleedIn}
               />
-              {selectedPage && (
-                <button
-                  type="button"
-                  className={"ze-filter-toggle-btn" + (layersOpen ? " active" : "")}
-                  aria-pressed={layersOpen}
-                  title={layersOpen ? "Minimize the Layers panel" : "Show the Layers panel"}
-                  onClick={() => setLayersOpen((open) => !open)}
-                >
-                  Layers
-                </button>
-              )}
               {pages.length > 0 && (
                 <button
                   type="button"
@@ -4570,6 +4559,20 @@
                         <path d="M17 3l4 4-9.5 9.5H7L3 12z" />
                         <path d="M7 21h13" />
                         <path d="M9.5 5.5l6 6" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={"ze-tool-icon-btn" + (layersOpen ? " active" : "")}
+                      aria-pressed={layersOpen}
+                      aria-label="Layers panel"
+                      title={layersOpen ? "Minimize the Layers panel" : "Show the Layers panel"}
+                      onClick={() => setLayersOpen((open) => !open)}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 3l9 5-9 5-9-5z" />
+                        <path d="M3 12.5l9 5 9-5" />
+                        <path d="M3 17l9 5 9-5" />
                       </svg>
                     </button>
                   </div>
