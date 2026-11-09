@@ -402,12 +402,22 @@
         { kind: "slider", prop: "distressVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
       ],
     };
-    const TEXT_EFFECTS = [STROKE_EFFECT, SHADOW_EFFECT, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, RANSOM_EFFECT, DISTRESS_EFFECT];
+    // Text along an arc: positive bends it up like a rainbow, negative down
+    // like a smile. 100% is half a circle across the widest line.
+    const CURVE_EFFECT = {
+      key: "curve",
+      label: "Curve",
+      controls: [
+        { kind: "slider", prop: "curveBend", label: "Bend (%)", min: -100, max: 100, fallback: 50 },
+      ],
+      hint: "Bends each line along an arc. Shown straight while you type.",
+    };
+    const TEXT_EFFECTS = [STROKE_EFFECT, SHADOW_EFFECT, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, RANSOM_EFFECT, CURVE_EFFECT, DISTRESS_EFFECT];
     const RANSOM_PAPER_COLORS = ["#f4efe1", "#ffe066", "#ff8fa3", "#8ecae6", "#b7e4c7", "#ffffff"];
     // These looks are drawn with the export renderer in the live editor too
     // (see AnnotationText), because per-letter jitter and knocked-out marks
     // have no clean CSS equivalent; one renderer means no editor/export drift.
-    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || (ann.colorRuns && ann.colorRuns.length));
+    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || (ann.colorRuns && ann.colorRuns.length));
     // A photo shown through the letters. 100% scale covers the text box; X/Y
     // move it by that percent of the box's size (0 = centred). The photo itself
     // lives on the text box as fillSrc/fillNatW/fillNatH and replaces the
@@ -523,6 +533,7 @@
       return {
         photo,
         ransom: ann.ransom ? effectSettings(ann, RANSOM_EFFECT) : null,
+        curve: ann.curve ? effectSettings(ann, CURVE_EFFECT) : null,
         distress: ann.distress ? effectSettings(ann, DISTRESS_EFFECT) : null,
         lineHeight: controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
         letterSpacingPx: fontSize * spacing / 100,
@@ -1393,7 +1404,7 @@
 
       // Letters placed one by one (ransom) lose kerning, so their widths are
       // the sum of each letter's own advance.
-      const measure = look.ransom
+      const measure = (look.ransom || look.curve)
         ? (s) => Array.from(s).reduce((width, ch) => width + ctx.measureText(ch).width, 0)
         : (s) => ctx.measureText(s).width;
 
@@ -1417,8 +1428,17 @@
         if (next === "\n" || next === " ") cursor += 1;
       }
       const textHeight = lines.length * lineHeight;
-      const boxHeight = textHeight + padY * 2;
-      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent };
+      // A curved line bows away from its straight position by up to `sag`
+      // (a rainbow's ends drop, a smile's ends rise); the box makes room for it.
+      // All lines share one circle, sized so the widest line spans the chosen arc.
+      let curve = null;
+      if (look.curve && look.curve.curveBend !== 0) {
+        const widest = Math.max(1, ...lines.map(measure));
+        const radius = widest / (Math.abs(look.curve.curveBend) / 100 * Math.PI);
+        curve = { radius, sign: look.curve.curveBend > 0 ? 1 : -1, sag: radius * (1 - Math.cos(widest / 2 / radius)) };
+      }
+      const boxHeight = textHeight + padY * 2 + (curve ? curve.sag : 0);
+      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve };
     }
 
     // How far a canvas-drawn text box paints past its own edges (editor px):
@@ -1429,6 +1449,7 @@
       if (look.stroke) margin += look.stroke.strokeThickness * 2;
       if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
       if (look.ransom) margin += fontSize * (look.ransom.ransomShift / 100 + 0.35 + look.ransom.ransomSize / 100);
+      if (look.curve) margin += fontSize * 0.6; // turned letters at the ends of an arc reach past the box
       return Math.ceil(margin);
     }
 
@@ -1443,7 +1464,7 @@
     async function drawTextOnCanvas(ctx, ann, scaleFactor) {
       const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
       ctx.save();
-      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent } = layoutText(ctx, ann, scaleFactor);
+      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve } = layoutText(ctx, ann, scaleFactor);
 
       rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
 
@@ -1477,10 +1498,11 @@
         let lineX = x + padX;
         if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
         else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
-        const lineTop = y + padY + i * lineHeight;
+        // A smile's ends rise, so its lines start lower to keep the arc inside the box.
+        const lineTop = y + padY + (curve && curve.sign < 0 ? curve.sag : 0) + i * lineHeight;
         const baselineY = lineTop + baselineOffset;
         const lineStart = lineStarts[i];
-        if (!look.ransom) {
+        if (!look.ransom && !curve) {
           // One run per stretch of a single colour (a whole line when no
           // letters are recoloured).
           const lineRuns = (ann.colorRuns || [])
@@ -1507,15 +1529,25 @@
           const run = { text: ch, x: cursor, baselineY, color: colorAtIndex(ann.colorRuns, lineStart + charIndex) };
           charIndex += ch.length;
           if (ch !== " ") {
-            const seed = look.ransom.ransomVariation;
             run.cx = cursor + advance / 2;
             run.cy = lineTop + lineHeight / 2;
-            run.tilt = (seededNoise(k * 4, seed) - 0.5) * 2 * look.ransom.ransomTilt * Math.PI / 180;
-            run.dy = (seededNoise(k * 4 + 1, seed) - 0.5) * 2 * fontSize * look.ransom.ransomShift / 100;
-            run.scale = 1 + (seededNoise(k * 4 + 2, seed) - 0.5) * 2 * look.ransom.ransomSize / 100;
             run.advance = advance;
-            if (look.ransom.ransomTiles === "paper") {
-              run.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
+            run.tilt = 0; run.dx = 0; run.dy = 0; run.scale = 1;
+            if (look.ransom) {
+              const seed = look.ransom.ransomVariation;
+              run.tilt = (seededNoise(k * 4, seed) - 0.5) * 2 * look.ransom.ransomTilt * Math.PI / 180;
+              run.dy = (seededNoise(k * 4 + 1, seed) - 0.5) * 2 * fontSize * look.ransom.ransomShift / 100;
+              run.scale = 1 + (seededNoise(k * 4 + 2, seed) - 0.5) * 2 * look.ransom.ransomSize / 100;
+              if (look.ransom.ransomTiles === "paper") {
+                run.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
+              }
+            }
+            if (curve) {
+              // The letter's middle sits on the arc, turned to follow it.
+              const phi = (run.cx - (lineX + lineWidth / 2)) / curve.radius;
+              run.tilt += curve.sign * phi;
+              run.dx += curve.radius * Math.sin(phi) - phi * curve.radius;
+              run.dy += curve.sign * curve.radius * (1 - Math.cos(phi));
             }
           }
           runs.push(run);
@@ -1527,7 +1559,7 @@
       const withRun = (c, run, draw) => {
         c.save();
         if (run.tilt !== undefined) {
-          c.translate(run.cx, run.cy + run.dy);
+          c.translate(run.cx + run.dx, run.cy + run.dy);
           c.rotate(run.tilt);
           c.scale(run.scale, run.scale);
           c.translate(-run.cx, -run.cy);
@@ -1539,7 +1571,7 @@
       // A photo, or a gradient on jittered letters (whose own turns would
       // turn a gradient with them), fills through a scratch layer: the
       // letters drawn solid, then the fill painted into them only.
-      const fillsThroughLayer = Boolean(photoImg || (look.gradient && look.ransom));
+      const fillsThroughLayer = Boolean(photoImg || (look.gradient && (look.ransom || curve)));
       const tilePad = fontSize * 0.06;
 
       const paintText = (c) => {
@@ -1602,7 +1634,7 @@
         }
         // Underline and strike-through take the colour of the letters they cross.
         lineExtents.forEach(({ line, baselineY, segments }) => {
-          if (!line) return;
+          if (!line || curve) return; // straight lines would cut across an arc
           segments.forEach(({ x0, x1, color }) => {
             const decoColor = color || look.color;
             if (ann.underline) drawTextDecorationLine(c, decoStyle, x0, x1, baselineY + fontSize * 0.12, fontSize, decoColor);
