@@ -651,16 +651,10 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 
 /* ---- Right-side format panel ------------------------------------------- */
-.ze-right-rail {
+.ze-format-panel {
     width: var(--ze-format-panel-width);
     flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
     border-left: 1px solid var(--ui-border);
-}
-.ze-format-panel {
-    flex: 1 1 0;
     background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
     display: flex;
     flex-direction: column;
@@ -812,21 +806,29 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 
 /* ---- Layers panel --------------------------------------------------------- */
 .ze-layers-panel {
-    flex: 0 0 auto;
-    border-top: 1px solid var(--ui-border);
-    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    position: fixed;
+    top: 128px;
+    right: calc(var(--ze-format-panel-width) + 16px);
+    width: 230px;
+    z-index: 15; /* under the topbar popovers and modals */
+    overflow: hidden;
+    background-color: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
 }
 .ze-layers-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px 8px 16px;
+    cursor: move;
+    user-select: none;
 }
 .ze-layers-list {
     height: min(240px, 36vh);
     overflow-y: auto;
     padding: 6px;
-    border-top: 1px solid var(--ui-border);
 }
 .ze-layer-row {
     display: flex;

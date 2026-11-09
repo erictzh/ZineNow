@@ -2564,13 +2564,42 @@
       );
     }
 
-    function LayersPanel({ annotations, selectedIds, onSelect, onToggleFlag, onRename, onReorder }) {
-      const [collapsed, setCollapsed] = useState(false);
+    // Floats over the workspace. `position` is null until first dragged,
+    // which leaves it at its default spot from the stylesheet.
+    function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onToggleFlag, onRename, onReorder }) {
       const [renamingId, setRenamingId] = useState(null);
       const [dropInfo, setDropInfo] = useState(null); // { row, before }
       const dragIdRef = useRef(null);
       const listRef = useRef(null);
+      const panelRef = useRef(null);
+      const headRef = useRef(null);
       const topFirst = annotations.slice().reverse();
+
+      // Keeps the title bar on screen, so the panel can always be grabbed.
+      function inView(x, y) {
+        return {
+          x: Math.max(0, Math.min(x, window.innerWidth - panelRef.current.offsetWidth)),
+          y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight)),
+        };
+      }
+
+      useEffect(() => {
+        if (!position) return;
+        const keepInView = () => {
+          const next = inView(position.x, position.y);
+          if (next.x !== position.x || next.y !== position.y) onMove(next);
+        };
+        keepInView(); // the window may have shrunk while the panel was minimized
+        window.addEventListener("resize", keepInView);
+        return () => window.removeEventListener("resize", keepInView);
+      }, [position]);
+
+      function startPanelDrag(e) {
+        e.preventDefault();
+        const start = panelRef.current.getBoundingClientRect();
+        const { clientX, clientY } = e;
+        trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+      }
 
       useEffect(() => {
         const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
@@ -2605,17 +2634,20 @@
       }
 
       return (
-        <section className="ze-layers-panel">
-          <div className="ze-format-panel-head ze-layers-head">
+        <section
+          className="ze-layers-panel"
+          ref={panelRef}
+          style={position ? { left: position.x, top: position.y, right: "auto" } : undefined}
+        >
+          <div className="ze-format-panel-head ze-layers-head" ref={headRef} onMouseDown={startPanelDrag}>
             Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}
-            <button type="button" className="ze-guides-settings-btn" title={collapsed ? "Show layers" : "Hide layers"} aria-expanded={!collapsed} onClick={() => setCollapsed((c) => !c)}>
-              <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d={collapsed ? "M5.5 12.5l4.5-4.5 4.5 4.5" : "M5.5 7.5l4.5 4.5 4.5-4.5"} />
+            <button type="button" className="ze-guides-settings-btn" title="Minimize layers" aria-label="Minimize layers" onMouseDown={(e) => e.stopPropagation()} onClick={onMinimize}>
+              <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                <path d="M5 10h10" />
               </svg>
             </button>
           </div>
-          {!collapsed && (
-            <div className="ze-layers-list" ref={listRef}>
+          <div className="ze-layers-list" ref={listRef}>
               {topFirst.map((ann, row) => {
                 const isRenaming = renamingId === ann.id;
                 return (
@@ -2682,8 +2714,7 @@
                 <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ backgroundColor: "#ffffff" }} /></span>
                 <span className="ze-layer-name">Page</span>
               </div>
-            </div>
-          )}
+          </div>
         </section>
       );
     }
@@ -3473,6 +3504,8 @@
       const [textColor, setTextColor] = useState("#1a1a1a");
       const [textAlign, setTextAlign] = useState("left");
       const [rectDefaults, setRectDefaults] = useState(() => controlValues({}, RECT_CONTROLS));
+      const [layersOpen, setLayersOpen] = useState(true);
+      const [layersPosition, setLayersPosition] = useState(null);
 
       // Clicking any toolbar tool switches the format panel to that tool's
       // own settings — any previous selection is cleared so the panel
@@ -4425,6 +4458,17 @@
                 bleedIn={guideBleedIn}
                 onBleedChange={setGuideBleedIn}
               />
+              {selectedPage && (
+                <button
+                  type="button"
+                  className={"ze-filter-toggle-btn" + (layersOpen ? " active" : "")}
+                  aria-pressed={layersOpen}
+                  title={layersOpen ? "Minimize the Layers panel" : "Show the Layers panel"}
+                  onClick={() => setLayersOpen((open) => !open)}
+                >
+                  Layers
+                </button>
+              )}
               {pages.length > 0 && (
                 <button
                   type="button"
@@ -4605,7 +4649,6 @@
               </div>
             </div>
             {selectedPage && (
-              <div className="ze-right-rail">
               <FormatPanel
                 key={selectedAnnId} // so a half-typed field never carries over to the next item
                 tool={tool}
@@ -4645,17 +4688,22 @@
                 onChangeHighlighterWidth={setHighlighterWidth}
                 onChangeHighlighterTaper={setHighlighterTaper}
               />
-              <LayersPanel
-                annotations={selectedPage.annotations || []}
-                selectedIds={[selectedAnnId, ...selectedAnnIds].filter((id) => id !== null)}
-                onSelect={handleSelectLayer}
-                onToggleFlag={handleToggleLayerFlag}
-                onRename={(id, name) => handleUpdateAnnotation(id, { name })}
-                onReorder={handleReorderLayers}
-              />
-              </div>
             )}
           </div>
+
+          {selectedPage && layersOpen && (
+            <LayersPanel
+              position={layersPosition}
+              onMove={setLayersPosition}
+              onMinimize={() => setLayersOpen(false)}
+              annotations={selectedPage.annotations || []}
+              selectedIds={[selectedAnnId, ...selectedAnnIds].filter((id) => id !== null)}
+              onSelect={handleSelectLayer}
+              onToggleFlag={handleToggleLayerFlag}
+              onRename={(id, name) => handleUpdateAnnotation(id, { name })}
+              onReorder={handleReorderLayers}
+            />
+          )}
 
           <input
             ref={fileInputRef}
