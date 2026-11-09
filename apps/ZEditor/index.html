@@ -379,6 +379,31 @@
       if (mode === "title") return text.replace(/(^|[^\p{L}\p{N}'’])(\p{L})/gu, (m, before, letter) => before + letter.toUpperCase());
       return text;
     }
+    // Stacked text puts each character on its own line, upright, centred: a
+    // zine spine or a vertical sign. (Turning the whole box sideways is the
+    // Angle control.) Drawn on canvas in the editor, straight while typing.
+    const VERTICAL_CONTROL = {
+      kind: "select", prop: "vertical", label: "Direction", fallback: "none",
+      options: [{ key: "none", label: "Horizontal" }, { key: "stacked", label: "Stacked (top to bottom)" }],
+    };
+    // Shrinks the font, never grows it past the Size, until the text fits in
+    // this much height. Set the box's width first (drag its side handle).
+    const FIT_HEIGHT_CONTROL = { kind: "slider", prop: "fitHeight", label: "Shrink to fit height (px, 0 = off)", min: 0, max: 1000, fallback: 0 };
+    function stackText(text) {
+      return Array.from(text).map((ch) => (ch === "\n" ? "" : ch)).join("\n");
+    }
+    // `ann` with its font size reduced just enough to fit its Fit Height.
+    function fitText(ann) {
+      if (!ann.fitHeight || !ann.text) return ann;
+      const base = { ...ann, fitHeight: undefined };
+      if (measureTextBox(base).height <= ann.fitHeight) return base;
+      let lo = 4, hi = ann.fontSize || 16;
+      for (let i = 0; i < 12 && hi - lo > 0.25; i++) {
+        const mid = (lo + hi) / 2;
+        if (measureTextBox({ ...base, fontSize: mid }).height <= ann.fitHeight) lo = mid; else hi = mid;
+      }
+      return { ...base, fontSize: Math.floor(lo * 4) / 4 };
+    }
     const TEXT_FILL_ALPHA_CONTROL = { kind: "slider", prop: "fillAlpha", label: "Fill opacity (%)", min: 0, max: 100, fallback: 100 };
     const TEXT_GRADIENT_EFFECT = {
       key: "textGradient",
@@ -447,7 +472,7 @@
     // These looks are drawn with the export renderer in the live editor too
     // (see AnnotationText), because per-letter jitter and knocked-out marks
     // have no clean CSS equivalent; one renderer means no editor/export drift.
-    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || (ann.colorRuns && ann.colorRuns.length));
+    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length));
     // A photo shown through the letters. 100% scale covers the text box; X/Y
     // move it by that percent of the box's size (0 = centred). The photo itself
     // lives on the text box as fillSrc/fillNatW/fillNatH and replaces the
@@ -464,7 +489,7 @@
     // rotation, per-letter colours or photo.
     const TEXT_STYLE_BASICS = ["fontFamily", "fontSize", "bold", "italic", "underline", "color", "align"];
     const TEXT_STYLE_PROPS = [
-      ...TEXT_STYLE_BASICS, "lineSpacing", "letterSpacing", "strike", "textCase", "fillAlpha",
+      ...TEXT_STYLE_BASICS, "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fillAlpha",
       ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
     ];
     const BUILT_IN_TEXT_STYLES = [
@@ -569,6 +594,7 @@
         letterSpacingPx: fontSize * spacing / 100,
         strike: controlValues(ann, [STRIKE_CONTROL]).strike,
         textCase: controlValues(ann, [CASE_CONTROL]).textCase,
+        stacked: controlValues(ann, [VERTICAL_CONTROL]).vertical === "stacked",
         color, fillAlpha,
         stroke: ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null,
         shadow: imageShadowOffset(ann),
@@ -1401,8 +1427,10 @@
     // size, padding, wrapped lines and baseline. Shared by Export and by the
     // measuring that Rasterize needs.
     function layoutText(ctx, ann, scaleFactor) {
+      ann = fitText(ann);
       const look = textLook(ann);
-      const shownText = caseText(ann.text || "", look.textCase);
+      const cased = caseText(ann.text || "", look.textCase);
+      const shownText = look.stacked ? stackText(cased) : cased;
       const fontSize = (ann.fontSize || 16) * scaleFactor;
       const weight = ann.bold ? "700" : "400";
       const styleStr = ann.italic ? "italic" : "normal";
@@ -1451,11 +1479,16 @@
       // one character), so per-letter colours can be matched to lines.
       const lineStarts = [];
       let cursor = 0;
-      for (const line of lines) {
-        lineStarts.push(cursor);
-        cursor += line.length;
-        const next = shownText[cursor];
-        if (next === "\n" || next === " ") cursor += 1;
+      if (look.stacked) {
+        // One line per typed character, so line k starts where character k does.
+        for (const ch of Array.from(ann.text || "")) { lineStarts.push(cursor); cursor += ch.length; }
+      } else {
+        for (const line of lines) {
+          lineStarts.push(cursor);
+          cursor += line.length;
+          const next = shownText[cursor];
+          if (next === "\n" || next === " ") cursor += 1;
+        }
       }
       const textHeight = lines.length * lineHeight;
       // A curved line bows away from its straight position by up to `sag`
@@ -1526,7 +1559,7 @@
       lines.forEach((line, i) => {
         const lineWidth = measure(line);
         let lineX = x + padX;
-        if (ann.align === "center") lineX = x + (boxWidth - lineWidth) / 2;
+        if (ann.align === "center" || look.stacked) lineX = x + (boxWidth - lineWidth) / 2;
         else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
         // A smile's ends rise, so its lines start lower to keep the arc inside the box.
         const lineTop = y + padY + (curve && curve.sign < 0 ? curve.sag : 0) + i * lineHeight;
@@ -1944,7 +1977,7 @@
       const box = { ...ann, width: size.width + 1, height: size.height };
       const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
       if (!baked) return null;
-      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
+      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
       const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
       const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
       // Text never followed the page filter, so the image shouldn't either.
@@ -4182,7 +4215,7 @@
               </div>
               <LetterColors ann={ann} patch={patch} />
               <TextPhotoFill ann={ann} patch={patch} />
-              <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
+              <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
               <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
               <div className="ze-format-field">
