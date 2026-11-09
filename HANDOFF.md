@@ -23,7 +23,7 @@ ZineNow is a suite of zero-build, browser-only tools for making zines. Everythin
 - Page object: `{ key, docId, pageNumber, rotation, dataUrl, isBlank, annotations, filter }`. Blank pages have `width/height` instead of `docId/pageNumber`.
 - `pdfDocsRef.current` = `{ docId: { doc, bytes } }` — multiple source PDFs can be loaded (Insert PDF). Use `docFor(pdfDocsRef, page)`.
 - Undo/redo: call `recordUndoCheckpoint(coalesceKey?)` BEFORE a mutating `setPages`. Same key within `UNDO_COALESCE_MS` (700ms) merges into one step. Thumbnails (`dataUrl`) are stripped from snapshots and regenerated.
-- Annotations: types `text`, `image`, `stroke`. Edited through `updateAnnotationsFor(pageIdx, updater, coalesceKey)`.
+- Annotations: types `text`, `image`, `rect`, `stroke`. Edited through `updateAnnotationsFor(pageIdx, updater, coalesceKey)`. The `page.annotations` array is the stacking order (first = bottom), for both the editor and export; `.znow` files older than version 2 are re-sorted on load. `hidden` and `locked` items can't be selected.
 - **Filters (grayscale/duotone/halftone) are per-page** (`page.filter`, default `DEFAULT_PAGE_FILTER = {type:"none"}`), edited via `updatePageFilter(pageIdx, patch)`. Images have their own `ann.filter` (`match` = follow the page's filter). Both preview and export read `page.filter`.
 - Export: `buildExportPdfBytes()` renders every page to canvas (`renderPageToCanvas`) and embeds PNGs via pdf-lib.
 - Project file `.znow` = JSON (base64-embedded source PDFs + pages minus thumbnails + settings). Self-contained; thumbnails regenerated on load.

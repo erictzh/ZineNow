@@ -75,20 +75,20 @@
 
     // A box after dragging one of its handles. `handle` is a compass name
     // ("e", "nw"...); the opposite side or corner stays where it is.
-    function resizedBox(box, handle, dx, dy, keepAspect) {
+    function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE) {
       const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
       const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
       let width = box.width + signX * dx;
       let height = box.height + signY * dy;
       if (keepAspect) {
         const scaleX = width / box.width, scaleY = height / box.height;
-        const minScale = MIN_RESIZE_SIZE / Math.min(box.width, box.height);
+        const minScale = minSize / Math.min(box.width, box.height);
         const scale = Math.max(minScale, signX && signY ? Math.max(scaleX, scaleY) : signX ? scaleX : scaleY);
         width = box.width * scale;
         height = box.height * scale;
       } else {
-        width = Math.max(MIN_RESIZE_SIZE, width);
-        height = Math.max(MIN_RESIZE_SIZE, height);
+        width = Math.max(minSize, width);
+        height = Math.max(minSize, height);
       }
       return {
         x: signX < 0 ? box.x + box.width - width : signX > 0 ? box.x : box.x + (box.width - width) / 2,
@@ -265,6 +265,14 @@
     };
     const IMAGE_EFFECTS = [ROUNDED_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
 
+    const OPACITY_CONTROL = { kind: "slider", prop: "opacity", label: "Opacity (%)", min: 0, max: 100, fallback: 100 };
+    const RECT_CONTROLS = [
+      { kind: "color", prop: "fillColor", label: "Fill color", fallback: "#1a1a1a" },
+      OPACITY_CONTROL,
+    ];
+    const MIN_RECT_SIZE = 2; // small enough to use a rectangle as a thin rule
+    const DEFAULT_RECT_SIZE = { width: 160, height: 110 }; // for a click without a drag
+
     // Current values for a list of controls, keyed by each control's
     // `prop`, with the control's fallback for anything not set yet.
     function controlValues(source, controls) {
@@ -273,6 +281,10 @@
 
     function effectSettings(ann, effect) {
       return controlValues(ann, effect.controls);
+    }
+
+    function opacityOf(ann) {
+      return controlValues(ann, [OPACITY_CONTROL]).opacity / 100;
     }
 
     // Resolves what an image annotation should actually be filtered with:
@@ -945,6 +957,24 @@
         sx = 0; sy = 0; sw = off.width; sh = off.height;
       }
 
+      drawBoxWithEffects(ctx, ann, scaleFactor, (target) => {
+        target.drawImage(source, sx, sy, sw, sh, 0, 0, ann.width, ann.height);
+      });
+    }
+
+    function drawRectOnCanvas(ctx, ann, scaleFactor) {
+      const { fillColor } = controlValues(ann, RECT_CONTROLS);
+      drawBoxWithEffects(ctx, ann, scaleFactor, (target) => {
+        target.fillStyle = fillColor;
+        target.fillRect(0, 0, ann.width, ann.height);
+      });
+    }
+
+    // Draws a box's content with its edge shape, stroke, shadow and texture.
+    // `paintContent` paints into the box's own 0..width/0..height space.
+    function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
+      const x = ann.x * scaleFactor, y = ann.y * scaleFactor;
+      const w = ann.width * scaleFactor, h = ann.height * scaleFactor;
       ctx.save();
       const shadow = imageShadowOffset(ann);
       if (shadow) {
@@ -969,7 +999,7 @@
         cctx.scale(scaleFactor, scaleFactor);
         cctx.save();
         if (outline) cctx.clip(new Path2D(outline));
-        cctx.drawImage(source, sx, sy, sw, sh, 0, 0, ann.width, ann.height);
+        paintContent(cctx);
         if (ann.texture) drawTextureMarks(cctx, ann);
         cctx.restore();
         if (stroke) {
@@ -981,9 +1011,32 @@
         }
         ctx.drawImage(cut, x - pad, y - pad);
       } else {
-        ctx.drawImage(source, sx, sy, sw, sh, x, y, w, h);
+        ctx.translate(x, y);
+        ctx.scale(scaleFactor, scaleFactor);
+        paintContent(ctx);
       }
       ctx.restore();
+    }
+
+    // Fades a finished item as one piece, on its own layer, so a shadow
+    // doesn't show through a see-through image. Matches CSS `opacity`.
+    async function drawWithOpacity(ctx, opacity, draw) {
+      if (opacity >= 1) { await draw(ctx); return; }
+      const layer = document.createElement("canvas");
+      layer.width = ctx.canvas.width;
+      layer.height = ctx.canvas.height;
+      await draw(layer.getContext("2d"));
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+    }
+
+    async function drawAnnotationOnCanvas(ctx, ann, scaleFactor, pageFilter) {
+      if (ann.type === "stroke") drawStrokeOnCanvas(ctx, ann, scaleFactor);
+      else if (ann.type === "text") drawTextOnCanvas(ctx, ann, scaleFactor);
+      else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor));
+      else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter));
     }
 
     // Bakes an image's crop, filter and effects into one new image and
@@ -1110,14 +1163,10 @@
 
       const scaleFactor = exportScale / MAIN_SCALE; // annotation coords were recorded in the editor's on-screen canvas space
       applyPageFilter(ctx, canvas, pageFilter, scaleFactor); // background only — drawn before any annotation touches the canvas
-      const annotations = page.annotations || [];
-      // Images first (bottom), then strokes, then text on top — matches
-      // the editor's own DOM layering in the annotation overlay.
-      for (const a of annotations.filter((a) => a.type === "image")) {
-        await drawImageOnCanvas(ctx, a, scaleFactor, pageFilter);
+      // The annotation list is the stacking order: first is the bottom layer.
+      for (const a of page.annotations || []) {
+        if (!a.hidden) await drawAnnotationOnCanvas(ctx, a, scaleFactor, pageFilter);
       }
-      annotations.filter((a) => a.type === "stroke").forEach((a) => drawStrokeOnCanvas(ctx, a, scaleFactor));
-      annotations.filter((a) => a.type === "text").forEach((a) => drawTextOnCanvas(ctx, a, scaleFactor));
       return canvas;
     }
 
@@ -1246,6 +1295,25 @@
       );
     }
 
+    // Before layers, items were drawn by type whatever order they were
+    // added in, so projects saved back then are sorted to look the same.
+    function legacyLayerOrder(annotations) {
+      const rank = { image: 0, stroke: 1, text: 2 };
+      return annotations.slice().sort((a, b) => rank[a.type] - rank[b.type]);
+    }
+
+    // The old indices in their new order after moving a block of items in
+    // front of slot `insertBefore`, or null if nothing changes.
+    function orderAfterMove(count, fromIndices, insertBefore) {
+      const moving = new Set(fromIndices);
+      const allIndices = Array.from({ length: count }, (_, i) => i);
+      const block = allIndices.filter((i) => moving.has(i));
+      const rest = allIndices.filter((i) => !moving.has(i));
+      const insertAt = rest.filter((i) => i < insertBefore).length;
+      const newOrder = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
+      return newOrder.every((oldIdx, newIdx) => oldIdx === newIdx) ? null : newOrder;
+    }
+
     function bboxOf(ann) {
       if (ann.type === "text") {
         return { x: ann.x, y: ann.y, width: ann.width || 160, height: ann.height || 26 };
@@ -1338,7 +1406,7 @@
         <div
           ref={boxRef}
           data-ann-id={ann.id}
-          className={"ze-ann-text" + (isSelected ? " is-selected" : "") + (isEditing ? " is-editing" : "")}
+          className={"ze-ann-text" + (isSelected ? " is-selected" : "") + (isEditing ? " is-editing" : "") + (ann.locked ? " is-locked" : "")}
           style={style}
           onMouseDown={handleMouseDown}
           onDoubleClick={(e) => {
@@ -1371,6 +1439,82 @@
       );
     }
 
+    // Shadow and opacity for a box's whole artwork. Kept off the box itself
+    // so they don't apply to its handles or trap them under other layers.
+    function boxGroupStyle(ann) {
+      const shadow = imageShadowOffset(ann);
+      const opacity = opacityOf(ann);
+      return {
+        filter: shadow ? `drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color})` : undefined,
+        opacity: opacity < 1 ? opacity : undefined,
+      };
+    }
+
+    // The texture and stroke drawn over a box's content.
+    function BoxEffectOverlays({ ann, edgeOutline }) {
+      const textureCanvasRef = useRef(null);
+      const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
+      const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
+
+      useEffect(() => {
+        const canvas = textureCanvasRef.current;
+        if (!textureKey || !canvas) return;
+        canvas.width = Math.max(1, Math.ceil(ann.width));
+        canvas.height = Math.max(1, Math.ceil(ann.height));
+        drawTextureMarks(canvas.getContext("2d"), ann);
+      }, [textureKey, ann.width, ann.height]);
+
+      return (
+        <React.Fragment>
+          {ann.texture && (
+            <canvas ref={textureCanvasRef} className="ze-ann-image-texture" style={{ clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
+          )}
+          {stroke && (
+            <svg className="ze-ann-image-stroke" width={ann.width} height={ann.height} aria-hidden="true">
+              <path
+                d={edgeOutline || rectOutline(ann)}
+                fill="none"
+                stroke={stroke.strokeColor}
+                strokeWidth={stroke.strokeThickness}
+                strokeLinejoin="miter"
+                strokeMiterlimit={STROKE_MITER_LIMIT}
+              />
+            </svg>
+          )}
+        </React.Fragment>
+      );
+    }
+
+    // ---- One rectangle --------------------------------------------------
+    // Resizes freely on every handle; Shift keeps its proportions.
+    function AnnotationRect({ ann, tool, isSelected, showHandles, onPress, onUpdate, zoom }) {
+      function startResize(handle, e) {
+        const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+        const dragDelta = dragDeltaFrom(e, zoom);
+        trackPointerDrag((ev) => {
+          const { dx, dy } = dragDelta(ev);
+          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, ev.shiftKey, MIN_RECT_SIZE));
+        });
+      }
+
+      const edgeOutline = imageEdgeOutline(ann);
+      const { fillColor } = controlValues(ann, RECT_CONTROLS);
+      return (
+        <div
+          data-ann-id={ann.id}
+          className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : "")}
+          style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
+          onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
+        >
+          <div className="ze-ann-image-shadow" style={boxGroupStyle(ann)}>
+            <div className="ze-ann-rect-fill" style={{ backgroundColor: fillColor, clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
+            <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
+          </div>
+          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
+        </div>
+      );
+    }
+
     // ---- One placed image --------------------------------------------
     // Drag to move (Select tool, same pattern as text). A resize handle
     // in the bottom-right corner appears only when selected — dragging it
@@ -1381,7 +1525,6 @@
 
     function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
       const halftoneCanvasRef = useRef(null);
-      const textureCanvasRef = useRef(null);
       const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
       // Crop is a sub-rect of the source image, in ITS OWN natural pixel
       // space — undefined/missing fields mean "no crop yet" (the full
@@ -1468,16 +1611,6 @@
       const filterType = imgFilter.type;
       const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]);
       const filterCanvasKey = usesFilterCanvas ? JSON.stringify(imgFilter) : null;
-      const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
-
-      useEffect(() => {
-        if (!textureKey || isCropping) return;
-        const canvas = textureCanvasRef.current;
-        if (!canvas) return;
-        canvas.width = Math.max(1, Math.ceil(ann.width));
-        canvas.height = Math.max(1, Math.ceil(ann.height));
-        drawTextureMarks(canvas.getContext("2d"), ann);
-      }, [textureKey, isCropping, ann.width, ann.height]);
 
       useEffect(() => {
         if (!usesFilterCanvas || isCropping) return;
@@ -1540,16 +1673,13 @@
       const edgeOutline = imageEdgeOutline(ann);
       if (edgeOutline) frameStyle.clipPath = `path("${edgeOutline}")`;
       if (cssFilter) frameStyle.filter = cssFilter;
-      const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-      const shadow = imageShadowOffset(ann);
-      const shadowStyle = shadow ? { filter: `drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color})` } : undefined;
       const ownDuotoneDarkRgb = hasOwnDuotone ? hexToRgb(imgFilter.darkColor || DEFAULT_DUOTONE_DARK) : null;
       const ownDuotoneLightRgb = hasOwnDuotone ? hexToRgb(imgFilter.lightColor || DEFAULT_DUOTONE_LIGHT) : null;
 
       return (
         <div
           data-ann-id={ann.id}
-          className={"ze-ann-image" + (isSelected ? " is-selected" : "")}
+          className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : "")}
           style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
           onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
         >
@@ -1557,7 +1687,7 @@
               can't cut it off, and away from the resize handle. It stays
               mounted when there's no shadow so toggling one never remounts
               (and blanks) the filter canvas. */}
-          <div className="ze-ann-image-shadow" style={shadowStyle}>
+          <div className="ze-ann-image-shadow" style={boxGroupStyle(ann)}>
             {usesFilterCanvas ? (
               <canvas ref={halftoneCanvasRef} style={frameStyle} />
             ) : (
@@ -1570,21 +1700,7 @@
                 />
               </div>
             )}
-            {ann.texture && (
-              <canvas ref={textureCanvasRef} className="ze-ann-image-texture" style={{ clipPath: frameStyle.clipPath }} />
-            )}
-            {stroke && (
-              <svg className="ze-ann-image-stroke" width={ann.width} height={ann.height} aria-hidden="true">
-                <path
-                  d={edgeOutline || rectOutline(ann)}
-                  fill="none"
-                  stroke={stroke.strokeColor}
-                  strokeWidth={stroke.strokeThickness}
-                  strokeLinejoin="miter"
-                  strokeMiterlimit={STROKE_MITER_LIMIT}
-                />
-              </svg>
-            )}
+            <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
           </div>
           {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
           {hasOwnDuotone && (
@@ -1617,7 +1733,8 @@
       const taper = ann.taper || 0;
       const box = bboxOf(ann);
       const handleMouseDown = (e) => { if (tool === "select") onPress(e, ann); };
-      const selectCursor = { cursor: tool === "select" ? "move" : "default" };
+      const pickable = tool === "select" && !ann.locked;
+      const selectCursor = { cursor: pickable ? "move" : "default" };
       return (
         <React.Fragment>
           {taper > 0 ? (
@@ -1627,7 +1744,7 @@
               fill={color}
               fillOpacity={isHi ? 0.45 : 1}
               stroke="none"
-              style={{ pointerEvents: tool === "select" ? "fill" : "none", ...selectCursor }}
+              style={{ pointerEvents: pickable ? "fill" : "none", ...selectCursor }}
               onMouseDown={handleMouseDown}
             />
           ) : (
@@ -1640,7 +1757,7 @@
               strokeOpacity={isHi ? 0.45 : 1}
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ pointerEvents: tool === "select" ? "stroke" : "none", ...selectCursor }}
+              style={{ pointerEvents: pickable ? "stroke" : "none", ...selectCursor }}
               onMouseDown={handleMouseDown}
             />
           )}
@@ -1664,7 +1781,7 @@
       pageFilter, onionGhostSrc, onionSkinOpacity,
       penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
       annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
-      onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onAddText, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
+      onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
       onStartTextEdit, onFinishTextEdit,
       zoom,
     }) {
@@ -1748,7 +1865,7 @@
           const erasedIds = new Set();
           const tryErase = (pt) => {
             annotations.forEach((a) => {
-              if (a.type === "stroke" && !erasedIds.has(a.id) && strokeHitTest(pt, a)) {
+              if (a.type === "stroke" && !a.hidden && !a.locked && !erasedIds.has(a.id) && strokeHitTest(pt, a)) {
                 erasedIds.add(a.id);
                 onEraseStroke(a.id);
               }
@@ -1761,8 +1878,8 @@
           });
           return;
         }
-        // Move or Text tool, pressing empty page (the other tools returned
-        // above). A click that ends a text edit does only that.
+        // Move, Text or Rectangle tool, pressing empty page (the other tools
+        // returned above). A click that ends a text edit does only that.
         e.preventDefault();
         if (editingAnnId !== null) {
           onFinishTextEdit();
@@ -1787,6 +1904,12 @@
             // A click makes a text box that fits its text; a drag sets its width.
             if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
             else onAddText(start.x, start.y);
+          } else if (tool === "rect") {
+            onAddRect(rect || {
+              ...DEFAULT_RECT_SIZE,
+              x: start.x - DEFAULT_RECT_SIZE.width / 2,
+              y: start.y - DEFAULT_RECT_SIZE.height / 2,
+            });
           } else if (rect) {
             onSelectAnnotations(annotationIdsTouching(rect), additive);
           }
@@ -1804,7 +1927,8 @@
             const box = el.getBoundingClientRect();
             return box.left < right && box.right > left && box.top < bottom && box.bottom > top;
           })
-          .map((el) => Number(el.dataset.annId));
+          .map((el) => Number(el.dataset.annId))
+          .filter((id) => !annotations.find((a) => a.id === id).locked);
       }
 
       // The shared press on any item: select it, then drag to move the
@@ -1844,7 +1968,7 @@
       const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
       const cursorClass =
         tool === "text" ? "ze-tool-text" :
-        (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" :
+        (tool === "pen" || tool === "highlighter" || tool === "rect") ? "ze-tool-draw" :
         tool === "eraser" ? "ze-tool-erase" : "";
 
       // The page is scaled visually; this outer box takes up the scaled
@@ -1862,25 +1986,63 @@
             style={{ width: canvasSize.width, height: canvasSize.height }}
             onMouseDown={handleOverlayMouseDown}
           >
-            {annotations.filter((a) => a.type === "image").map((a) => (
-              <AnnotationImage
-                key={a.id}
-                ann={a}
-                tool={tool}
-                isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
-                showHandles={showHandlesFor(a)}
-                isCropping={a.id === croppingAnnId}
-                onPress={pressAnnotation}
-                onUpdate={onUpdateAnnotation}
-                onToggleCrop={onToggleCrop}
-                pageFilter={pageFilter}
-                zoom={zoom}
-              />
-            ))}
+            {annotations.filter((a) => !a.hidden).map((a) => {
+              const isSelected = a.id === selectedAnnId || selectedAnnIds.includes(a.id);
+              if (a.type === "image") {
+                return (
+                  <AnnotationImage
+                    key={a.id}
+                    ann={a}
+                    tool={tool}
+                    isSelected={isSelected}
+                    showHandles={showHandlesFor(a)}
+                    isCropping={a.id === croppingAnnId}
+                    onPress={pressAnnotation}
+                    onUpdate={onUpdateAnnotation}
+                    onToggleCrop={onToggleCrop}
+                    pageFilter={pageFilter}
+                    zoom={zoom}
+                  />
+                );
+              }
+              if (a.type === "rect") {
+                return (
+                  <AnnotationRect
+                    key={a.id}
+                    ann={a}
+                    tool={tool}
+                    isSelected={isSelected}
+                    showHandles={showHandlesFor(a)}
+                    onPress={pressAnnotation}
+                    onUpdate={onUpdateAnnotation}
+                    zoom={zoom}
+                  />
+                );
+              }
+              if (a.type === "text") {
+                return (
+                  <AnnotationText
+                    key={a.id}
+                    ann={a}
+                    tool={tool}
+                    isSelected={isSelected}
+                    isEditing={a.id === editingAnnId}
+                    showHandles={showHandlesFor(a)}
+                    onPress={pressAnnotation}
+                    onStartEdit={onStartTextEdit}
+                    onFinishEdit={onFinishTextEdit}
+                    onUpdate={onUpdateAnnotation}
+                    zoom={zoom}
+                  />
+                );
+              }
+              return (
+                <svg key={a.id} className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
+                  <StrokeShape ann={a} tool={tool} isSelected={isSelected} onPress={pressAnnotation} />
+                </svg>
+              );
+            })}
             <svg className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
-              {annotations.filter((a) => a.type === "stroke").map((a) => (
-                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)} onPress={pressAnnotation} />
-              ))}
               {drawingRef.current && (drawingRef.current.taper > 0 ? (
                 <path
                   d={taperedPathD(drawingRef.current.points, drawingRef.current.width, drawingRef.current.taper)}
@@ -1900,21 +2062,6 @@
                 />
               ))}
             </svg>
-            {annotations.filter((a) => a.type === "text").map((a) => (
-              <AnnotationText
-                key={a.id}
-                ann={a}
-                tool={tool}
-                isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
-                isEditing={a.id === editingAnnId}
-                showHandles={showHandlesFor(a)}
-                onPress={pressAnnotation}
-                onStartEdit={onStartTextEdit}
-                onFinishEdit={onFinishTextEdit}
-                onUpdate={onUpdateAnnotation}
-                zoom={zoom}
-              />
-            ))}
             {dragRect && (
               <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height }} />
             )}
@@ -2361,8 +2508,189 @@
       );
     }
 
+    // The effect on/off buttons and the settings of each active effect.
+    function EffectControls({ ann, onPatch }) {
+      const toggleEffect = (effect) => {
+        const on = !ann[effect.key];
+        const otherEdgesOff = effect.outline && on
+          ? Object.fromEntries(IMAGE_EFFECTS.filter((e) => e.outline).map((e) => [e.key, false]))
+          : {};
+        onPatch({ ...otherEdgesOff, [effect.key]: on });
+      };
+      return (
+        <React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Effect</span>
+            <div className="ze-format-row">
+              {IMAGE_EFFECTS.map((effect) => (
+                <button
+                  key={effect.key}
+                  type="button"
+                  className={"ze-format-toggle ze-format-toggle-wide" + (ann[effect.key] ? " active" : "")}
+                  onClick={() => toggleEffect(effect)}
+                >
+                  {effect.label}
+                </button>
+              ))}
+            </div>
+            <span className="ze-format-hint">Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too.</span>
+          </div>
+          {IMAGE_EFFECTS.filter((effect) => ann[effect.key]).map((effect) => (
+            <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={onPatch} />
+          ))}
+        </React.Fragment>
+      );
+    }
+
+    // ---- Layers panel — the page's items, top layer first. ----------------
+    function layerName(ann) {
+      if (ann.name) return ann.name;
+      if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
+      if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+      return ann.type === "rect" ? "Rectangle" : "Image";
+    }
+
+    function LayerThumb({ ann }) {
+      if (ann.type === "image") return <span className="ze-layer-thumb"><img src={ann.src} alt="" draggable="false" /></span>;
+      if (ann.type === "rect") return <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ backgroundColor: controlValues(ann, RECT_CONTROLS).fillColor }} /></span>;
+      if (ann.type === "text") return <span className="ze-layer-thumb ze-layer-thumb-text">T</span>;
+      const isHi = ann.tool === "highlighter";
+      return (
+        <span className="ze-layer-thumb">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke={ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color)} strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+            <path d="M3 16c4-9 6-9 8-4s4 5 10-5" />
+          </svg>
+        </span>
+      );
+    }
+
+    function LayersPanel({ annotations, selectedIds, onSelect, onToggleFlag, onRename, onReorder }) {
+      const [collapsed, setCollapsed] = useState(false);
+      const [renamingId, setRenamingId] = useState(null);
+      const [dropInfo, setDropInfo] = useState(null); // { row, before }
+      const dragIdRef = useRef(null);
+      const listRef = useRef(null);
+      const topFirst = annotations.slice().reverse();
+
+      useEffect(() => {
+        const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
+        if (row) row.scrollIntoView({ block: "nearest" });
+      }, [selectedIds[0]]);
+
+      function finishRename(ann, text) {
+        setRenamingId(null);
+        const name = text.trim();
+        if (name && name !== layerName(ann)) onRename(ann.id, name);
+      }
+
+      function dragHandlersFor(ann, row) {
+        return {
+          onDragStart: (e) => { dragIdRef.current = ann.id; e.dataTransfer.setData("text/plain", ""); },
+          onDragOver: (e) => {
+            e.preventDefault();
+            const box = e.currentTarget.getBoundingClientRect();
+            setDropInfo({ row, before: e.clientY < box.top + box.height / 2 });
+          },
+          onDragEnd: () => { dragIdRef.current = null; setDropInfo(null); },
+          onDrop: (e) => {
+            e.preventDefault();
+            const from = dragIdRef.current;
+            const info = dropInfo;
+            dragIdRef.current = null;
+            setDropInfo(null);
+            if (from === null || !info) return;
+            onReorder(selectedIds.includes(from) ? selectedIds : [from], info.row + (info.before ? 0 : 1));
+          },
+        };
+      }
+
+      return (
+        <section className="ze-layers-panel">
+          <div className="ze-format-panel-head ze-layers-head">
+            Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}
+            <button type="button" className="ze-guides-settings-btn" title={collapsed ? "Show layers" : "Hide layers"} aria-expanded={!collapsed} onClick={() => setCollapsed((c) => !c)}>
+              <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={collapsed ? "M5.5 12.5l4.5-4.5 4.5 4.5" : "M5.5 7.5l4.5 4.5 4.5-4.5"} />
+              </svg>
+            </button>
+          </div>
+          {!collapsed && (
+            <div className="ze-layers-list" ref={listRef}>
+              {topFirst.map((ann, row) => {
+                const isRenaming = renamingId === ann.id;
+                return (
+                  <React.Fragment key={ann.id}>
+                    {dropInfo && dropInfo.row === row && dropInfo.before && <div className="ze-drop-line" />}
+                    <div
+                      className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "")}
+                      data-layer-id={ann.id}
+                      draggable={!isRenaming}
+                      onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, e.shiftKey); }}
+                      onDoubleClick={() => setRenamingId(ann.id)}
+                      {...dragHandlersFor(ann, row)}
+                    >
+                      <LayerThumb ann={ann} />
+                      {isRenaming ? (
+                        <input
+                          className="ze-layer-name-input"
+                          defaultValue={layerName(ann)}
+                          autoFocus
+                          spellCheck="false"
+                          onFocus={(e) => e.target.select()}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => finishRename(ann, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") e.target.value = layerName(ann);
+                            if (e.key === "Enter" || e.key === "Escape") e.target.blur();
+                          }}
+                        />
+                      ) : (
+                        <span className="ze-layer-name" title="Double-click to rename">{layerName(ann)}</span>
+                      )}
+                      <button
+                        type="button"
+                        className={"ze-layer-icon-btn" + (ann.locked ? " active" : "")}
+                        title={ann.locked ? "Unlock layer" : "Lock layer"}
+                        aria-pressed={Boolean(ann.locked)}
+                        onClick={(e) => { e.stopPropagation(); onToggleFlag(ann, "locked"); }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      >
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="5" y="11" width="14" height="10" rx="2" />
+                          <path d={ann.locked ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2"} />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className={"ze-layer-icon-btn" + (ann.hidden ? " active" : "")}
+                        title={ann.hidden ? "Show layer" : "Hide layer"}
+                        aria-pressed={Boolean(ann.hidden)}
+                        onClick={(e) => { e.stopPropagation(); onToggleFlag(ann, "hidden"); }}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                      >
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" />
+                          {ann.hidden ? <path d="M4 4l16 16" /> : <circle cx="12" cy="12" r="3" />}
+                        </svg>
+                      </button>
+                    </div>
+                    {dropInfo && dropInfo.row === row && !dropInfo.before && <div className="ze-drop-line" />}
+                  </React.Fragment>
+                );
+              })}
+              <div className="ze-layer-row ze-layer-row--page">
+                <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ backgroundColor: "#ffffff" }} /></span>
+                <span className="ze-layer-name">Page</span>
+              </div>
+            </div>
+          )}
+        </section>
+      );
+    }
+
     function FormatPanel({
       tool, selectedAnn, onUpdate, fontOptions, setFontOptions, croppingAnnId, onToggleCrop,
+      rectDefaults, onChangeRectDefaults,
       textFontFamily, textFontSize, textBold, textItalic, textUnderline, textColor, textAlign,
       onChangeTextFontFamily, onChangeTextFontSize, onChangeTextBold, onChangeTextItalic, onChangeTextUnderline, onChangeTextColor, onChangeTextAlign,
       penColor, penWidth, penTaper, onChangePenColor, onChangePenWidth, onChangePenTaper,
@@ -2467,13 +2795,6 @@
         const patch = (p) => onUpdate(ann.id, p);
         const isCroppingThis = croppingAnnId === ann.id;
         const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
-        const toggleEffect = (effect) => {
-          const on = !ann[effect.key];
-          const otherEdgesOff = effect.outline && on
-            ? Object.fromEntries(IMAGE_EFFECTS.filter((e) => e.outline).map((e) => [e.key, false]))
-            : {};
-          patch({ ...otherEdgesOff, [effect.key]: on });
-        };
         return (
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">Format — Image</div>
@@ -2485,6 +2806,7 @@
                 <span className="ze-format-label">Size</span>
                 <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
               </div>
+              <ControlList controls={[OPACITY_CONTROL]} source={ann} onPatch={patch} />
               <div className="ze-format-field">
                 <span className="ze-format-label">Crop</span>
                 <div className="ze-format-row">
@@ -2561,25 +2883,40 @@
                 )}
                 <span className="ze-format-hint">Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.</span>
               </div>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Effect</span>
-                <div className="ze-format-row">
-                  {IMAGE_EFFECTS.map((effect) => (
-                    <button
-                      key={effect.key}
-                      type="button"
-                      className={"ze-format-toggle ze-format-toggle-wide" + (ann[effect.key] ? " active" : "")}
-                      onClick={() => toggleEffect(effect)}
-                    >
-                      {effect.label}
-                    </button>
-                  ))}
-                </div>
-                <span className="ze-format-hint">Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too.</span>
+              <EffectControls ann={ann} onPatch={patch} />
+            </div>
+          </aside>
+        );
+      }
+
+      if (selectedAnn && selectedAnn.type === "rect") {
+        const ann = selectedAnn;
+        const patch = (p) => onUpdate(ann.id, p);
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Format — Rectangle</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block" }}>
+                Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border.
+              </span>
+              <div className="ze-format-field" style={{ marginTop: 14 }}>
+                <span className="ze-format-label">Size</span>
+                <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
               </div>
-              {IMAGE_EFFECTS.filter((effect) => ann[effect.key]).map((effect) => (
-                <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={patch} />
-              ))}
+              <ControlList controls={RECT_CONTROLS} source={ann} onPatch={patch} />
+              <EffectControls ann={ann} onPatch={patch} />
+            </div>
+          </aside>
+        );
+      }
+
+      if (tool === "rect") {
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Rectangle</div>
+            <div className="ze-format-panel-body">
+              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Drag on the page to draw, or click for a default size. Sets the fill for the next rectangle.</span>
+              <ControlList controls={RECT_CONTROLS} source={rectDefaults} onPatch={onChangeRectDefaults} />
             </div>
           </aside>
         );
@@ -2702,7 +3039,7 @@
           <div className="ze-format-panel-head">Format</div>
           <div className="ze-format-panel-body">
             <div className="ze-format-empty">
-              Select a text box, image, or stroke to edit it, or pick the Pen/Highlighter tool to set defaults for your next stroke.
+              Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add.
             </div>
           </div>
         </aside>
@@ -2936,6 +3273,7 @@
           ["V", "Move tool"],
           ["T", "Text tool"],
           ["I", "Add an image"],
+          ["R", "Rectangle tool"],
           ["D", "Draw tool"],
           ["H", "Highlighter tool"],
         ],
@@ -2961,7 +3299,7 @@
           ["Ctrl + R", "Rotate the selected page"],
           ["Shift + click", "Add to or remove from the selection (pages and items)"],
           ["Drag on empty page", "Select the items it touches (Move tool)"],
-          ["Shift + drag a handle", "Stretch an image freely"],
+          ["Shift + drag a handle", "Stretch an image freely, or keep a rectangle's proportions"],
         ],
       },
     ];
@@ -3064,7 +3402,7 @@
       const [errorMsg, setErrorMsg] = useState(null);
       const [exporting, setExporting] = useState(false);
       const [sendingToArranger, setSendingToArranger] = useState(false);
-      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'pen' | 'highlighter' | 'eraser'
+      const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'pen' | 'highlighter' | 'eraser'
       const [selectedAnnId, setSelectedAnnId] = useState(null);
       // Shift+Click multi-select — `selectedAnnId` stays the single
       // "primary" item (the one resize/crop/drag/Ctrl+C/the FormatPanel's
@@ -3134,6 +3472,7 @@
       const [textUnderline, setTextUnderline] = useState(false);
       const [textColor, setTextColor] = useState("#1a1a1a");
       const [textAlign, setTextAlign] = useState("left");
+      const [rectDefaults, setRectDefaults] = useState(() => controlValues({}, RECT_CONTROLS));
 
       // Clicking any toolbar tool switches the format panel to that tool's
       // own settings — any previous selection is cleared so the panel
@@ -3431,7 +3770,7 @@
             docs[docId] = arrayBufferToBase64(pdfDocsRef.current[docId].bytes);
           }
           const project = {
-            version: 1,
+            version: 2, // 2: the annotation list is the stacking order
             docs,
             pages: pages.map(({ dataUrl, ...rest }) => rest),
             settings: {
@@ -3515,7 +3854,8 @@
             const dataUrl = p.isBlank
               ? makeBlankThumb(p.width, p.height, p.rotation)
               : await renderThumb(newDocsMap[p.docId].doc, p.pageNumber, p.rotation);
-            return { ...p, key: nextKeyRef.current++, dataUrl };
+            const annotations = project.version >= 2 ? p.annotations : legacyLayerOrder(p.annotations || []);
+            return { ...p, annotations, key: nextKeyRef.current++, dataUrl };
           }));
 
           // Keep the id counters past anything restored, so new pages,
@@ -3685,13 +4025,8 @@
       // `insertBefore` is a slot in the current, pre-move page list. Moved
       // pages keep their document order, not the order they were selected.
       function handleReorder(fromIndices, insertBefore) {
-        const moving = new Set(fromIndices);
-        const allIndices = pages.map((_, i) => i);
-        const block = allIndices.filter((i) => moving.has(i));
-        const rest = allIndices.filter((i) => !moving.has(i));
-        const insertAt = rest.filter((i) => i < insertBefore).length;
-        const newOrder = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
-        if (newOrder.every((oldIdx, newIdx) => oldIdx === newIdx)) return;
+        const newOrder = orderAfterMove(pages.length, fromIndices, insertBefore);
+        if (!newOrder) return;
 
         const newIdxOf = new Array(newOrder.length);
         newOrder.forEach((oldIdx, newIdx) => { newIdxOf[oldIdx] = newIdx; });
@@ -3824,6 +4159,7 @@
           if (key === "v") { selectTool("select"); return; }
           if (key === "t") { selectTool("text"); return; }
           if (key === "i") { handleImageToolClick(); return; }
+          if (key === "r") { selectTool("rect"); return; }
           if (key === "h") { selectTool("highlighter"); return; }
           if (key === "d") { selectTool("pen"); return; } // "Draw" in the UI — see the toolbar button below
           if (key === "arrowup") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
@@ -3892,6 +4228,41 @@
         setSelectedAnnId(id);
         setSelectedAnnIds([]);
         setEditingAnnId(id);
+      }
+
+      function handleAddRect(box) {
+        if (selectedIdx === null) return;
+        const id = nextAnnIdRef.current++;
+        updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+          id, type: "rect", x: box.x, y: box.y,
+          width: Math.max(MIN_RECT_SIZE, box.width),
+          height: Math.max(MIN_RECT_SIZE, box.height),
+          ...rectDefaults,
+        }]);
+        selectTool("select");
+        setSelectedAnnId(id);
+      }
+
+      // ---- Layers ----------------------------------------------------------
+      function handleSelectLayer(id, shiftKey) {
+        selectTool("select");
+        handleSelectAnnotation(id, shiftKey);
+      }
+
+      // A hidden or locked layer can't stay selected, which is what keeps
+      // it safe from dragging, nudging, resizing and Delete.
+      function handleToggleLayerFlag(ann, flag) {
+        const on = !ann[flag];
+        handleUpdateAnnotation(ann.id, { [flag]: on });
+        if (on && (ann.id === selectedAnnId || selectedAnnIds.includes(ann.id))) handleSelectAnnotation(ann.id, true);
+      }
+
+      // `insertBeforeRow` is a slot in the panel's list, which runs top layer first.
+      function handleReorderLayers(ids, insertBeforeRow) {
+        const topFirst = (pages[selectedIdx].annotations || []).slice().reverse();
+        const fromRows = topFirst.flatMap((a, row) => (ids.includes(a.id) ? [row] : []));
+        const newOrder = orderAfterMove(topFirst.length, fromRows, insertBeforeRow);
+        if (newOrder) updateAnnotationsFor(selectedIdx, () => newOrder.map((row) => topFirst[row]).reverse());
       }
 
       function handleAddStroke(stroke) {
@@ -4132,6 +4503,11 @@
                         <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" />
                       </svg>
                     </button>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "rect" ? " active" : "")} title="Rectangle (R)" onClick={() => selectTool("rect")}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3.5" y="6" width="17" height="12" />
+                      </svg>
+                    </button>
                     <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Draw (D)" onClick={() => selectTool("pen")}>
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <path d="M4 20l1-4L16 5l3 3L8 19z" />
@@ -4219,6 +4595,7 @@
                     croppingAnnId={croppingAnnId}
                     onSelectAnnotation={handleSelectAnnotation}
                     onAddText={handleAddText}
+                    onAddRect={handleAddRect}
                     onAddStroke={handleAddStroke}
                     onUpdateAnnotation={handleUpdateAnnotation}
                     onEraseStroke={handleEraseStroke}
@@ -4228,8 +4605,12 @@
               </div>
             </div>
             {selectedPage && (
+              <div className="ze-right-rail">
               <FormatPanel
+                key={selectedAnnId} // so a half-typed field never carries over to the next item
                 tool={tool}
+                rectDefaults={rectDefaults}
+                onChangeRectDefaults={(patch) => setRectDefaults((d) => ({ ...d, ...patch }))}
                 selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
                 onUpdate={handleUpdateAnnotation}
                 onFlattenImage={handleFlattenImage}
@@ -4264,6 +4645,15 @@
                 onChangeHighlighterWidth={setHighlighterWidth}
                 onChangeHighlighterTaper={setHighlighterTaper}
               />
+              <LayersPanel
+                annotations={selectedPage.annotations || []}
+                selectedIds={[selectedAnnId, ...selectedAnnIds].filter((id) => id !== null)}
+                onSelect={handleSelectLayer}
+                onToggleFlag={handleToggleLayerFlag}
+                onRename={(id, name) => handleUpdateAnnotation(id, { name })}
+                onReorder={handleReorderLayers}
+              />
+              </div>
             )}
           </div>
 
