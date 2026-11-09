@@ -41,14 +41,38 @@
     const THUMB_SCALE = 0.3;
     const MAIN_SCALE = 1.1;
     const DEFAULT_PAGE_SIZE = { width: 420, height: 594 }; // used only if no PDF has been loaded yet
+    // Paper sizes for starting a new blank document, in PDF points (1/72 in),
+    // portrait. Landscape just swaps width and height.
+    const NEW_DOCUMENT_PRESETS = [
+      { key: "a3", label: "A3", width: 841.89, height: 1190.55 },
+      { key: "a4", label: "A4", width: 595.28, height: 841.89 },
+      { key: "a5", label: "A5", width: 419.53, height: 595.28 },
+      { key: "a6", label: "A6", width: 297.64, height: 419.53 },
+      { key: "letter", label: "US Letter", width: 612, height: 792 },
+      { key: "half-letter", label: "Half Letter", width: 396, height: 612 },
+      { key: "digest", label: "Digest", width: 396, height: 594 },
+    ];
+    const MAX_NEW_DOCUMENT_PAGES = 100;
     const ZOOM_PERCENT = { min: 25, max: 400, initial: 100 };
 
     // For a drag started by `startEvent`: turns a later mouse event into how
     // far the pointer has moved in artboard px (annotations' own space),
     // whatever the current zoom is.
-    function dragDeltaFrom(startEvent, zoom) {
+    // A point turned `degrees` clockwise about the origin (y points down).
+    function rotatePoint(x, y, degrees) {
+      const radians = degrees * Math.PI / 180;
+      const cos = Math.cos(radians), sin = Math.sin(radians);
+      return [x * cos - y * sin, x * sin + y * cos];
+    }
+
+    // `angle` is the rotation of the thing being dragged: the delta then comes
+    // back in that thing's own (unrotated) axes, which is what resizing needs.
+    function dragDeltaFrom(startEvent, zoom, angle = 0) {
       const { clientX: startX, clientY: startY } = startEvent;
-      return (ev) => ({ dx: (ev.clientX - startX) / zoom, dy: (ev.clientY - startY) / zoom });
+      return (ev) => {
+        const [dx, dy] = rotatePoint((ev.clientX - startX) / zoom, (ev.clientY - startY) / zoom, -angle);
+        return { dx, dy };
+      };
     }
 
     const DRAG_THRESHOLD = 4; // screen px of movement before a press counts as a drag
@@ -75,7 +99,10 @@
 
     // A box after dragging one of its handles. `handle` is a compass name
     // ("e", "nw"...); the opposite side or corner stays where it is.
-    function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE) {
+    // For a rotated box, pass its `angle` and `dx`/`dy` measured in its own
+    // axes (dragDeltaFrom does that): the box rotates about its centre, so
+    // the anchored side is kept fixed on the page by moving the centre.
+    function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE, angle = 0) {
       const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
       const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
       let width = box.width + signX * dx;
@@ -90,12 +117,15 @@
         width = Math.max(minSize, width);
         height = Math.max(minSize, height);
       }
-      return {
-        x: signX < 0 ? box.x + box.width - width : signX > 0 ? box.x : box.x + (box.width - width) / 2,
-        y: signY < 0 ? box.y + box.height - height : signY > 0 ? box.y : box.y + (box.height - height) / 2,
-        width,
-        height,
-      };
+      // The anchor is the side or corner opposite the handle, as a fraction
+      // of the box (0 = left/top, 1 = right/bottom, 0.5 = untouched axis).
+      const anchorX = signX > 0 ? 0 : signX < 0 ? 1 : 0.5;
+      const anchorY = signY > 0 ? 0 : signY < 0 ? 1 : 0.5;
+      const [oldOffsetX, oldOffsetY] = rotatePoint((anchorX - 0.5) * box.width, (anchorY - 0.5) * box.height, angle);
+      const [newOffsetX, newOffsetY] = rotatePoint((anchorX - 0.5) * width, (anchorY - 0.5) * height, angle);
+      const centerX = box.x + box.width / 2 + oldOffsetX - newOffsetX;
+      const centerY = box.y + box.height / 2 + oldOffsetY - newOffsetY;
+      return { x: centerX - width / 2, y: centerY - height / 2, width, height };
     }
 
     // The character position under a screen point inside `element`.
@@ -212,6 +242,14 @@
         { kind: "slider", prop: "roundedRadius", label: "Radius (%)", min: 0, max: 50, fallback: 12 },
       ],
     };
+    // Masks an image to the ellipse that fits its box — a circle on a
+    // square image. Rectangles don't offer it: the Ellipse tool covers them.
+    const ELLIPSE_EFFECT = {
+      key: "ellipseEdge",
+      label: "Ellipse",
+      outline: ellipseOutline,
+      controls: [],
+    };
     const TORN_EDGE_EFFECT = {
       key: "tornEdge",
       label: "Torn Edge",
@@ -263,13 +301,36 @@
         { kind: "slider", prop: "textureVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
       ],
     };
-    const IMAGE_EFFECTS = [ROUNDED_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+    const IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
 
     const OPACITY_CONTROL = { kind: "slider", prop: "opacity", label: "Opacity (%)", min: 0, max: 100, fallback: 100 };
+    // How an item mixes with whatever is under it. Keys are valid both as CSS
+    // `mix-blend-mode` (live editor) and canvas `globalCompositeOperation`
+    // (Export), so one value drives both. Multiply darkens like ink on paper;
+    // Screen lightens (white stays white, so it only shows on darker areas).
+    const BLEND_CONTROL = {
+      kind: "select", prop: "blend", label: "Blend", fallback: "normal",
+      options: [
+        { key: "normal", label: "Normal" },
+        { key: "multiply", label: "Multiply" },
+        { key: "screen", label: "Screen" },
+        { key: "overlay", label: "Overlay" },
+        { key: "soft-light", label: "Soft Light" },
+        { key: "darken", label: "Darken" },
+        { key: "lighten", label: "Lighten" },
+        { key: "difference", label: "Difference" },
+      ],
+    };
     // A rectangle's fill is solid, or a two-colour gradient. Each colour has
     // its own opacity, so a gradient can fade out to nothing; the plain
     // Opacity control below still fades the whole rectangle as one piece.
     const isGradientFill = (v) => v.fillType !== "solid";
+    // Rotation of a text box, image, rectangle or ellipse, in degrees clockwise
+    // about its centre. The box's own x/y/width/height stay unrotated.
+    const ANGLE_CONTROL = { kind: "slider", prop: "angle", label: "Rotation (°)", min: 0, max: 359, fallback: 0 };
+    const angleOf = (ann) => ann.angle || 0;
+    // CSS for a rotated item's outer box, or nothing when it isn't rotated.
+    const rotationCss = (ann) => (angleOf(ann) ? `rotate(${angleOf(ann)}deg)` : undefined);
     const RECT_CONTROLS = [
       {
         kind: "select", prop: "fillType", label: "Fill", fallback: "solid",
@@ -283,8 +344,10 @@
       { kind: "slider", prop: "gradientStart", label: "Start (%)", min: 0, max: 100, fallback: 0, showIf: isGradientFill },
       { kind: "slider", prop: "gradientEnd", label: "End (%)", min: 0, max: 100, fallback: 100, showIf: isGradientFill },
       OPACITY_CONTROL,
+      BLEND_CONTROL,
     ];
-    const RECT_FILL_PROPS = RECT_CONTROLS.map((c) => c.prop).filter((p) => p !== OPACITY_CONTROL.prop);
+    // What Rasterize to Image clears: the fill. Opacity and blend carry over to the image.
+    const RECT_FILL_PROPS = RECT_CONTROLS.map((c) => c.prop).filter((p) => p !== OPACITY_CONTROL.prop && p !== BLEND_CONTROL.prop);
     const MIN_RECT_SIZE = 2; // small enough to use a rectangle as a thin rule
     const DEFAULT_RECT_SIZE = { width: 160, height: 110 }; // for a click without a drag
 
@@ -300,6 +363,11 @@
 
     function opacityOf(ann) {
       return controlValues(ann, [OPACITY_CONTROL]).opacity / 100;
+    }
+
+    // "normal" is left unset in CSS and canvas, so unblended items render exactly as before.
+    function blendOf(ann) {
+      return controlValues(ann, [BLEND_CONTROL]).blend;
     }
 
     // The colour stops of a rectangle's gradient. When the two ends differ
@@ -994,6 +1062,8 @@
       const lines = wrapTextLines(ctx, ann.text || "", innerWidth);
       const lineHeight = fontSize * 1.3;
 
+      ctx.save();
+      rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + (lines.length * lineHeight + padY * 2) / 2);
       lines.forEach((line, i) => {
         const lineWidth = ctx.measureText(line).width;
         let lineX = x + padX;
@@ -1013,6 +1083,7 @@
           ctx.restore();
         }
       });
+      ctx.restore();
     }
 
     // Renders one full page (background + annotations) to an offscreen
@@ -1070,12 +1141,24 @@
       drawBoxWithEffects(ctx, ann, scaleFactor, (target) => paintRectFill(target, ann));
     }
 
+    // Turns what's drawn next by the item's angle, about its centre (in canvas px).
+    function rotateAboutCenter(ctx, ann, centerX, centerY) {
+      const angle = angleOf(ann);
+      if (!angle) return;
+      ctx.translate(centerX, centerY);
+      ctx.rotate(angle * Math.PI / 180);
+      ctx.translate(-centerX, -centerY);
+    }
+
     // Draws a box's content with its edge shape, stroke, shadow and texture.
     // `paintContent` paints into the box's own 0..width/0..height space.
     function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
       const x = ann.x * scaleFactor, y = ann.y * scaleFactor;
       const w = ann.width * scaleFactor, h = ann.height * scaleFactor;
       ctx.save();
+      // Canvas shadows are measured on the page, not in the rotated box, so
+      // the shadow direction stays fixed while the item turns.
+      rotateAboutCenter(ctx, ann, x + w / 2, y + h / 2);
       const shadow = imageShadowOffset(ann);
       if (shadow) {
         ctx.shadowColor = shadow.color;
@@ -1118,25 +1201,28 @@
       ctx.restore();
     }
 
-    // Fades a finished item as one piece, on its own layer, so a shadow
-    // doesn't show through a see-through image. Matches CSS `opacity`.
-    async function drawWithOpacity(ctx, opacity, draw) {
-      if (opacity >= 1) { await draw(ctx); return; }
+    // Fades and blends a finished item as one piece, on its own layer, so a
+    // shadow doesn't show through a see-through image and the blend mixes the
+    // whole item with the page under it. Matches CSS `opacity` and `mix-blend-mode`.
+    async function drawWithOpacity(ctx, opacity, draw, blend) {
+      const mixes = blend && blend !== "normal";
+      if (opacity >= 1 && !mixes) { await draw(ctx); return; }
       const layer = document.createElement("canvas");
       layer.width = ctx.canvas.width;
       layer.height = ctx.canvas.height;
       await draw(layer.getContext("2d"));
       ctx.save();
       ctx.globalAlpha = opacity;
+      if (mixes) ctx.globalCompositeOperation = blend;
       ctx.drawImage(layer, 0, 0);
       ctx.restore();
     }
 
     async function drawAnnotationOnCanvas(ctx, ann, scaleFactor, pageFilter) {
       if (ann.type === "stroke") drawStrokeOnCanvas(ctx, ann, scaleFactor);
-      else if (ann.type === "text") drawTextOnCanvas(ctx, ann, scaleFactor);
-      else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor));
-      else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter));
+      else if (ann.type === "text") await drawWithOpacity(ctx, 1, (target) => drawTextOnCanvas(target, ann, scaleFactor), blendOf(ann));
+      else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor), blendOf(ann));
+      else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter), blendOf(ann));
     }
 
     // Bakes an image's crop, filter and effects into one new image and
@@ -1202,11 +1288,18 @@
       // pixel would be slightly transparent, ruling out JPEG for a photo.
       const widthPx = Math.max(1, Math.round(ann.width * scale));
       const heightPx = Math.max(1, Math.round(ann.height * scale));
+      // A rotated box's corners reach past its own width and height, so the
+      // canvas is sized for the rotated outline, with the box at its centre.
+      const radians = angleOf(ann) * Math.PI / 180;
+      const turnedWidth = Math.ceil(Math.abs(widthPx * Math.cos(radians)) + Math.abs(heightPx * Math.sin(radians)));
+      const turnedHeight = Math.ceil(Math.abs(widthPx * Math.sin(radians)) + Math.abs(heightPx * Math.cos(radians)));
+      const boxLeft = marginPx + (turnedWidth - widthPx) / 2;
+      const boxTop = marginPx + (turnedHeight - heightPx) / 2;
       const canvas = document.createElement("canvas");
-      canvas.width = widthPx + marginPx * 2;
-      canvas.height = heightPx + marginPx * 2;
+      canvas.width = turnedWidth + marginPx * 2;
+      canvas.height = turnedHeight + marginPx * 2;
       const ctx = canvas.getContext("2d");
-      await draw(ctx, { ...ann, x: marginPx / scale, y: marginPx / scale, width: widthPx / scale, height: heightPx / scale });
+      await draw(ctx, { ...ann, x: boxLeft / scale, y: boxTop / scale, width: widthPx / scale, height: heightPx / scale });
 
       const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const alphaAt = (x, y) => data[(y * canvas.width + x) * 4 + 3];
@@ -1237,8 +1330,9 @@
 
       return {
         src,
-        x: ann.x + (left - marginPx) / scale,
-        y: ann.y + (top - marginPx) / scale,
+        x: ann.x + (left - boxLeft) / scale,
+        y: ann.y + (top - boxTop) / scale,
+        angle: undefined, // the rotation is part of the pixels now
         width: trimmedW / scale,
         height: trimmedH / scale,
         naturalWidth: trimmedW,
@@ -1462,14 +1556,34 @@
     // A text box's height always follows its text, so it has no top/bottom handles.
     const TEXT_RESIZE_HANDLES = ["nw", "ne", "e", "se", "sw", "w"];
 
-    function ResizeHandles({ handles, onStart }) {
-      return handles.map((handle) => (
-        <div
-          key={handle}
-          className={"ze-resize-handle ze-resize-handle-" + handle}
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onStart(handle, e); }}
-        />
-      ));
+    function ResizeHandles({ handles, onStart, onRotate }) {
+      return (
+        <React.Fragment>
+          {handles.map((handle) => (
+            <div
+              key={handle}
+              className={"ze-resize-handle ze-resize-handle-" + handle}
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onStart(handle, e); }}
+            />
+          ))}
+          {onRotate && <div className="ze-rotate-handle" title="Rotate (hold Shift to snap to 15°)" onMouseDown={(e) => startRotateDrag(e, onRotate)} />}
+        </React.Fragment>
+      );
+    }
+
+    // Dragging the rotate knob turns the item toward the pointer: straight up
+    // from the item's centre is 0°. The knob sits inside the item's own
+    // (rotated) box, so its parent's bounding box is centred on the item.
+    function startRotateDrag(e, onRotate) {
+      e.preventDefault();
+      e.stopPropagation();
+      const box = e.currentTarget.parentElement.getBoundingClientRect();
+      const centerX = box.left + box.width / 2, centerY = box.top + box.height / 2;
+      trackPointerDrag((ev) => {
+        let degrees = Math.atan2(ev.clientY - centerY, ev.clientX - centerX) * 180 / Math.PI + 90;
+        degrees = ev.shiftKey ? Math.round(degrees / 15) * 15 : Math.round(degrees);
+        onRotate(((degrees % 360) + 360) % 360);
+      });
     }
 
     // ---- One text annotation --------------------------------------------
@@ -1505,16 +1619,17 @@
         const orig = { x: ann.x, y: ann.y, width: boxRef.current.offsetWidth, height: boxRef.current.offsetHeight };
         const origFontSize = ann.fontSize || 16;
         const hasSetWidth = Boolean(ann.width);
-        const dragDelta = dragDeltaFrom(e, zoom);
+        const angle = angleOf(ann);
+        const dragDelta = dragDeltaFrom(e, zoom, angle);
         trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
           if (handle === "e" || handle === "w") {
-            const box = resizedBox(orig, handle, dx, dy, false);
-            onUpdate(ann.id, { x: box.x, width: box.width });
+            const box = resizedBox(orig, handle, dx, dy, false, MIN_RESIZE_SIZE, angle);
+            onUpdate(ann.id, { x: box.x, y: box.y, width: box.width });
             return;
           }
           // Corners scale the text; the box's width scales along with it.
-          const box = resizedBox(orig, handle, dx, dy, true);
+          const box = resizedBox(orig, handle, dx, dy, true, MIN_RESIZE_SIZE, angle);
           const scaled = { x: box.x, y: box.y, fontSize: Math.max(6, Math.round(origFontSize * box.width / orig.width)) };
           onUpdate(ann.id, hasSetWidth ? { ...scaled, width: box.width } : scaled);
         });
@@ -1530,6 +1645,8 @@
         textDecoration: ann.underline ? "underline" : "none",
         color: ann.color,
         textAlign: ann.align || "left",
+        mixBlendMode: blendOf(ann) !== "normal" ? blendOf(ann) : undefined,
+        transform: rotationCss(ann),
       };
       if (ann.width) style.width = ann.width;
       else style.maxWidth = AUTO_TEXT_MAX_WIDTH;
@@ -1566,7 +1683,7 @@
           ) : (
             <span>{ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}</span>
           )}
-          {showHandles && !isEditing && <ResizeHandles handles={TEXT_RESIZE_HANDLES} onStart={startResize} />}
+          {showHandles && !isEditing && <ResizeHandles handles={TEXT_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
         </div>
       );
     }
@@ -1576,9 +1693,26 @@
     function boxGroupStyle(ann) {
       const shadow = imageShadowOffset(ann);
       const opacity = opacityOf(ann);
+      const blend = blendOf(ann);
+      // The shadow is drawn inside the rotated box, so its offset is turned
+      // back the other way: the light stays fixed on the page, as in Export.
+      const [shadowX, shadowY] = shadow ? rotatePoint(shadow.x, shadow.y, -angleOf(ann)) : [0, 0];
       return {
-        filter: shadow ? `drop-shadow(${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.color})` : undefined,
+        filter: shadow ? `drop-shadow(${shadowX}px ${shadowY}px ${shadow.blur}px ${shadow.color})` : undefined,
         opacity: opacity < 1 ? opacity : undefined,
+        // A rotated box is its own stacking context, which would trap this
+        // blend inside it; see boxOuterStyle, which carries it instead.
+        mixBlendMode: blend !== "normal" && !angleOf(ann) ? blend : undefined,
+      };
+    }
+
+    // Position, size and rotation of an image or rectangle's outer box.
+    function boxOuterStyle(ann) {
+      const blend = blendOf(ann);
+      return {
+        left: ann.x, top: ann.y, width: ann.width, height: ann.height,
+        transform: rotationCss(ann),
+        mixBlendMode: angleOf(ann) && blend !== "normal" ? blend : undefined,
       };
     }
 
@@ -1622,10 +1756,10 @@
     function AnnotationRect({ ann, tool, isSelected, showHandles, onPress, onUpdate, zoom }) {
       function startResize(handle, e) {
         const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-        const dragDelta = dragDeltaFrom(e, zoom);
+        const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
         trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, ev.shiftKey, MIN_RECT_SIZE));
+          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, ev.shiftKey, MIN_RECT_SIZE, angleOf(ann)));
         });
       }
 
@@ -1634,14 +1768,14 @@
         <div
           data-ann-id={ann.id}
           className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : "")}
-          style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
+          style={boxOuterStyle(ann)}
           onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
         >
           <div className="ze-ann-image-shadow" style={boxGroupStyle(ann)}>
             <div className="ze-ann-rect-fill" style={{ background: rectFillCss(ann), clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
             <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
           </div>
-          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
+          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
         </div>
       );
     }
@@ -1670,10 +1804,10 @@
       // Proportions stay locked on every handle unless Shift is held.
       function startResize(handle, e) {
         const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-        const dragDelta = dragDeltaFrom(e, zoom);
+        const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
         trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey));
+          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
         });
       }
 
@@ -1775,12 +1909,13 @@
         const winX = cropX * displayScaleX, winY = cropY * displayScaleY, winW = cropW * displayScaleX, winH = cropH * displayScaleY;
         return (
           <div className="ze-ann-image ze-ann-image--cropping" style={{ left: imageOriginX, top: imageOriginY, width: fullW, height: fullH }}>
+            {/* The part being cut away is see-through, so the page and the layers
+                under it show; the part inside the crop window is drawn solid. */}
             <img src={ann.src} alt="" draggable="false" className="ze-crop-full-img" />
-            <div className="ze-crop-mask" style={{ left: 0, top: 0, width: "100%", height: winY }} />
-            <div className="ze-crop-mask" style={{ left: 0, top: winY + winH, width: "100%", height: Math.max(0, fullH - (winY + winH)) }} />
-            <div className="ze-crop-mask" style={{ left: 0, top: winY, width: winX, height: winH }} />
-            <div className="ze-crop-mask" style={{ left: winX + winW, top: winY, width: Math.max(0, fullW - (winX + winW)), height: winH }} />
             <div className="ze-crop-window" style={{ left: winX, top: winY, width: winW, height: winH }} onMouseDown={startCropPan}>
+              <div className="ze-crop-window-clip">
+                <img src={ann.src} alt="" draggable="false" style={{ position: "absolute", left: -winX, top: -winY, width: fullW, height: fullH }} />
+              </div>
               <div className="ze-crop-handle ze-crop-handle-nw" onMouseDown={(e) => startCropCornerResize("nw", e)} />
               <div className="ze-crop-handle ze-crop-handle-ne" onMouseDown={(e) => startCropCornerResize("ne", e)} />
               <div className="ze-crop-handle ze-crop-handle-sw" onMouseDown={(e) => startCropCornerResize("sw", e)} />
@@ -1811,7 +1946,7 @@
         <div
           data-ann-id={ann.id}
           className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : "")}
-          style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
+          style={boxOuterStyle(ann)}
           onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
         >
           {/* Shadow sits on this wrapper, outside the edge clip so the clip
@@ -1833,7 +1968,7 @@
             )}
             <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
           </div>
-          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
+          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
           {hasOwnDuotone && (
             <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
               <defs>
@@ -1908,7 +2043,7 @@
     // the annotation layer (images + text boxes + freehand strokes) on
     // top of it.
     function ComposeCanvas({
-      pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, tool,
+      pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn, tool,
       pageFilter, onionGhostSrc, onionSkinOpacity,
       penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
       annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
@@ -2091,7 +2226,7 @@
       if (!page) {
         return (
           <div className="preview-empty">
-            No pages yet — load a PDF to get started.
+            No pages yet — load a PDF or start a new document to get started.
           </div>
         );
       }
@@ -2206,6 +2341,16 @@
               bleedIn={guideBleedIn}
             />
           )}
+          {centerGuideOn && canvasSize.width > 0 && (
+            // The page's vertical middle — where a two-page spread folds.
+            // Editor-only, like the other guides; never drawn into Export.
+            <svg className="ze-guides-overlay" width={canvasSize.width} height={canvasSize.height} aria-hidden="true">
+              <line
+                x1={canvasSize.width / 2} y1={0} x2={canvasSize.width / 2} y2={canvasSize.height}
+                stroke="#1d9bf0" strokeDasharray="6 4" strokeWidth="1.25"
+              />
+            </svg>
+          )}
         </div>
         </div>
       );
@@ -2275,7 +2420,7 @@
     const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
     const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-    function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onInsertPdfClick, onInsertBlank, loading }) {
+    function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
       const dragIndexRef = useRef(null);
       const bodyRef = useRef(null);
       const scrollDirRef = useRef(0); // -1 up, 0 idle, 1 down
@@ -2356,6 +2501,11 @@
                   {loading ? "Loading…" : "Load PDF"}
                 </button>
               )}
+              {pages.length === 0 && (
+                <button type="button" onClick={onNewDocClick} disabled={loading} title="Start a blank document with a paper size you choose">
+                  New Document
+                </button>
+              )}
               <button type="button" className="log-btn" onClick={onInsertPdfClick} disabled={loading || pages.length === 0} title="Insert another PDF's pages into this document">
                 Insert PDF
               </button>
@@ -2367,7 +2517,7 @@
           <div className="ze-sidebar-body" ref={bodyRef} onDragOver={handleContainerDragOver}>
             {pages.length === 0 && !loading ? (
               <div className="ze-sidebar-empty">
-                No pages yet. Click "Load PDF" to bring in a file.
+                No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.
               </div>
             ) : (
               <div className="ze-thumb-list">
@@ -2648,8 +2798,9 @@
           : {};
         onPatch({ ...otherEdgesOff, [effect.key]: on });
       };
-      // An ellipse already has its own outline, so the rectangle edge shapes are left out.
-      const available = IMAGE_EFFECTS.filter((effect) => !(effect.outline && isEllipse(ann)));
+      // An ellipse already has its own outline, so the rectangle edge shapes
+      // are left out; a rectangle has the Ellipse tool instead of the Ellipse edge.
+      const available = IMAGE_EFFECTS.filter((effect) => !(effect.outline && isEllipse(ann)) && !(effect === ELLIPSE_EFFECT && ann.type === "rect"));
       return (
         <React.Fragment>
           <div className="ze-format-field">
@@ -2667,10 +2818,10 @@
               ))}
             </div>
             <span className="ze-format-hint">
-              {isEllipse(ann) ? "All effects are baked into Export PDF too." : "Rounded, Torn Edge and Scissor Cut replace each other. All effects are baked into Export PDF too."}
+              {isEllipse(ann) ? "All effects are baked into Export PDF too." : "The edge shapes (Rounded, Ellipse, Torn Edge, Scissor Cut) replace each other. All effects are baked into Export PDF too."}
             </span>
           </div>
-          {available.filter((effect) => ann[effect.key]).map((effect) => (
+          {available.filter((effect) => ann[effect.key] && effect.controls.length > 0).map((effect) => (
             <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={onPatch} />
           ))}
         </React.Fragment>
@@ -2928,6 +3079,7 @@
                   />
                 </div>
               </div>
+              <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
             </div>
           </aside>
         );
@@ -2973,13 +3125,15 @@
                 <span className="ze-format-label">Size</span>
                 <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
               </div>
-              <ControlList controls={[OPACITY_CONTROL]} source={ann} onPatch={patch} />
+              <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
               <div className="ze-format-field">
                 <span className="ze-format-label">Crop</span>
                 <div className="ze-format-row">
                   <button
                     type="button"
                     className={"ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : "")}
+                    disabled={Boolean(angleOf(ann)) && !isCroppingThis}
+                    title={angleOf(ann) && !isCroppingThis ? "Set the rotation to 0° to crop" : undefined}
                     onClick={() => onToggleCrop(ann.id)}
                   >
                     {isCroppingThis ? "Done Cropping" : "Crop"}
@@ -3072,6 +3226,7 @@
                 <span className="ze-format-label">Size</span>
                 <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
               </div>
+              <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
               <ControlList controls={RECT_CONTROLS} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} />
               <div className="ze-format-field">
@@ -3522,6 +3677,61 @@
       );
     }
 
+    // ---- New blank document — pick a paper size, orientation and page
+    // count instead of opening an existing PDF. `onOpenPdf` (optional) adds
+    // an "Open a PDF instead" way out, for when this was reached via New Project.
+    function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
+      const [presetKey, setPresetKey] = useState("a5");
+      const [orientation, setOrientation] = useState("portrait");
+      const [pageCountText, setPageCountText] = useState("1");
+      if (!open) return null;
+      const preset = NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
+      const landscape = orientation === "landscape";
+      const width = landscape ? preset.height : preset.width;
+      const height = landscape ? preset.width : preset.height;
+      const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
+      const mm = (pts) => Math.round(pts / POINTS_PER_INCH * 25.4);
+      const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
+      return (
+        <div className="ze-modal-backdrop" onMouseDown={onCancel}>
+          <div className="ze-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="ze-modal-head">New document</div>
+            <div className="ze-modal-body">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Paper size</span>
+                <select className="ze-format-select" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
+                  {NEW_DOCUMENT_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </select>
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Orientation</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : "")} onClick={() => setOrientation("portrait")}>Portrait</button>
+                  <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : "")} onClick={() => setOrientation("landscape")}>Landscape</button>
+                </div>
+              </div>
+              <label className="ze-format-field">
+                <span className="ze-format-label">Pages</span>
+                <input
+                  type="number" className="ze-format-number" min="1" max={MAX_NEW_DOCUMENT_PAGES}
+                  value={pageCountText} onChange={(e) => setPageCountText(e.target.value)}
+                  onBlur={() => setPageCountText(String(pageCount))}
+                />
+              </label>
+              <span className="ze-format-hint">
+                {mm(width)} × {mm(height)} mm ({inches(width)} × {inches(height)} in). You can add or remove pages later.
+              </span>
+            </div>
+            <div className="ze-modal-actions">
+              {onOpenPdf && <button type="button" onClick={onOpenPdf}>Open a PDF instead</button>}
+              <button type="button" onClick={onCancel}>Cancel</button>
+              <button type="button" className="btn-solid" onClick={() => onCreate({ width, height, pageCount })}>Create</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function ConfirmDialog({ step, onProceed, onYes, onCancel }) {
       if (!step) return null;
       return (
@@ -3550,6 +3760,7 @@
 
     function App() {
       const [guidesOn, setGuidesOn] = useState(false);
+      const [centerGuideOn, setCenterGuideOn] = useState(false);
       const [guideFormat, setGuideFormat] = useState("match");
       const [guideMarginIn, setGuideMarginIn] = useState(DEFAULT_GUIDE_MARGIN_IN);
       const [guideBleedIn, setGuideBleedIn] = useState(DEFAULT_GUIDE_BLEED_IN);
@@ -3596,6 +3807,10 @@
       // Insert PDF — holds the chosen file while the "Insert after page"
       // dialog is open; the actual insert only happens on confirm.
       const [pendingInsertFile, setPendingInsertFile] = useState(null);
+      const [newDocOpen, setNewDocOpen] = useState(false);
+      // True when the New Document dialog was reached through New Project
+      // (so it offers "Open a PDF instead"); false from the empty-state button.
+      const [newDocFromProject, setNewDocFromProject] = useState(false);
       const [insertAfterPage, setInsertAfterPage] = useState(0);
       const [savingProject, setSavingProject] = useState(false);
       // Two-step "this erases your work" confirmation, shared by New
@@ -3843,6 +4058,39 @@
         fileInputRef.current && fileInputRef.current.click();
       }
 
+      // Starts a fresh document of blank pages at the chosen size, replacing
+      // whatever was open (the caller has already confirmed that where it
+      // matters). Orientation is baked into width/height rather than a
+      // rotation, so page 1 isn't "rotated" from the user's point of view.
+      function handleCreateBlankDocument({ width, height, pageCount }) {
+        setNewDocOpen(false);
+        setErrorMsg(null);
+        pdfDocsRef.current = {};
+        pageSizeRef.current = { width, height }; // new blank pages added later match this
+        const thumb = makeBlankThumb(width, height, 0);
+        const newPages = Array.from({ length: pageCount }, () => ({
+          key: nextKeyRef.current++,
+          isBlank: true,
+          rotation: 0,
+          width,
+          height,
+          dataUrl: thumb,
+          annotations: [],
+        }));
+        setPages(newPages);
+        setSelectedIdx(0);
+        setSelectedPageIndices([]);
+        setSelectedAnnId(null);
+        setSelectedAnnIds([]);
+        setUndoStack([]);
+        setRedoStack([]);
+      }
+
+      function handleNewDocumentOpenPdf() {
+        setNewDocOpen(false);
+        handleLoadClick();
+      }
+
       function handleFileInputChange(e) {
         const file = e.target.files && e.target.files[0];
         e.target.value = ""; // allow re-selecting the same file later
@@ -3954,7 +4202,7 @@
             docs,
             pages: pages.map(({ dataUrl, ...rest }) => rest),
             settings: {
-              guidesOn, guideFormat, guideMarginIn, guideBleedIn,
+              guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
               onionSkinOn, onionSkinOpacity,
             },
           };
@@ -4004,7 +4252,7 @@
         const action = confirmAction;
         setConfirmAction(null);
         setConfirmStep(1);
-        if (action === "newProject") handleLoadClick();
+        if (action === "newProject") { setNewDocFromProject(true); setNewDocOpen(true); }
         else if (action === "loadProject") openProjectPicker();
       }
 
@@ -4070,6 +4318,7 @@
 
           const s = project.settings || {};
           if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn);
+          if (s.centerGuideOn !== undefined) setCenterGuideOn(s.centerGuideOn);
           if (s.guideFormat !== undefined) setGuideFormat(s.guideFormat);
           if (s.guideMarginIn !== undefined) setGuideMarginIn(s.guideMarginIn);
           if (s.guideBleedIn !== undefined) setGuideBleedIn(s.guideBleedIn);
@@ -4286,7 +4535,7 @@
         function handleKeyDown(e) {
           const tag = (e.target && e.target.tagName) || "";
           if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return; // let native undo/typing run inside text fields
-          if (pendingInsertFile || confirmAction || shortcutsOpen) return; // a modal is up — its own buttons handle input
+          if (pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen) return; // a modal is up — its own buttons handle input
           const key = e.key.toLowerCase();
           const mod = e.ctrlKey || e.metaKey;
 
@@ -4348,7 +4597,7 @@
         }
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-      }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction, shortcutsOpen]);
+      }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction, shortcutsOpen, newDocOpen]);
 
       // Ctrl+V with an image on the system clipboard (a screenshot, or an
       // image copied from another app/page) drops it onto the current page
@@ -4361,7 +4610,7 @@
         function handlePaste(e) {
           const tag = (e.target && e.target.tagName) || "";
           if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return;
-          if (pendingInsertFile || confirmAction || shortcutsOpen || selectedIdx === null) return;
+          if (pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen || selectedIdx === null) return;
           const items = e.clipboardData && e.clipboardData.items;
           if (!items) return;
           const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
@@ -4371,7 +4620,7 @@
         }
         window.addEventListener("paste", handlePaste);
         return () => window.removeEventListener("paste", handlePaste);
-      }, [selectedIdx, pendingInsertFile, confirmAction, shortcutsOpen]);
+      }, [selectedIdx, pendingInsertFile, confirmAction, shortcutsOpen, newDocOpen]);
 
       // ---- Annotations (Compose mode) ------------------------------------
       function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
@@ -4670,6 +4919,7 @@
               onDelete={handleDeleteThumbnail}
               onReorder={handleReorder}
               onLoadClick={handleLoadClick}
+              onNewDocClick={() => { setNewDocFromProject(false); setNewDocOpen(true); }}
               onInsertPdfClick={handleInsertPdfClick}
               onInsertBlank={handleInsertBlank}
               loading={loading}
@@ -4735,6 +4985,19 @@
                         <path d="M3 17l9 5 9-5" />
                       </svg>
                     </button>
+                    <button
+                      type="button"
+                      className={"ze-tool-icon-btn" + (centerGuideOn ? " active" : "")}
+                      aria-pressed={centerGuideOn}
+                      aria-label="Center guide"
+                      title={centerGuideOn ? "Hide the center guide" : "Show a guide down the middle of the page (for covers and two-page spreads)"}
+                      onClick={() => setCenterGuideOn((on) => !on)}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="14" rx="1" />
+                        <path d="M12 3v18" strokeDasharray="2.5 2.5" />
+                      </svg>
+                    </button>
                   </div>
                   <div className="ze-zoom-control">
                     <span className="ze-format-label">Zoom (%)</span>
@@ -4778,6 +5041,7 @@
                     pdfDocsRef={pdfDocsRef}
                     page={selectedPage}
                     guidesOn={guidesOn}
+                    centerGuideOn={centerGuideOn}
                     guideFormat={guideFormat}
                     guideMarginIn={guideMarginIn}
                     guideBleedIn={guideBleedIn}
@@ -4907,6 +5171,12 @@
             onCancel={() => setPendingInsertFile(null)}
           />
 
+          <NewDocumentDialog
+            open={newDocOpen}
+            onCreate={handleCreateBlankDocument}
+            onOpenPdf={newDocFromProject ? handleNewDocumentOpenPdf : undefined}
+            onCancel={() => setNewDocOpen(false)}
+          />
           <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
           <ConfirmDialog
             step={confirmAction ? confirmStep : 0}
