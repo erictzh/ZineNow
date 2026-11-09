@@ -2019,6 +2019,35 @@
       return bytes.buffer;
     }
 
+    // ---- Fonts uploaded by the user. Each is registered with the browser
+    // (so live text and the export canvas can both use it) and kept here as
+    // base64 so a saved project carries the font files it uses and looks
+    // the same on a PC that doesn't have them installed.
+    const customFontStore = []; // [{ family, data }]
+
+    async function registerCustomFont(family, bytes) {
+      const face = new FontFace(family, bytes.slice(0));
+      await face.load();
+      document.fonts.add(face);
+    }
+
+    // Reads a chosen font file, registers it and returns its family name
+    // (taken from the file name, made unique among `takenNames`).
+    async function addCustomFontFile(file, takenNames) {
+      if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) throw new Error("Choose a .ttf, .otf, .woff or .woff2 font file.");
+      const bytes = await file.arrayBuffer();
+      const base = file.name.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/['"\\]/g, "").trim() || "Custom font";
+      let family = base, n = 2;
+      while (takenNames.includes(family)) family = `${base} ${n++}`;
+      try {
+        await registerCustomFont(family, bytes);
+      } catch (err) {
+        throw new Error("That file isn't a font the browser can read.");
+      }
+      customFontStore.push({ family, data: arrayBufferToBase64(bytes) });
+      return family;
+    }
+
     // Renders a blank white page straight to a data URL — no pdf.js
     // involved, since a blank page has no underlying PDF page to render.
 
@@ -3248,6 +3277,7 @@
       const [status, setStatus] = useState(null); // { type: 'success'|'error', message }
       const [loadingFonts, setLoadingFonts] = useState(false);
       const containerRef = useRef(null);
+      const uploadInputRef = useRef(null);
 
       useEffect(() => { setQuery(value || ""); }, [value]);
 
@@ -3272,6 +3302,21 @@
         onChange(font);
         setQuery(font);
         setOpen(false);
+      }
+
+      async function handleUploadFont(e) {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        setStatus(null);
+        try {
+          const family = await addCustomFontFile(file, fontOptions);
+          setFontOptions((prev) => Array.from(new Set([...prev, family])).sort((a, b) => a.localeCompare(b)));
+          selectFont(family);
+          setStatus({ type: "success", message: `Added "${family}". It will be saved inside the project.` });
+        } catch (err) {
+          setStatus({ type: "error", message: err.message });
+        }
       }
 
       async function handleLoadLocalFonts() {
@@ -3329,6 +3374,10 @@
           <button type="button" className="ze-fontbox-load" onClick={handleLoadLocalFonts} disabled={loadingFonts}>
             {loadingFonts ? "Loading…" : "+ Load Local System Fonts"}
           </button>
+          <button type="button" className="ze-fontbox-load" onClick={() => uploadInputRef.current && uploadInputRef.current.click()} title="Add a font file. It is saved inside the project, so it still works on another PC.">
+            + Upload Font File…
+          </button>
+          <input ref={uploadInputRef} type="file" accept=".ttf,.otf,.woff,.woff2" style={{ display: "none" }} onChange={handleUploadFont} />
           {status && (
             <span className={"ze-format-hint" + (status.type === "error" ? " is-error" : "")}>{status.message}</span>
           )}
@@ -4995,9 +5044,14 @@
           for (const docId of Object.keys(pdfDocsRef.current)) {
             docs[docId] = arrayBufferToBase64(pdfDocsRef.current[docId].bytes);
           }
+          // Only the uploaded fonts some text actually uses are stored.
+          const usedFamilies = new Set();
+          pages.forEach((p) => (p.annotations || []).forEach((a) => { if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily); }));
+          const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
           const project = {
             version: 2, // 2: the annotation list is the stacking order
             docs,
+            fonts,
             pages: pages.map(({ dataUrl, ...rest }) => rest),
             settings: {
               guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
@@ -5075,6 +5129,19 @@
             newDocsMap[docId] = { doc, bytes };
           }
           pdfDocsRef.current = newDocsMap;
+
+          // Fonts the project carried: registered before anything is drawn,
+          // so the text lays out in them rather than in a fallback.
+          const loadedFamilies = [];
+          for (const font of project.fonts || []) {
+            if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) { loadedFamilies.push(font.family); continue; }
+            try {
+              await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
+              customFontStore.push({ family: font.family, data: font.data });
+              loadedFamilies.push(font.family);
+            } catch (err) { /* a damaged font falls back to the default; the text is still there */ }
+          }
+          if (loadedFamilies.length) setFontOptions((prev) => Array.from(new Set([...prev, ...loadedFamilies])).sort((a, b) => a.localeCompare(b)));
 
           const newPages = await Promise.all(project.pages.map(async (p) => {
             const dataUrl = p.isBlank
