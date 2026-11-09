@@ -51,6 +51,66 @@
       return (ev) => ({ dx: (ev.clientX - startX) / zoom, dy: (ev.clientY - startY) / zoom });
     }
 
+    const DRAG_THRESHOLD = 4; // screen px of movement before a press counts as a drag
+    const MIN_RESIZE_SIZE = 20;
+    const AUTO_TEXT_MAX_WIDTH = 320; // a text box with no set width wraps here, on screen and in export
+
+    // Follows the mouse until release, wherever it goes on the page.
+    function trackPointerDrag(onMove, onUp) {
+      const move = (ev) => onMove(ev);
+      const up = (ev) => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        if (onUp) onUp(ev);
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    }
+
+    function translatedAnnotation(ann, dx, dy) {
+      return ann.type === "stroke"
+        ? { ...ann, points: ann.points.map(([px, py]) => [px + dx, py + dy]) }
+        : { ...ann, x: ann.x + dx, y: ann.y + dy };
+    }
+
+    // A box after dragging one of its handles. `handle` is a compass name
+    // ("e", "nw"...); the opposite side or corner stays where it is.
+    function resizedBox(box, handle, dx, dy, keepAspect) {
+      const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
+      const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
+      let width = box.width + signX * dx;
+      let height = box.height + signY * dy;
+      if (keepAspect) {
+        const scaleX = width / box.width, scaleY = height / box.height;
+        const minScale = MIN_RESIZE_SIZE / Math.min(box.width, box.height);
+        const scale = Math.max(minScale, signX && signY ? Math.max(scaleX, scaleY) : signX ? scaleX : scaleY);
+        width = box.width * scale;
+        height = box.height * scale;
+      } else {
+        width = Math.max(MIN_RESIZE_SIZE, width);
+        height = Math.max(MIN_RESIZE_SIZE, height);
+      }
+      return {
+        x: signX < 0 ? box.x + box.width - width : signX > 0 ? box.x : box.x + (box.width - width) / 2,
+        y: signY < 0 ? box.y + box.height - height : signY > 0 ? box.y : box.y + (box.height - height) / 2,
+        width,
+        height,
+      };
+    }
+
+    // The character position under a screen point inside `element`.
+    function textOffsetAtPoint(x, y, element, textLength) {
+      let node = null, offset = 0;
+      if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y);
+        if (position) { node = position.offsetNode; offset = position.offset; }
+      } else if (document.caretRangeFromPoint) {
+        const range = document.caretRangeFromPoint(x, y);
+        if (range) { node = range.startContainer; offset = range.startOffset; }
+      }
+      return node && node.nodeType === Node.TEXT_NODE && element.contains(node) ? offset : textLength;
+    }
+
     // Guides — trim/margin/bleed presets, in inches. Page geometry
     // (page.width/height, canvas px at MAIN_SCALE) is already in points
     // (72/in), same unit pdf.js and PDFs use, so presets convert cleanly.
@@ -805,7 +865,7 @@
       const x = ann.x * scaleFactor;
       const y = ann.y * scaleFactor;
       const padX = 4 * scaleFactor, padY = 2 * scaleFactor;
-      const maxWidthCap = 320 * scaleFactor;
+      const maxWidthCap = AUTO_TEXT_MAX_WIDTH * scaleFactor;
 
       let boxWidth;
       if (ann.width) {
@@ -1197,46 +1257,67 @@
       return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
     }
 
-    // ---- One text annotation --------------------------------------------
-    // Plain non-interactive <div> when idle (so a mousedown can mean "start
-    // dragging" without fighting a native text cursor); swaps to a real
-    // <textarea> only while editing. Double-click (or any click while the
-    // Text tool is active) enters edit mode.
-    function AnnotationText({ ann, tool, isSelected, startEditing, onSelect, onUpdate, onSwitchToTextTool, zoom }) {
-      const [editing, setEditing] = useState(!!startEditing);
+    // Selection handles, positioned by their compass name.
+    const ALL_RESIZE_HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+    // A text box's height always follows its text, so it has no top/bottom handles.
+    const TEXT_RESIZE_HANDLES = ["nw", "ne", "e", "se", "sw", "w"];
 
-      // Click vs. drag are told apart by movement, not by click count: a
-      // mousedown that releases with barely any movement is a click
-      // (select + edit + switch the toolbar to Text); one that moves past
-      // a small threshold first is a drag (just reposition, never edit).
-      // Selection itself fires immediately on mousedown either way, so the
-      // box highlights the instant you press down, same as before.
+    function ResizeHandles({ handles, onStart }) {
+      return handles.map((handle) => (
+        <div
+          key={handle}
+          className={"ze-resize-handle ze-resize-handle-" + handle}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onStart(handle, e); }}
+        />
+      ));
+    }
+
+    // ---- One text annotation --------------------------------------------
+    // The text itself always lays out the box. While editing it's hidden
+    // and a transparent <textarea> fills that same box, so typing looks
+    // exactly like the finished text and the box grows as it would.
+    function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate }) {
+      const boxRef = useRef(null);
+      const inputRef = useRef(null);
+      const pendingCaretRef = useRef(null);
+
+      useLayoutEffect(() => {
+        if (!isEditing || !inputRef.current) return;
+        const caret = pendingCaretRef.current != null ? pendingCaretRef.current : ann.text.length;
+        pendingCaretRef.current = null;
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(caret, caret);
+      }, [isEditing]);
+
+      function startEditingAt(x, y) {
+        pendingCaretRef.current = textOffsetAtPoint(x, y, boxRef.current, ann.text.length);
+        onStartEdit(ann.id);
+      }
+
       function handleMouseDown(e) {
-        if (tool !== "select" && tool !== "text") return; // other tools (pen/highlighter/etc.) shouldn't drag or select text boxes
-        e.preventDefault();
-        e.stopPropagation();
-        onSelect(ann.id, e.shiftKey);
+        if (isEditing) { e.stopPropagation(); return; }
+        if (tool !== "select" && tool !== "text") return; // other tools (pen/highlighter/etc.) work straight through text boxes
+        const { clientX, clientY } = e;
+        onPress(e, ann, () => { if (tool === "text") startEditingAt(clientX, clientY); });
+      }
+
+      function startResize(handle, e) {
+        const orig = { x: ann.x, y: ann.y, width: boxRef.current.offsetWidth, height: boxRef.current.offsetHeight };
+        const origFontSize = ann.fontSize || 16;
+        const hasSetWidth = Boolean(ann.width);
         const dragDelta = dragDeltaFrom(e, zoom);
-        const origX = ann.x, origY = ann.y;
-        let moved = false;
-        const DRAG_THRESHOLD = 4; // screen px, so it feels the same at any zoom
-        const move = (ev) => {
+        trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
-          if (moved) onUpdate(ann.id, { x: origX + dx, y: origY + dy });
-        };
-        const up = () => {
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-          if (!moved) {
-            // A genuine click, not a drag — enter edit mode and make the
-            // toolbar/panel reflect Text, matching what's now happening.
-            onSwitchToTextTool && onSwitchToTextTool();
-            setEditing(true);
+          if (handle === "e" || handle === "w") {
+            const box = resizedBox(orig, handle, dx, dy, false);
+            onUpdate(ann.id, { x: box.x, width: box.width });
+            return;
           }
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
+          // Corners scale the text; the box's width scales along with it.
+          const box = resizedBox(orig, handle, dx, dy, true);
+          const scaled = { x: box.x, y: box.y, fontSize: Math.max(6, Math.round(origFontSize * box.width / orig.width)) };
+          onUpdate(ann.id, hasSetWidth ? { ...scaled, width: box.width } : scaled);
+        });
       }
 
       const style = {
@@ -1250,62 +1331,42 @@
         color: ann.color,
         textAlign: ann.align || "left",
       };
-      // Explicit size only if the box has been manually resized at least
-      // once (see onMouseUp below) — otherwise both stay auto/shrink-to-fit,
-      // matching the original behavior for untouched boxes.
       if (ann.width) style.width = ann.width;
-      if (ann.height) style.height = ann.height;
-
-      if (editing) {
-        return (
-          <textarea
-            className="ze-ann-text ze-ann-text--editing"
-            style={style}
-            autoFocus
-            value={ann.text}
-            onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
-            onBlur={(e) => {
-              // Always re-sync size on the way out, not just after an
-              // explicit resize drag — otherwise a box that was never
-              // manually resized snaps from the textarea's actual on-screen
-              // size down to the plain <div>'s shrink-to-fit size the
-              // instant you click away, which read as the box "shrinking
-              // itself" even though nothing was actually lost.
-              onUpdate(ann.id, { width: e.target.offsetWidth, height: e.target.offsetHeight });
-              setEditing(false);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => {
-              // Fires after any drag on the textarea, including a resize
-              // drag via its native corner handle — harmless to call when
-              // nothing was actually resized, since it just re-syncs the
-              // current size. Without this, a resize is lost the moment
-              // editing ends and the box swaps back to the idle <div>.
-              onUpdate(ann.id, { width: e.target.offsetWidth, height: e.target.offsetHeight });
-            }}
-            onKeyDown={(e) => {
-              // Escape steps back to "selected, not editing" — the only
-              // way to reach that state at all, since a click either edits
-              // the box (not moved) or drags it (moved), and clicking away
-              // deselects entirely. Needed so Ctrl+C has something to copy:
-              // a text box's own Ctrl+C is otherwise unreachable, since
-              // while you're still focused in the textarea, Ctrl+C is
-              // deliberately left alone for the browser's native "copy the
-              // highlighted text" behavior instead.
-              if (e.key === "Escape") { e.stopPropagation(); e.currentTarget.blur(); }
-            }}
-          />
-        );
-      }
+      else style.maxWidth = AUTO_TEXT_MAX_WIDTH;
 
       return (
         <div
-          className={"ze-ann-text" + (isSelected ? " is-selected" : "")}
+          ref={boxRef}
+          data-ann-id={ann.id}
+          className={"ze-ann-text" + (isSelected ? " is-selected" : "") + (isEditing ? " is-editing" : "")}
           style={style}
           onMouseDown={handleMouseDown}
-          onDoubleClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            if (tool === "select" && !isEditing) startEditingAt(e.clientX, e.clientY);
+          }}
         >
-          {ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}
+          {isEditing ? (
+            <React.Fragment>
+              {/* The zero-width space gives a trailing blank line some height. */}
+              <span className="ze-ann-text-mirror">{ann.text + "​"}</span>
+              <textarea
+                ref={inputRef}
+                className="ze-ann-text-input"
+                value={ann.text}
+                spellCheck="false"
+                onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
+                onBlur={onFinishEdit}
+                onMouseDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { e.stopPropagation(); onFinishEdit(); }
+                }}
+              />
+            </React.Fragment>
+          ) : (
+            <span>{ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>}</span>
+          )}
+          {showHandles && !isEditing && <ResizeHandles handles={TEXT_RESIZE_HANDLES} onStart={startResize} />}
         </div>
       );
     }
@@ -1318,7 +1379,7 @@
     // add/move/resize/select/delete only, deliberately scoped that way.
     const MIN_CROP_SIZE = 20; // natural px — keeps a crop drag from collapsing to nothing
 
-    function AnnotationImage({ ann, tool, isSelected, isPrimary, isCropping, onSelect, onUpdate, onToggleCrop, pageFilter, zoom }) {
+    function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
       const halftoneCanvasRef = useRef(null);
       const textureCanvasRef = useRef(null);
       const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
@@ -1328,42 +1389,18 @@
       // working with no migration needed.
       const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
       const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
+      // On-page size of one source pixel. The two differ once an image has
+      // been stretched with Shift, which Export PDF draws the same way.
+      const displayScaleX = ann.width / cropW, displayScaleY = ann.height / cropH;
 
-      function startDrag(e) {
-        if (tool !== "select") return;
-        e.preventDefault();
-        e.stopPropagation();
-        onSelect(ann.id, e.shiftKey);
+      // Proportions stay locked on every handle unless Shift is held.
+      function startResize(handle, e) {
+        const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
         const dragDelta = dragDeltaFrom(e, zoom);
-        const origX = ann.x, origY = ann.y;
-        const move = (ev) => {
+        trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          onUpdate(ann.id, { x: origX + dx, y: origY + dy });
-        };
-        const up = () => {
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
-      }
-
-      function startResize(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        const dragDelta = dragDeltaFrom(e, zoom);
-        const origWidth = ann.width;
-        const aspect = cropH / cropW; // the CROPPED aspect ratio, not the source image's
-        const move = (ev) => {
-          const newWidth = Math.max(20, origWidth + dragDelta(ev).dx);
-          onUpdate(ann.id, { width: newWidth, height: newWidth * aspect });
-        };
-        const up = () => {
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
+          onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey));
+        });
       }
 
       // Both crop gestures work in a fixed "px on screen per natural px"
@@ -1374,37 +1411,29 @@
       function startCropPan(e) {
         e.preventDefault();
         e.stopPropagation();
-        const scale = ann.width / cropW;
         const dragDelta = dragDeltaFrom(e, zoom);
         const origCropX = cropX, origCropY = cropY;
-        const move = (ev) => {
+        trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          const dxNat = dx / scale;
-          const dyNat = dy / scale;
+          const dxNat = dx / displayScaleX;
+          const dyNat = dy / displayScaleY;
           const newCropX = Math.min(Math.max(0, origCropX - dxNat), Math.max(0, naturalW - cropW));
           const newCropY = Math.min(Math.max(0, origCropY - dyNat), Math.max(0, naturalH - cropH));
           onUpdate(ann.id, { cropX: newCropX, cropY: newCropY });
-        };
-        const up = () => {
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
+        });
       }
 
       function startCropCornerResize(corner, e) {
         e.preventDefault();
         e.stopPropagation();
-        const scale = ann.width / cropW;
-        const imageOriginX = ann.x - cropX * scale;
-        const imageOriginY = ann.y - cropY * scale;
+        const imageOriginX = ann.x - cropX * displayScaleX;
+        const imageOriginY = ann.y - cropY * displayScaleY;
         const dragDelta = dragDeltaFrom(e, zoom);
         const orig = { cropX, cropY, cropW, cropH };
-        const move = (ev) => {
+        trackPointerDrag((ev) => {
           const { dx, dy } = dragDelta(ev);
-          const dxNat = dx / scale;
-          const dyNat = dy / scale;
+          const dxNat = dx / displayScaleX;
+          const dyNat = dy / displayScaleY;
           let cx = orig.cropX, cy = orig.cropY, cw = orig.cropW, ch = orig.cropH;
           if (corner === "se") { cw = orig.cropW + dxNat; ch = orig.cropH + dyNat; }
           else if (corner === "ne") { cy = orig.cropY + dyNat; cw = orig.cropW + dxNat; ch = orig.cropH - dyNat; }
@@ -1418,16 +1447,10 @@
           ch = Math.min(ch, naturalH - cy);
           onUpdate(ann.id, {
             cropX: cx, cropY: cy, cropW: cw, cropH: ch,
-            x: imageOriginX + cx * scale, y: imageOriginY + cy * scale,
-            width: cw * scale, height: ch * scale,
+            x: imageOriginX + cx * displayScaleX, y: imageOriginY + cy * displayScaleY,
+            width: cw * displayScaleX, height: ch * displayScaleY,
           });
-        };
-        const up = () => {
-          window.removeEventListener("mousemove", move);
-          window.removeEventListener("mouseup", up);
-        };
-        window.addEventListener("mousemove", move);
-        window.addEventListener("mouseup", up);
+        });
       }
 
       // An image's own filter (if it has one — see effectiveImageFilter)
@@ -1482,11 +1505,10 @@
       // every crop adjustment goes through onUpdate, so it's just another
       // undo-able edit like any other, rather than its own modal state.
       if (isCropping) {
-        const scale = ann.width / cropW;
-        const imageOriginX = ann.x - cropX * scale;
-        const imageOriginY = ann.y - cropY * scale;
-        const fullW = naturalW * scale, fullH = naturalH * scale;
-        const winX = cropX * scale, winY = cropY * scale, winW = cropW * scale, winH = cropH * scale;
+        const imageOriginX = ann.x - cropX * displayScaleX;
+        const imageOriginY = ann.y - cropY * displayScaleY;
+        const fullW = naturalW * displayScaleX, fullH = naturalH * displayScaleY;
+        const winX = cropX * displayScaleX, winY = cropY * displayScaleY, winW = cropW * displayScaleX, winH = cropH * displayScaleY;
         return (
           <div className="ze-ann-image ze-ann-image--cropping" style={{ left: imageOriginX, top: imageOriginY, width: fullW, height: fullH }}>
             <img src={ann.src} alt="" draggable="false" className="ze-crop-full-img" />
@@ -1524,16 +1546,12 @@
       const ownDuotoneDarkRgb = hasOwnDuotone ? hexToRgb(imgFilter.darkColor || DEFAULT_DUOTONE_DARK) : null;
       const ownDuotoneLightRgb = hasOwnDuotone ? hexToRgb(imgFilter.lightColor || DEFAULT_DUOTONE_LIGHT) : null;
 
-      // Un-cropped display scale/offset — when there's no crop these
-      // collapse to (0,0) and the image's natural size, so an uncropped
-      // image renders exactly as it always did.
-      const scale = ann.width / cropW;
-
       return (
         <div
+          data-ann-id={ann.id}
           className={"ze-ann-image" + (isSelected ? " is-selected" : "")}
           style={{ left: ann.x, top: ann.y, width: ann.width, height: ann.height }}
-          onMouseDown={(e) => { if (tool === "select") startDrag(e); else e.stopPropagation(); }}
+          onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
         >
           {/* Shadow sits on this wrapper, outside the edge clip so the clip
               can't cut it off, and away from the resize handle. It stays
@@ -1548,7 +1566,7 @@
                   src={ann.src}
                   alt=""
                   draggable="false"
-                  style={{ position: "absolute", left: -cropX * scale, top: -cropY * scale, width: naturalW * scale, height: naturalH * scale }}
+                  style={{ position: "absolute", left: -cropX * displayScaleX, top: -cropY * displayScaleY, width: naturalW * displayScaleX, height: naturalH * displayScaleY }}
                 />
               </div>
             )}
@@ -1568,9 +1586,7 @@
               </svg>
             )}
           </div>
-          {isPrimary && tool === "select" && (
-            <div className="ze-ann-image-handle" onMouseDown={startResize} title="Drag to resize" />
-          )}
+          {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} />}
           {hasOwnDuotone && (
             <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
               <defs>
@@ -1594,18 +1610,19 @@
     // it when selected. The stroke itself only captures clicks in Select
     // tool (pointer-events toggle below) so it doesn't intercept
     // drawing/text clicks meant for the page background.
-    function StrokeShape({ ann, tool, isSelected, onSelect }) {
+    function StrokeShape({ ann, tool, isSelected, onPress }) {
       const isHi = ann.tool === "highlighter";
       const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
       const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
       const taper = ann.taper || 0;
       const box = bboxOf(ann);
-      const handleMouseDown = (e) => { if (tool === "select") { e.stopPropagation(); onSelect(ann.id, e.shiftKey); } };
-      const selectCursor = { cursor: tool === "select" ? "pointer" : "default" };
+      const handleMouseDown = (e) => { if (tool === "select") onPress(e, ann); };
+      const selectCursor = { cursor: tool === "select" ? "move" : "default" };
       return (
         <React.Fragment>
           {taper > 0 ? (
             <path
+              data-ann-id={ann.id}
               d={taperedPathD(ann.points, width, taper)}
               fill={color}
               fillOpacity={isHi ? 0.45 : 1}
@@ -1615,6 +1632,7 @@
             />
           ) : (
             <path
+              data-ann-id={ann.id}
               d={smoothPathD(ann.points)}
               fill="none"
               stroke={color}
@@ -1645,12 +1663,15 @@
       pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, tool,
       pageFilter, onionGhostSrc, onionSkinOpacity,
       penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
-      annotations, selectedAnnId, selectedAnnIds, autoEditAnnId, croppingAnnId,
-      onSelectAnnotation, onAddText, onAddStroke, onUpdateAnnotation, onEraseStroke, onSwitchToTextTool, onToggleCrop,
+      annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
+      onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onAddText, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
+      onStartTextEdit, onFinishTextEdit,
       zoom,
     }) {
       const canvasRef = useRef(null);
+      const layerRef = useRef(null);
       const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+      const [dragRect, setDragRect] = useState(null); // the box being dragged out on empty page
       const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
       const [drawTick, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
 
@@ -1704,14 +1725,11 @@
           const taper = tool === "highlighter" ? highlighterTaper : penTaper;
           drawingRef.current = { tool, color, width, taper, points: [[start.x, start.y]] };
           setDrawTick((t) => t + 1);
-          const move = (ev) => {
+          trackPointerDrag((ev) => {
             const p = overlayPoint(ev);
             drawingRef.current.points.push([p.x, p.y]);
             setDrawTick((t) => t + 1);
-          };
-          const up = () => {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("mouseup", up);
+          }, () => {
             if (drawingRef.current && drawingRef.current.points.length > 1) {
               onAddStroke({
                 tool: drawingRef.current.tool,
@@ -1723,9 +1741,7 @@
             }
             drawingRef.current = null;
             setDrawTick((t) => t + 1);
-          };
-          window.addEventListener("mousemove", move);
-          window.addEventListener("mouseup", up);
+          });
           return;
         }
         if (tool === "eraser") {
@@ -1739,36 +1755,82 @@
             });
           };
           tryErase([overlayPoint(e).x, overlayPoint(e).y]);
-          const move = (ev) => {
+          trackPointerDrag((ev) => {
             const p = overlayPoint(ev);
             tryErase([p.x, p.y]);
-          };
-          const up = () => {
-            window.removeEventListener("mousemove", move);
-            window.removeEventListener("mouseup", up);
-          };
-          window.addEventListener("mousemove", move);
-          window.addEventListener("mouseup", up);
+          });
           return;
         }
-        // Select or Text tool, clicking empty background: deselect. (Pen/
-        // Highlighter/Eraser all returned above, so only these two tools
-        // ever reach here.)
-        onSelectAnnotation(null);
+        // Move or Text tool, pressing empty page (the other tools returned
+        // above). A click that ends a text edit does only that.
+        e.preventDefault();
+        if (editingAnnId !== null) {
+          onFinishTextEdit();
+          onSelectAnnotation(null);
+          return;
+        }
+        const additive = e.shiftKey;
+        if (!additive) onSelectAnnotation(null);
+        const start = overlayPoint(e);
+        let rect = null;
+        trackPointerDrag((ev) => {
+          const p = overlayPoint(ev);
+          if (!rect && Math.hypot(p.x - start.x, p.y - start.y) * zoom <= DRAG_THRESHOLD) return;
+          rect = {
+            x: Math.min(start.x, p.x), y: Math.min(start.y, p.y),
+            width: Math.abs(p.x - start.x), height: Math.abs(p.y - start.y),
+          };
+          setDragRect(rect);
+        }, () => {
+          setDragRect(null);
+          if (tool === "text") {
+            // A click makes a text box that fits its text; a drag sets its width.
+            if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
+            else onAddText(start.x, start.y);
+          } else if (rect) {
+            onSelectAnnotations(annotationIdsTouching(rect), additive);
+          }
+        });
       }
 
-      // Double-click on empty page background creates a new text box —
-      // text creation is double-click-only now, not a single click while
-      // the Text tool happens to be active.
-      function handleOverlayDoubleClick(e) {
-        if (!page) return;
-        if (tool !== "select" && tool !== "text") return;
-        // Same fix as elsewhere: without this, the browser's own default
-        // mousedown action (from the clicks that make up this double-click)
-        // undoes the focus we're about to set via the new box's autoFocus.
+      // Measured from what's on screen, so every item type uses its true
+      // drawn shape without each needing its own size calculation.
+      function annotationIdsTouching(rect) {
+        const page = canvasRef.current.getBoundingClientRect();
+        const left = page.left + rect.x * zoom, top = page.top + rect.y * zoom;
+        const right = left + rect.width * zoom, bottom = top + rect.height * zoom;
+        return [...layerRef.current.querySelectorAll("[data-ann-id]")]
+          .filter((el) => {
+            const box = el.getBoundingClientRect();
+            return box.left < right && box.right > left && box.top < bottom && box.bottom > top;
+          })
+          .map((el) => Number(el.dataset.annId));
+      }
+
+      // The shared press on any item: select it, then drag to move the
+      // whole selection. `onPlainClick` runs if the press never became a drag.
+      function pressAnnotation(e, ann, onPlainClick) {
         e.preventDefault();
-        const p = overlayPoint(e);
-        onAddText(p.x, p.y);
+        e.stopPropagation();
+        if (editingAnnId !== null && editingAnnId !== ann.id) onFinishTextEdit();
+        const current = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
+        const wasSelected = current.includes(ann.id);
+        if (e.shiftKey || !wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
+        if (e.shiftKey && wasSelected) return; // that press just took it out of the selection
+        const movingIds = wasSelected ? current : e.shiftKey ? [...current, ann.id] : [ann.id];
+        const originals = annotations.filter((a) => movingIds.includes(a.id));
+        const dragDelta = dragDeltaFrom(e, zoom);
+        let moved = false;
+        trackPointerDrag((ev) => {
+          const { dx, dy } = dragDelta(ev);
+          if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
+          if (moved) onMoveAnnotations(originals, dx, dy);
+        }, () => {
+          if (moved) return;
+          // Clicking one member of a group, without dragging, narrows to it.
+          if (wasSelected && !e.shiftKey && current.length > 1) onSelectAnnotation(ann.id, false);
+          if (onPlainClick) onPlainClick();
+        });
       }
 
       if (!page) {
@@ -1779,6 +1841,7 @@
         );
       }
 
+      const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
       const cursorClass =
         tool === "text" ? "ze-tool-text" :
         (tool === "pen" || tool === "highlighter") ? "ze-tool-draw" :
@@ -1788,16 +1851,16 @@
       // size, which is what gives the pane something to scroll.
       return (
         <div className="ze-artboard-zoom" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
-        <div className="ze-page ze-page--rendered" style={{ transform: zoom === 1 ? undefined : `scale(${zoom})` }}>
+        <div className="ze-page ze-page--rendered" style={{ transform: zoom === 1 ? undefined : `scale(${zoom})`, "--ze-zoom": zoom }}>
           <canvas ref={canvasRef} />
           {onionGhostSrc && (
             <img className="ze-onion-ghost" src={onionGhostSrc} alt="" style={{ opacity: onionSkinOpacity }} />
           )}
           <div
+            ref={layerRef}
             className={"ze-annotation-layer " + cursorClass}
             style={{ width: canvasSize.width, height: canvasSize.height }}
             onMouseDown={handleOverlayMouseDown}
-            onDoubleClick={handleOverlayDoubleClick}
           >
             {annotations.filter((a) => a.type === "image").map((a) => (
               <AnnotationImage
@@ -1805,9 +1868,9 @@
                 ann={a}
                 tool={tool}
                 isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
-                isPrimary={a.id === selectedAnnId}
+                showHandles={showHandlesFor(a)}
                 isCropping={a.id === croppingAnnId}
-                onSelect={onSelectAnnotation}
+                onPress={pressAnnotation}
                 onUpdate={onUpdateAnnotation}
                 onToggleCrop={onToggleCrop}
                 pageFilter={pageFilter}
@@ -1816,7 +1879,7 @@
             ))}
             <svg className="ze-stroke-svg" width={canvasSize.width} height={canvasSize.height}>
               {annotations.filter((a) => a.type === "stroke").map((a) => (
-                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)} onSelect={onSelectAnnotation} />
+                <StrokeShape key={a.id} ann={a} tool={tool} isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)} onPress={pressAnnotation} />
               ))}
               {drawingRef.current && (drawingRef.current.taper > 0 ? (
                 <path
@@ -1843,13 +1906,18 @@
                 ann={a}
                 tool={tool}
                 isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
-                startEditing={a.id === autoEditAnnId}
-                onSelect={onSelectAnnotation}
+                isEditing={a.id === editingAnnId}
+                showHandles={showHandlesFor(a)}
+                onPress={pressAnnotation}
+                onStartEdit={onStartTextEdit}
+                onFinishEdit={onFinishTextEdit}
                 onUpdate={onUpdateAnnotation}
-                onSwitchToTextTool={onSwitchToTextTool}
                 zoom={zoom}
               />
             ))}
+            {dragRect && (
+              <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height }} />
+            )}
           </div>
           {guidesOn && canvasSize.width > 0 && (
             <GuidesOverlay
@@ -2411,7 +2479,7 @@
             <div className="ze-format-panel-head">Format — Image</div>
             <div className="ze-format-panel-body">
               <span className="ze-format-hint" style={{ display: "block" }}>
-                Drag the image to move it. Drag the handle in its bottom-right corner to resize (aspect ratio locked).
+                Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely.
               </span>
               <div className="ze-format-field" style={{ marginTop: 14 }}>
                 <span className="ze-format-label">Size</span>
@@ -2865,7 +2933,7 @@
       {
         group: "Tools",
         rows: [
-          ["Space", "Select tool"],
+          ["V", "Move tool"],
           ["T", "Text tool"],
           ["I", "Add an image"],
           ["D", "Draw tool"],
@@ -2880,15 +2948,20 @@
           ["Ctrl + C", "Copy the selected item"],
           ["Ctrl + V", "Paste a copied item, or an image from the clipboard"],
           ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
-          ["Esc", "Stop editing a text box"],
+          ["Double-click text", "Edit it (Move tool)"],
+          ["Esc", "Finish editing and keep the text selected"],
         ],
       },
       {
         group: "Pages and selection",
         rows: [
-          ["↑ / ↓", "Previous / next page"],
+          ["↑ / ↓", "Previous / next page, when no item is selected"],
+          ["Arrow keys", "Nudge the selected items 1 px"],
+          ["Shift + arrow keys", "Nudge the selected items 10 px"],
           ["Ctrl + R", "Rotate the selected page"],
           ["Shift + click", "Add to or remove from the selection (pages and items)"],
+          ["Drag on empty page", "Select the items it touches (Move tool)"],
+          ["Shift + drag a handle", "Stretch an image freely"],
         ],
       },
     ];
@@ -3002,7 +3075,7 @@
       // deliberate scope cut, not an oversight.
       const [selectedAnnIds, setSelectedAnnIds] = useState([]);
       const [selectedPageIndices, setSelectedPageIndices] = useState([]);
-      const [autoEditAnnId, setAutoEditAnnId] = useState(null);
+      const [editingAnnId, setEditingAnnId] = useState(null);
       const [croppingAnnId, setCroppingAnnId] = useState(null);
       // Insert PDF — holds the chosen file while the "Insert after page"
       // dialog is open; the actual insert only happens on confirm.
@@ -3065,11 +3138,39 @@
       // Clicking any toolbar tool switches the format panel to that tool's
       // own settings — any previous selection is cleared so the panel
       // can't keep showing a stale object's properties instead.
+      // Going back to Move keeps what's selected; any other tool starts clean.
       function selectTool(t) {
         setTool(t);
+        setEditingAnnId(null);
+        if (t === "select") return;
         setSelectedAnnId(null);
         setSelectedAnnIds([]);
-        setAutoEditAnnId(null);
+      }
+
+      function handleSelectAnnotations(ids, additive) {
+        const existing = additive && selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [];
+        const all = [...new Set([...existing, ...ids])];
+        setSelectedAnnId(all.length > 0 ? all[0] : null);
+        setSelectedAnnIds(all.slice(1));
+      }
+
+      function handleMoveAnnotations(originals, dx, dy) {
+        if (selectedIdx === null) return;
+        const moved = new Map(originals.map((a) => [a.id, translatedAnnotation(a, dx, dy)]));
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => moved.get(a.id) || a), "move:" + [...moved.keys()].join());
+      }
+
+      // Finishing a text edit returns to Move, and a box left empty is
+      // discarded rather than staying behind as an invisible item.
+      function finishTextEdit() {
+        if (editingAnnId === null) return;
+        const edited = selectedIdx === null ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === editingAnnId);
+        setEditingAnnId(null);
+        setTool("select");
+        if (edited && !edited.text.trim()) {
+          updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== edited.id), "ann:" + edited.id);
+          setSelectedAnnId((id) => (id === edited.id ? null : id));
+        }
       }
 
       // Shift+Click toggles membership in a selection set, keeping one
@@ -3131,10 +3232,6 @@
       // Narrower than selectTool: switches the toolbar/panel to Text
       // without clearing the current selection — used when clicking an
       // existing text box to edit it, where that box should stay selected.
-      function switchToTextTool() {
-        setTool("text");
-      }
-
       // Map of docId -> { doc, bytes } — a page can come from any one of
       // several loaded source PDFs (the original load, plus anything
       // brought in via Insert PDF), not just a single document.
@@ -3698,9 +3795,7 @@
                 // second copy, not sitting invisibly on top of the first —
                 // a stroke's whole point list has to shift together, not
                 // just some single x/y the way text/image annotations work.
-                const newAnn = clip.type === "stroke"
-                  ? { ...clip, id, points: clip.points.map(([px, py]) => [px + 20, py + 20]) }
-                  : { ...clip, id, x: clip.x + 20, y: clip.y + 20 };
+                const newAnn = { ...translatedAnnotation(clip, 20, 20), id };
                 updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
                 setSelectedAnnId(id);
               }
@@ -3718,7 +3813,15 @@
             }
             return;
           }
-          if (key === " ") { e.preventDefault(); selectTool("select"); return; }
+          const nudge = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] }[key];
+          if (nudge && selectedAnnId !== null) {
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            const ids = [selectedAnnId, ...selectedAnnIds];
+            handleMoveAnnotations((pages[selectedIdx].annotations || []).filter((a) => ids.includes(a.id)), nudge[0] * step, nudge[1] * step);
+            return;
+          }
+          if (key === "v") { selectTool("select"); return; }
           if (key === "t") { selectTool("text"); return; }
           if (key === "i") { handleImageToolClick(); return; }
           if (key === "h") { selectTool("highlighter"); return; }
@@ -3769,15 +3872,15 @@
         setPages((prev) => prev.map((p, i) => (targets.has(i) ? { ...p, filter: { ...(p.filter || DEFAULT_PAGE_FILTER), ...patch } } : p)));
       }
 
-      function handleAddText(x, y) {
+      function handleAddText(x, y, width) {
         if (selectedIdx === null) return;
         const id = nextAnnIdRef.current++;
         // Shares handleUpdateAnnotation's coalesce key for this same id —
         // a brand-new box immediately followed by typing into it (the
-        // normal flow, since autoEditAnnId focuses it right away) collapses
-        // into one undo step, instead of "empty box" being its own step.
+        // normal flow, since it opens ready for typing) collapses into
+        // one undo step, instead of "empty box" being its own step.
         updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
-          id, type: "text", x, y, text: "",
+          id, type: "text", x, y, text: "", width,
           fontFamily: textFontFamily,
           fontSize: textFontSize,
           bold: textBold,
@@ -3786,9 +3889,9 @@
           color: textColor,
           align: textAlign,
         }], "ann:" + id);
-        setTool("text"); // creating text implies you're now in Text mode, same as clicking an existing box to edit it
         setSelectedAnnId(id);
-        setAutoEditAnnId(id);
+        setSelectedAnnIds([]);
+        setEditingAnnId(id);
       }
 
       function handleAddStroke(stroke) {
@@ -4016,7 +4119,7 @@
               {selectedPage && (
                 <div className="ze-tool-bar">
                   <div className="ze-tool-bar-group">
-                    <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Select (Space)" onClick={() => selectTool("select")}>
+                    <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Move (V)" onClick={() => selectTool("select")}>
                       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3l6.5 16 2-6.5L19 10.5z" fill="currentColor" /></svg>
                     </button>
                     <button type="button" className={"ze-tool-icon-btn" + (tool === "text" ? " active" : "")} title="Text (T)" onClick={() => selectTool("text")}>
@@ -4108,14 +4211,17 @@
                     annotations={selectedPage ? (selectedPage.annotations || []) : []}
                     selectedAnnId={selectedAnnId}
                     selectedAnnIds={selectedAnnIds}
-                    autoEditAnnId={autoEditAnnId}
+                    editingAnnId={editingAnnId}
+                    onStartTextEdit={setEditingAnnId}
+                    onFinishTextEdit={finishTextEdit}
+                    onSelectAnnotations={handleSelectAnnotations}
+                    onMoveAnnotations={handleMoveAnnotations}
                     croppingAnnId={croppingAnnId}
                     onSelectAnnotation={handleSelectAnnotation}
                     onAddText={handleAddText}
                     onAddStroke={handleAddStroke}
                     onUpdateAnnotation={handleUpdateAnnotation}
                     onEraseStroke={handleEraseStroke}
-                    onSwitchToTextTool={switchToTextTool}
                     onToggleCrop={handleToggleCrop}
                   />
                 </div>

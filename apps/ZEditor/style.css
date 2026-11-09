@@ -512,17 +512,37 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     pointer-events: none; /* the wrapper div handles drag; the media element itself shouldn't intercept */
     -webkit-user-drag: none;
 }
-.ze-ann-image-handle {
+/* Counter-scaled so handles stay the same size on screen at any zoom. */
+.ze-resize-handle {
     position: absolute;
-    right: -6px;
-    bottom: -6px;
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    background-color: var(--ui-accent);
-    border: 2px solid #fff;
-    cursor: nwse-resize;
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    background-color: #fff;
+    border: 2px solid var(--ui-accent);
+    transform: translate(-50%, -50%) scale(calc(1 / var(--ze-zoom, 1)));
 }
+.ze-resize-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.ze-resize-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.ze-resize-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.ze-resize-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.ze-resize-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.ze-resize-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.ze-resize-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.ze-resize-handle-w { left: 0; top: 50%; cursor: ew-resize; }
+
+/* The box being dragged out on empty page, for selecting or new text. */
+.ze-drag-rect {
+    position: absolute;
+    border: calc(1px / var(--ze-zoom, 1)) dashed var(--ui-accent);
+    background-color: color-mix(in srgb, var(--ui-accent) 10%, transparent);
+    pointer-events: none;
+}
+
+/* Tools other than Move work straight through placed items. */
+.ze-tool-text .ze-ann-image, .ze-tool-text .ze-ann-text { cursor: text; }
+.ze-tool-draw .ze-ann-image { cursor: crosshair; }
+.ze-tool-erase .ze-ann-image { cursor: cell; }
 
 .ze-ann-image-shadow {
     position: relative;
@@ -600,15 +620,29 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-ann-text.is-selected { border-color: var(--ui-accent); }
 .ze-ann-text-placeholder { color: rgba(0, 0, 0, 0.35); font-style: italic; }
 
-.ze-ann-text--editing {
-    resize: both;
-    overflow: auto;
-    border: 1px solid var(--ui-accent);
-    background-color: rgba(255, 255, 255, 0.92);
+.ze-ann-text.is-editing { border: 1px solid var(--ui-accent); cursor: text; }
+/* Lays out the box while hidden; the extra sliver stops the input
+   wrapping a line a pixel too early. */
+.ze-ann-text-mirror { display: inline-block; visibility: hidden; padding-right: 2px; }
+.ze-ann-text-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: inherit;
+    border: 0;
     outline: none;
-    min-width: 120px;
-    min-height: 32px;
-    cursor: text;
+    resize: none;
+    overflow: hidden;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: inherit;
+    text-decoration: inherit;
+    white-space: inherit;
+    word-break: inherit;
 }
 
 /* ---- Right-side format panel ------------------------------------------- */
