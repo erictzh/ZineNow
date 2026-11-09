@@ -395,7 +395,7 @@
     // These looks are drawn with the export renderer in the live editor too
     // (see AnnotationText), because per-letter jitter and knocked-out marks
     // have no clean CSS equivalent; one renderer means no editor/export drift.
-    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress);
+    const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || (ann.colorRuns && ann.colorRuns.length));
     // A photo shown through the letters. 100% scale covers the text box; X/Y
     // move it by that percent of the box's size (0 = centred). The photo itself
     // lives on the text box as fillSrc/fillNatW/fillNatH and replaces the
@@ -484,6 +484,79 @@
         padY: 2 + (label ? label.labelPadding : 0),
       };
     }
+
+    // ---- Per-letter colours. A text box keeps its words as plain text and the
+    // recoloured stretches as `colorRuns`: [{ start, end, color }] over the
+    // text's character positions (end exclusive), sorted and never
+    // overlapping. Where a run is absent the box's own colour shows.
+    function normalizeRuns(runs) {
+      const sorted = (runs || []).filter((r) => r.end > r.start).sort((a, b) => a.start - b.start);
+      const merged = [];
+      for (const run of sorted) {
+        const last = merged[merged.length - 1];
+        if (last && last.end === run.start && last.color === run.color) last.end = run.end;
+        else merged.push({ ...run });
+      }
+      return merged;
+    }
+
+    // `runs` with [start, end) given `color`, or cleared when color is null.
+    function setRunColor(runs, start, end, color) {
+      const next = [];
+      for (const run of runs || []) {
+        if (run.end <= start || run.start >= end) { next.push(run); continue; }
+        if (run.start < start) next.push({ ...run, end: start });
+        if (run.end > end) next.push({ ...run, start: end });
+      }
+      if (color) next.push({ start, end, color });
+      return normalizeRuns(next);
+    }
+
+    // `runs` after the text changed from oldText to newText. The edit is
+    // found as what's left between the shared start and shared end of the two;
+    // runs before it stay, runs after it shift, runs inside it shrink, and text
+    // typed inside (or at the end of) a coloured stretch takes its colour.
+    function adjustRunsForEdit(runs, oldText, newText) {
+      if (!runs || !runs.length) return runs;
+      let start = 0;
+      const maxStart = Math.min(oldText.length, newText.length);
+      while (start < maxStart && oldText[start] === newText[start]) start++;
+      let tail = 0;
+      const maxTail = maxStart - start;
+      while (tail < maxTail && oldText[oldText.length - 1 - tail] === newText[newText.length - 1 - tail]) tail++;
+      const removedEnd = oldText.length - tail;
+      const insertedLength = newText.length - start - tail;
+      const delta = insertedLength - (removedEnd - start);
+      // A run starting where text is inserted stays after it; one ending
+      // there grows to take it in.
+      const mapStart = (pos) => (pos < start ? pos : pos >= removedEnd ? pos + delta : start + insertedLength);
+      const mapEnd = (pos) => (pos >= removedEnd ? pos + delta : pos <= start ? pos : start);
+      return normalizeRuns(runs.map((run) => ({ ...run, start: mapStart(run.start), end: mapEnd(run.end) })));
+    }
+
+    // The text cut into stretches of one colour each: [{ text, color }], with
+    // color null where no run applies.
+    function colorSegments(text, runs) {
+      const segments = [];
+      let position = 0;
+      for (const run of runs || []) {
+        if (run.start > position) segments.push({ text: text.slice(position, run.start), color: null });
+        segments.push({ text: text.slice(run.start, run.end), color: run.color });
+        position = run.end;
+      }
+      if (position < text.length) segments.push({ text: text.slice(position), color: null });
+      return segments.filter((s) => s.text.length > 0);
+    }
+
+    function colorAtIndex(runs, index) {
+      for (const run of runs || []) if (index >= run.start && index < run.end) return run.color;
+      return null;
+    }
+
+    // The selection last made inside a text box's editor, kept outside React
+    // state: it's read only at the moment a colour is picked, and has to
+    // outlive the box leaving edit mode when focus moves to the panel.
+    const textSelectionStore = { annId: null, start: 0, end: 0 };
 
     // Where a text's fill photo sits inside the text area (w x h px), as the
     // size and top-left of the photo: it covers the area at 100% scale, and
@@ -1276,9 +1349,19 @@
       }
       const innerWidth = Math.max(4, boxWidth - padX * 2);
       const lines = wrapTextLines(ctx, ann.text || "", innerWidth, measure);
+      // Where each wrapped line begins in the text (a wrap or newline swallows
+      // one character), so per-letter colours can be matched to lines.
+      const lineStarts = [];
+      let cursor = 0;
+      for (const line of lines) {
+        lineStarts.push(cursor);
+        cursor += line.length;
+        const next = (ann.text || "")[cursor];
+        if (next === "\n" || next === " ") cursor += 1;
+      }
       const textHeight = lines.length * lineHeight;
       const boxHeight = textHeight + padY * 2;
-      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight, measure, ascent, descent };
+      return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent };
     }
 
     // How far a canvas-drawn text box paints past its own edges (editor px):
@@ -1303,7 +1386,7 @@
     async function drawTextOnCanvas(ctx, ann, scaleFactor) {
       const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
       ctx.save();
-      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, textHeight, boxHeight, measure, ascent, descent } = layoutText(ctx, ann, scaleFactor);
+      const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent } = layoutText(ctx, ann, scaleFactor);
 
       rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
 
@@ -1339,13 +1422,33 @@
         else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
         const lineTop = y + padY + i * lineHeight;
         const baselineY = lineTop + baselineOffset;
-        lineExtents.push({ line, lineX, lineWidth, baselineY });
-        if (!look.ransom) { runs.push({ text: line, x: lineX, baselineY }); return; }
+        const lineStart = lineStarts[i];
+        if (!look.ransom) {
+          // One run per stretch of a single colour (a whole line when no
+          // letters are recoloured).
+          const lineRuns = (ann.colorRuns || [])
+            .filter((r) => r.end > lineStart && r.start < lineStart + line.length)
+            .map((r) => ({ ...r, start: Math.max(r.start, lineStart) - lineStart, end: Math.min(r.end, lineStart + line.length) - lineStart }));
+          const segments = [];
+          let offset = 0;
+          for (const seg of colorSegments(line, lineRuns)) {
+            const segX = lineX + (offset ? measure(line.slice(0, offset)) : 0);
+            offset += seg.text.length;
+            const segEnd = lineX + measure(line.slice(0, offset));
+            runs.push({ text: seg.text, x: segX, baselineY, color: seg.color });
+            segments.push({ x0: segX, x1: segEnd, color: seg.color });
+          }
+          lineExtents.push({ line, lineX, lineWidth, baselineY, segments });
+          return;
+        }
+        lineExtents.push({ line, lineX, lineWidth, baselineY, segments: [{ x0: lineX, x1: lineX + lineWidth, color: null }] });
         let cursor = lineX;
+        let charIndex = 0;
         for (const ch of Array.from(line)) {
           const advance = ctx.measureText(ch).width;
           const k = letterIndex++;
-          const run = { text: ch, x: cursor, baselineY };
+          const run = { text: ch, x: cursor, baselineY, color: colorAtIndex(ann.colorRuns, lineStart + charIndex) };
+          charIndex += ch.length;
           if (ch !== " ") {
             const seed = look.ransom.ransomVariation;
             run.cx = cursor + advance / 2;
@@ -1402,9 +1505,18 @@
             c.strokeText(run.text, run.x, run.baselineY);
           }));
         }
+        // Letters given their own colour are painted solid in it, over any
+        // gradient or photo the rest of the text has.
+        const paintOwnColors = () => runs.forEach((run) => {
+          if (!run.color) return;
+          withRun(c, run, () => {
+            c.fillStyle = rgbaCss(run.color, look.fillAlpha);
+            c.fillText(run.text, run.x, run.baselineY);
+          });
+        });
         if (!fillsThroughLayer) {
           runs.forEach((run) => withRun(c, run, () => {
-            c.fillStyle = fill;
+            c.fillStyle = run.color ? rgbaCss(run.color, look.fillAlpha) : fill;
             c.fillText(run.text, run.x, run.baselineY);
           }));
         } else {
@@ -1415,7 +1527,7 @@
           lctx.setTransform(c.getTransform());
           setFont(lctx);
           lctx.fillStyle = "#000";
-          runs.forEach((run) => withRun(lctx, run, () => lctx.fillText(run.text, run.x, run.baselineY)));
+          runs.forEach((run) => { if (!run.color) withRun(lctx, run, () => lctx.fillText(run.text, run.x, run.baselineY)); });
           lctx.globalCompositeOperation = "source-in";
           if (photoImg) {
             const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
@@ -1429,11 +1541,16 @@
           c.setTransform(1, 0, 0, 1, 0, 0);
           c.drawImage(letters, 0, 0);
           c.restore();
+          paintOwnColors();
         }
-        lineExtents.forEach(({ line, lineX, lineWidth, baselineY }) => {
+        // Underline and strike-through take the colour of the letters they cross.
+        lineExtents.forEach(({ line, baselineY, segments }) => {
           if (!line) return;
-          if (ann.underline) drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY + fontSize * 0.12, fontSize, look.color);
-          if (look.strike !== "none") drawTextDecorationLine(c, decoStyle, lineX, lineX + lineWidth, baselineY - fontSize * 0.3, fontSize, look.color);
+          segments.forEach(({ x0, x1, color }) => {
+            const decoColor = color || look.color;
+            if (ann.underline) drawTextDecorationLine(c, decoStyle, x0, x1, baselineY + fontSize * 0.12, fontSize, decoColor);
+            if (look.strike !== "none") drawTextDecorationLine(c, decoStyle, x0, x1, baselineY - fontSize * 0.3, fontSize, decoColor);
+          });
         });
       };
 
@@ -1708,7 +1825,7 @@
       const box = { ...ann, width: size.width + 1, height: size.height };
       const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
       if (!baked) return null;
-      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha", ...TEXT_PHOTO_PROPS];
+      const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
       const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
       const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
       // Text never followed the page filter, so the image shouldn't either.
@@ -2079,6 +2196,13 @@
       }
 
       const look = textLook(ann);
+      const hasLetterColors = Boolean(ann.colorRuns && ann.colorRuns.length);
+
+      function rememberSelection(input) {
+        textSelectionStore.annId = ann.id;
+        textSelectionStore.start = input.selectionStart;
+        textSelectionStore.end = input.selectionEnd;
+      }
 
       // Ransom lettering and distress are drawn on a canvas by Export's own
       // text renderer, so what you see is exactly what exports. (Plain text
@@ -2205,14 +2329,28 @@
           {isEditing ? (
             <React.Fragment>
               {/* The zero-width space gives a trailing blank line some height. */}
-              <span className="ze-ann-text-mirror">{ann.text + "​"}</span>
+              {/* With recoloured letters the mirror is shown (in their colours)
+                  under a see-through textarea, which keeps the caret and selection. */}
+              <span className={"ze-ann-text-mirror" + (hasLetterColors ? " is-visible" : "")}>
+                {hasLetterColors
+                  ? colorSegments(ann.text + "​", ann.colorRuns).map((seg, i) => <span key={i} style={seg.color ? { color: seg.color } : undefined}>{seg.text}</span>)
+                  : ann.text + "​"}
+              </span>
               <textarea
                 ref={inputRef}
                 className="ze-ann-text-input"
+                style={hasLetterColors ? { color: "transparent", caretColor: ann.color } : undefined}
                 value={ann.text}
                 spellCheck="false"
-                onChange={(e) => onUpdate(ann.id, { text: e.target.value })}
-                onBlur={onFinishEdit}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  const patch = { text };
+                  if (hasLetterColors) patch.colorRuns = adjustRunsForEdit(ann.colorRuns, ann.text, text);
+                  rememberSelection(e.target);
+                  onUpdate(ann.id, patch);
+                }}
+                onSelect={(e) => rememberSelection(e.target)}
+                onBlur={(e) => { rememberSelection(e.target); onFinishEdit(); }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") { e.stopPropagation(); onFinishEdit(); }
@@ -3631,6 +3769,42 @@
       );
     }
 
+    // The text panel's "colour individual letters" section. It colours
+    // whatever was last selected inside this box's editor; the swatches don't
+    // take focus when pressed, so the selection stays put while you pick.
+    function LetterColors({ ann, patch }) {
+      const [message, setMessage] = useState(null);
+      const keepFocus = (e) => e.preventDefault();
+      function applyColor(color) {
+        const text = ann.text || "";
+        const { annId, start } = textSelectionStore;
+        const end = Math.min(textSelectionStore.end, text.length);
+        if (annId !== ann.id || end <= start) {
+          setMessage("Double-click the text and select some letters first.");
+          return;
+        }
+        setMessage(null);
+        patch({ colorRuns: setRunColor(ann.colorRuns, start, end, color) });
+      }
+      const count = (ann.colorRuns || []).reduce((total, run) => total + run.end - run.start, 0);
+      return (
+        <div className="ze-format-field">
+          <span className="ze-format-label">Letter color</span>
+          <div className="ze-format-row ze-format-swatches" onMouseDown={keepFocus}>
+            {TEXT_COLOR_SWATCHES.map((c) => (
+              <button key={c} type="button" className="ze-format-swatch" style={{ backgroundColor: c }} title={"Color the selected letters " + c} onClick={() => applyColor(c)} />
+            ))}
+            <CustomColorInput value="#dd531a" onChange={applyColor} />
+          </div>
+          <div className="ze-format-row" onMouseDown={keepFocus}>
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => applyColor(null)}>Reset selected</button>
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!count} onClick={() => { setMessage(null); patch({ colorRuns: undefined }); }}>Reset all</button>
+          </div>
+          <span className="ze-format-hint">{message || (count ? count + " letter" + (count === 1 ? "" : "s") + " colored. Select letters while editing, then pick a color." : "Double-click the text, select some letters, then pick a color.")}</span>
+        </div>
+      );
+    }
+
     function FormatPanel({
       tool, selectedAnn, onUpdate, fontOptions, setFontOptions, croppingAnnId, onToggleCrop,
       rectDefaults, onChangeRectDefaults,
@@ -3698,6 +3872,7 @@
                   <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(ann.color) ? ann.color : "#1a1a1a"} onChange={(color) => patch({ color })} />
                 </div>
               </div>
+              <LetterColors ann={ann} patch={patch} />
               <TextPhotoFill ann={ann} patch={patch} />
               <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
