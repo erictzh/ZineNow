@@ -1833,8 +1833,11 @@
       // shows plain text in the box's own colour.
       const fillStyle = {};
       if (look.gradient) {
+        // backgroundImage, not the `background` shorthand: when only the
+        // colours change, React re-sets just that property, and the
+        // shorthand would reset background-clip and fill the whole box.
         Object.assign(fillStyle, {
-          background: rectFillCss(textGradientView(ann, look)),
+          backgroundImage: rectFillCss(textGradientView(ann, look)),
           WebkitBackgroundClip: "text", backgroundClip: "text",
           WebkitTextFillColor: "transparent",
         });
