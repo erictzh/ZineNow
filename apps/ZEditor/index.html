@@ -481,6 +481,7 @@
       { kind: "slider", prop: "fillScale", label: "Photo scale (%)", min: 20, max: 400, fallback: 100 },
       { kind: "slider", prop: "fillX", label: "Photo X (%)", min: -100, max: 100, fallback: 0 },
       { kind: "slider", prop: "fillY", label: "Photo Y (%)", min: -100, max: 100, fallback: 0 },
+      { kind: "slider", prop: "fillPhotoAlpha", label: "Photo opacity (%)", min: 0, max: 100, fallback: 100 },
     ];
     const TEXT_PHOTO_PROPS = ["fillSrc", "fillNatW", "fillNatH", ...TEXT_PHOTO_CONTROLS.map((c) => c.prop)];
 
@@ -583,7 +584,8 @@
       const color = ann.color || "#1a1a1a";
       const fillAlpha = controlValues(ann, [TEXT_FILL_ALPHA_CONTROL]).fillAlpha;
       const photo = ann.fillSrc ? { src: ann.fillSrc, natW: ann.fillNatW, natH: ann.fillNatH, ...controlValues(ann, TEXT_PHOTO_CONTROLS) } : null;
-      const gradient = ann.textGradient && !photo ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
+      // Kept with a photo too: it shows through a faded photo, under it.
+      const gradient = ann.textGradient ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
       const label = ann.labelBox ? effectSettings(ann, TEXT_LABEL_EFFECT) : null;
       return {
         photo,
@@ -1683,7 +1685,17 @@
           lctx.globalCompositeOperation = "source-in";
           if (photoImg) {
             const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
+            lctx.globalAlpha = look.photo.fillPhotoAlpha / 100;
             lctx.drawImage(photoImg, x + padX + place.left * scaleFactor, y + padY + place.top * scaleFactor, place.width * scaleFactor, place.height * scaleFactor);
+            // A faded photo shows the text colour underneath it, not the page.
+            if (look.photo.fillPhotoAlpha < 100) {
+              lctx.globalAlpha = 1;
+              lctx.globalCompositeOperation = "destination-over";
+              lctx.fillStyle = look.gradient
+                ? makeLinearGradient(lctx, look.gradient.gradientAngle, rectGradientStops(textGradientView(ann, look)), x + padX, y + padY, innerWidth, textHeight)
+                : rgbaCss(look.color, look.fillAlpha);
+              runs.forEach((run) => { if (!run.color) withRun(lctx, run, () => lctx.fillText(run.text, run.x, run.baselineY)); });
+            }
           } else {
             // Painted well past the box so letters that jitter outside it still fill.
             lctx.fillStyle = makeLinearGradient(lctx, look.gradient.gradientAngle, rectGradientStops(textGradientView(ann, look)), x + padX, y + padY, innerWidth, textHeight);
@@ -1782,6 +1794,49 @@
     // own live-editing render path (some duplicated logic, but it avoids
     // any risk of an export-specific change accidentally affecting the
     // already-tested live editor).
+    // ---- Soft eraser: fades an image's own pixels to transparent with a
+    // feathered round brush, like a soft eraser in a paint program.
+    const SOFT_ERASER_DEFAULTS = { size: 40, softness: 60, strength: 100 };
+    const SOFT_ERASER_DABS_PER_RADIUS = 4; // dabs overlap ~4 deep along a stroke
+
+    // Where page point (px, py) lands on an image, in the image's own natural
+    // pixels, allowing for its rotation (about its centre) and crop.
+    // `inside` is false when the point is off the image.
+    function imagePixelAt(ann, px, py) {
+      const cx = ann.x + ann.width / 2, cy = ann.y + ann.height / 2;
+      const [lx, ly] = rotatePoint(px - cx, py - cy, -angleOf(ann));
+      const u = lx + ann.width / 2, v = ly + ann.height / 2;
+      const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
+      const cropW = ann.cropW || ann.naturalWidth, cropH = ann.cropH || ann.naturalHeight;
+      return {
+        inside: u >= 0 && v >= 0 && u <= ann.width && v <= ann.height,
+        x: cropX + u * cropW / ann.width,
+        y: cropY + v * cropH / ann.height,
+        // Natural px per page px, so the brush keeps its on-page size.
+        scaleX: cropW / ann.width, scaleY: cropH / ann.height,
+      };
+    }
+
+    // One round dab of the soft eraser at natural pixel (x, y). `softness`
+    // is how much of the radius fades out (0 = hard edge); `alpha` is how
+    // much this one dab removes at its centre.
+    function stampSoftErase(ctx, x, y, radiusX, radiusY, softness, alpha) {
+      const inner = Math.min(0.99, Math.max(0, 1 - softness / 100));
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.translate(x, y);
+      ctx.scale(radiusX, radiusY);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+      g.addColorStop(inner, `rgba(0,0,0,${alpha})`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(0, 0, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     function loadImageElement(src) {
       return new Promise((resolve, reject) => {
         const img = new Image();
@@ -2500,6 +2555,14 @@
       // the label background isn't clipped away by a gradient fill and the
       // gradient spans the text area. They're left off while typing, which
       // shows plain text in the box's own colour.
+      // backgroundImage, not the `background` shorthand: when only the
+      // colours change, React re-sets just that property, and the
+      // shorthand would reset background-clip and fill the whole box.
+      const gradientStyle = look.gradient ? {
+        backgroundImage: rectFillCss(textGradientView(ann, look)),
+        WebkitBackgroundClip: "text", backgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+      } : null;
       const fillStyle = {};
       if (look.photo) {
         const area = measureTextBox(ann);
@@ -2511,16 +2574,12 @@
           backgroundRepeat: "no-repeat",
           WebkitBackgroundClip: "text", backgroundClip: "text",
           WebkitTextFillColor: "transparent",
+          // Fades only the photo letters: when faded, this block is always the
+          // copy laid over the text-colour copy (see `layered`).
+          opacity: look.photo.fillPhotoAlpha < 100 ? look.photo.fillPhotoAlpha / 100 : undefined,
         });
-      } else if (look.gradient) {
-        // backgroundImage, not the `background` shorthand: when only the
-        // colours change, React re-sets just that property, and the
-        // shorthand would reset background-clip and fill the whole box.
-        Object.assign(fillStyle, {
-          backgroundImage: rectFillCss(textGradientView(ann, look)),
-          WebkitBackgroundClip: "text", backgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        });
+      } else if (gradientStyle) {
+        Object.assign(fillStyle, gradientStyle);
       } else if (look.fillAlpha < 100) {
         fillStyle.color = rgbaCss(look.color, look.fillAlpha);
       }
@@ -2540,7 +2599,12 @@
       // bury the gradient. So with a gradient the outline and shadow go on a
       // copy of the text underneath and the gradient copy sits on top, as in
       // Export (stroke first, fill over it).
-      const layered = Boolean((look.gradient || look.photo) && (look.stroke || look.shadow) && ann.text);
+      // A faded photo also needs a copy underneath in the text's own fill
+      // (its gradient, or its colour), so that shows through the photo
+      // rather than the page.
+      const fadedPhoto = Boolean(look.photo && look.photo.fillPhotoAlpha < 100);
+      const baseFillStyle = fadedPhoto ? (gradientStyle || { color: rgbaCss(look.color, look.fillAlpha) }) : null;
+      const layered = Boolean((look.gradient || look.photo) && (look.stroke || look.shadow || fadedPhoto) && ann.text);
       const bodyStyle = layered ? { display: "block", position: "relative" } : { display: "block", ...fillStyle, ...outlineStyle };
 
       return (
@@ -2596,6 +2660,9 @@
             <span style={bodyStyle}>
               {layered && (
                 <span aria-hidden="true" style={{ display: "block", position: "absolute", left: 0, top: 0, width: "100%", color: "transparent", ...outlineStyle }}>{ann.text}</span>
+              )}
+              {layered && baseFillStyle && (
+                <span aria-hidden="true" style={{ display: "block", position: "absolute", left: 0, top: 0, width: "100%", ...baseFillStyle }}>{ann.text}</span>
               )}
               {layered ? <span style={{ display: "block", position: "relative", ...fillStyle }}>{ann.text}</span> : (ann.text ? ann.text : <span className="ze-ann-text-placeholder">Text</span>)}
             </span>
@@ -2966,6 +3033,7 @@
       annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
       onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
       onStartTextEdit, onFinishTextEdit,
+      eraserMode, softEraser, onEraseImagePixels,
       zoom,
     }) {
       const canvasRef = useRef(null);
@@ -2973,6 +3041,8 @@
       const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
       const [dragRect, setDragRect] = useState(null); // the box being dragged out on empty page
       const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
+      const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
+      const softErasing = tool === "eraser" && eraserMode === "soft";
       const [drawTick, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
 
       useEffect(() => {
@@ -3044,6 +3114,10 @@
           });
           return;
         }
+        if (softErasing) {
+          startSoftErase(e);
+          return;
+        }
         if (tool === "eraser") {
           const erasedIds = new Set();
           const tryErase = (pt) => {
@@ -3096,6 +3170,110 @@
           } else if (rect) {
             onSelectAnnotations(annotationIdsTouching(rect), additive);
           }
+        });
+      }
+
+      // A soft-eraser swipe works on one image: the topmost one under the
+      // pointer when the swipe first reaches an image. The image is copied
+      // to a canvas, erased there (shown in place of the image while
+      // dragging), and saved back as one undo step on release.
+      function startSoftErase(e) {
+        e.preventDefault();
+        const { size, softness, strength } = softEraser;
+        const dabAlpha = 1 - Math.pow(1 - strength / 100, 1 / SOFT_ERASER_DABS_PER_RADIUS);
+        const session = { ann: null, canvas: null, ctx: null, img: null, last: null, pending: [], touched: false, done: false };
+
+        function pickImage(p) {
+          for (let i = annotations.length - 1; i >= 0; i--) {
+            const a = annotations[i];
+            if (a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside) return a;
+          }
+          return null;
+        }
+
+        function dab(p) {
+          const hit = imagePixelAt(session.ann, p.x, p.y);
+          stampSoftErase(session.ctx, hit.x, hit.y, size / 2 * hit.scaleX, size / 2 * hit.scaleY, softness, dabAlpha);
+          session.touched = true;
+        }
+
+        // Dabs spaced along the path from the last one, so a fast swipe
+        // still leaves a smooth line rather than separate spots.
+        function eraseTo(p) {
+          if (!session.last) { dab(p); session.last = p; return; }
+          const step = Math.max(0.5, size / 2 / SOFT_ERASER_DABS_PER_RADIUS);
+          const from = session.last;
+          const dist = Math.hypot(p.x - from.x, p.y - from.y);
+          if (dist < step) return;
+          const n = Math.floor(dist / step);
+          for (let k = 1; k <= n; k++) {
+            const t = (k * step) / dist;
+            dab({ x: from.x + (p.x - from.x) * t, y: from.y + (p.y - from.y) * t });
+          }
+          const t = (n * step) / dist;
+          session.last = { x: from.x + (p.x - from.x) * t, y: from.y + (p.y - from.y) * t };
+        }
+
+        async function begin(ann) {
+          const source = await loadImageElement(ann.src);
+          const canvas = document.createElement("canvas");
+          canvas.width = ann.naturalWidth;
+          canvas.height = ann.naturalHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+          session.canvas = canvas;
+          session.ctx = ctx;
+          // Live view: the working canvas sits exactly where the <img> is.
+          // (A filtered image draws through its own canvas; it updates on release.)
+          const img = layerRef.current && layerRef.current.querySelector(`[data-ann-id="${ann.id}"] .ze-ann-image-frame > img`);
+          if (img) {
+            canvas.style.cssText = img.style.cssText;
+            canvas.style.pointerEvents = "none";
+            img.parentNode.insertBefore(canvas, img.nextSibling);
+            img.style.visibility = "hidden";
+            session.img = img;
+          }
+          session.pending.forEach(eraseTo);
+          session.pending = [];
+          if (session.done) finish();
+        }
+
+        function handlePoint(p) {
+          if (!session.ann) {
+            const ann = pickImage(p);
+            if (!ann) return;
+            session.ann = ann;
+            session.pending.push(p);
+            begin(ann).catch(() => { session.ann = null; });
+            return;
+          }
+          if (!session.ctx) { session.pending.push(p); return; }
+          eraseTo(p);
+        }
+
+        function finish() {
+          const { canvas, img, ann } = session;
+          if (!canvas) return;
+          if (session.touched) onEraseImagePixels(ann.id, canvas.toDataURL("image/png"));
+          if (!img) return;
+          // Keep the live canvas up until the <img> shows the erased
+          // picture, so the old one doesn't flash in between.
+          let cleaned = false;
+          const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
+            canvas.remove();
+            img.style.visibility = "";
+          };
+          if (!session.touched) { cleanup(); return; }
+          img.addEventListener("load", cleanup, { once: true });
+          setTimeout(cleanup, 1500);
+        }
+
+        handlePoint(overlayPoint(e));
+        trackPointerDrag((ev) => handlePoint(overlayPoint(ev)), () => {
+          session.done = true;
+          if (session.ctx) finish();
         });
       }
 
@@ -3179,6 +3357,7 @@
       const cursorClass =
         tool === "text" ? "ze-tool-text" :
         (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse") ? "ze-tool-draw" :
+        softErasing ? "ze-tool-soft-erase" :
         tool === "eraser" ? "ze-tool-erase" : "";
 
       // The page is scaled visually; this outer box takes up the scaled
@@ -3195,6 +3374,8 @@
             className={"ze-annotation-layer " + cursorClass}
             style={{ width: canvasSize.width, height: canvasSize.height }}
             onMouseDown={handleOverlayMouseDown}
+            onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : undefined}
+            onMouseLeave={softErasing ? () => setBrushPos(null) : undefined}
           >
             {annotations.filter((a) => !a.hidden).map((a) => {
               const isSelected = a.id === selectedAnnId || selectedAnnIds.includes(a.id);
@@ -3284,6 +3465,13 @@
                   onMouseDown={startSelectionTurn}
                 />
               </React.Fragment>
+            )}
+            {softErasing && brushPos && (
+              <div className="ze-brush-cursor" style={{ left: brushPos.x, top: brushPos.y, width: softEraser.size, height: softEraser.size }}>
+                {softEraser.softness > 0 && softEraser.softness < 100 && (
+                  <div className="ze-brush-cursor-core" style={{ width: `${100 - softEraser.softness}%`, height: `${100 - softEraser.softness}%` }} />
+                )}
+              </div>
             )}
             {dragRect && (
               <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
@@ -3527,19 +3715,28 @@
     // a permission grant) — same pattern Markdown-to-PDF uses.
     function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
       const [query, setQuery] = useState(value || "");
+      // Only filter once the user has typed: the box starting out showing the
+      // current font's name shouldn't hide every other font.
+      const [typed, setTyped] = useState(false);
       const [open, setOpen] = useState(false);
+      const [highlight, setHighlight] = useState(-1);
+      // The font in use before arrow-key previewing began, so Escape or a
+      // click away can put it back. Null when not previewing.
+      const previewFromRef = useRef(null);
+      const listRef = useRef(null);
       const [status, setStatus] = useState(null); // { type: 'success'|'error', message }
       const [loadingFonts, setLoadingFonts] = useState(false);
       const containerRef = useRef(null);
       const uploadInputRef = useRef(null);
 
-      useEffect(() => { setQuery(value || ""); }, [value]);
+      // Follow outside changes to the font, but not our own previews, which
+      // would overwrite what the user typed into the search box.
+      useEffect(() => { if (previewFromRef.current === null) { setQuery(value || ""); setTyped(false); } }, [value]);
 
       useEffect(() => {
         function handleClickOutside(e) {
           if (containerRef.current && !containerRef.current.contains(e.target)) {
-            setOpen(false);
-            setQuery(value || "");
+            cancelPreview();
           }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -3547,15 +3744,61 @@
       }, [value]);
 
       const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase();
+        const q = typed ? query.trim().toLowerCase() : "";
         if (!q) return fontOptions;
         return fontOptions.filter((f) => f.toLowerCase().includes(q));
-      }, [fontOptions, query]);
+      }, [fontOptions, query, typed]);
+
+      // Keep the highlighted font scrolled into view.
+      useEffect(() => {
+        if (!open || highlight < 0 || !listRef.current) return;
+        const item = listRef.current.children[highlight];
+        if (item) item.scrollIntoView({ block: "nearest" });
+      }, [open, highlight]);
+
+      function openList() {
+        if (!open) setHighlight(filtered.indexOf(value));
+        setOpen(true);
+      }
 
       function selectFont(font) {
+        previewFromRef.current = null;
         onChange(font);
         setQuery(font);
+        setTyped(false);
         setOpen(false);
+      }
+
+      // Escape / click away: undo any arrow-key preview and close.
+      function cancelPreview() {
+        const original = previewFromRef.current;
+        previewFromRef.current = null;
+        if (original !== null && original !== value) onChange(original);
+        setQuery(original !== null ? original : (value || ""));
+        setTyped(false);
+        setOpen(false);
+      }
+
+      function handleKeyDown(e) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (!filtered.length) return;
+          const start = open ? highlight : filtered.indexOf(value);
+          const step = e.key === "ArrowDown" ? 1 : -1;
+          const next = start < 0 ? (step > 0 ? 0 : filtered.length - 1) : Math.min(filtered.length - 1, Math.max(0, start + step));
+          setOpen(true);
+          setHighlight(next);
+          if (previewFromRef.current === null) previewFromRef.current = value || "";
+          // Unless the user is searching, show the previewed font's name.
+          if (!typed) setQuery(filtered[next]);
+          onChange(filtered[next]);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          if (open && highlight >= 0 && filtered[highlight]) selectFont(filtered[highlight]);
+          else if (open && filtered.length === 1) selectFont(filtered[0]);
+        } else if (e.key === "Escape") {
+          if (open) { e.preventDefault(); e.stopPropagation(); cancelPreview(); }
+        }
       }
 
       async function handleUploadFont(e) {
@@ -3600,24 +3843,26 @@
               type="text"
               className="ze-format-select ze-fontbox-input"
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-              onFocus={() => setOpen(true)}
+              onChange={(e) => { setQuery(e.target.value); setTyped(true); setHighlight(-1); setOpen(true); }}
+              onFocus={(e) => { e.target.select(); openList(); }}
+              onKeyDown={handleKeyDown}
               placeholder="Search fonts…"
             />
-            <button type="button" className="ze-fontbox-caret" onClick={() => setOpen((o) => !o)} aria-label="Toggle font list">
+            <button type="button" className="ze-fontbox-caret" onClick={() => (open ? cancelPreview() : openList())} aria-label="Toggle font list">
               <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 7.5l4.5 4.5 4.5-4.5" /></svg>
             </button>
           </div>
           {open && (
-            <div className="ze-fontbox-list">
+            <div className="ze-fontbox-list" ref={listRef}>
               {filtered.length === 0 ? (
                 <div className="ze-fontbox-empty">No fonts match "{query}"</div>
               ) : (
-                filtered.map((font) => (
+                filtered.map((font, i) => (
                   <button
                     key={font}
                     type="button"
-                    className={"ze-fontbox-item" + (font === value ? " active" : "")}
+                    className={"ze-fontbox-item" + (font === value ? " active" : "") + (i === highlight ? " is-highlighted" : "")}
+                    onMouseEnter={() => setHighlight(i)}
                     style={{ fontFamily: `'${font}', sans-serif` }}
                     onClick={() => selectFont(font)}
                   >{font}</button>
@@ -3838,7 +4083,7 @@
           <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleChosen} />
           {hasPhoto && <ControlList controls={TEXT_PHOTO_CONTROLS} source={ann} onPatch={patch} />}
           {error && <span className="ze-format-hint is-error">{error}</span>}
-          <span className="ze-format-hint">Shows a photo through the letters. While it's set it replaces the text color and gradient.</span>
+          <span className="ze-format-hint">Shows a photo through the letters. Lower its opacity to let the text color or gradient show through.</span>
         </div>
       );
     }
@@ -4099,9 +4344,9 @@
               </span>
             ))}
           </div>
-          <div className="ze-format-row">
+          <div className="ze-format-row ze-style-row">
             <input type="text" className="ze-format-number ze-style-name" placeholder="Name this look…" maxLength="30" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
-            <button type="button" className="ze-format-toggle" onClick={save}>Save</button>
+            <button type="button" className="ze-format-toggle ze-style-save" onClick={save}>Save</button>
           </div>
           <span className="ze-format-hint">{message || "Saves the font, size, color, spacing, case and effects (not the words). Your styles are remembered in this browser and saved inside the project."}</span>
         </div>
@@ -4153,6 +4398,7 @@
       highlighterColor, highlighterWidth, highlighterTaper, onChangeHighlighterColor, onChangeHighlighterWidth, onChangeHighlighterTaper,
       onFlattenImage, onRasterizeRect, onRasterizeText,
       textStyles, onSaveTextStyle, onDeleteTextStyle,
+      eraserMode, onChangeEraserMode, softEraser, onChangeSoftEraser,
     }) {
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
@@ -4480,6 +4726,40 @@
                 onWidth={onChangePenWidth}
                 onTaper={onChangePenTaper}
               />
+            </div>
+          </aside>
+        );
+      }
+
+      if (tool === "eraser") {
+        const slider = (prop, label, min, max, unit) => (
+          <div className="ze-format-field">
+            <span className="ze-format-label">{label} ({softEraser[prop]}{unit})</span>
+            <input type="range" className="ze-format-slider" min={min} max={max} step="1" value={softEraser[prop]}
+              onChange={(e) => onChangeSoftEraser({ [prop]: Number(e.target.value) })} />
+          </div>
+        );
+        return (
+          <aside className="ze-format-panel">
+            <div className="ze-format-panel-head">Eraser</div>
+            <div className="ze-format-panel-body">
+              <div className="ze-format-field">
+                <span className="ze-format-label">Mode</span>
+                <div className="ze-format-row">
+                  <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : "")} onClick={() => onChangeEraserMode("stroke")}>Strokes</button>
+                  <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : "")} onClick={() => onChangeEraserMode("soft")}>Soft (images)</button>
+                </div>
+              </div>
+              {eraserMode === "stroke" ? (
+                <span className="ze-format-hint">Removes any pen or highlighter stroke you drag across.</span>
+              ) : (
+                <React.Fragment>
+                  {slider("size", "Size", 4, 300, "px")}
+                  {slider("softness", "Softness", 0, 100, "%")}
+                  {slider("strength", "Strength", 5, 100, "%")}
+                  <span className="ze-format-hint">Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first.</span>
+                </React.Fragment>
+              )}
             </div>
           </aside>
         );
@@ -5080,6 +5360,9 @@
       const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
       const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
       const [penTaper, setPenTaper] = useState(0);
+      // Eraser: "stroke" removes whole pen strokes; "soft" fades image pixels.
+      const [eraserMode, setEraserMode] = useState("stroke");
+      const [softEraser, setSoftEraser] = useState(SOFT_ERASER_DEFAULTS);
       const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
       const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);
       const [highlighterTaper, setHighlighterTaper] = useState(0);
@@ -6060,6 +6343,13 @@
         setSelectedAnnId((cur) => (cur === id ? null : cur));
       }
 
+      // Soft eraser: the erased picture replaces the image's own pixels.
+      // No coalesce key, so every swipe is its own undo step.
+      function handleEraseImagePixels(id, src) {
+        if (selectedIdx === null) return;
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, src } : a)));
+      }
+
       // Clear the annotation selection whenever the selected page changes —
       // a selection outline shouldn't survive a page switch.
       useEffect(() => { setSelectedAnnId(null); }, [selectedIdx]);
@@ -6345,6 +6635,9 @@
                     onUpdateAnnotation={handleUpdateAnnotation}
                     onEraseStroke={handleEraseStroke}
                     onToggleCrop={handleToggleCrop}
+                    eraserMode={eraserMode}
+                    softEraser={softEraser}
+                    onEraseImagePixels={handleEraseImagePixels}
                   />
                 </div>
               </div>
@@ -6393,6 +6686,10 @@
                 onChangeHighlighterColor={setHighlighterColor}
                 onChangeHighlighterWidth={setHighlighterWidth}
                 onChangeHighlighterTaper={setHighlighterTaper}
+                eraserMode={eraserMode}
+                onChangeEraserMode={setEraserMode}
+                softEraser={softEraser}
+                onChangeSoftEraser={(patch) => setSoftEraser((cur) => ({ ...cur, ...patch }))}
               />
             )}
           </div>

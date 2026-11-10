@@ -491,6 +491,26 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-tool-text { cursor: text; }
 .ze-tool-draw { cursor: crosshair; }
 .ze-tool-erase { cursor: cell; }
+/* Soft eraser: a circle the size of the brush follows the pointer. */
+.ze-tool-soft-erase,
+.ze-tool-soft-erase * { cursor: crosshair !important; }
+.ze-brush-cursor {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: calc(1px / var(--ze-zoom, 1)) solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 calc(1px / var(--ze-zoom, 1)) rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    z-index: 50;
+}
+.ze-brush-cursor-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: calc(1px / var(--ze-zoom, 1)) dashed rgba(0, 0, 0, 0.55);
+}
 
 /* ---- Placed images -------------------------------------------------------- */
 .ze-ann-image {
@@ -696,7 +716,23 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     line-height: 1;
 }
 .ze-style-chip-delete:hover { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
-.ze-style-name { flex: 1 1 auto; min-width: 0; width: auto; text-align: left; }
+/* Style chips and the Save button hold words, not icons: size them to their text. */
+.ze-style-chips .ze-format-toggle,
+.ze-format-toggle.ze-style-save { width: auto; padding: 0 10px; white-space: nowrap; }
+/* A long name shrinks with "…" so the chip (and its × delete) stays inside the panel. */
+.ze-style-chips > .ze-format-toggle,
+.ze-style-chip { max-width: 100%; min-width: 0; }
+.ze-style-chips .ze-format-toggle {
+    display: block;
+    min-width: 0;
+    line-height: 28px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ze-style-chip .ze-format-toggle { flex: 0 1 auto; }
+.ze-style-chip-delete { flex: 0 0 auto; }
+.ze-style-row { flex-wrap: nowrap; }
+.ze-format-row .ze-style-name { flex: 1 1 0; min-width: 0; width: auto; text-align: left; }
 .ze-ann-text-input {
     position: absolute;
     inset: 0;
@@ -1062,6 +1098,7 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-fontbox-item:hover { background-color: var(--ui-bg); }
 .ze-fontbox-item.active { color: var(--ui-accent-text); background-color: var(--ui-bg); }
+.ze-fontbox-item.is-highlighted { background-color: var(--ui-bg); outline: 1px solid var(--ui-accent-text); outline-offset: -1px; }
 .ze-fontbox-empty { padding: 8px; font-size: 12px; color: var(--ui-fg-muted); }
 
 .ze-fontbox-load {
