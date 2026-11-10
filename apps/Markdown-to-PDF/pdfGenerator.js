@@ -98,10 +98,20 @@
    * ------------------------------------------------------------------ */
   var HARDCODED_FALLBACK_DEFAULTS = {
     fontFamily: 'Inter',
+    // Heading typeface: when headingFontSameAsBody is true (or
+    // headingFontFamily is blank), headings use the body fontFamily.
+    headingFontSameAsBody: true,
+    headingFontFamily: '',
     paperSize: DEFAULT_PAPER_KEY,
     fontSize: 16, // px
     lineHeight: 1.6, // unitless
     paragraphSpacing: '1rem', // CSS length (bottom margin on <p>)
+    textAlign: 'left', // body text: left | center | right | justify
+    // Per-heading alignment: blank = same as body text, or
+    // left | center | right | justify. H4–H6 follow H3.
+    h1TextAlign: '',
+    h2TextAlign: '',
+    h3TextAlign: '',
     h1Size: 28, // px
     h1Weight: 700,
     h2Size: 22, // px
@@ -112,6 +122,30 @@
     boldWeight: 700, // <strong>/<b> weight
     marginVerticalIn: 0.75, // page margin, top/bottom, inches
     marginHorizontalIn: 0.75, // page margin, left/right, inches
+    // Table of contents (placed wherever a `\toc` line appears)
+    tocLevels: 3, // include H1..H{tocLevels}
+    tocShowTitle: true,
+    tocTitle: 'Contents',
+    tocTitleAlign: '', // blank = same as H2
+    // Per-level ToC entry style. Size (px) / line height blank = body text's.
+    tocL1Bold: true,
+    tocL1Italic: false,
+    tocL1Underline: false,
+    tocL1Size: '',
+    tocL1LineHeight: '',
+    tocL2Bold: false,
+    tocL2Italic: false,
+    tocL2Underline: false,
+    tocL2Size: '',
+    tocL2LineHeight: '',
+    tocL3Bold: false,
+    tocL3Italic: false,
+    tocL3Underline: false,
+    tocL3Size: '',
+    tocL3LineHeight: '',
+    tocPageNumbers: true,
+    tocDotLeaders: true,
+    tocPageBreakAfter: true,
     pageNumbersEnabled: false, // show a page number at the bottom-center of every page
     pageStartFrom: 1, // the number shown on the first page when page numbers are on
   };
@@ -119,6 +153,14 @@
   var DEFAULTS = Object.assign({}, HARDCODED_FALLBACK_DEFAULTS, window.MD2eBookDefaultConfig || {});
 
   var ALLOWED_BOLD_WEIGHTS = [600, 700, 800, 900];
+
+  var TEXT_ALIGN_OPTIONS = [
+    { key: 'left', label: 'Left' },
+    { key: 'center', label: 'Center' },
+    { key: 'right', label: 'Right' },
+    { key: 'justify', label: 'Justify' },
+  ];
+  var ALLOWED_TEXT_ALIGNS = TEXT_ALIGN_OPTIONS.map(function (o) { return o.key; });
 
   // Fonts that are loaded via Google Fonts in index.html and therefore
   // always render correctly regardless of the user's OS.
@@ -211,6 +253,25 @@
     return bare > 0 ? bare : fallback;
   }
 
+  // Blank or unrecognized -> fallback. Accepts any case ("Justify").
+  function toTextAlign(value, fallback) {
+    if (isBlank(value)) return fallback;
+    var v = String(value).trim().toLowerCase();
+    return ALLOWED_TEXT_ALIGNS.indexOf(v) !== -1 ? v : fallback;
+  }
+
+  // Same "blank -> default" coercion the checkbox fields need: a
+  // hand-edited "false" string must read as false, not truthy.
+  function toBoolean(value, fallback) {
+    if (isBlank(value)) return Boolean(fallback);
+    if (typeof value === 'string') return !/^(false|0|no|off)$/i.test(value.trim());
+    return Boolean(value);
+  }
+
+  function fontStackFor(family) {
+    return FONT_STACKS[family] || "'" + family + "', ui-sans-serif, system-ui, sans-serif";
+  }
+
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -246,11 +307,31 @@
   var PAGE_BREAK_MARKER = '\\pagebreak';
   var PAGE_BREAK_LINE_RE = /^[ \t]*\\pagebreak[ \t]*$/gm;
 
+  /* Blank space: a line containing only `\space{N}` becomes an empty
+   * block exactly N body-text lines tall (font size x line spacing), a
+   * gap left on purpose for pasting an image into the exported PDF by
+   * hand. It never splits across pages: if it doesn't fit, it moves
+   * whole to the next page. N is clamped to 1-200. */
+  var SPACE_LINE_RE = /^[ \t]*\\space\{[ \t]*(\d+)[ \t]*\}[ \t]*$/gm;
+  var MAX_SPACE_LINES = 200;
+
+  /* Table of contents: a line containing only `\toc` is swapped for a
+   * placeholder here; after marked has turned the Markdown into HTML,
+   * applyToc() below replaces each placeholder with the actual list. */
+  var TOC_LINE_RE = /^[ \t]*\\toc[ \t]*$/gm;
+  var TOC_SLOT_HTML = '<div class="md2ebook-toc-slot"></div>';
+
   function applyPageBreakMarkers(markdownText) {
-    return String(markdownText).replace(
-      PAGE_BREAK_LINE_RE,
-      '\n\n<div class="md2ebook-pagebreak"></div>\n\n'
-    );
+    return String(markdownText)
+      .replace(PAGE_BREAK_LINE_RE, '\n\n<div class="md2ebook-pagebreak"></div>\n\n')
+      .replace(TOC_LINE_RE, '\n\n' + TOC_SLOT_HTML + '\n\n')
+      .replace(SPACE_LINE_RE, function (_, n) {
+        var lines = Math.min(MAX_SPACE_LINES, Math.max(1, parseInt(n, 10) || 1));
+        return (
+          '\n\n<div class="md2ebook-space" data-lines="' + lines + '" style="--md2ebook-space-lines: ' +
+          lines + ';"></div>\n\n'
+        );
+      });
   }
 
   /* ------------------------------------------------------------------
@@ -268,10 +349,29 @@
 
     var fontFamilyRaw = isBlank(config.fontFamily) ? DEFAULTS.fontFamily : String(config.fontFamily).trim();
 
+    // Heading font: "same as body" checkbox wins; a blank custom
+    // heading font also falls back to the body font.
+    var headingSameAsBody = toBoolean(config.headingFontSameAsBody, DEFAULTS.headingFontSameAsBody);
+    var headingFontRaw = isBlank(config.headingFontFamily) ? DEFAULTS.headingFontFamily : config.headingFontFamily;
+    var headingFontFamily =
+      headingSameAsBody || isBlank(headingFontRaw) ? fontFamilyRaw : String(headingFontRaw).trim();
+
+    var textAlign = toTextAlign(config.textAlign, toTextAlign(DEFAULTS.textAlign, 'left'));
+    // Older config files had one shared `headingTextAlign`; honour it
+    // as the fallback for any heading level left blank.
+    var legacyHeadingAlign = toTextAlign(config.headingTextAlign, textAlign);
+
     return {
       fontFamily: fontFamilyRaw,
-      fontStack: FONT_STACKS[fontFamilyRaw] || "'" + fontFamilyRaw + "', ui-sans-serif, system-ui, sans-serif",
+      fontStack: fontStackFor(fontFamilyRaw),
+      headingFontFamily: headingFontFamily,
+      headingFontStack: fontStackFor(headingFontFamily),
       paperSize: paperKey,
+
+      textAlign: textAlign,
+      h1TextAlign: toTextAlign(config.h1TextAlign, toTextAlign(DEFAULTS.h1TextAlign, legacyHeadingAlign)),
+      h2TextAlign: toTextAlign(config.h2TextAlign, toTextAlign(DEFAULTS.h2TextAlign, legacyHeadingAlign)),
+      h3TextAlign: toTextAlign(config.h3TextAlign, toTextAlign(DEFAULTS.h3TextAlign, legacyHeadingAlign)),
 
       fontSize: toPositiveNumber(config.fontSize, DEFAULTS.fontSize),
       lineHeight: toPositiveNumber(config.lineHeight, DEFAULTS.lineHeight),
@@ -300,6 +400,24 @@
       // truthy, non-boolean value loaded from a hand-edited config
       // file (e.g. "true" as a string) is coerced the same way a
       // checkbox's own state would be.
+      tocLevels: Math.min(3, Math.max(1, Math.round(toNumber(config.tocLevels, DEFAULTS.tocLevels)) || 3)),
+      tocShowTitle: toBoolean(config.tocShowTitle, DEFAULTS.tocShowTitle),
+      tocTitle: isBlank(config.tocTitle) ? String(DEFAULTS.tocTitle || 'Contents') : String(config.tocTitle).trim(),
+      tocTitleAlign: toTextAlign(config.tocTitleAlign, toTextAlign(DEFAULTS.tocTitleAlign, '')),
+      tocLevelStyles: [1, 2, 3].map(function (n) {
+        var k = 'tocL' + n;
+        return {
+          bold: toBoolean(config[k + 'Bold'], DEFAULTS[k + 'Bold']),
+          italic: toBoolean(config[k + 'Italic'], DEFAULTS[k + 'Italic']),
+          underline: toBoolean(config[k + 'Underline'], DEFAULTS[k + 'Underline']),
+          size: toPositiveNumber(config[k + 'Size'], toPositiveNumber(DEFAULTS[k + 'Size'], null)),
+          lineHeight: toPositiveNumber(config[k + 'LineHeight'], toPositiveNumber(DEFAULTS[k + 'LineHeight'], null)),
+        };
+      }),
+      tocPageNumbers: toBoolean(config.tocPageNumbers, DEFAULTS.tocPageNumbers),
+      tocDotLeaders: toBoolean(config.tocDotLeaders, DEFAULTS.tocDotLeaders),
+      tocPageBreakAfter: toBoolean(config.tocPageBreakAfter, DEFAULTS.tocPageBreakAfter),
+
       pageNumbersEnabled: Boolean(
         isBlank(config.pageNumbersEnabled) ? DEFAULTS.pageNumbersEnabled : config.pageNumbersEnabled
       ),
@@ -319,6 +437,11 @@
   function generateStyleBlock(normalized, paper) {
     var vars = [
       '--md2ebook-font-family: ' + normalized.fontStack + ';',
+      '--md2ebook-heading-font-family: ' + normalized.headingFontStack + ';',
+      '--md2ebook-text-align: ' + normalized.textAlign + ';',
+      '--md2ebook-h1-text-align: ' + normalized.h1TextAlign + ';',
+      '--md2ebook-h2-text-align: ' + normalized.h2TextAlign + ';',
+      '--md2ebook-h3-text-align: ' + normalized.h3TextAlign + ';',
       '--md2ebook-font-size: ' + normalized.fontSize + 'px;',
       '--md2ebook-line-height: ' + normalized.lineHeight + ';',
       '--md2ebook-paragraph-spacing: ' + normalized.paragraphSpacing + ';',
@@ -366,13 +489,18 @@
       '      font-size: var(--md2ebook-font-size);\n' +
       '      line-height: var(--md2ebook-line-height);\n' +
       '      font-weight: var(--md2ebook-base-weight);\n' +
+      '      text-align: var(--md2ebook-text-align);\n' +
       '      color: #1a1a1a;\n' +
       '      -webkit-font-smoothing: antialiased;\n' +
       '    }\n\n' +
+      (normalized.textAlign === 'justify'
+        ? '    .page p, .page li, .page blockquote { hyphens: auto; -webkit-hyphens: auto; }\n\n'
+        : '') +
       '    .page > *:first-child { margin-top: 0; }\n' +
       '    .page > *:last-child { margin-bottom: 0; }\n\n' +
       '    .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {\n' +
-      '      font-family: var(--md2ebook-font-family);\n' +
+      '      font-family: var(--md2ebook-heading-font-family);\n' +
+      '      text-align: var(--md2ebook-h3-text-align);\n' +
       '      page-break-after: avoid;\n' +
       '      break-after: avoid;\n' +
       '      margin-top: 1.4em;\n' +
@@ -381,6 +509,7 @@
       '    .page h1 {\n' +
       '      font-size: var(--md2ebook-h1-size);\n' +
       '      font-weight: var(--md2ebook-h1-weight);\n' +
+      '      text-align: var(--md2ebook-h1-text-align);\n' +
       '      line-height: 1.25;\n' +
       '      border-bottom: 2px solid #e2e8f0;\n' +
       '      padding-bottom: 0.3em;\n' +
@@ -388,6 +517,7 @@
       '    .page h2 {\n' +
       '      font-size: var(--md2ebook-h2-size);\n' +
       '      font-weight: var(--md2ebook-h2-weight);\n' +
+      '      text-align: var(--md2ebook-h2-text-align);\n' +
       '      line-height: 1.3;\n' +
       '    }\n\n' +
       '    .page h3 {\n' +
@@ -447,6 +577,7 @@
       '      color: #e2e8f0;\n' +
       '      border-radius: 8px;\n' +
       '      overflow-x: auto;\n' +
+      '      text-align: left;\n' +
       '      page-break-inside: avoid;\n' +
       '      break-inside: avoid;\n' +
       '    }\n\n' +
@@ -489,6 +620,49 @@
       // break-before, so the content right after it is what visibly
       // starts the new page, with nothing before it shifted or spaced
       // out on the page it's leaving.
+      '    .md2ebook-toc { margin: 0 0 var(--md2ebook-paragraph-spacing) 0; text-align: left; }\n' +
+      '    .md2ebook-toc.md2ebook-toc-break { page-break-after: always; break-after: page; }\n' +
+      '    .md2ebook-toc-title {\n' +
+      '      font-family: var(--md2ebook-heading-font-family);\n' +
+      '      font-size: var(--md2ebook-h2-size);\n' +
+      '      font-weight: var(--md2ebook-h2-weight);\n' +
+      '      text-align: ' + (normalized.tocTitleAlign || 'var(--md2ebook-h2-text-align)') + ';\n' +
+      '      line-height: 1.3;\n' +
+      '      margin: 0 0 0.8em 0;\n' +
+      '    }\n' +
+      '    .md2ebook-toc ol { list-style: none; margin: 0; padding: 0; }\n' +
+      '    .md2ebook-toc li { margin: 0 0 0.35em 0; break-inside: avoid; page-break-inside: avoid; }\n' +
+      normalized.tocLevelStyles
+        .map(function (st, i) {
+          var sel = '    .md2ebook-toc li.md2ebook-toc-l' + (i + 1);
+          return (
+            sel + ' {' +
+            ' font-weight: ' + (st.bold ? 'var(--md2ebook-bold-weight)' : 'var(--md2ebook-base-weight)') + ';' +
+            ' font-style: ' + (st.italic ? 'italic' : 'normal') + ';' +
+            (st.size ? ' font-size: ' + st.size + 'px;' : '') +
+            (st.lineHeight ? ' line-height: ' + st.lineHeight + ';' : '') +
+            ' }\n' +
+            (st.underline ? sel + ' .md2ebook-toc-text { text-decoration: underline; text-underline-offset: 0.15em; }\n' : '')
+          );
+        })
+        .join('') +
+      '    .md2ebook-toc li.md2ebook-toc-l1:not(:first-child) { margin-top: 0.6em; }\n' +
+      '    .md2ebook-toc li.md2ebook-toc-l2 { padding-left: 1.4em; }\n' +
+      '    .md2ebook-toc li.md2ebook-toc-l3 { padding-left: 2.8em; }\n' +
+      '    .page .md2ebook-toc a { display: flex; align-items: baseline; color: inherit; text-decoration: none; word-break: normal; }\n' +
+      '    .md2ebook-toc-text { flex: 0 1 auto; }\n' +
+      '    .md2ebook-toc-leader { flex: 1 1 auto; min-width: 1em; margin: 0 0.4em; }\n' +
+      '    .md2ebook-toc-dots .md2ebook-toc-leader { border-bottom: 1.5px dotted #94a3b8; transform: translateY(-0.3em); }\n' +
+      '    .md2ebook-toc-num { flex: 0 0 auto; min-width: 1.8em; text-align: right; font-variant-numeric: tabular-nums; }\n\n' +
+      '    .md2ebook-space {\n' +
+      '      display: block;\n' +
+      '      height: calc(var(--md2ebook-font-size) * var(--md2ebook-line-height) * var(--md2ebook-space-lines, 1));\n' +
+      '      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n' +
+      '      padding: 0;\n' +
+      '      border: 0;\n' +
+      '      page-break-inside: avoid;\n' +
+      '      break-inside: avoid;\n' +
+      '    }\n\n' +
       '    .md2ebook-pagebreak {\n' +
       '      height: 0;\n' +
       '      margin: 0;\n' +
@@ -607,12 +781,23 @@
     };
   }
 
-  function googleFontLinkTag(fontFamily) {
+  // Link tags for both the body and (if different) the heading font.
+  function fontLinkTags(normalized) {
+    var tags = googleFontLinkTag(normalized.fontFamily);
+    if (normalized.headingFontFamily !== normalized.fontFamily) {
+      tags += googleFontLinkTag(normalized.headingFontFamily, true);
+    }
+    return tags;
+  }
+
+  function googleFontLinkTag(fontFamily, skipPreconnect) {
     if (WEB_SAFE_GOOGLE_FONTS.hasOwnProperty(fontFamily)) {
       var family = fontFamily.replace(/ /g, '+');
       return (
-        '<link rel="preconnect" href="https://fonts.googleapis.com">' +
-        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+        (skipPreconnect
+          ? ''
+          : '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+            '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>') +
         '<link href="https://fonts.googleapis.com/css2?family=' +
         family +
         ':wght@400;600;700;800;900&display=swap" rel="stylesheet">'
@@ -627,7 +812,108 @@
    * Shared groundwork used by both renderHtmlDocument and exportToPdf so
    * the two never drift out of sync.
    * ------------------------------------------------------------------ */
-  function buildDocumentParts(markdownText, config) {
+  /* ------------------------------------------------------------------
+   * applyToc(bodyHtml, normalized, tocPages)
+   * ------------------------------------------------------------------
+   * Gives every heading an id (keeping any it already has), then swaps
+   * each `\toc` placeholder for a list of H1..H{tocLevels} that link to
+   * them. Page numbers can't be known until pages are laid out, so the
+   * number cells start empty: the Paged.js documents (preview and
+   * rasterize) fill them in tocFillScript() below, and the print export
+   * gets the numbers the preview measured, passed in as tocPages
+   * ({ headingId: pageNumber }).
+   * ------------------------------------------------------------------ */
+  function slugify(text) {
+    var s = String(text)
+      .replace(/&[a-z0-9#]+;/gi, ' ')
+      .toLowerCase()
+      .trim();
+    try {
+      s = s.replace(/[^\p{L}\p{N}]+/gu, '-');
+    } catch (e) {
+      s = s.replace(/[^a-z0-9\u00c0-\uffff]+/g, '-');
+    }
+    return s.replace(/^-+|-+$/g, '').slice(0, 60);
+  }
+
+  function applyToc(bodyHtml, normalized, tocPages) {
+    if (bodyHtml.indexOf(TOC_SLOT_HTML) === -1) return bodyHtml;
+    var used = {};
+    var entries = [];
+    var html = bodyHtml.replace(/<h([1-6])(\s[^>]*)?>([\s\S]*?)<\/h\1>/g, function (whole, level, attrs, inner) {
+      attrs = attrs || '';
+      var text = inner.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      var idMatch = /\sid\s*=\s*["']([^"']+)["']/i.exec(attrs);
+      var id;
+      if (idMatch) {
+        id = idMatch[1];
+      } else {
+        var base = 'h-' + (slugify(text) || 'section');
+        id = base;
+        for (var n = 2; used[id]; n++) id = base + '-' + n;
+        attrs = ' id="' + id + '"' + attrs;
+      }
+      used[id] = true;
+      if (Number(level) <= normalized.tocLevels && text) {
+        entries.push({ level: Number(level), id: id, text: text });
+      }
+      return '<h' + level + attrs + '>' + inner + '</h' + level + '>';
+    });
+
+    var items = entries
+      .map(function (e) {
+        var num =
+          normalized.tocPageNumbers && tocPages && tocPages[e.id] != null ? String(tocPages[e.id]) : '';
+        return (
+          '<li class="md2ebook-toc-l' + e.level + '"><a href="#' + e.id + '" data-toc-target="' + e.id + '">' +
+          '<span class="md2ebook-toc-text">' + e.text + '</span>' +
+          (normalized.tocPageNumbers
+            ? '<span class="md2ebook-toc-leader"></span><span class="md2ebook-toc-num">' + num + '</span>'
+            : '') +
+          '</a></li>'
+        );
+      })
+      .join('');
+
+    var cls =
+      'md2ebook-toc' +
+      (normalized.tocPageNumbers && normalized.tocDotLeaders ? ' md2ebook-toc-dots' : '') +
+      (normalized.tocPageBreakAfter ? ' md2ebook-toc-break' : '');
+    var tocHtml =
+      '<nav class="' + cls + '">' +
+      (normalized.tocShowTitle && normalized.tocTitle
+        ? '<p class="md2ebook-toc-title">' + escapeHtml(normalized.tocTitle) + '</p>'
+        : '') +
+      '<ol>' + (items || '<li><em>No headings yet.</em></li>') + '</ol></nav>';
+
+    return html.split(TOC_SLOT_HTML).join(tocHtml);
+  }
+
+  // JS run inside a Paged.js document once layout is done: finds which
+  // page each contents entry's heading landed on, writes the number into
+  // the entry, and leaves the map in __tocPages for posting back.
+  function tocFillScript(normalized) {
+    var start = normalized.pageNumbersEnabled ? normalized.pageStartFrom : 1;
+    return (
+      '      var __tocPages = {};\n' +
+      '      try {\n' +
+      '        var __pgs = Array.prototype.slice.call(document.querySelectorAll(".pagedjs_page"));\n' +
+      '        var __links = document.querySelectorAll(".md2ebook-toc a[data-toc-target]");\n' +
+      '        for (var __k = 0; __k < __links.length; __k++) {\n' +
+      '          var __id = __links[__k].getAttribute("data-toc-target");\n' +
+      '          var __t = document.getElementById(__id);\n' +
+      '          var __p = __t && __t.closest(".pagedjs_page");\n' +
+      '          if (!__p) continue;\n' +
+      '          var __n = ' + start + ' + __pgs.indexOf(__p);\n' +
+      '          __tocPages[__id] = __n;\n' +
+      '          var __s = __links[__k].querySelector(".md2ebook-toc-num");\n' +
+      '          if (__s) __s.textContent = String(__n);\n' +
+      '        }\n' +
+      '      } catch (e) {}\n'
+    );
+  }
+
+  function buildDocumentParts(markdownText, config, options) {
     var normalized = normalizeConfig(config);
     var paper = PAPER_SIZES[normalized.paperSize] || PAPER_SIZES[DEFAULT_PAPER_KEY];
     var styleText = generateStyleBlock(normalized, paper);
@@ -644,6 +930,7 @@
         /* older marked builds may not expose setOptions the same way */
       }
       bodyHtml = markedFn(applyPageBreakMarkers(markdownText || ''));
+      bodyHtml = applyToc(bodyHtml, normalized, options && options.tocPages);
     } else {
       // Extremely defensive fallback if marked.js failed to load for any
       // reason — avoids a hard crash and shows the raw text instead. The
@@ -734,9 +1021,11 @@
           '        }\n'
         : '') +
       '      } catch (e) {}\n' +
+      tocFillScript(parts.normalized) +
       '      try {\n' +
       '        window.parent.postMessage({\n' +
       "          source: 'md2ebook-pagedjs',\n" +
+      '          tocPages: __tocPages,\n' +
       '          pageCount: flow && flow.total,\n' +
       '          height: document.documentElement.scrollHeight\n' +
       "        }, '*');\n" +
@@ -763,11 +1052,13 @@
       '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '  <title>Md to PDF Converter — Preview</title>\n' +
       '  ' +
-      googleFontLinkTag(parts.normalized.fontFamily) +
+      fontLinkTags(parts.normalized) +
       '\n' +
       '  <style>' +
       parts.styleText +
       buildPageBoxRule(parts) +
+      '\n    .md2ebook-space { outline: 1px dashed #cbd5e1; outline-offset: -1px; position: relative; }\n' +
+      "    .md2ebook-space::after { content: 'blank space \\00b7  ' attr(data-lines) ' lines'; position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; font: 11px ui-sans-serif, system-ui, sans-serif; color: #94a3b8; }\n" +
       '  </style>\n' +
       '  ' +
       paginationScript +
@@ -885,6 +1176,7 @@
           '        }\n'
         : '') +
       '      } catch (e) {}\n' +
+      tocFillScript(parts.normalized) +
       '      var pages = document.querySelectorAll(".pagedjs_page");\n' +
       '      var images = [];\n' +
       '      var i = 0;\n' +
@@ -929,7 +1221,7 @@
       '  <meta charset="UTF-8">\n' +
       '  <title>Md to PDF Converter — Export</title>\n' +
       '  ' +
-      googleFontLinkTag(parts.normalized.fontFamily) +
+      fontLinkTags(parts.normalized) +
       '\n' +
       '  <style>' +
       parts.styleText +
@@ -985,11 +1277,13 @@
    * the visual margin comes from the .page element's own padding, so it
    * renders identically to the live preview.
    * ------------------------------------------------------------------ */
-  function exportToPdf(markdownText, config) {
+  // options.tocPages: { headingId: pageNumber } as measured by the live
+  // preview (the print engine can't work out page numbers itself).
+  function exportToPdf(markdownText, config, options) {
     return new Promise(function (resolve, reject) {
       var parts;
       try {
-        parts = buildDocumentParts(markdownText, config);
+        parts = buildDocumentParts(markdownText, config, options);
       } catch (err) {
         reject(err);
         return;
@@ -1051,7 +1345,7 @@
         '<title>' +
         escapeHtml(docTitle) +
         '</title>\n' +
-        googleFontLinkTag(parts.normalized.fontFamily) +
+        fontLinkTags(parts.normalized) +
         '\n' +
         '<style>' +
         parts.styleText +
@@ -1405,6 +1699,7 @@
     FONT_STACKS: FONT_STACKS,
     DEFAULTS: DEFAULTS,
     ALLOWED_BOLD_WEIGHTS: ALLOWED_BOLD_WEIGHTS,
+    TEXT_ALIGN_OPTIONS: TEXT_ALIGN_OPTIONS,
     normalizeConfig: normalizeConfig,
     renderHtmlDocument: renderHtmlDocument,
     renderRasterizationDocument: renderRasterizationDocument,
