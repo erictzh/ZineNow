@@ -80,7 +80,7 @@
     },
   };
 
-  var DEFAULT_PAPER_KEY = 'a4';
+  var DEFAULT_PAPER_KEY = 'a5';
 
   /* ------------------------------------------------------------------
    * Default typography values — the fallback contract described in the
@@ -103,7 +103,7 @@
     headingFontSameAsBody: true,
     headingFontFamily: '',
     paperSize: DEFAULT_PAPER_KEY,
-    fontSize: 16, // px
+    fontSize: 13.33, // px (= 10pt, the Anarchist Library / Amusewiki default for A5 zine pages)
     lineHeight: 1.6, // unitless
     paragraphSpacing: '1rem', // CSS length (bottom margin on <p>)
     textAlign: 'left', // body text: left | center | right | justify
@@ -118,6 +118,14 @@
     h2Weight: 600,
     h3Size: 18, // px
     h3Weight: 600,
+    // Per-level heading line height (unitless) and the rule drawn
+    // beneath the heading. H4–H6 are unaffected by these.
+    h1LineHeight: 1.25,
+    h2LineHeight: 1.3,
+    h3LineHeight: 1.35,
+    h1Underline: true,
+    h2Underline: false,
+    h3Underline: false,
     baseWeight: 400, // regular body text weight
     boldWeight: 700, // <strong>/<b> weight
     marginVerticalIn: 0.75, // page margin, top/bottom, inches
@@ -383,6 +391,12 @@
       h2Weight: toNumber(config.h2Weight, DEFAULTS.h2Weight),
       h3Size: toPositiveNumber(config.h3Size, DEFAULTS.h3Size),
       h3Weight: toNumber(config.h3Weight, DEFAULTS.h3Weight),
+      h1LineHeight: toPositiveNumber(config.h1LineHeight, DEFAULTS.h1LineHeight),
+      h2LineHeight: toPositiveNumber(config.h2LineHeight, DEFAULTS.h2LineHeight),
+      h3LineHeight: toPositiveNumber(config.h3LineHeight, DEFAULTS.h3LineHeight),
+      h1Underline: toBoolean(config.h1Underline, DEFAULTS.h1Underline),
+      h2Underline: toBoolean(config.h2Underline, DEFAULTS.h2Underline),
+      h3Underline: toBoolean(config.h3Underline, DEFAULTS.h3Underline),
 
       baseWeight: toNumber(config.baseWeight, DEFAULTS.baseWeight),
       boldWeight: toBoldWeight(config.boldWeight, DEFAULTS.boldWeight),
@@ -434,6 +448,14 @@
    * (iframe srcDoc) and the print window used for PDF export, so the
    * two are guaranteed to look identical.
    * ------------------------------------------------------------------ */
+  // The rule drawn beneath a heading (H1 has always had one; H2/H3 can
+  // now opt in). Off means no border and no extra padding to hold it.
+  function headingRule(on) {
+    return on
+      ? '      border-bottom: 2px solid #e2e8f0;\n      padding-bottom: 0.3em;\n'
+      : '      border-bottom: none;\n      padding-bottom: 0;\n';
+  }
+
   function generateStyleBlock(normalized, paper) {
     var vars = [
       '--md2ebook-font-family: ' + normalized.fontStack + ';',
@@ -451,6 +473,9 @@
       '--md2ebook-h2-weight: ' + normalized.h2Weight + ';',
       '--md2ebook-h3-size: ' + normalized.h3Size + 'px;',
       '--md2ebook-h3-weight: ' + normalized.h3Weight + ';',
+      '--md2ebook-h1-line-height: ' + normalized.h1LineHeight + ';',
+      '--md2ebook-h2-line-height: ' + normalized.h2LineHeight + ';',
+      '--md2ebook-h3-line-height: ' + normalized.h3LineHeight + ';',
       '--md2ebook-base-weight: ' + normalized.baseWeight + ';',
       '--md2ebook-bold-weight: ' + normalized.boldWeight + ';',
       '--md2ebook-page-width: ' + paper.widthIn + 'in;',
@@ -493,9 +518,9 @@
       '      color: #1a1a1a;\n' +
       '      -webkit-font-smoothing: antialiased;\n' +
       '    }\n\n' +
-      (normalized.textAlign === 'justify'
-        ? '    .page p, .page li, .page blockquote { hyphens: auto; -webkit-hyphens: auto; }\n\n'
-        : '') +
+      // Words never split across lines with a hyphen (no "criti-/cal").
+      // Justified text just spreads the gaps between whole words instead.
+      '    .page p, .page li, .page blockquote { hyphens: none; -webkit-hyphens: none; }\n\n' +
       '    .page > *:first-child { margin-top: 0; }\n' +
       '    .page > *:last-child { margin-bottom: 0; }\n\n' +
       '    .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {\n' +
@@ -510,20 +535,21 @@
       '      font-size: var(--md2ebook-h1-size);\n' +
       '      font-weight: var(--md2ebook-h1-weight);\n' +
       '      text-align: var(--md2ebook-h1-text-align);\n' +
-      '      line-height: 1.25;\n' +
-      '      border-bottom: 2px solid #e2e8f0;\n' +
-      '      padding-bottom: 0.3em;\n' +
+      '      line-height: var(--md2ebook-h1-line-height);\n' +
+      headingRule(normalized.h1Underline) +
       '    }\n\n' +
       '    .page h2 {\n' +
       '      font-size: var(--md2ebook-h2-size);\n' +
       '      font-weight: var(--md2ebook-h2-weight);\n' +
       '      text-align: var(--md2ebook-h2-text-align);\n' +
-      '      line-height: 1.3;\n' +
+      '      line-height: var(--md2ebook-h2-line-height);\n' +
+      headingRule(normalized.h2Underline) +
       '    }\n\n' +
       '    .page h3 {\n' +
       '      font-size: var(--md2ebook-h3-size);\n' +
       '      font-weight: var(--md2ebook-h3-weight);\n' +
-      '      line-height: 1.35;\n' +
+      '      line-height: var(--md2ebook-h3-line-height);\n' +
+      headingRule(normalized.h3Underline) +
       '    }\n\n' +
       '    .page h4 { font-size: calc(var(--md2ebook-h3-size) * 0.9); font-weight: var(--md2ebook-h3-weight); }\n\n' +
       '    .page p {\n' +
@@ -552,7 +578,11 @@
       '      margin: 2em 0;\n' +
       '    }\n\n' +
       '    .page blockquote {\n' +
-      '      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n' +
+      // One blank body-text line above and below every quote (adjacent
+      // margins collapse, so this never stacks on top of paragraph
+      // spacing — the larger of the two wins). The first/last-child
+      // rules above still zero it at the very top/bottom of the page.
+      '      margin: calc(var(--md2ebook-font-size) * var(--md2ebook-line-height)) 0;\n' +
       '      padding: 0.6em 1.2em;\n' +
       '      border-left: 4px solid #94a3b8;\n' +
       '      background: #f8fafc;\n' +
@@ -696,6 +726,27 @@
    * width/padding would just double up against the margin Paged.js is
    * already applying per page.
    * ------------------------------------------------------------------ */
+  // Paged.js stamps data-align-last-split-element="justify" on the deepest
+  // element of a split and styles it `text-align-last: justify`, so the
+  // line right before a page break stays flush on both sides. When the
+  // break falls *between* paragraphs, the deepest split element is the
+  // outer .page wrapper itself, and text-align-last is inherited — so
+  // every paragraph on that page had its final line stretched across the
+  // full width. Neutralize the stamp everywhere, then re-apply it only
+  // where the split element is an actual paragraph/list item that
+  // continues on the next page.
+  function paginationJustifyFix() {
+    return (
+      ".pagedjs_page_content [data-align-last-split-element='justify'] {\n" +
+      '  text-align-last: auto;\n' +
+      '}\n' +
+      ".pagedjs_page_content p[data-align-last-split-element='justify'],\n" +
+      ".pagedjs_page_content li[data-align-last-split-element='justify'] {\n" +
+      '  text-align-last: justify;\n' +
+      '}\n'
+    );
+  }
+
   function buildPageBoxRule(parts) {
     var pageNumbers = buildPageNumberCss(parts.normalized);
     return (
@@ -725,7 +776,8 @@
       '.pagedjs_page {\n' +
       '  margin-bottom: 24px !important;\n' +
       '  border-bottom: 3px solid #4b4b4b !important;\n' +
-      '}\n'
+      '}\n' +
+      paginationJustifyFix()
     );
   }
 
@@ -1147,7 +1199,8 @@
       '.pagedjs_page {\n' +
       '  margin-bottom: 0 !important;\n' +
       '  border-bottom: none !important;\n' +
-      '}\n'
+      '}\n' +
+      paginationJustifyFix()
     );
   }
 
