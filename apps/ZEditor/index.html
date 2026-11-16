@@ -91,6 +91,24 @@
       window.addEventListener("mouseup", up);
     }
 
+    // ---- Groups. Items grouped together share a `groupId`. Selecting any one
+    // selects them all, so they move, turn and delete as one; Alt + click
+    // picks a single member, and Ungroup (Ctrl+Shift+G) lets them go.
+    // `ids` plus every other selectable (not hidden, not locked) member of
+    // their groups, with `ids` first.
+    function withGroupMates(annotations, ids) {
+      const groups = new Set(annotations.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+      if (groups.size === 0) return ids;
+      const mates = annotations.filter((a) => groups.has(a.groupId) && !a.hidden && !a.locked).map((a) => a.id);
+      return [...new Set([...ids, ...mates])];
+    }
+    // A steady colour per group, for the marker beside its layers.
+    function groupColor(groupId) {
+      let hash = 0;
+      for (const ch of String(groupId)) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
+      return `hsl(${(hash * 47) % 360} 70% 60%)`;
+    }
+
     function translatedAnnotation(ann, dx, dy) {
       return ann.type === "stroke"
         ? { ...ann, points: ann.points.map(([px, py]) => [px + dx, py + dy]) }
@@ -256,6 +274,95 @@
       xerox: XEROX_FILTER_CONTROLS,
     };
     const DEFAULT_PAGE_FILTER = { type: "none" };
+
+    // ---- Photo adjustments — basic photo editing for a placed image. The values
+    // sit on the image annotation (like effects do) and are applied to the
+    // image's pixels BEFORE any filter, so a Threshold or Halftone filter
+    // works on the adjusted photo. Live preview and Export PDF run the same
+    // applyPhotoAdjust, so what you see is what exports.
+    const adjustSlider = (prop, label, fallback = 0, min = -100, max = 100) => ({ kind: "slider", prop, label, min, max, fallback });
+    const PHOTO_ADJUST_SECTIONS = [
+      {
+        id: "light", title: "Light",
+        controls: [
+          adjustSlider("adjExposure", "Exposure"),
+          adjustSlider("adjBrightness", "Brightness"),
+          adjustSlider("adjContrast", "Contrast"),
+          adjustSlider("adjHighlights", "Highlights"),
+          adjustSlider("adjShadows", "Shadows"),
+        ],
+      },
+      {
+        id: "color", title: "Color",
+        controls: [
+          adjustSlider("adjSaturation", "Saturation"),
+          adjustSlider("adjTemperature", "White balance: cool ↔ warm"),
+          adjustSlider("adjTint", "Tint: green ↔ magenta"),
+        ],
+      },
+      {
+        id: "levels", title: "Levels",
+        controls: [
+          adjustSlider("adjBlack", "Black point", 0, 0, 254),
+          adjustSlider("adjWhite", "White point", 255, 1, 255),
+          adjustSlider("adjGamma", "Midtones (%)", 100, 10, 300),
+        ],
+      },
+    ];
+    const PHOTO_ADJUST_CONTROLS = PHOTO_ADJUST_SECTIONS.flatMap((s) => s.controls);
+    const isAdjusted = (ann, control) => ann[control.prop] != null && ann[control.prop] !== control.fallback;
+    const hasPhotoAdjust = (ann) => PHOTO_ADJUST_CONTROLS.some((c) => isAdjusted(ann, c));
+
+    // Edits the canvas's pixels in place. The per-channel steps (levels,
+    // exposure, brightness, contrast) are baked into one lookup table; the
+    // rest (shadows/highlights, white balance, saturation) work on each pixel.
+    function applyPhotoAdjust(ctx, canvas, ann) {
+      const { width, height } = canvas;
+      if (width === 0 || height === 0) return;
+      const v = controlValues(ann, PHOTO_ADJUST_CONTROLS);
+      const black = v.adjBlack;
+      const white = Math.max(black + 1, v.adjWhite);
+      const invGamma = 1 / (v.adjGamma / 100);
+      const gain = Math.pow(2, v.adjExposure / 50); // ±100 is ±2 stops
+      const offset = v.adjBrightness * 1.2;
+      const c = v.adjContrast * 1.2; // ±100 gives roughly ×0.4 to ×2.7
+      const contrast = (259 * (c + 255)) / (255 * (259 - c));
+      const lut = new Uint8ClampedArray(256);
+      for (let i = 0; i < 256; i++) {
+        const level = Math.pow(Math.min(1, Math.max(0, (i - black) / (white - black))), invGamma) * 255;
+        lut[i] = ((level * gain + offset) - 128) * contrast + 128;
+      }
+      const shadows = v.adjShadows * 0.9, highlights = v.adjHighlights * 0.9;
+      const toneMapped = shadows !== 0 || highlights !== 0;
+      const warm = v.adjTemperature / 100, tint = v.adjTint / 100;
+      const balanced = warm !== 0 || tint !== 0;
+      const saturation = 1 + v.adjSaturation / 100;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        let r = lut[data[i]], g = lut[data[i + 1]], b = lut[data[i + 2]];
+        if (toneMapped) {
+          // Shadows lift the dark parts, highlights pull the bright parts.
+          const l = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+          const shift = shadows * (1 - l) * (1 - l) + highlights * l * l;
+          r += shift; g += shift; b += shift;
+        }
+        if (balanced) {
+          r *= 1 + warm * 0.3 + tint * 0.1;
+          g *= 1 - tint * 0.3;
+          b *= 1 - warm * 0.3 + tint * 0.1;
+        }
+        if (saturation !== 1) {
+          const l = r * 0.299 + g * 0.587 + b * 0.114;
+          r = l + (r - l) * saturation;
+          g = l + (g - l) * saturation;
+          b = l + (b - l) * saturation;
+        }
+        data[i] = r; data[i + 1] = g; data[i + 2] = b; // the clamped array rounds and limits to 0–255
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
     // Image effects — the one place an effect and its settings are defined.
     // `key` is the on/off flag on the annotation, each control's `prop` is
     // where its value lives. The Format panel's buttons and cards are built
@@ -549,6 +656,8 @@
     ];
     // What Rasterize to Image clears: the fill. Opacity and blend carry over to the image.
     const RECT_FILL_PROPS = RECT_CONTROLS.map((c) => c.prop).filter((p) => p !== OPACITY_CONTROL.prop && p !== BLEND_CONTROL.prop);
+    // The Format panel shows the fill apart from opacity/blend.
+    const RECT_FILL_CONTROLS = RECT_CONTROLS.filter((c) => RECT_FILL_PROPS.includes(c.prop));
     const MIN_RECT_SIZE = 2; // small enough to use a rectangle as a thin rule
     const DEFAULT_RECT_SIZE = { width: 160, height: 110 }; // for a click without a drag
 
@@ -1375,24 +1484,65 @@
       ctx.restore();
     }
 
-    // Word-based wrapping (canvas has no auto-wrap) — also respects
-    // explicit newlines, matching the editor's `white-space: pre-wrap`.
-    function wrapTextLines(ctx, text, maxWidth, measure = (s) => ctx.measureText(s).width) {
-      const paragraphs = (text || "").split("\n");
-      const lines = [];
-      for (const para of paragraphs) {
-        if (para === "") { lines.push(""); continue; }
-        const words = para.split(" ");
-        let current = "";
-        for (const word of words) {
-          const test = current ? current + " " + word : word;
-          if (current && measure(test) > maxWidth) {
-            lines.push(current);
-            current = word;
-          } else {
-            current = test;
-          }
+    // Characters a browser may break a line between (each one on its own, no
+    // spaces needed): Chinese, Japanese kana, Korean, and full-width forms.
+    const WRAP_CJK_RE = /[⺀-〿぀-ヿ㄀-ㄯ㐀-䶿一-鿿가-힯豈-﫿︰-﹏＀-￯\u{20000}-\u{3FFFF}]/u;
+    // Closing punctuation never starts a line, so it sticks to the character before it.
+    const WRAP_NO_LINE_START = "，。、．：；！？）］｝】〕〉》」』”’…ー";
+
+    // Splits one space-free word into pieces a line may break between: each
+    // CJK character alone, any other run of characters kept whole.
+    function wrapAtoms(word) {
+      const atoms = [];
+      let run = "";
+      for (const ch of Array.from(word)) {
+        if (WRAP_CJK_RE.test(ch)) {
+          if (run) { atoms.push(run); run = ""; }
+          if (atoms.length && WRAP_NO_LINE_START.includes(ch)) atoms[atoms.length - 1] += ch;
+          else atoms.push(ch);
+        } else {
+          run += ch;
         }
+      }
+      if (run) atoms.push(run);
+      return atoms;
+    }
+
+    // Word-based wrapping (canvas has no auto-wrap) — also respects
+    // explicit newlines, matching the editor's `white-space: pre-wrap`, and
+    // its `word-break: break-word`: CJK text breaks between characters, and
+    // a single word wider than the box is cut to fit rather than running on
+    // in one endless line.
+    function wrapTextLines(ctx, text, maxWidth, measure = (s) => ctx.measureText(s).width) {
+      const lines = [];
+      // Cuts a too-wide piece into lines that fit; the last chunk becomes the line in progress.
+      const cutToFit = (piece) => {
+        let chunk = "";
+        for (const ch of Array.from(piece)) {
+          if (chunk && measure(chunk + ch) > maxWidth) { lines.push(chunk); chunk = ch; }
+          else chunk += ch;
+        }
+        return chunk;
+      };
+      for (const para of (text || "").split("\n")) {
+        if (para === "") { lines.push(""); continue; }
+        let current = "";
+        para.split(" ").forEach((word, wordIndex) => {
+          const atoms = word === "" ? [""] : wrapAtoms(word);
+          atoms.forEach((atom, atomIndex) => {
+            // A space goes before a word's first piece only (not the paragraph's first word).
+            const joiner = atomIndex === 0 && wordIndex > 0 ? " " : "";
+            const test = current + joiner + atom;
+            if (current && measure(test) > maxWidth) {
+              lines.push(current);
+              current = measure(atom) > maxWidth ? cutToFit(atom) : atom;
+            } else if (!current && measure(test) > maxWidth) {
+              current = cutToFit(test);
+            } else {
+              current = test;
+            }
+          });
+        });
         lines.push(current);
       }
       return lines;
@@ -1867,12 +2017,14 @@
       // into surrounding page pixels.
       const imgFilter = effectiveImageFilter(ann, pageFilter);
       const filterType = imgFilter.type;
-      if (filterType && filterType !== "none") {
+      const adjusted = hasPhotoAdjust(ann);
+      if ((filterType && filterType !== "none") || adjusted) {
         const off = document.createElement("canvas");
         off.width = Math.max(1, Math.round(w));
         off.height = Math.max(1, Math.round(h));
         const octx = off.getContext("2d");
         octx.drawImage(img, sx, sy, sw, sh, 0, 0, off.width, off.height);
+        if (adjusted) applyPhotoAdjust(octx, off, ann); // before the filter, so the filter sees the adjusted photo
         applyPageFilter(octx, off, imgFilter, scaleFactor);
         source = off;
         sx = 0; sy = 0; sw = off.width; sh = off.height;
@@ -1994,11 +2146,31 @@
       ]));
       return {
         ...clearedEffects,
+        ...Object.fromEntries(PHOTO_ADJUST_CONTROLS.map((c) => [c.prop, undefined])), // baked in now
         ...baked,
         cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined,
         // Any filter is baked in now; an unfiltered image can keep following the page.
         filter: filter.type === "none" ? ann.filter : { type: "none" },
       };
+    }
+
+    // The patch that removes an image's crop. The box keeps the on-page size of
+    // one source pixel and grows to show the whole image around the cropped
+    // window, which stays where it is. (Just clearing the crop fields would
+    // squeeze the full image into the cropped box, at the wrong proportions.)
+    function cropResetPatch(ann) {
+      const cleared = { cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined };
+      if (ann.cropW == null || !ann.naturalWidth || !ann.naturalHeight) return cleared;
+      const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
+      const sx = ann.width / ann.cropW, sy = ann.height / (ann.cropH || ann.naturalHeight);
+      const width = ann.naturalWidth * sx, height = ann.naturalHeight * sy;
+      // Shift of the box's centre, in its own (unrotated) frame, then turned by its rotation.
+      const lx = -cropX * sx + width / 2 - ann.width / 2;
+      const ly = -cropY * sy + height / 2 - ann.height / 2;
+      const rad = angleOf(ann) * Math.PI / 180;
+      const cx = ann.x + ann.width / 2 + lx * Math.cos(rad) - ly * Math.sin(rad);
+      const cy = ann.y + ann.height / 2 + lx * Math.sin(rad) + ly * Math.cos(rad);
+      return { ...cleared, x: cx - width / 2, y: cy - height / 2, width, height };
     }
 
     // Turns a rectangle into an ordinary image annotation holding what it
@@ -2858,8 +3030,13 @@
       // "for free" without a separate step.
       const imgFilter = effectiveImageFilter(ann, pageFilter);
       const filterType = imgFilter.type;
-      const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]);
-      const filterCanvasKey = usesFilterCanvas ? JSON.stringify(imgFilter) : null;
+      // Photo adjustments are per-pixel too, so an adjusted image is drawn on
+      // the canvas as well (adjusted first, then filtered).
+      const adjusted = hasPhotoAdjust(ann);
+      const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
+      const filterCanvasKey = usesFilterCanvas
+        ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null])
+        : null;
 
       useEffect(() => {
         if (!usesFilterCanvas || isCropping) return;
@@ -2875,6 +3052,7 @@
           canvas.height = h;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
+          if (adjusted) applyPhotoAdjust(ctx, canvas, ann);
           applyPageFilter(ctx, canvas, imgFilter, 1);
         })();
         return () => { cancelled = true; };
@@ -2916,7 +3094,7 @@
       // the page's duotone colors, not necessarily this image's.
       const hasOwnDuotone = ann.filter && ann.filter.type === "duotone";
       const duotoneFilterId = hasOwnDuotone ? "ze-filter-duotone-img-" + ann.id : "ze-filter-duotone";
-      const cssFilter =
+      const cssFilter = usesFilterCanvas ? undefined : // the canvas already has the filter applied
         filterType === "grayscale" ? "url(#ze-filter-grayscale)" :
         filterType === "duotone" ? `url(#${duotoneFilterId})` : undefined;
       const frameStyle = {};
@@ -3300,9 +3478,13 @@
         if (editingAnnId !== null && editingAnnId !== ann.id) onFinishTextEdit();
         const current = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
         const wasSelected = current.includes(ann.id);
-        if (e.shiftKey || !wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
+        // Alt + click takes one member out of its group.
+        const single = e.altKey && !e.shiftKey && Boolean(ann.groupId);
+        if (single) onSelectAnnotation(ann.id, false, true);
+        else if (e.shiftKey || !wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
         if (e.shiftKey && wasSelected) return; // that press just took it out of the selection
-        const movingIds = wasSelected ? current : e.shiftKey ? [...current, ann.id] : [ann.id];
+        const mates = withGroupMates(annotations, [ann.id]);
+        const movingIds = single ? [ann.id] : wasSelected ? current : e.shiftKey ? [...current, ...mates] : mates;
         const originals = annotations.filter((a) => movingIds.includes(a.id));
         const dragDelta = dragDeltaFrom(e, zoom);
         let moved = false;
@@ -3313,7 +3495,7 @@
         }, () => {
           if (moved) return;
           // Clicking one member of a group, without dragging, narrows to it.
-          if (wasSelected && !e.shiftKey && current.length > 1) onSelectAnnotation(ann.id, false);
+          if (wasSelected && !e.shiftKey && !single && current.length > 1) onSelectAnnotation(ann.id, false);
           if (onPlainClick) onPlainClick();
         });
       }
@@ -4050,7 +4232,67 @@
       });
     }
 
-    // The text panel's "photo through the letters" section.
+    // ---- Collapsible sections, CapCut-style. Every group of controls in the
+    // Format panel is one of these: an optional checkbox that switches the
+    // feature on (an unchecked section stays collapsed), a title that
+    // expands/collapses it, an optional "?" tooltip, a summary of the current
+    // value and an optional reset button. Whether a section is open is
+    // remembered by `id`, so it stays as you left it when you select
+    // something else.
+    const sectionOpenMemory = {};
+    function PanelSection({ id, title, checked, onToggle, disabled, defaultOpen = false, group, hint, summary, onReset, children }) {
+      const hasToggle = typeof onToggle === "function";
+      const expandable = children != null && children !== false;
+      const [open, setOpenState] = useState(() => (id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen));
+      const setOpen = (value) => { sectionOpenMemory[id] = value; setOpenState(value); };
+      // Turning a feature on opens its controls.
+      const wasChecked = useRef(checked);
+      useEffect(() => {
+        if (checked && !wasChecked.current && expandable) setOpen(true);
+        wasChecked.current = checked;
+      }, [checked]);
+      const isOff = hasToggle && !checked;
+      const isOpen = expandable && open && !isOff;
+      function clickTitle() {
+        if (isOff) { if (!disabled) onToggle(true); }
+        else if (expandable) setOpen(!open);
+        else if (hasToggle && !disabled) onToggle(false);
+      }
+      return (
+        <section className={"ze-sec" + (isOpen ? " is-open" : "") + (isOff ? " is-off" : "")}>
+          <div className="ze-sec-head">
+            {hasToggle && (
+              <input type="checkbox" className="ze-sec-check" checked={Boolean(checked)} disabled={disabled} aria-label={title} onChange={(e) => onToggle(e.target.checked)} />
+            )}
+            <button type="button" className="ze-sec-title" aria-expanded={expandable ? isOpen : undefined} onClick={clickTitle}>
+              <span className="ze-sec-name">{title}</span>
+              {expandable && (
+                <svg className={"ze-sec-caret" + (isOff ? " is-hidden" : "")} viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+                </svg>
+              )}
+              {hint && <span className="ze-sec-help" title={hint}>?</span>}
+              {summary && !isOpen && <span className="ze-sec-summary">{summary}</span>}
+            </button>
+            {onReset && isOpen && (
+              <button type="button" className="ze-sec-reset" title="Reset to defaults" aria-label={"Reset " + title} onClick={onReset}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" />
+                  <path d="M3 4v5h5" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {isOpen && <div className={"ze-sec-body" + (group ? " is-group" : "")}>{children}</div>}
+        </section>
+      );
+    }
+
+    // Setting these to undefined puts a control list back to its defaults.
+    const resetPatch = (controls) => Object.fromEntries(controls.map((c) => [c.prop, undefined]));
+
+    // The text panel's "photo through the letters" section: ticking it asks
+    // for a photo, unticking removes it.
     function TextPhotoFill({ ann, patch }) {
       const inputRef = useRef(null);
       const [error, setError] = useState(null);
@@ -4067,42 +4309,34 @@
           setError(err.message);
         }
       }
+      const choose = () => inputRef.current && inputRef.current.click();
       return (
-        <div className="ze-format-field">
-          <span className="ze-format-label">Photo fill</span>
-          <div className="ze-format-row">
-            <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => inputRef.current && inputRef.current.click()}>
-              {hasPhoto ? "Change photo…" : "Choose photo…"}
-            </button>
-            {hasPhoto && (
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => patch(Object.fromEntries(TEXT_PHOTO_PROPS.map((prop) => [prop, undefined])))}>
-                Remove
-              </button>
-            )}
-          </div>
+        <React.Fragment>
+          <PanelSection
+            id="text.photo"
+            title="Photo fill"
+            checked={hasPhoto}
+            hint="Shows a photo through the letters. Lower its opacity to let the text color or gradient show through."
+            onToggle={(on) => (on ? choose() : patch(Object.fromEntries(TEXT_PHOTO_PROPS.map((prop) => [prop, undefined]))))}
+            onReset={() => patch(resetPatch(TEXT_PHOTO_CONTROLS))}
+          >
+            <div className="ze-format-field">
+              <div className="ze-format-row">
+                <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={choose}>Change photo…</button>
+              </div>
+            </div>
+            <ControlList controls={TEXT_PHOTO_CONTROLS} source={ann} onPatch={patch} />
+          </PanelSection>
           <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleChosen} />
-          {hasPhoto && <ControlList controls={TEXT_PHOTO_CONTROLS} source={ann} onPatch={patch} />}
-          {error && <span className="ze-format-hint is-error">{error}</span>}
-          <span className="ze-format-hint">Shows a photo through the letters. Lower its opacity to let the text color or gradient show through.</span>
-        </div>
+          {error && <span className="ze-format-hint is-error" style={{ padding: "8px 16px", margin: 0 }}>{error}</span>}
+        </React.Fragment>
       );
     }
 
-    // One active image effect: its name above the controls defined for it.
-    function EffectCard({ effect, ann, onPatch }) {
-      return (
-        <section className="ze-effect-card">
-          <div className="ze-effect-card-title">{effect.label}</div>
-          <ControlList controls={effect.controls} source={ann} onPatch={onPatch} />
-          {effect.hint && <span className="ze-format-hint">{effect.hint}</span>}
-        </section>
-      );
-    }
-
-    // The effect on/off buttons and the settings of each active effect.
+    // One section per effect, each with its own on/off checkbox. The edge
+    // shapes (Rounded, Ellipse, Torn Edge, Scissor Cut) replace each other.
     function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS }) {
-      const toggleEffect = (effect) => {
-        const on = !ann[effect.key];
+      const toggleEffect = (effect, on) => {
         const otherEdgesOff = effect.outline && on
           ? Object.fromEntries(effects.filter((e) => e.outline).map((e) => [e.key, false]))
           : {};
@@ -4111,31 +4345,76 @@
       // An ellipse already has its own outline, so the rectangle edge shapes
       // are left out; a rectangle has the Ellipse tool instead of the Ellipse edge.
       const available = effects.filter((effect) => !(effect.outline && isEllipse(ann)) && !(effect === ELLIPSE_EFFECT && ann.type === "rect"));
-      const hint = effects !== IMAGE_EFFECTS || isEllipse(ann)
-        ? "All effects are baked into Export PDF too."
-        : "The edge shapes (Rounded, Ellipse, Torn Edge, Scissor Cut) replace each other. All effects are baked into Export PDF too.";
+      const active = available.filter((effect) => ann[effect.key]).map((effect) => effect.label);
       return (
-        <React.Fragment>
+        <PanelSection id="effects" title="Effect" group summary={active.length > 0 ? active.join(", ") : undefined}>
+          {available.map((effect) => {
+            const hint = [effect.outline && "Only one edge shape can be on at a time.", effect.hint].filter(Boolean).join(" ");
+            return (
+              <PanelSection
+                key={effect.key}
+                id={"fx." + effect.key}
+                title={effect.label}
+                checked={Boolean(ann[effect.key])}
+                onToggle={(on) => toggleEffect(effect, on)}
+                hint={hint || undefined}
+                onReset={effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : undefined}
+              >
+                {effect.controls.length > 0 && <ControlList controls={effect.controls} source={ann} onPatch={onPatch} />}
+              </PanelSection>
+            );
+          })}
+        </PanelSection>
+      );
+    }
+
+    // Font, size, B/I/U, alignment and colour: one section shared by a text
+    // box's own panel and the Text tool's defaults.
+    function TextBasicSection({ fontOptions, setFontOptions, fontFamily, fontSize, bold, italic, underline, align, color, fillAlphaSource, onFillAlpha, onChange }) {
+      return (
+        <PanelSection id="text.basic" title="Basic" defaultOpen>
           <div className="ze-format-field">
-            <span className="ze-format-label">Effect</span>
-            <div className="ze-format-row">
-              {available.map((effect) => (
-                <button
-                  key={effect.key}
-                  type="button"
-                  className={"ze-format-toggle ze-format-toggle-wide" + (ann[effect.key] ? " active" : "")}
-                  onClick={() => toggleEffect(effect)}
-                >
-                  {effect.label}
-                </button>
-              ))}
-            </div>
-            <span className="ze-format-hint">{hint}</span>
+            <span className="ze-format-label">Font</span>
+            <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={fontFamily} onChange={(v) => onChange({ fontFamily: v })} />
           </div>
-          {available.filter((effect) => ann[effect.key] && effect.controls.length > 0).map((effect) => (
-            <EffectCard key={effect.key} effect={effect} ann={ann} onPatch={onPatch} />
-          ))}
-        </React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Size &amp; style</span>
+            <div className="ze-format-inline">
+              <input
+                type="number" className="ze-format-number" min="8" max="200" aria-label="Font size (px)"
+                value={fontSize}
+                onChange={(e) => onChange({ fontSize: Number(e.target.value) || 16 })}
+              />
+              <button type="button" className={"ze-format-toggle" + (bold ? " active" : "")} title="Bold" onClick={() => onChange({ bold: !bold })}><strong>B</strong></button>
+              <button type="button" className={"ze-format-toggle" + (italic ? " active" : "")} title="Italic" onClick={() => onChange({ italic: !italic })}><em>I</em></button>
+              <button type="button" className={"ze-format-toggle" + (underline ? " active" : "")} title="Underline" onClick={() => onChange({ underline: !underline })}><span style={{ textDecoration: "underline" }}>U</span></button>
+            </div>
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label" title="Resize the box (drag its corner while editing) to see centering/right-align take effect.">Align</span>
+            <div className="ze-format-row">
+              <button type="button" className={"ze-format-toggle" + (align === "left" ? " active" : "")} title="Align left" onClick={() => onChange({ align: "left" })}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
+              </button>
+              <button type="button" className={"ze-format-toggle" + (align === "center" ? " active" : "")} title="Align center" onClick={() => onChange({ align: "center" })}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
+              </button>
+              <button type="button" className={"ze-format-toggle" + (align === "right" ? " active" : "")} title="Align right" onClick={() => onChange({ align: "right" })}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
+              </button>
+            </div>
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Color</span>
+            <div className="ze-format-row ze-format-swatches">
+              {TEXT_COLOR_SWATCHES.map((c) => (
+                <button key={c} type="button" className={"ze-format-swatch" + (color === c ? " active" : "")} style={{ backgroundColor: c }} title={c} onClick={() => onChange({ color: c })} />
+              ))}
+              <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : "#1a1a1a"} onChange={(c) => onChange({ color: c })} />
+            </div>
+          </div>
+          {fillAlphaSource && <ControlList controls={[TEXT_FILL_ALPHA_CONTROL]} source={fillAlphaSource} onPatch={onFillAlpha} />}
+        </PanelSection>
       );
     }
 
@@ -4164,7 +4443,7 @@
 
     // Floats over the workspace. `position` is null until first dragged,
     // which leaves it at its default spot from the stylesheet.
-    function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onToggleFlag, onRename, onReorder }) {
+    function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onToggleFlag, onRename, onReorder }) {
       const [renamingId, setRenamingId] = useState(null);
       const [dropInfo, setDropInfo] = useState(null); // { row, before }
       const dragIdRef = useRef(null);
@@ -4172,6 +4451,7 @@
       const panelRef = useRef(null);
       const headRef = useRef(null);
       const topFirst = annotations.slice().reverse();
+      const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
 
       // Keeps the title bar on screen, so the panel can always be grabbed.
       function inView(x, y) {
@@ -4238,12 +4518,27 @@
           style={position ? { left: position.x, top: position.y, right: "auto" } : undefined}
         >
           <div className="ze-format-panel-head ze-layers-head" ref={headRef} onMouseDown={startPanelDrag}>
-            Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}
-            <button type="button" className="ze-guides-settings-btn" title="Minimize layers" aria-label="Minimize layers" onMouseDown={(e) => e.stopPropagation()} onClick={onMinimize}>
-              <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-                <path d="M5 10h10" />
-              </svg>
-            </button>
+            <span>Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}</span>
+            <span className="ze-layers-head-actions" onMouseDown={(e) => e.stopPropagation()}>
+              <button type="button" className="ze-guides-settings-btn" title="Group the selected layers (Ctrl+G)" aria-label="Group selected layers" disabled={selectedIds.length < 2} onClick={onGroup}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="11" height="11" rx="2" />
+                  <rect x="10" y="10" width="11" height="11" rx="2" />
+                </svg>
+              </button>
+              <button type="button" className="ze-guides-settings-btn" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup selected layers" disabled={!canUngroup} onClick={onUngroup}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="3" width="8" height="8" rx="2" />
+                  <rect x="13" y="13" width="8" height="8" rx="2" />
+                  <path d="M14 7h4M7 14v4" strokeDasharray="1 3" />
+                </svg>
+              </button>
+              <button type="button" className="ze-guides-settings-btn" title="Minimize layers" aria-label="Minimize layers" onClick={onMinimize}>
+                <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+                  <path d="M5 10h10" />
+                </svg>
+              </button>
+            </span>
           </div>
           <div className="ze-layers-list" ref={listRef}>
               {topFirst.map((ann, row) => {
@@ -4252,10 +4547,12 @@
                   <React.Fragment key={ann.id}>
                     {dropInfo && dropInfo.row === row && dropInfo.before && <div className="ze-drop-line" />}
                     <div
-                      className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "")}
+                      className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.groupId ? " is-grouped" : "")}
+                      style={ann.groupId ? { "--ze-group-color": groupColor(ann.groupId) } : undefined}
+                      title={ann.groupId ? "In a group — Alt + click selects just this layer" : undefined}
                       data-layer-id={ann.id}
                       draggable={!isRenaming}
-                      onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, e.shiftKey); }}
+                      onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, e.shiftKey, e.altKey); }}
                       onDoubleClick={() => setRenamingId(ann.id)}
                       {...dragHandlersFor(ann, row)}
                     >
@@ -4332,7 +4629,6 @@
       }
       return (
         <div className="ze-format-field">
-          <span className="ze-format-label">Styles</span>
           <div className="ze-style-chips">
             {BUILT_IN_TEXT_STYLES.map((style) => (
               <button key={style.name} type="button" className="ze-format-toggle" title={`Give this text the ${style.name} look`} onClick={() => { setMessage(null); patch(textStylePatch(style)); }}>{style.name}</button>
@@ -4373,7 +4669,6 @@
       const count = (ann.colorRuns || []).reduce((total, run) => total + run.end - run.start, 0);
       return (
         <div className="ze-format-field">
-          <span className="ze-format-label">Letter color</span>
           <div className="ze-format-row ze-format-swatches" onMouseDown={keepFocus}>
             {TEXT_COLOR_SWATCHES.map((c) => (
               <button key={c} type="button" className="ze-format-swatch" style={{ backgroundColor: c }} title={"Color the selected letters " + c} onClick={() => applyColor(c)} />
@@ -4400,77 +4695,51 @@
       textStyles, onSaveTextStyle, onDeleteTextStyle,
       eraserMode, onChangeEraserMode, softEraser, onChangeSoftEraser,
     }) {
+      // Every panel below is a stack of collapsible sections (see PanelSection):
+      // the essentials open, everything else one click away, effects behind
+      // their own checkbox.
+      const sizeReadout = (ann) => (
+        <div className="ze-format-field">
+          <span className="ze-format-label">Size</span>
+          <span className="ze-format-hint" style={{ display: "block", marginTop: 0 }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
+        </div>
+      );
+
       if (selectedAnn && selectedAnn.type === "text") {
         const ann = selectedAnn;
         const patch = (p) => onUpdate(ann.id, p);
+        const spacingControls = [LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
         return (
-          <aside className="ze-format-panel">
+          <aside className="ze-format-panel" key={ann.id}>
             <div className="ze-format-panel-head">Format — Text</div>
-            <div className="ze-format-panel-body">
-              <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={onSaveTextStyle} onDeleteStyle={onDeleteTextStyle} />
-              <div className="ze-format-field">
-                <span className="ze-format-label">Font</span>
-                <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={ann.fontFamily} onChange={(v) => patch({ fontFamily: v })} />
-              </div>
-
-              <label className="ze-format-field">
-                <span className="ze-format-label">Size (px)</span>
-                <input
-                  type="number"
-                  className="ze-format-number"
-                  min="8"
-                  max="200"
-                  value={ann.fontSize || 16}
-                  onChange={(e) => patch({ fontSize: Number(e.target.value) || 16 })}
-                />
-              </label>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Style</span>
-                <div className="ze-format-row">
-                  <button type="button" className={"ze-format-toggle" + (ann.bold ? " active" : "")} title="Bold" onClick={() => patch({ bold: !ann.bold })}><strong>B</strong></button>
-                  <button type="button" className={"ze-format-toggle" + (ann.italic ? " active" : "")} title="Italic" onClick={() => patch({ italic: !ann.italic })}><em>I</em></button>
-                  <button type="button" className={"ze-format-toggle" + (ann.underline ? " active" : "")} title="Underline" onClick={() => patch({ underline: !ann.underline })}><span style={{ textDecoration: "underline" }}>U</span></button>
-                </div>
-              </div>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Align</span>
-                <div className="ze-format-row">
-                  <button type="button" className={"ze-format-toggle" + (ann.align === "left" ? " active" : "")} title="Align left" onClick={() => patch({ align: "left" })}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
-                  </button>
-                  <button type="button" className={"ze-format-toggle" + (ann.align === "center" ? " active" : "")} title="Align center" onClick={() => patch({ align: "center" })}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
-                  </button>
-                  <button type="button" className={"ze-format-toggle" + (ann.align === "right" ? " active" : "")} title="Align right" onClick={() => patch({ align: "right" })}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
-                  </button>
-                </div>
-                <span className="ze-format-hint">Resize the box (drag its corner while editing) to see centering/right-align take effect.</span>
-              </div>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Color</span>
-                <div className="ze-format-row ze-format-swatches">
-                  {TEXT_COLOR_SWATCHES.map((c) => (
-                    <button key={c} type="button" className={"ze-format-swatch" + (ann.color === c ? " active" : "")} style={{ backgroundColor: c }} title={c} onClick={() => patch({ color: c })} />
-                  ))}
-                  <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(ann.color) ? ann.color : "#1a1a1a"} onChange={(color) => patch({ color })} />
-                </div>
-              </div>
-              <LetterColors ann={ann} patch={patch} />
+            <div className="ze-format-panel-body ze-sections">
+              <TextBasicSection
+                fontOptions={fontOptions} setFontOptions={setFontOptions}
+                fontFamily={ann.fontFamily} fontSize={ann.fontSize || 16}
+                bold={ann.bold} italic={ann.italic} underline={ann.underline}
+                align={ann.align} color={ann.color}
+                fillAlphaSource={ann} onFillAlpha={patch}
+                onChange={patch}
+              />
+              <PanelSection id="text.styles" title="Saved styles">
+                <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={onSaveTextStyle} onDeleteStyle={onDeleteTextStyle} />
+              </PanelSection>
+              <PanelSection id="text.spacing" title="Spacing & layout" onReset={() => patch(resetPatch(spacingControls))}>
+                <ControlList controls={spacingControls} source={ann} onPatch={patch} />
+              </PanelSection>
+              <PanelSection id="text.letters" title="Letter color">
+                <LetterColors ann={ann} patch={patch} />
+              </PanelSection>
               <TextPhotoFill ann={ann} patch={patch} />
-              <ControlList controls={[TEXT_FILL_ALPHA_CONTROL, LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL]} source={ann} onPatch={patch} />
               <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
-              <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
-              <div className="ze-format-field">
-                <span className="ze-format-label">Rasterize</span>
+              <PanelSection id="text.transform" title="Rotation & blend" onReset={() => patch(resetPatch([ANGLE_CONTROL, BLEND_CONTROL]))}>
+                <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+              </PanelSection>
+              <PanelSection id="text.rasterize" title="Rasterize" hint="Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.">
                 <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text} onClick={() => onRasterizeText(ann)}>
                   Rasterize to Image
                 </button>
-                <span className="ze-format-hint">Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.</span>
-              </div>
+              </PanelSection>
             </div>
           </aside>
         );
@@ -4481,22 +4750,25 @@
         const isHi = ann.tool === "highlighter";
         const patch = (p) => onUpdate(ann.id, p);
         return (
-          <aside className="ze-format-panel">
+          <aside className="ze-format-panel" key={ann.id}>
             <div className="ze-format-panel-head">Format — {isHi ? "Highlighter" : "Draw"} stroke</div>
-            <div className="ze-format-panel-body">
-              <StrokeFormatFields
-                swatches={isHi ? HIGHLIGHTER_COLOR_SWATCHES : PEN_COLOR_SWATCHES}
-                color={ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color)}
-                width={ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)}
-                minWidth={isHi ? 6 : 1}
-                maxWidth={isHi ? 40 : 20}
-                taper={ann.taper || 0}
-                onColor={(c) => patch({ color: c })}
-                onWidth={(w) => patch({ strokeWidth: w })}
-                onTaper={(t) => patch({ taper: t })}
-              />
-              <ControlList controls={[BLEND_CONTROL]} source={ann} onPatch={patch} />
-              <span className="ze-format-hint">Drag the round knob above the stroke to rotate it.</span>
+            <div className="ze-format-panel-body ze-sections">
+              <PanelSection id="stroke.basic" title="Stroke" defaultOpen hint="Drag the round knob above the stroke to rotate it.">
+                <StrokeFormatFields
+                  swatches={isHi ? HIGHLIGHTER_COLOR_SWATCHES : PEN_COLOR_SWATCHES}
+                  color={ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color)}
+                  width={ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)}
+                  minWidth={isHi ? 6 : 1}
+                  maxWidth={isHi ? 40 : 20}
+                  taper={ann.taper || 0}
+                  onColor={(c) => patch({ color: c })}
+                  onWidth={(w) => patch({ strokeWidth: w })}
+                  onTaper={(t) => patch({ taper: t })}
+                />
+              </PanelSection>
+              <PanelSection id="stroke.blend" title="Blend">
+                <ControlList controls={[BLEND_CONTROL]} source={ann} onPatch={patch} />
+              </PanelSection>
             </div>
           </aside>
         );
@@ -4507,68 +4779,70 @@
         const patch = (p) => onUpdate(ann.id, p);
         const isCroppingThis = croppingAnnId === ann.id;
         const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
+        const cropReset = cropResetPatch(ann);
+        const filterType = (ann.filter && ann.filter.type) || "match";
+        const filterOption = IMAGE_FILTER_OPTIONS.find((o) => o.key === filterType);
+        const adjustedCount = PHOTO_ADJUST_CONTROLS.filter((c) => isAdjusted(ann, c)).length;
+        const filtersSummary = [adjustedCount > 0 && adjustedCount + " adjusted", filterType !== "match" && filterOption && filterOption.label].filter(Boolean).join(" · ") || undefined;
         return (
-          <aside className="ze-format-panel">
+          <aside className="ze-format-panel" key={ann.id}>
             <div className="ze-format-panel-head">Format — Image</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block" }}>
-                Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely.
-              </span>
-              <div className="ze-format-field" style={{ marginTop: 14 }}>
-                <span className="ze-format-label">Size</span>
-                <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
-              </div>
-              <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
-              <div className="ze-format-field">
-                <span className="ze-format-label">Crop</span>
-                <div className="ze-format-row">
-                  <button
-                    type="button"
-                    className={"ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : "")}
-                    disabled={Boolean(angleOf(ann)) && !isCroppingThis}
-                    title={angleOf(ann) && !isCroppingThis ? "Set the rotation to 0° to crop" : undefined}
-                    onClick={() => onToggleCrop(ann.id)}
-                  >
-                    {isCroppingThis ? "Done Cropping" : "Crop"}
-                  </button>
-                  {hasCrop && (
-                    <button
-                      type="button"
-                      className="ze-format-toggle ze-format-toggle-wide"
-                      onClick={() => patch({ cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined })}
-                    >
-                      Reset Crop
-                    </button>
-                  )}
-                </div>
-                <span className="ze-format-hint">While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop.</span>
-              </div>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Flatten</span>
-                <button
-                  type="button"
-                  className="ze-format-toggle ze-format-toggle-wide"
-                  disabled={isCroppingThis}
-                  onClick={() => onFlattenImage(ann)}
-                >
-                  Flatten Image
+            <div className="ze-format-panel-body ze-sections">
+              <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely." onReset={() => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]))}>
+                {sizeReadout(ann)}
+                <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+              </PanelSection>
+              <PanelSection
+                id="image.crop"
+                title="Crop"
+                checked={isCroppingThis || Boolean(hasCrop)}
+                disabled={Boolean(angleOf(ann)) && !isCroppingThis && !hasCrop}
+                hint="While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop. Set the rotation to 0° to crop."
+                onToggle={(on) => {
+                  if (on) { if (!isCroppingThis) onToggleCrop(ann.id); return; }
+                  if (isCroppingThis) onToggleCrop(ann.id);
+                  patch(cropReset);
+                }}
+                onReset={hasCrop ? () => patch(cropReset) : undefined}
+              >
+                <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : "")} onClick={() => onToggleCrop(ann.id)}>
+                  {isCroppingThis ? "Done Cropping" : "Edit Crop"}
                 </button>
-                <span className="ze-format-hint">Bakes the crop, filter and effects into one image, so you can stack new effects on top. Undo brings them back. Currently {Math.round(ann.src.length * 0.75 / 1024)} KB.</span>
-              </div>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Filter</span>
-                <select
-                  className="ze-format-select"
-                  value={(ann.filter && ann.filter.type) || "match"}
-                  onChange={(e) => patch({ filter: { ...ann.filter, type: e.target.value } })}
-                >
-                  {IMAGE_FILTER_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
+              </PanelSection>
+              <PanelSection
+                id="image.filters"
+                title="Filters"
+                group
+                summary={filtersSummary}
+                hint="Adjust the photo's light, color and levels. Adjustments are applied before the Style filter, so a filter works on the adjusted photo."
+              >
+                {PHOTO_ADJUST_SECTIONS.map((group) => {
+                  const changed = group.controls.filter((c) => isAdjusted(ann, c)).length;
+                  return (
+                    <PanelSection
+                      key={group.id}
+                      id={"image.adjust." + group.id}
+                      title={group.title}
+                      summary={changed > 0 ? changed + " changed" : undefined}
+                      onReset={() => patch(resetPatch(group.controls))}
+                    >
+                      <ControlList controls={group.controls} source={ann} onPatch={patch} />
+                    </PanelSection>
+                  );
+                })}
+              </PanelSection>
+              <PanelSection
+                id="image.filter"
+                title="Style"
+                  summary={filterOption ? filterOption.label : undefined}
+                hint={'Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.'}
+              >
+                <div className="ze-format-field">
+                  <SelectInput options={IMAGE_FILTER_OPTIONS} value={filterType} onChange={(type) => patch({ filter: { ...ann.filter, type } })} />
+                </div>
                 {ann.filter && ann.filter.type === "duotone" && (
                   <React.Fragment>
-                    <div className="ze-format-field" style={{ marginTop: 10 }}>
+                    <div className="ze-format-field">
                       <span className="ze-format-label">Dark tone</span>
                       <input
                         type="color" className="ze-format-color-input"
@@ -4587,17 +4861,24 @@
                   </React.Fragment>
                 )}
                 {ann.filter && FILTER_CONTROLS[ann.filter.type] && (
-                  <div style={{ marginTop: 10 }}>
-                    <ControlList
-                      controls={FILTER_CONTROLS[ann.filter.type]}
-                      source={ann.filter}
-                      onPatch={(p) => patch({ filter: { ...ann.filter, ...p } })}
-                    />
-                  </div>
+                  <ControlList
+                    controls={FILTER_CONTROLS[ann.filter.type]}
+                    source={ann.filter}
+                    onPatch={(p) => patch({ filter: { ...ann.filter, ...p } })}
+                  />
                 )}
-                <span className="ze-format-hint">Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.</span>
-              </div>
+              </PanelSection>
               <EffectControls ann={ann} onPatch={patch} />
+              <PanelSection
+                id="image.flatten"
+                title="Flatten"
+                summary={Math.round(ann.src.length * 0.75 / 1024) + " KB"}
+                hint="Bakes the crop, filter and effects into one image, so you can stack new effects on top. Undo brings them back."
+              >
+                <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={isCroppingThis} onClick={() => onFlattenImage(ann)}>
+                  Flatten Image
+                </button>
+              </PanelSection>
             </div>
           </aside>
         );
@@ -4606,29 +4887,32 @@
       if (selectedAnn && selectedAnn.type === "rect") {
         const ann = selectedAnn;
         const patch = (p) => onUpdate(ann.id, p);
+        const transformControls = [ANGLE_CONTROL, OPACITY_CONTROL, BLEND_CONTROL];
         return (
-          <aside className="ze-format-panel">
+          <aside className="ze-format-panel" key={ann.id}>
             <div className="ze-format-panel-head">{isEllipse(ann) ? "Format — Ellipse" : "Format — Rectangle"}</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block" }}>
-                {isEllipse(ann)
+            <div className="ze-format-panel-body ze-sections">
+              <PanelSection id="rect.fill" title="Fill" defaultOpen onReset={() => patch(resetPatch(RECT_FILL_CONTROLS))}>
+                <ControlList controls={RECT_FILL_CONTROLS} source={ann} onPatch={patch} />
+              </PanelSection>
+              <PanelSection
+                id="rect.transform"
+                title="Transform"
+                defaultOpen
+                hint={isEllipse(ann)
                   ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline."
                   : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border."}
-              </span>
-              <div className="ze-format-field" style={{ marginTop: 14 }}>
-                <span className="ze-format-label">Size</span>
-                <span className="ze-format-hint" style={{ display: "block" }}>{Math.round(ann.width)} × {Math.round(ann.height)} px</span>
-              </div>
-              <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
-              <ControlList controls={RECT_CONTROLS} source={ann} onPatch={patch} />
+                onReset={() => patch(resetPatch(transformControls))}
+              >
+                {sizeReadout(ann)}
+                <ControlList controls={transformControls} source={ann} onPatch={patch} />
+              </PanelSection>
               <EffectControls ann={ann} onPatch={patch} />
-              <div className="ze-format-field">
-                <span className="ze-format-label">Rasterize</span>
+              <PanelSection id="rect.rasterize" title="Rasterize" hint="Turns this shape into an image of what it looks like now — gradient, edge shape, stroke and shadow included — so image filters and effects can be applied to it. Undo brings the shape back.">
                 <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => onRasterizeRect(ann)}>
                   Rasterize to Image
                 </button>
-                <span className="ze-format-hint">Turns this shape into an image of what it looks like now — gradient, edge shape, stroke and shadow included — so image filters and effects can be applied to it. Undo brings the shape back.</span>
-              </div>
+              </PanelSection>
             </div>
           </aside>
         );
@@ -4639,93 +4923,62 @@
         return (
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">{tool === "ellipse" ? "Ellipse" : "Rectangle"}</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Drag on the page to draw, or click for a default size. Sets the fill for the next {shapeName} (rectangles and ellipses share these settings).</span>
-              <ControlList controls={RECT_CONTROLS} source={rectDefaults} onPatch={onChangeRectDefaults} />
+            <div className="ze-format-panel-body ze-sections">
+              <span className="ze-sec-intro">Drag on the page to draw, or click for a default size. These settings apply to the next {shapeName} (rectangles and ellipses share them).</span>
+              <PanelSection id="rect.fill" title="Fill" defaultOpen onReset={() => onChangeRectDefaults(resetPatch(RECT_FILL_CONTROLS))}>
+                <ControlList controls={RECT_FILL_CONTROLS} source={rectDefaults} onPatch={onChangeRectDefaults} />
+              </PanelSection>
+              <PanelSection id="rect.look" title="Opacity & blend" onReset={() => onChangeRectDefaults(resetPatch([OPACITY_CONTROL, BLEND_CONTROL]))}>
+                <ControlList controls={[OPACITY_CONTROL, BLEND_CONTROL]} source={rectDefaults} onPatch={onChangeRectDefaults} />
+              </PanelSection>
             </div>
           </aside>
         );
       }
 
       if (tool === "text") {
+        const handlers = {
+          fontFamily: onChangeTextFontFamily, fontSize: onChangeTextFontSize, bold: onChangeTextBold,
+          italic: onChangeTextItalic, underline: onChangeTextUnderline, color: onChangeTextColor, align: onChangeTextAlign,
+        };
+        const changeDefaults = (p) => Object.keys(p).forEach((prop) => handlers[prop](p[prop]));
         return (
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">Text</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the font, size, style, alignment and color for the next text box you add.</span>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Font</span>
-                <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={textFontFamily} onChange={onChangeTextFontFamily} />
-              </div>
-
-              <label className="ze-format-field">
-                <span className="ze-format-label">Size (px)</span>
-                <input
-                  type="number"
-                  className="ze-format-number"
-                  min="8"
-                  max="200"
-                  value={textFontSize}
-                  onChange={(e) => onChangeTextFontSize(Number(e.target.value) || 16)}
-                />
-              </label>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Style</span>
-                <div className="ze-format-row">
-                  <button type="button" className={"ze-format-toggle" + (textBold ? " active" : "")} title="Bold" onClick={() => onChangeTextBold(!textBold)}><strong>B</strong></button>
-                  <button type="button" className={"ze-format-toggle" + (textItalic ? " active" : "")} title="Italic" onClick={() => onChangeTextItalic(!textItalic)}><em>I</em></button>
-                  <button type="button" className={"ze-format-toggle" + (textUnderline ? " active" : "")} title="Underline" onClick={() => onChangeTextUnderline(!textUnderline)}><span style={{ textDecoration: "underline" }}>U</span></button>
-                </div>
-              </div>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Align</span>
-                <div className="ze-format-row">
-                  <button type="button" className={"ze-format-toggle" + (textAlign === "left" ? " active" : "")} title="Align left" onClick={() => onChangeTextAlign("left")}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
-                  </button>
-                  <button type="button" className={"ze-format-toggle" + (textAlign === "center" ? " active" : "")} title="Align center" onClick={() => onChangeTextAlign("center")}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
-                  </button>
-                  <button type="button" className={"ze-format-toggle" + (textAlign === "right" ? " active" : "")} title="Align right" onClick={() => onChangeTextAlign("right")}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
-                  </button>
-                </div>
-              </div>
-
-              <div className="ze-format-field">
-                <span className="ze-format-label">Color</span>
-                <div className="ze-format-row ze-format-swatches">
-                  {TEXT_COLOR_SWATCHES.map((c) => (
-                    <button key={c} type="button" className={"ze-format-swatch" + (textColor === c ? " active" : "")} style={{ backgroundColor: c }} title={c} onClick={() => onChangeTextColor(c)} />
-                  ))}
-                  <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#1a1a1a"} onChange={onChangeTextColor} />
-                </div>
-              </div>
+            <div className="ze-format-panel-body ze-sections">
+              <span className="ze-sec-intro">Sets the font, size, style, alignment and color for the next text box you add.</span>
+              <TextBasicSection
+                fontOptions={fontOptions} setFontOptions={setFontOptions}
+                fontFamily={textFontFamily} fontSize={textFontSize}
+                bold={textBold} italic={textItalic} underline={textUnderline}
+                align={textAlign} color={textColor}
+                onChange={changeDefaults}
+              />
             </div>
           </aside>
         );
       }
 
-      if (tool === "pen") {
+      if (tool === "pen" || tool === "highlighter") {
+        const isHi = tool === "highlighter";
         return (
           <aside className="ze-format-panel">
-            <div className="ze-format-panel-head">Draw</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the color and thickness for the next stroke you draw.</span>
-              <StrokeFormatFields
-                swatches={PEN_COLOR_SWATCHES}
-                color={penColor}
-                width={penWidth}
-                minWidth={1}
-                maxWidth={20}
-                taper={penTaper}
-                onColor={onChangePenColor}
-                onWidth={onChangePenWidth}
-                onTaper={onChangePenTaper}
-              />
+            <div className="ze-format-panel-head">{isHi ? "Highlighter" : "Draw"}</div>
+            <div className="ze-format-panel-body ze-sections">
+              <span className="ze-sec-intro">Sets the color and thickness for the next stroke you draw.</span>
+              <PanelSection id={"stroke.basic"} title="Stroke" defaultOpen>
+                <StrokeFormatFields
+                  swatches={isHi ? HIGHLIGHTER_COLOR_SWATCHES : PEN_COLOR_SWATCHES}
+                  color={isHi ? highlighterColor : penColor}
+                  width={isHi ? highlighterWidth : penWidth}
+                  minWidth={isHi ? 6 : 1}
+                  maxWidth={isHi ? 40 : 20}
+                  taper={isHi ? highlighterTaper : penTaper}
+                  onColor={isHi ? onChangeHighlighterColor : onChangePenColor}
+                  onWidth={isHi ? onChangeHighlighterWidth : onChangePenWidth}
+                  onTaper={isHi ? onChangeHighlighterTaper : onChangePenTaper}
+                />
+              </PanelSection>
             </div>
           </aside>
         );
@@ -4742,46 +4995,21 @@
         return (
           <aside className="ze-format-panel">
             <div className="ze-format-panel-head">Eraser</div>
-            <div className="ze-format-panel-body">
-              <div className="ze-format-field">
-                <span className="ze-format-label">Mode</span>
+            <div className="ze-format-panel-body ze-sections">
+              <PanelSection id="eraser.mode" title="Mode" defaultOpen>
                 <div className="ze-format-row">
                   <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : "")} onClick={() => onChangeEraserMode("stroke")}>Strokes</button>
                   <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : "")} onClick={() => onChangeEraserMode("soft")}>Soft (images)</button>
                 </div>
-              </div>
-              {eraserMode === "stroke" ? (
-                <span className="ze-format-hint">Removes any pen or highlighter stroke you drag across.</span>
-              ) : (
-                <React.Fragment>
+                {eraserMode === "stroke" && <span className="ze-format-hint">Removes any pen or highlighter stroke you drag across.</span>}
+              </PanelSection>
+              {eraserMode === "soft" && (
+                <PanelSection id="eraser.brush" title="Brush" defaultOpen hint="Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first.">
                   {slider("size", "Size", 4, 300, "px")}
                   {slider("softness", "Softness", 0, 100, "%")}
                   {slider("strength", "Strength", 5, 100, "%")}
-                  <span className="ze-format-hint">Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first.</span>
-                </React.Fragment>
+                </PanelSection>
               )}
-            </div>
-          </aside>
-        );
-      }
-
-      if (tool === "highlighter") {
-        return (
-          <aside className="ze-format-panel">
-            <div className="ze-format-panel-head">Highlighter</div>
-            <div className="ze-format-panel-body">
-              <span className="ze-format-hint" style={{ display: "block", marginBottom: 12 }}>Sets the color and thickness for the next stroke you draw.</span>
-              <StrokeFormatFields
-                swatches={HIGHLIGHTER_COLOR_SWATCHES}
-                color={highlighterColor}
-                width={highlighterWidth}
-                minWidth={6}
-                maxWidth={40}
-                taper={highlighterTaper}
-                onColor={onChangeHighlighterColor}
-                onWidth={onChangeHighlighterWidth}
-                onTaper={onChangeHighlighterTaper}
-              />
             </div>
           </aside>
         );
@@ -5125,6 +5353,9 @@
           ["Arrow keys", "Nudge the selected items 1 px"],
           ["Shift + arrow keys", "Nudge the selected items 10 px"],
           ["Ctrl + R", "Rotate the selected page"],
+          ["Ctrl + G", "Group the selected items (select several first)"],
+          ["Ctrl + Shift + G", "Ungroup"],
+          ["Alt + click", "Pick one item out of a group"],
           ["Shift + click", "Add to or remove from the selection (pages and items)"],
           ["Drag on empty page", "Select the items it touches (Move tool)"],
           ["Shift + drag a handle", "Stretch an image freely, or keep a rectangle's proportions"],
@@ -5360,8 +5591,8 @@
       const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
       const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
       const [penTaper, setPenTaper] = useState(0);
-      // Eraser: "stroke" removes whole pen strokes; "soft" fades image pixels.
-      const [eraserMode, setEraserMode] = useState("stroke");
+      // Eraser: "soft" fades image pixels (the default); "stroke" removes whole pen strokes.
+      const [eraserMode, setEraserMode] = useState("soft");
       const [softEraser, setSoftEraser] = useState(SOFT_ERASER_DEFAULTS);
       const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
       const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);
@@ -5392,9 +5623,11 @@
         setSelectedAnnIds([]);
       }
 
+      const currentAnnotations = () => (selectedIdx === null ? [] : pages[selectedIdx].annotations || []);
+
       function handleSelectAnnotations(ids, additive) {
         const existing = additive && selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [];
-        const all = [...new Set([...existing, ...ids])];
+        const all = [...new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])];
         setSelectedAnnId(all.length > 0 ? all[0] : null);
         setSelectedAnnIds(all.slice(1));
       }
@@ -5430,21 +5663,56 @@
       // Ctrl+C, the FormatPanel's own property editing — and a side set of
       // "also selected" ids purely for the shared outline and group
       // delete. A plain click (no shift) always resets to that one item.
-      function handleSelectAnnotation(id, shiftKey) {
-        if (!shiftKey || id === null) {
-          setSelectedAnnId(id);
+      // An item in a group brings its whole group along, unless `single`.
+      function handleSelectAnnotation(id, shiftKey, single) {
+        if (id === null) {
+          setSelectedAnnId(null);
           setSelectedAnnIds([]);
+          return;
+        }
+        const members = single ? [id] : withGroupMates(currentAnnotations(), [id]);
+        if (!shiftKey) {
+          setSelectedAnnId(id);
+          setSelectedAnnIds(members.filter((m) => m !== id));
           return;
         }
         const currentAll = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
         if (currentAll.includes(id)) {
-          const next = currentAll.filter((x) => x !== id);
+          const next = currentAll.filter((x) => !members.includes(x));
           setSelectedAnnId(next.length > 0 ? next[0] : null);
           setSelectedAnnIds(next.slice(1));
         } else {
-          setSelectedAnnIds(currentAll);
+          setSelectedAnnIds([...new Set([...currentAll, ...members.filter((m) => m !== id)])]);
           setSelectedAnnId(id);
         }
+      }
+
+      // Group: the selected items become one group, stacked together at the
+      // top-most member's place (their own order kept). Ungroup releases the
+      // groups the selection touches. Both are one undo step.
+      function selectedAnnotationIds() {
+        return [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
+      }
+
+      function handleGroupSelection() {
+        const ids = selectedAnnotationIds();
+        if (selectedIdx === null || ids.length < 2) return;
+        const groupId = "g" + nextAnnIdRef.current++;
+        updateAnnotationsFor(selectedIdx, (anns) => {
+          const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
+          const topIndex = Math.max(...anns.map((a, i) => (ids.includes(a.id) ? i : -1)));
+          const rest = anns.filter((a) => !ids.includes(a.id));
+          rest.splice(topIndex + 1 - members.length, 0, ...members);
+          return rest;
+        });
+      }
+
+      function handleUngroupSelection() {
+        const ids = selectedAnnotationIds();
+        if (selectedIdx === null) return;
+        const groups = new Set(currentAnnotations().filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+        if (groups.size === 0) return;
+        updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined } : a)));
       }
 
       function handleSelectPage(idx, shiftKey) {
@@ -6086,6 +6354,7 @@
             if (key === "z" && !e.shiftKey) { e.preventDefault(); handleUndo(); return; }
             if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); handleRedo(); return; }
             if (key === "r") { e.preventDefault(); if (selectedIdx !== null) handleRotate(selectedIdx); return; }
+            if (key === "g") { e.preventDefault(); if (e.shiftKey) handleUngroupSelection(); else handleGroupSelection(); return; }
             if (key === "c") {
               if (selectedIdx !== null && selectedAnnId !== null) {
                 const ann = (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
@@ -6102,7 +6371,7 @@
                 // second copy, not sitting invisibly on top of the first —
                 // a stroke's whole point list has to shift together, not
                 // just some single x/y the way text/image annotations work.
-                const newAnn = { ...translatedAnnotation(clip, 20, 20), id };
+                const newAnn = { ...translatedAnnotation(clip, 20, 20), id, groupId: undefined }; // a copy isn't part of the original's group
                 updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
                 setSelectedAnnId(id);
               }
@@ -6217,9 +6486,9 @@
       }
 
       // ---- Layers ----------------------------------------------------------
-      function handleSelectLayer(id, shiftKey) {
+      function handleSelectLayer(id, shiftKey, single) {
         selectTool("select");
-        handleSelectAnnotation(id, shiftKey);
+        handleSelectAnnotation(id, shiftKey, single);
       }
 
       // A hidden or locked layer can't stay selected, which is what keeps
@@ -6227,12 +6496,13 @@
       function handleToggleLayerFlag(ann, flag) {
         const on = !ann[flag];
         handleUpdateAnnotation(ann.id, { [flag]: on });
-        if (on && (ann.id === selectedAnnId || selectedAnnIds.includes(ann.id))) handleSelectAnnotation(ann.id, true);
+        if (on && (ann.id === selectedAnnId || selectedAnnIds.includes(ann.id))) handleSelectAnnotation(ann.id, true, true);
       }
 
       // `insertBeforeRow` is a slot in the panel's list, which runs top layer first.
-      function handleReorderLayers(ids, insertBeforeRow) {
+      function handleReorderLayers(draggedIds, insertBeforeRow) {
         const topFirst = (pages[selectedIdx].annotations || []).slice().reverse();
+        const ids = withGroupMates(topFirst, draggedIds); // a group always moves as one
         const fromRows = topFirst.flatMap((a, row) => (ids.includes(a.id) ? [row] : []));
         const newOrder = orderAfterMove(topFirst.length, fromRows, insertBeforeRow);
         if (newOrder) updateAnnotationsFor(selectedIdx, () => newOrder.map((row) => topFirst[row]).reverse());
@@ -6702,6 +6972,8 @@
               annotations={selectedPage.annotations || []}
               selectedIds={[selectedAnnId, ...selectedAnnIds].filter((id) => id !== null)}
               onSelect={handleSelectLayer}
+              onGroup={handleGroupSelection}
+              onUngroup={handleUngroupSelection}
               onToggleFlag={handleToggleLayerFlag}
               onRename={(id, name) => handleUpdateAnnotation(id, { name })}
               onReorder={handleReorderLayers}

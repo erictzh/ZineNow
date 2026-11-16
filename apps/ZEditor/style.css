@@ -25,7 +25,7 @@
     --md2ebook-canvas-fg: #b5b5b5;
 
     --ze-sidebar-width: 240px;
-    --ze-format-panel-width: 220px;
+    --ze-format-panel-width: 264px;
     --ze-page-w: 420px;
     --ze-page-h: 594px; /* ~A5 ratio placeholder */
 }
@@ -937,22 +937,117 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 .ze-format-slider-row input[type="number"].ze-format-number { width: 58px; }
 .ze-format-slider-row .ze-format-color-input { flex: 0 0 auto; }
 
-/* ---- Image effect cards -------------------------------------------------- */
-.ze-effect-card {
-    background-color: var(--ui-bg-card);
-    border: 1px solid var(--ui-border);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
+/* ---- Collapsible sections (CapCut-style) ---------------------------------
+   Every group of controls in the Format panel is a section: an optional
+   checkbox that switches the feature on, a title that expands/collapses
+   the controls, an optional "?" tooltip and a reset button. Unchecked
+   sections stay collapsed, so only what is in use takes up room. */
+.ze-format-panel-body.ze-sections { padding: 0; }
+.ze-sec { border-bottom: 1px solid var(--ui-border); }
+.ze-sec-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px; min-height: 40px; }
+.ze-sec-check {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--ui-fg-muted) 75%, transparent);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-content: center;
 }
-.ze-effect-card-title {
+.ze-sec-check:hover:not(:disabled) { border-color: var(--ui-fg); }
+.ze-sec-check:checked { background: var(--ui-accent); border-color: var(--ui-accent); }
+.ze-sec-check:checked::after {
+    content: "";
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: translateY(-1px) rotate(-45deg);
+}
+.ze-sec-check:disabled { opacity: 0.4; cursor: not-allowed; }
+.ze-sec-check:focus-visible,
+.ze-sec-title:focus-visible { outline: 2px solid var(--ui-accent-text); outline-offset: 2px; }
+.ze-sec-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--ui-fg);
     font-size: 12px;
     font-weight: 600;
-    color: var(--ui-fg);
-    margin-bottom: 10px;
+    text-align: left;
 }
-.ze-effect-card .ze-format-field { margin-bottom: 12px; }
-.ze-effect-card .ze-format-field:last-of-type { margin-bottom: 0; }
+.ze-sec-title:hover { background: none; color: var(--ui-fg); }
+.ze-sec-title:active { transform: none; }
+.ze-sec.is-off .ze-sec-title { color: var(--ui-fg-muted); font-weight: 500; }
+.ze-sec-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ze-sec-caret { flex: 0 0 auto; color: var(--ui-fg-muted); transition: transform 0.15s ease; }
+.ze-sec.is-open .ze-sec-caret { transform: rotate(180deg); }
+.ze-sec-caret.is-hidden { visibility: hidden; }
+.ze-sec-summary {
+    margin-left: auto;
+    padding-left: 8px;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--ui-fg-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ze-sec-help {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-fg-muted) 60%, transparent);
+    border-radius: 50%;
+    color: var(--ui-fg-muted);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 12px;
+    text-align: center;
+    cursor: help;
+}
+.ze-sec-reset {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    border: 0;
+    background: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-fg-muted);
+}
+.ze-sec-reset:hover { background: none; color: var(--ui-fg); }
+.ze-sec-body { padding: 2px 16px 16px; }
+.ze-sec-body > .ze-format-field:last-child { margin-bottom: 0; }
+.ze-sec-body .ze-format-field { margin-bottom: 14px; }
+/* A parent section holding child sections (e.g. Filters → Light, Color, Levels, Style). */
+.ze-sec-body.is-group { padding: 0; border-top: 1px solid var(--ui-border); background-color: rgba(0, 0, 0, 0.12); }
+.ze-sec-body.is-group > .ze-sec { border-bottom: 0; border-top: 1px solid var(--ui-border); }
+.ze-sec-body.is-group > .ze-sec:first-child { border-top: 0; }
+.ze-sec-body.is-group .ze-sec-head { padding-left: 28px; min-height: 36px; }
+.ze-sec-body.is-group .ze-sec-title { font-weight: 500; }
+.ze-sec-body.is-group .ze-sec-body { padding-left: 28px; }
+.ze-sec-intro { display: block; padding: 12px 16px; font-size: 11px; line-height: 1.5; color: var(--ui-fg-muted); border-bottom: 1px solid var(--ui-border); }
+
+/* Font + size + B/I/U sit on one tidy row inside a section. */
+.ze-format-inline { display: flex; align-items: center; gap: 6px; }
+.ze-format-inline .ze-format-number { flex: 1 1 auto; min-width: 0; }
+.ze-format-inline .ze-format-toggle { flex: 0 0 auto; }
 
 /* ---- Layers panel --------------------------------------------------------- */
 .ze-layers-panel {
@@ -994,6 +1089,11 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
     border-color: var(--ui-accent);
     background-color: color-mix(in srgb, var(--ui-accent) 18%, transparent);
 }
+/* Layers that belong to a group share a coloured bar on their left edge. */
+.ze-layer-row.is-grouped { border-left: 3px solid var(--ze-group-color); }
+.ze-layers-head-actions { display: flex; align-items: center; gap: 2px; cursor: default; }
+.ze-layers-head-actions .ze-guides-settings-btn { border: 0; background: none; }
+.ze-layers-head-actions .ze-guides-settings-btn:hover:not(:disabled) { color: var(--ui-fg); }
 .ze-layer-row.is-hidden .ze-layer-thumb,
 .ze-layer-row.is-hidden .ze-layer-name { opacity: 0.4; }
 .ze-layer-row--page { cursor: default; }
