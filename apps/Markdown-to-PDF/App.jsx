@@ -45,7 +45,8 @@ const BOLD_WEIGHT_OPTIONS = window.MD2eBook.ALLOWED_BOLD_WEIGHTS;
 const TEXT_ALIGN_OPTIONS = window.MD2eBook.TEXT_ALIGN_OPTIONS;
 // Fields that are real booleans (checkboxes) rather than strings.
 const BOOLEAN_CONFIG_KEYS = ['pageNumbersEnabled', 'headingFontSameAsBody', 'tocShowTitle', 'tocPageNumbers', 'tocDotLeaders', 'tocPageBreakAfter',
-    'tocL1Bold', 'tocL1Italic', 'tocL1Underline', 'tocL2Bold', 'tocL2Italic', 'tocL2Underline', 'tocL3Bold', 'tocL3Italic', 'tocL3Underline'];
+    'tocL1Bold', 'tocL1Italic', 'tocL1Underline', 'tocL2Bold', 'tocL2Italic', 'tocL2Underline', 'tocL3Bold', 'tocL3Italic', 'tocL3Underline',
+    'h1Underline', 'h2Underline', 'h3Underline'];
 // Boolean default from defaultConfig.json, tolerating "false" strings.
 function defaultBool(value, fallback) {
     if (value === undefined || value === null || value === '')
@@ -58,7 +59,7 @@ const INITIAL_CONFIG = {
     fontFamily: 'Inter',
     headingFontSameAsBody: DEFAULTS.headingFontSameAsBody !== false && DEFAULTS.headingFontSameAsBody !== 'false',
     headingFontFamily: DEFAULTS.headingFontFamily ? String(DEFAULTS.headingFontFamily) : '',
-    paperSize: 'a4',
+    paperSize: String(DEFAULTS.paperSize || 'a5'),
     fontSize: '',
     lineHeight: '',
     paragraphSpacing: '',
@@ -72,6 +73,12 @@ const INITIAL_CONFIG = {
     h2Weight: String(DEFAULTS.h2Weight),
     h3Size: '',
     h3Weight: String(DEFAULTS.h3Weight),
+    h1LineHeight: '',
+    h2LineHeight: '',
+    h3LineHeight: '',
+    h1Underline: defaultBool(DEFAULTS.h1Underline, true),
+    h2Underline: defaultBool(DEFAULTS.h2Underline, false),
+    h3Underline: defaultBool(DEFAULTS.h3Underline, false),
     baseWeight: String(DEFAULTS.baseWeight),
     boldWeight: String(DEFAULTS.boldWeight),
     marginVertical: '',
@@ -179,6 +186,15 @@ function AlignField({ label, value, onChange, inheritedValue, allowInherit, hint
    ToC entry style row — Bold / Italic / Underline toggles plus font size
    and line spacing boxes for one heading level's entries in the ToC.
    ========================================================================== */
+// Per-heading line height plus the on/off rule drawn beneath it.
+function HeadingLineControls({ level, config, updateConfig }) {
+    const lh = `h${level}LineHeight`;
+    const ul = `h${level}Underline`;
+    return (React.createElement("div", null,
+        React.createElement(ControlField, { label: `H${level} Line Height`, hint: `Default: ${DEFAULTS[lh]}` },
+            React.createElement(TextInput, { value: config[lh], onChange: (v) => updateConfig(lh, v), placeholder: String(DEFAULTS[lh]), inputMode: "decimal" })),
+        React.createElement(ToggleRow, { checked: config[ul], onChange: (v) => updateConfig(ul, v), label: `Line beneath H${level}` })));
+}
 function TocLevelStyle({ level, config, updateConfig }) {
     const k = 'tocL' + level;
     const toggles = [
@@ -799,18 +815,21 @@ function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updat
                     React.createElement(TextInput, { value: config.h1Size, onChange: (v) => updateConfig('h1Size', v), placeholder: String(DEFAULTS.h1Size), inputMode: "decimal" })),
                 React.createElement(ControlField, { label: "H1 Weight", hint: `Default: ${DEFAULTS.h1Weight}` },
                     React.createElement(SelectInput, { value: config.h1Weight, onChange: (v) => updateConfig('h1Weight', v) }, BOLD_WEIGHT_OPTIONS.map((w) => (React.createElement("option", { key: w, value: w }, w)))))),
+            React.createElement(HeadingLineControls, { level: 1, config: config, updateConfig: updateConfig }),
             React.createElement(AlignField, { label: "H1 Alignment", value: config.h1TextAlign, onChange: (v) => updateConfig('h1TextAlign', v), allowInherit: true, inheritedValue: config.textAlign || 'left' }),
             React.createElement("div", { className: "grid grid-cols-2 gap-3" },
                 React.createElement(ControlField, { label: "H2 Size (px)", hint: `Default: ${DEFAULTS.h2Size}px` },
                     React.createElement(TextInput, { value: config.h2Size, onChange: (v) => updateConfig('h2Size', v), placeholder: String(DEFAULTS.h2Size), inputMode: "decimal" })),
                 React.createElement(ControlField, { label: "H2 Weight", hint: `Default: ${DEFAULTS.h2Weight}` },
                     React.createElement(SelectInput, { value: config.h2Weight, onChange: (v) => updateConfig('h2Weight', v) }, BOLD_WEIGHT_OPTIONS.map((w) => (React.createElement("option", { key: w, value: w }, w)))))),
+            React.createElement(HeadingLineControls, { level: 2, config: config, updateConfig: updateConfig }),
             React.createElement(AlignField, { label: "H2 Alignment", value: config.h2TextAlign, onChange: (v) => updateConfig('h2TextAlign', v), allowInherit: true, inheritedValue: config.textAlign || 'left' }),
             React.createElement("div", { className: "grid grid-cols-2 gap-3" },
                 React.createElement(ControlField, { label: "H3 Size (px)", hint: `Default: ${DEFAULTS.h3Size}px` },
                     React.createElement(TextInput, { value: config.h3Size, onChange: (v) => updateConfig('h3Size', v), placeholder: String(DEFAULTS.h3Size), inputMode: "decimal" })),
                 React.createElement(ControlField, { label: "H3 Weight", hint: `Default: ${DEFAULTS.h3Weight}` },
                     React.createElement(SelectInput, { value: config.h3Weight, onChange: (v) => updateConfig('h3Weight', v) }, BOLD_WEIGHT_OPTIONS.map((w) => (React.createElement("option", { key: w, value: w }, w)))))),
+            React.createElement(HeadingLineControls, { level: 3, config: config, updateConfig: updateConfig }),
             React.createElement(AlignField, { label: "H3 Alignment", value: config.h3TextAlign, onChange: (v) => updateConfig('h3TextAlign', v), allowInherit: true, inheritedValue: config.textAlign || 'left', hint: "H4\u2013H6 use the H3 setting." }),
             React.createElement(SectionLabel, null, "Table of Contents"),
             React.createElement("p", { className: "mb-3 text-[11px] leading-relaxed text-fg-muted opacity-70" },

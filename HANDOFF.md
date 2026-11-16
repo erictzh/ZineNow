@@ -86,6 +86,12 @@ Md to PDF Converter:
 - **"Send to ZineArranger" button** (`handleSendToZineArranger` in `App.jsx`; `renderRasterizationDocument` in `pdfGenerator.js`). Pipeline: hidden iframe → Paged.js paginates → html2canvas rasterizes each `.pagedjs_page` at scale 2 → images `postMessage`d back → pdf-lib assembles a PDF → handoff to ZineArranger.
 - Security decision: html2canvas **hangs forever** inside a `sandbox="allow-scripts"`-only iframe, so the export iframe uses `allow-scripts allow-same-origin`. That combo would let a `<script>` smuggled via pasted Markdown raw HTML reach the parent app, so the rendered HTML is run through **DOMPurify first**. Do not remove the sanitize step or the reasoning comments. The live preview iframe stays opaque-origin and untouched.
 
+### Md-to-PDF typography changes (2026-11)
+- Fixed stretched last lines in justified text: Paged.js stamps `text-align-last: justify` on the `.page` wrapper and paragraphs inherit it (`paginationJustifyFix` in `pdfGenerator.js`).
+- Hyphenation is off (`hyphens: none`), so words never split across lines.
+- Blockquotes get one blank body line above and below (margin = font-size × line-height; collapses with paragraph spacing).
+- Per-heading (H1–H3) `hNLineHeight` and `hNUnderline` settings (rule beneath the heading; H1 on by default, H2/H3 off). New keys live in `HARDCODED_FALLBACK_DEFAULTS`, `defaultConfig.json`, `INITIAL_CONFIG` + `BOOLEAN_CONFIG_KEYS` in `App.jsx`, and the `HeadingLineControls` component.
+
 ## 4. Pending / known gaps (priority order)
 
 1. ~~Group drag-reorder of multi-selected pages.~~ Done 2026-11-09: `handleReorder(fromIndices, insertBefore)` now handles single and group moves. Verified with scripted drag events; not yet tried by hand with a real mouse drag.
