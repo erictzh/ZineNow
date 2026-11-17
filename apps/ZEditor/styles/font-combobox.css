@@ -1,0 +1,61 @@
+/* Searchable font picker. */
+
+/* ---- Font combobox (searchable, + local system fonts) -------------------- */
+.ze-fontbox { position: relative; }
+.ze-fontbox-input-wrap { position: relative; }
+.ze-fontbox-input { padding-right: 26px; }
+.ze-fontbox-caret {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--ui-fg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ze-fontbox-caret:hover { color: var(--ui-fg); background: none; }
+
+.ze-fontbox-list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    max-height: 220px;
+    overflow-y: auto;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 6;
+    padding: 4px;
+}
+.ze-fontbox-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 8px;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--ui-fg);
+}
+.ze-fontbox-item:hover { background-color: var(--ui-bg); }
+.ze-fontbox-item.active { color: var(--ui-accent-text); background-color: var(--ui-bg); }
+.ze-fontbox-item.is-highlighted { background-color: var(--ui-bg); outline: 1px solid var(--ui-accent-text); outline-offset: -1px; }
+.ze-fontbox-empty { padding: 8px; font-size: 12px; color: var(--ui-fg-muted); }
+
+.ze-fontbox-load {
+    width: 100%;
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 6px 8px;
+}
+

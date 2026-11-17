@@ -1,0 +1,36 @@
+/* Onion-skin ghost, Load-PDF button and the error bar. */
+
+/* ---- Onion-skin ghost — the previous page's flattened composite, faded
+   in on top of the current page. mix-blend-mode: multiply lets its own
+   white paper disappear into the current page's background instead of
+   washing it out, so only the ghost's actual ink shows through. */
+.ze-onion-ghost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+}
+
+/* ---- Load-PDF button + error bar -------------------------------------------
+   Load PDF intentionally uses the plain base `button` style from
+   component-kit — no custom variant. Insert PDF / Load Project are
+   secondary actions, so they use .log-btn instead of a second variant. */
+.ze-sidebar-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+.ze-sidebar-head-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ze-sidebar-head-actions .log-btn { margin: 0; }
+
+.ze-error-bar {
+    flex: 0 0 auto;
+    padding: 8px 20px;
+    font-size: 12px;
+    color: #ff9b81;
+    background-color: color-mix(in srgb, #dd1a1a 12%, var(--ui-bg));
+    border-bottom: 1px solid color-mix(in srgb, #dd1a1a 35%, var(--ui-border));
+}
+
