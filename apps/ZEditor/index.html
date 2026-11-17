@@ -2488,6 +2488,24 @@
       await writable.close();
     }
 
+    // ---- Document title — the topbar title box. Defaults to the first
+    // imported PDF's name (or "New Zine") plus a YYMMDDHHmm stamp, and names
+    // the saved .znow, the exported PDF and the ZineArranger hand-off.
+    function titleStamp(date = new Date()) {
+      const two = (n) => String(n).padStart(2, "0");
+      return two(date.getFullYear() % 100) + two(date.getMonth() + 1) + two(date.getDate()) + two(date.getHours()) + two(date.getMinutes());
+    }
+    function stripExtension(name) {
+      return String(name || "").replace(/\.[^./\\]+$/, "");
+    }
+    // A title made safe as a file name: characters Windows/macOS forbid are
+    // dropped ("Issue #1: Summer?" → "Issue #1 Summer"), and an empty result
+    // falls back to "zine".
+    function titleToFileName(title, extension) {
+      const safe = String(title || "").replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/, "").trim();
+      return (safe || "zine") + extension;
+    }
+
     async function savePdfBytes(bytes, filename) {
       return saveFile(bytes, filename, "application/pdf", "PDF file", [".pdf"]);
     }
@@ -5850,6 +5868,9 @@
       // browsers with the File System Access API give us a handle; elsewhere
       // this stays null and Save always downloads a copy.
       const [projectFile, setProjectFile] = useState(null); // { handle, name } | null
+      // The topbar title box (see titleStamp). Set whenever a document is
+      // started fresh or a project is opened; edited freely after that.
+      const [docTitle, setDocTitle] = useState("");
       // Briefly true after a save lands, so the Project menu button can say
       // "Saved" — a quick Save (or Ctrl+S) opens no dialog to show it worked.
       const [justSaved, setJustSaved] = useState(false);
@@ -5933,6 +5954,7 @@
           setUndoStack([]); // loading a document is a fresh start, not an undoable step
           setRedoStack([]);
           setProjectFile(null); // a new document — Save must not overwrite the previous project's file
+          setDocTitle(stripExtension(file.name) + " - " + titleStamp());
         } catch (err) {
           setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -5971,6 +5993,7 @@
         setUndoStack([]);
         setRedoStack([]);
         setProjectFile(null); // a new document — Save must not overwrite the previous project's file
+        setDocTitle("New Zine - " + titleStamp());
       }
 
       function handleNewDocumentOpenPdf() {
@@ -6060,7 +6083,7 @@
         setExporting(true);
         try {
           const pdfBytes = await buildExportPdfBytes();
-          await savePdfBytes(pdfBytes, "zine.pdf");
+          await savePdfBytes(pdfBytes, titleToFileName(docTitle, ".pdf"));
         } catch (err) {
           setErrorMsg("Couldn't export PDF — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -6093,6 +6116,7 @@
           const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
           const project = {
             version: 2, // 2: the annotation list is the stacking order
+            title: docTitle,
             docs,
             fonts,
             textStyles,
@@ -6116,7 +6140,9 @@
               // back to asking where to save, rather than losing the save.
             }
           }
-          const handle = await saveFile(json, (projectFile && projectFile.name) || "zine-project.znow", "application/json", "ZEditor project file", [".znow"]);
+          // The dialog suggests the title box's name (a quick Save above keeps
+          // writing to whatever file was picked, even if the title changed since).
+          const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"]);
           if (handle !== "cancelled") flashSaved();
           if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
         } catch (err) {
@@ -6257,6 +6283,8 @@
           setUndoStack([]);
           setRedoStack([]);
           setProjectFile(handle ? { handle, name: handle.name } : null);
+          // Projects saved before titles existed take their file's name.
+          setDocTitle(typeof project.title === "string" && project.title ? project.title : stripExtension(file.name));
 
           const s = project.settings || {};
           if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn);
@@ -6314,7 +6342,7 @@
           const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
 
           await readyPromise;
-          win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename: "zine.pdf" }, "*", [buffer]);
+          win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename: titleToFileName(docTitle, ".pdf") }, "*", [buffer]);
         } catch (err) {
           setErrorMsg("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -6806,6 +6834,18 @@
                   </svg>
                 </button>
               </div>
+              <input
+                type="text"
+                className="ze-title-input"
+                aria-label="Zine title"
+                placeholder="Untitled zine"
+                title="Zine title — names the saved project and exported PDF"
+                disabled={pages.length === 0}
+                value={docTitle}
+                onChange={(e) => setDocTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+                onBlur={() => setDocTitle((t) => t.trim())}
+              />
               <TopMenu label="Page">
                 {() => (
                   <PageMenuBody
