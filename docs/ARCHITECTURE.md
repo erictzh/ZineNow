@@ -92,6 +92,16 @@ Where things went that might not be obvious:
 - `render/textLayout.js` has `fitText` (shrink-to-fit has to measure text),
   and `render/itemGeometry.js` has `annotationBounds` / `rotatedAnnotation`
   (a text box's size comes from layout), so `model/` never measures text.
+- The Format panel: `ui/panels/FormatPanel.jsx` only picks a panel —
+  `format/TextFormat`, `ImageFormat`, `ShapeFormat`, `StrokeFormat` for a
+  selected item, `format/ToolPanels` for a tool with nothing selected. Panels
+  get the `useToolDefaults` object as `toolDefaults` rather than one prop per
+  setting.
+- The canvas: `ui/canvas/ComposeCanvas.jsx` routes mouse presses per tool;
+  `usePageBackground` draws the page, `softEraseGesture.js` is the soft
+  eraser, `SelectionTurn.jsx` the multi-item rotate knob, `AnnotationItem.jsx`
+  picks the component per item type, `CanvasOverlays.jsx` holds the live
+  stroke, brush cursor and guide/page-number previews.
 - `ui/textSelection.js` is the small store that lets the Letter Colours panel
   colour the text selection after the text box has lost focus.
 
@@ -141,7 +151,7 @@ ZineArranger), `convert/` (docx, epub, muse, HTML → Markdown), `App.jsx`,
 - [ ] Shared CSS tokens/components and shared JS (`shared/styles`, `shared/js`)
 - [x] ZEditor split into `model/`, `render/`, `io/` and `ui/` (82 files; every statement moved byte-for-byte, only `import`/`export` lines added); `style.css` split into `styles/` (11 files, same 301 rules in the same order)
 - [x] ZEditor `ui/App.jsx` split into 15 `state/` hooks (App.jsx 1,748 → 223 lines); PDF import/export, the `.znow` format and the ZineArranger hand-off moved to `io/`; Topbar, ToolBar and the live filter defs are their own components
-- [ ] ZEditor `ComposeCanvas.jsx` (517 lines) and `FormatPanel.jsx` (363 lines) broken up further
+- [x] ZEditor `FormatPanel.jsx` is now a router over one panel per item type plus the tool panels (`ui/panels/format/`); `ComposeCanvas.jsx` (517 → 253 lines) delegates the page background, soft-eraser gesture, selection rotate knob, per-type item rendering and page overlays to their own files
 - [ ] Markdown-to-PDF moved to `src/` (JSX source instead of the hand-converted `App.jsx`), `pdfGenerator.js` split
 - [ ] ZineArranger moved to `src/`; imposition rewritten as layout table + pure `impose()` (check every layout's page order against the old code first)
 - [ ] Launcher moved to `launcher/`

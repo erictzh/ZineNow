@@ -125,50 +125,14 @@ export function App() {
           <FormatPanel
             key={selectedAnnId} // so a half-typed field never carries over to the next item
             tool={tool}
-            rectDefaults={t.rectDefaults}
-            onChangeRectDefaults={(patch) => t.setRectDefaults((d) => ({ ...d, ...patch }))}
             selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
             onUpdate={edits.handleUpdateAnnotation}
+            croppingAnnId={croppingAnnId}
+            onToggleCrop={selection.handleToggleCrop}
             onFlattenImage={edits.handleFlattenImage}
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}
-            textStyles={t.textStyles}
-            onSaveTextStyle={t.handleSaveTextStyle}
-            onDeleteTextStyle={t.handleDeleteTextStyle}
-            fontOptions={t.fontOptions}
-            setFontOptions={t.setFontOptions}
-            croppingAnnId={croppingAnnId}
-            onToggleCrop={selection.handleToggleCrop}
-            textFontFamily={t.textFontFamily}
-            textFontSize={t.textFontSize}
-            textBold={t.textBold}
-            textItalic={t.textItalic}
-            textUnderline={t.textUnderline}
-            textColor={t.textColor}
-            textAlign={t.textAlign}
-            onChangeTextFontFamily={t.setTextFontFamily}
-            onChangeTextFontSize={t.setTextFontSize}
-            onChangeTextBold={t.setTextBold}
-            onChangeTextItalic={t.setTextItalic}
-            onChangeTextUnderline={t.setTextUnderline}
-            onChangeTextColor={t.setTextColor}
-            onChangeTextAlign={t.setTextAlign}
-            penColor={t.penColor}
-            penWidth={t.penWidth}
-            penTaper={t.penTaper}
-            onChangePenColor={t.setPenColor}
-            onChangePenWidth={t.setPenWidth}
-            onChangePenTaper={t.setPenTaper}
-            highlighterColor={t.highlighterColor}
-            highlighterWidth={t.highlighterWidth}
-            highlighterTaper={t.highlighterTaper}
-            onChangeHighlighterColor={t.setHighlighterColor}
-            onChangeHighlighterWidth={t.setHighlighterWidth}
-            onChangeHighlighterTaper={t.setHighlighterTaper}
-            eraserMode={t.eraserMode}
-            onChangeEraserMode={t.setEraserMode}
-            softEraser={t.softEraser}
-            onChangeSoftEraser={(patch) => t.setSoftEraser((cur) => ({ ...cur, ...patch }))}
+            toolDefaults={toolDefaults}
           />
         )}
       </div>
