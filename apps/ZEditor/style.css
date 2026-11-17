@@ -291,6 +291,28 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-topbar-popover .ze-format-field:last-of-type { margin-bottom: 0; }
 
+/* ---- Title box — between undo/redo and the menus. Reads as plain text
+   until hovered or focused, like a document name in an editor. */
+.ze-title-input {
+    width: 240px;
+    min-width: 80px;
+    flex: 0 1 auto;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ui-fg);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    text-overflow: ellipsis;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ze-title-input:hover:not(:disabled) { border-color: var(--ui-border); }
+.ze-title-input:focus { outline: none; border-color: var(--ui-accent); background-color: var(--ui-bg); }
+.ze-title-input::placeholder { color: var(--ui-fg-muted); }
+.ze-title-input:disabled { opacity: 0.5; }
+
 /* ---- Topbar menu bar (Page / Project / Export) — TopMenu's trigger and
    dropdown. The Page menu's toggle rows swap to a settings sub-view
    (.ze-menu-settings) in place rather than opening a second popup. */
