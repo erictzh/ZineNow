@@ -4352,6 +4352,168 @@
     }
   }
 
+  // apps/ZineArranger/src/readOptions.js
+  function readOptionsIntoState() {
+    if (document.getElementById("zs-half").checked) {
+      state.size = SIZE_HALF;
+    } else if (document.getElementById("zs-qtr").checked) {
+      state.size = SIZE_QUARTER;
+    } else if (document.getElementById("zs-eighth").checked) {
+      state.size = SIZE_EIGHTH;
+    } else if (document.getElementById("zs-twlv").checked) {
+      state.size = SIZE_12TH;
+    } else if (document.getElementById("zs-sxtn").checked) {
+      state.size = SIZE_16TH;
+    } else if (document.getElementById("zs-twfr").checked) {
+      state.size = SIZE_24TH;
+    } else if (document.getElementById("zs-thtw").checked) {
+      state.size = SIZE_32ND;
+    } else if (document.getElementById("zs-thsx").checked) {
+      state.size = SIZE_36TH;
+    } else if (document.getElementById("zs-frei").checked) {
+      state.size = SIZE_48TH;
+    } else if (document.getElementById("zs-sxfr").checked) {
+      state.size = SIZE_64TH;
+    }
+    state.doubleSided = document.getElementById("dx-double").checked;
+    state.zinePortrait = document.getElementById("ori-portrait").checked;
+    state.spineSide = document.getElementById("spine-side").checked;
+    state.flipBackCover = document.getElementById("flip-bc").checked;
+    state.quarterCopy = document.getElementById("quarter-copy").checked;
+    if (document.getElementById("cust-sig-size").checked) {
+      document.getElementById("sig-size").style = "display:inline";
+      document.getElementById("sig-size-label").style = "display:inline";
+      state.sigSize = document.getElementById("sig-size").value;
+    } else {
+      document.getElementById("sig-size").style = "display:none";
+      document.getElementById("sig-size-label").style = "display:none";
+      state.sigSize = 0;
+    }
+    state.guideMargins = document.getElementById("guide-margin").checked;
+    state.guideCenter = document.getElementById("guide-center").checked;
+    state.guideFolds = document.getElementById("guide-folds").checked;
+    state.blankAfterPages = document.getElementById("blank-after-pages").value.split(",").map(function(s) {
+      return parseInt(s.trim(), 10);
+    }).filter(function(n) {
+      return !isNaN(n) && n > 0;
+    });
+    if (state.blankAfterPages.length > 0) {
+      logResult("Manual blank pages requested after PDF page(s): " + state.blankAfterPages.join(", ") + ".");
+    }
+    state.pageRangeSpec = document.getElementById("page-range").value.trim();
+    if (state.pageRangeSpec.length > 0) {
+      logResult('Page range requested: "' + state.pageRangeSpec + '".');
+    }
+  }
+  function updateSpecString() {
+    state.specsString = SIZE_CHARS[state.size];
+    if (state.doubleSided) {
+      state.specsString = state.specsString + "2";
+    } else {
+      state.specsString = state.specsString + "1";
+    }
+    if (state.zinePortrait) {
+      state.specsString = state.specsString + "p";
+    } else {
+      state.specsString = state.specsString + "l";
+    }
+    if (state.spineSide) {
+      state.specsString = state.specsString + "s";
+    } else {
+      state.specsString = state.specsString + "t";
+    }
+    var foldingInsEl = document.getElementById("folding-ins");
+    if (foldingInsEl) {
+      foldingInsEl.innerHTML = '<a href="folding.html?' + state.specsString + '">Folding Instructions</a>';
+    }
+  }
+
+  // apps/ZineArranger/src/sheetGrid.js
+  var GRIDS = {
+    [SIZE_HALF]: { cols: 2, rows: 1 },
+    [SIZE_QUARTER]: { cols: 2, rows: 2 },
+    [SIZE_EIGHTH]: { cols: 4, rows: 2 },
+    [SIZE_12TH]: { cols: 6, rows: 2 },
+    [SIZE_16TH]: { cols: 4, rows: 4 },
+    [SIZE_24TH]: { cols: 6, rows: 4 },
+    [SIZE_32ND]: { cols: 8, rows: 4 },
+    [SIZE_36TH]: { cols: 6, rows: 6 },
+    [SIZE_48TH]: { cols: 8, rows: 6 },
+    [SIZE_64TH]: { cols: 8, rows: 8 }
+  };
+  function sheetGrid({ size, doubleSided, quarterCopy, zinePortrait }) {
+    const { cols, rows } = GRIDS[size];
+    const square = cols === rows;
+    let pgmult = doubleSided ? cols * rows * 2 : cols * rows;
+    if (size === SIZE_HALF) pgmult = 4;
+    if (size === SIZE_QUARTER && doubleSided && quarterCopy) pgmult = 4;
+    const turnGrid = !square && !zinePortrait;
+    return {
+      pgmult,
+      divHoriz: turnGrid ? rows : cols,
+      divVert: turnGrid ? cols : rows,
+      pagePortrait: square ? zinePortrait : !zinePortrait
+    };
+  }
+
+  // apps/ZineArranger/src/sheetSizes.js
+  function updateSheetLabels() {
+    var lblPcMultEl = document.getElementById("lbl-pc-mult");
+    if (lblPcMultEl) {
+      lblPcMultEl.innerHTML = "To avoid blank pages at the end, the page count should be a multiple of " + state.pgmult + ".";
+    }
+    document.getElementById("sig-size-label").innerHTML = "Sheets per signature (" + state.pgmult * state.sigSize + " zine pages/signature)";
+  }
+  function applySheetSizes() {
+    if (state.pagePortrait) {
+      document.getElementById("rt-width-label").innerHTML = "Width";
+      document.getElementById("rt-height-label").innerHTML = "Height";
+      state.aspectWidth = document.getElementById("rt-width").value;
+      state.aspectHeight = document.getElementById("rt-height").value;
+    } else {
+      document.getElementById("rt-width-label").innerHTML = "Height";
+      document.getElementById("rt-height-label").innerHTML = "Width";
+      state.aspectWidth = document.getElementById("rt-height").value;
+      state.aspectHeight = document.getElementById("rt-width").value;
+    }
+    state.pagerat = state.aspectWidth / state.divHoriz / (state.aspectHeight / state.divVert);
+    var scl = state.aspectWidth;
+    if (scl == 0) {
+      scl = 1;
+    }
+    while (scl < 1e3) {
+      scl *= 2;
+    }
+    var scl = scl / state.aspectWidth;
+    scl = Math.floor(scl, 1);
+    state.sheetWidth = scl * state.aspectWidth;
+    state.sheetHeight = scl * state.aspectHeight;
+    state.pgunit = "in";
+    if (document.getElementById("page-mm").checked) {
+      state.pgunit = "mm";
+    }
+    state.pageWidth = Math.floor(state.sheetWidth / state.divHoriz);
+    state.pageHeight = Math.floor(state.sheetHeight / state.divVert);
+    var rt = document.querySelector(":root");
+    rt.style.setProperty("--sheet-width", state.sheetWidth + "px");
+    rt.style.setProperty("--sheet-height", state.sheetHeight + "px");
+    rt.style.setProperty("--sheet-print-width", state.aspectWidth + state.pgunit);
+    rt.style.setProperty("--sheet-print-height", state.aspectHeight + state.pgunit);
+    rt.style.setProperty("--page-width", state.pageWidth + "px");
+    rt.style.setProperty("--page-height", state.pageHeight + "px");
+    rt.style.setProperty("--sheet-scale", getPreviewTargetWidth() / state.sheetWidth);
+  }
+  function getPreviewTargetWidth() {
+    var pane = document.getElementById("workspace-preview-scroll");
+    if (pane) {
+      var paneWidth = pane.clientWidth;
+      if (paneWidth > 0) {
+        return Math.min(900, Math.max(200, paneWidth - 48));
+      }
+    }
+    return 550;
+  }
+
   // apps/ZineArranger/src/optionsPanel.js
   function switchOptionsTab(tab) {
     var basicTab = document.getElementById("tab-basic");
@@ -4466,264 +4628,13 @@
   }
   function refreshSpecs() {
     logCmd("refreshSpecs()");
-    if (document.getElementById("zs-half").checked) {
-      state.size = SIZE_HALF;
-    } else if (document.getElementById("zs-qtr").checked) {
-      state.size = SIZE_QUARTER;
-    } else if (document.getElementById("zs-eighth").checked) {
-      state.size = SIZE_EIGHTH;
-    } else if (document.getElementById("zs-twlv").checked) {
-      state.size = SIZE_12TH;
-    } else if (document.getElementById("zs-sxtn").checked) {
-      state.size = SIZE_16TH;
-    } else if (document.getElementById("zs-twfr").checked) {
-      state.size = SIZE_24TH;
-    } else if (document.getElementById("zs-thtw").checked) {
-      state.size = SIZE_32ND;
-    } else if (document.getElementById("zs-thsx").checked) {
-      state.size = SIZE_36TH;
-    } else if (document.getElementById("zs-frei").checked) {
-      state.size = SIZE_48TH;
-    } else if (document.getElementById("zs-sxfr").checked) {
-      state.size = SIZE_64TH;
-    }
-    state.doubleSided = document.getElementById("dx-double").checked;
-    state.zinePortrait = document.getElementById("ori-portrait").checked;
-    state.spineSide = document.getElementById("spine-side").checked;
-    state.flipBackCover = document.getElementById("flip-bc").checked;
-    state.quarterCopy = document.getElementById("quarter-copy").checked;
-    if (document.getElementById("cust-sig-size").checked) {
-      document.getElementById("sig-size").style = "display:inline";
-      document.getElementById("sig-size-label").style = "display:inline";
-      state.sigSize = document.getElementById("sig-size").value;
-    } else {
-      document.getElementById("sig-size").style = "display:none";
-      document.getElementById("sig-size-label").style = "display:none";
-      state.sigSize = 0;
-    }
-    state.guideMargins = document.getElementById("guide-margin").checked;
-    state.guideCenter = document.getElementById("guide-center").checked;
-    state.guideFolds = document.getElementById("guide-folds").checked;
-    state.blankAfterPages = document.getElementById("blank-after-pages").value.split(",").map(function(s) {
-      return parseInt(s.trim(), 10);
-    }).filter(function(n) {
-      return !isNaN(n) && n > 0;
-    });
-    if (state.blankAfterPages.length > 0) {
-      logResult("Manual blank pages requested after PDF page(s): " + state.blankAfterPages.join(", ") + ".");
-    }
-    state.pageRangeSpec = document.getElementById("page-range").value.trim();
-    if (state.pageRangeSpec.length > 0) {
-      logResult('Page range requested: "' + state.pageRangeSpec + '".');
-    }
-    state.specsString = SIZE_CHARS[state.size];
-    if (state.doubleSided) {
-      state.specsString = state.specsString + "2";
-    } else {
-      state.specsString = state.specsString + "1";
-    }
-    if (state.zinePortrait) {
-      state.specsString = state.specsString + "p";
-    } else {
-      state.specsString = state.specsString + "l";
-    }
-    if (state.spineSide) {
-      state.specsString = state.specsString + "s";
-    } else {
-      state.specsString = state.specsString + "t";
-    }
-    var foldingInsEl = document.getElementById("folding-ins");
-    if (foldingInsEl) {
-      foldingInsEl.innerHTML = '<a href="folding.html?' + state.specsString + '">Folding Instructions</a>';
-    }
-    state.pgmult = 0;
-    switch (state.size) {
-      case SIZE_HALF:
-        state.pgmult = 4;
-        state.pagePortrait = !state.zinePortrait;
-        if (state.zinePortrait) {
-          state.divVert = 1;
-          state.divHoriz = 2;
-        } else {
-          state.divVert = 2;
-          state.divHoriz = 1;
-        }
-        break;
-      case SIZE_QUARTER:
-        if (state.doubleSided) {
-          if (state.quarterCopy) {
-            state.pgmult = 4;
-          } else {
-            state.pgmult = 8;
-          }
-        } else {
-          state.pgmult = 4;
-        }
-        state.divVert = 2;
-        state.divHoriz = 2;
-        state.pagePortrait = state.zinePortrait;
-        break;
-      case SIZE_EIGHTH:
-        if (state.doubleSided) {
-          state.pgmult = 16;
-        } else {
-          state.pgmult = 8;
-        }
-        if (state.zinePortrait) {
-          state.divVert = 2;
-          state.divHoriz = 4;
-        } else {
-          state.divVert = 4;
-          state.divHoriz = 2;
-        }
-        state.pagePortrait = !state.zinePortrait;
-        break;
-      case SIZE_12TH:
-        if (state.doubleSided) {
-          state.pgmult = 24;
-        } else {
-          state.pgmult = 12;
-        }
-        if (state.zinePortrait) {
-          state.divVert = 2;
-          state.divHoriz = 6;
-        } else {
-          state.divVert = 6;
-          state.divHoriz = 2;
-        }
-        state.pagePortrait = !state.zinePortrait;
-        break;
-      case SIZE_16TH:
-        if (state.doubleSided) {
-          state.pgmult = 32;
-        } else {
-          state.pgmult = 16;
-        }
-        state.divVert = 4;
-        state.divHoriz = 4;
-        state.pagePortrait = state.zinePortrait;
-        break;
-      case SIZE_24TH:
-        if (state.doubleSided) {
-          state.pgmult = 48;
-        } else {
-          state.pgmult = 24;
-        }
-        if (state.zinePortrait) {
-          state.divVert = 4;
-          state.divHoriz = 6;
-        } else {
-          state.divVert = 6;
-          state.divHoriz = 4;
-        }
-        state.pagePortrait = !state.zinePortrait;
-        break;
-      case SIZE_32ND:
-        if (state.doubleSided) {
-          state.pgmult = 64;
-        } else {
-          state.pgmult = 32;
-        }
-        if (state.zinePortrait) {
-          state.divVert = 4;
-          state.divHoriz = 8;
-        } else {
-          state.divVert = 8;
-          state.divHoriz = 4;
-        }
-        state.pagePortrait = !state.zinePortrait;
-        break;
-      case SIZE_36TH:
-        if (state.doubleSided) {
-          state.pgmult = 72;
-        } else {
-          state.pgmult = 36;
-        }
-        state.divVert = 6;
-        state.divHoriz = 6;
-        state.pagePortrait = state.zinePortrait;
-        break;
-      case SIZE_48TH:
-        if (state.doubleSided) {
-          state.pgmult = 96;
-        } else {
-          state.pgmult = 48;
-        }
-        if (state.zinePortrait) {
-          state.divVert = 6;
-          state.divHoriz = 8;
-        } else {
-          state.divVert = 8;
-          state.divHoriz = 6;
-        }
-        state.pagePortrait = !state.zinePortrait;
-        break;
-      case SIZE_64TH:
-        if (state.doubleSided) {
-          state.pgmult = 128;
-        } else {
-          state.pgmult = 64;
-        }
-        state.divVert = 8;
-        state.divHoriz = 8;
-        state.pagePortrait = state.zinePortrait;
-      default:
-        break;
-    }
-    var lblPcMultEl = document.getElementById("lbl-pc-mult");
-    if (lblPcMultEl) {
-      lblPcMultEl.innerHTML = "To avoid blank pages at the end, the page count should be a multiple of " + state.pgmult + ".";
-    }
-    document.getElementById("sig-size-label").innerHTML = "Sheets per signature (" + state.pgmult * state.sigSize + " zine pages/signature)";
-    if (state.pagePortrait) {
-      document.getElementById("rt-width-label").innerHTML = "Width";
-      document.getElementById("rt-height-label").innerHTML = "Height";
-      state.aspectWidth = document.getElementById("rt-width").value;
-      state.aspectHeight = document.getElementById("rt-height").value;
-    } else {
-      document.getElementById("rt-width-label").innerHTML = "Height";
-      document.getElementById("rt-height-label").innerHTML = "Width";
-      state.aspectWidth = document.getElementById("rt-height").value;
-      state.aspectHeight = document.getElementById("rt-width").value;
-    }
-    state.pagerat = state.aspectWidth / state.divHoriz / (state.aspectHeight / state.divVert);
-    var scl = state.aspectWidth;
-    if (scl == 0) {
-      scl = 1;
-    }
-    while (scl < 1e3) {
-      scl *= 2;
-    }
-    var scl = scl / state.aspectWidth;
-    scl = Math.floor(scl, 1);
-    state.sheetWidth = scl * state.aspectWidth;
-    state.sheetHeight = scl * state.aspectHeight;
-    state.pgunit = "in";
-    if (document.getElementById("page-mm").checked) {
-      state.pgunit = "mm";
-    }
-    state.pageWidth = Math.floor(state.sheetWidth / state.divHoriz);
-    state.pageHeight = Math.floor(state.sheetHeight / state.divVert);
-    var rt = document.querySelector(":root");
-    rt.style.setProperty("--sheet-width", state.sheetWidth + "px");
-    rt.style.setProperty("--sheet-height", state.sheetHeight + "px");
-    rt.style.setProperty("--sheet-print-width", state.aspectWidth + state.pgunit);
-    rt.style.setProperty("--sheet-print-height", state.aspectHeight + state.pgunit);
-    rt.style.setProperty("--page-width", state.pageWidth + "px");
-    rt.style.setProperty("--page-height", state.pageHeight + "px");
-    rt.style.setProperty("--sheet-scale", getPreviewTargetWidth() / state.sheetWidth);
+    readOptionsIntoState();
+    updateSpecString();
+    Object.assign(state, sheetGrid(state));
+    updateSheetLabels();
+    applySheetSizes();
     logResult("Layout settings updated (spec: " + state.specsString + ", " + (state.doubleSided ? "double" : "single") + "-sided).");
     selectFile();
-  }
-  function getPreviewTargetWidth() {
-    var pane = document.getElementById("workspace-preview-scroll");
-    if (pane) {
-      var paneWidth = pane.clientWidth;
-      if (paneWidth > 0) {
-        return Math.min(900, Math.max(200, paneWidth - 48));
-      }
-    }
-    return 550;
   }
   function toggleReverseImpose() {
     state.isReverseImposeActive = document.getElementById("reverse-impose-toggle").checked;

@@ -3,7 +3,8 @@
 // see docs/ARCHITECTURE.md for what goes where.
 
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
-import { getPreviewTargetWidth, refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
+import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
+import { getPreviewTargetWidth } from "./sheetSizes.js";
 import { state } from "./state.js";
 import { triggerPrint } from "./print.js";
 
