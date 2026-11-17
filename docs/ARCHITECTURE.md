@@ -110,15 +110,29 @@ cascade order (later files win ties). Each file is one contiguous part of
 the old `style.css`, so keep new rules in the file for their area and mind
 the order if a rule must override another file's.
 
-### ZineArranger `src/` (target)
+### ZineArranger `src/`
 
-`state.js` (all options in one object instead of ~30 globals),
-`paperSizes.js`, `pageRange.js`, `imposition/` (`signatures.js`,
-`layouts.js` — a data table of which page goes in which cell for each size ×
-sides × orientation × spine side — and `impose.js`, a pure function from
-options + page count to sheets), `render/` (`sheetsDom.js`,
-`guideClasses.js`, `pdfPages.js`), `reverseImpose.js`, `optionsPanel.js`,
-`print.js`, `activityLog.js`, `main.js`.
+Plain JavaScript (no React).
+
+| File | Holds |
+|---|---|
+| `state.js` | Every value that changes: the chosen options, computed sheet/page sizes, UI flags (was ~30 globals). |
+| `sizes.js` | Zine sizes and the automatic signature-size cap. |
+| `optionsPanel.js` | Tabs, size buttons, paper presets, the Reverse Impose toggle, and `refreshSpecs` (reads every option into `state`, computes sizes, reloads). |
+| `loadPdf.js` | Loads the PDF and draws each page into its canvas cell. |
+| `imposition/layouts.js` | **Data**: for each size × sides × orientation × spine (× copy), which page goes in which cell, rotation and guide lines. Format documented at the top of the file. |
+| `imposition/impose.js` | Pure: options + page count → padded page count and sheets of cells. |
+| `imposition/sheetsHtml.js` | Sheets → the preview/print HTML. |
+| `imposition/arrangeZineSheets.js`, `signatures.js` | Glue (state → impose → DOM) and sheets-per-signature. |
+| `reverseImpose.js`, `pageRange.js`, `print.js`, `activityLog.js` | De-imposing, page ranges, print orientation/size, the log panel. |
+| `main.js` | Startup, the ZEditor hand-off receiver, and `window` exposure of the functions `index.html`'s `onclick`/`onchange` attributes call. |
+
+To change a layout, edit its entry in `layouts.js`. `layouts.js` was
+extracted from the original hand-written code by running it, and
+`impose()` was checked to produce byte-identical HTML, page counts and
+print orientation for every option combination (10 sizes × sides ×
+orientation × spine × copy × flip × 8 guide combinations × 8 signature
+sizes × page counts 0–300: 1,267,712 cases, 0 differences).
 
 ### Markdown-to-PDF `src/`
 
@@ -160,7 +174,8 @@ options + page count to sheets), `render/` (`sheetsDom.js`,
 - [x] ZEditor `ui/App.jsx` split into 15 `state/` hooks (App.jsx 1,748 → 223 lines); PDF import/export, the `.znow` format and the ZineArranger hand-off moved to `io/`; Topbar, ToolBar and the live filter defs are their own components
 - [x] ZEditor `FormatPanel.jsx` is now a router over one panel per item type plus the tool panels (`ui/panels/format/`); `ComposeCanvas.jsx` (517 → 253 lines) delegates the page background, soft-eraser gesture, selection rotate knob, per-type item rendering and page overlays to their own files
 - [x] Markdown-to-PDF moved to `src/`: `App.jsx` converted back to JSX by a codemod (compiles to the identical program); `pdfGenerator.js` and `App.jsx` split into 36 files; the Sidebar broken into tabs and sections, with shared file-dialog helpers. Preview document and sidebar HTML verified identical to the old version.
-- [ ] ZineArranger moved to `src/`; imposition rewritten as layout table + pure `impose()` (check every layout's page order against the old code first)
+- [x] ZineArranger moved to `src/` (14 files, ~30 globals into one `state`); the 4,770-line imposition function replaced by `layouts.js` data + `impose()` + `sheetsHtml()`, identical on all 1,267,712 checked cases and in the browser against the old page
+- [ ] ZineArranger `refreshSpecs` (~290 lines in `optionsPanel.js`) split into reading options vs computing sizes
 - [ ] Launcher moved to `launcher/`
 
 The last state before this refactor is tagged `pre-modular-refactor`.

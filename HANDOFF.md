@@ -11,7 +11,7 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 | App | Path | Purpose |
 |---|---|---|
 | ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `styles/` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
-| ZineArranger | `apps/ZineArranger/index.html` | Imposes a multi-page PDF into a printable zine booklet. |
+| ZineArranger | `apps/ZineArranger/src/` (built to `dist/app.js`) + `index.html` + `style.css` | Imposes a multi-page PDF into a printable zine booklet. |
 | Md to PDF Converter | `apps/Markdown-to-PDF/src/` (built to `dist/app.js`) + `index.html` + CSS | Markdown → paginated PDF eBook. |
 | Launcher | `index.html`, `app.js`, `style.css`, `bg.jpg` (root) | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
 
@@ -38,7 +38,8 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 - Depends on CDNs (marked, mammoth, turndown, jszip, pdf-lib, DOMPurify, Tailwind, React, Google Fonts, Paged.js, html2canvas) — needs internet.
 
 ### ZineArranger
-- Large single file. Has a "ZEditor handoff" block near the end: listens for `postMessage` `{type:"zeditor-handoff-pdf", buffer, filename}` and feeds the bytes into its `#selector` file input; pings `{type:"zinearranger-ready"}` to `window.opener` every 500ms (up to 15×).
+- Plain JS (no React) in `src/`, built to `dist/app.js` (see docs/ARCHITECTURE.md). All changing values live on one `state` object (`src/state.js`); `index.html`'s `onclick`/`onchange` attributes call functions that `src/main.js` puts on `window`. Imposition is data: `src/imposition/layouts.js` (one entry per size/sides/orientation/spine) read by `impose()`; it replaced a 4,770-line hand-written function and was checked byte-identical against it.
+- The "ZEditor handoff" block is in `src/main.js`: listens for `postMessage` `{type:"zeditor-handoff-pdf", buffer, filename}` and feeds the bytes into its `#selector` file input; pings `{type:"zinearranger-ready"}` to `window.opener` every 500ms (up to 15×).
 
 ### Cross-app handoff protocol ("Send to ZineArranger")
 Sender (ZEditor and Md-to-PDF both use the same shape):
