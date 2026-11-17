@@ -10,22 +10,7 @@
     
     --sheet-scale: 1;
 
-    /* On-screen UI theme only — never applied to the zine/print output above, which must stay print-accurate.
-       These --ui-* tokens are copied verbatim from MD2eBook's styles.css :root block. */
-    --ui-bg: #171312;
-    --ui-bg-alt: #241d1bb0;
-    --ui-bg-card: #201918e8;
-    --ui-bg-terminal: #100d0c6b;
-    --ui-border: #3f3634;
-    --ui-fg: #e9e9ee;
-    --ui-fg-muted: #9a9ca6;
-    --ui-accent: #dd531a;
-    --ui-accent-hover: #bf6836;
-    --ui-accent-text: #dd531a;
-    --ui-radius: 10px;
-    --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --ui-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --preview-bar: #151313c9;
+    /* The on-screen UI theme (--ui-* tokens) is in shared/styles/tokens.css. */
 
     /* App layout tokens — also copied verbatim from MD2eBook's styles.css :root. */
     --md2ebook-sidebar-width: 40vw;
@@ -1331,51 +1316,7 @@ input[type="file"]::file-selector-button:hover {
     color: var(--ui-fg);
 }
 
-/* Matches MD2eBook's hollow buttons exactly: rounded-md(6px), border-line,
-   bg-ink-card, px-3 py-1.5, text-xs(12px) font-medium(500), text-fg-muted
-   at rest brightening to text-fg + bg-ink on hover. .tab and
-   .log-btn/.log-copy-btn override this with their own more specific rules. */
-button {
-    background-color: var(--ui-bg-card);
-    color: var(--ui-fg-muted);
-    border: 1px solid var(--ui-border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-}
-
-button:hover {
-    background-color: var(--ui-bg);
-    color: var(--ui-fg);
-}
-
-button:active {
-    transform: scale(0.97);
-}
-
-/* Exception: the Print button stays solid/filled and accent-colored, as the one
-   primary call-to-action — kept fully self-contained (not layered on the plain
-   button styling above) so it isn't affected by that button's styling changes.
-   Matches MD2eBook's "Download PDF eBook" button: rounded-md, solid bg-accent,
-   px-4 py-1.5, text-xs font-semibold, white text, hover bg-accent-hover. */
-button.btn-solid {
-    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
-    color: #fff;
-    border: 1px solid var(--ui-accent);
-    border-radius: 6px;
-    padding: 6px 16px;
-    min-width: 85px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-button.btn-solid:hover {
-    background-color: var(--ui-accent-hover);
-    border-color: var(--ui-accent-hover);
-}
+/* Buttons (hollow, .btn-solid for Print, .log-btn) are in shared/styles/buttons.css. */
 
 /* ---- Activity log panel ---- */
 /* Sits inside the sidebar (.workspace-panel) as one of the stacked .panel-card
@@ -1415,24 +1356,6 @@ button.btn-solid:hover {
 
 .log-panel-actions {
     display: flex;
-}
-
-.log-btn {
-    margin: 0 0 0 6px;
-    padding: 4px 10px;
-    min-width: unset;
-    font-size: 11px;
-    font-weight: 500;
-    background-color: var(--ui-bg-card);
-    border: 1px solid var(--ui-border);
-    border-radius: 6px;
-    color: var(--ui-fg-muted);
-}
-
-.log-btn:hover {
-    color: var(--ui-fg);
-    background-color: var(--ui-bg);
-    border-color: var(--ui-border);
 }
 
 .log-output-wrap {
