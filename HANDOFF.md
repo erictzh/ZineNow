@@ -13,7 +13,7 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 | ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `styles/` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
 | ZineArranger | `apps/ZineArranger/src/` (built to `dist/app.js`) + `index.html` + `style.css` | Imposes a multi-page PDF into a printable zine booklet. |
 | Md to PDF Converter | `apps/Markdown-to-PDF/src/` (built to `dist/app.js`) + `index.html` + CSS | Markdown → paginated PDF eBook. |
-| Launcher | `index.html`, `app.js`, `style.css`, `bg.jpg` (root) | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
+| Launcher | `index.html` (root) + `launcher/` (`launcher.js`, `launcher.css`, `bg.jpg`); app list in `config/apps-config.js` | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
 
 ## 2. Architecture notes per app
 
