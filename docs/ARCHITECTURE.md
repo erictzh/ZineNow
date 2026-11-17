@@ -64,6 +64,26 @@ Every file starts with a one-line comment saying what it is responsible
 for — read those to find your way around. `constants.js` (scales, paper
 presets, zoom, export DPI) sits at the top and counts as `model/`.
 
+**How the state hooks fit together.** `ui/App.jsx` creates them in order and
+passes each the ones it builds on, as plain objects:
+
+| Hook | Owns |
+|---|---|
+| `useStatus` | `loading`, `errorMsg` |
+| `useDocumentState` | `pages`, page selection, `pdfDocsRef`, id counters, `pageSizeRef` |
+| `useHistory` | undo/redo; call `recordUndoCheckpoint(key?)` **before** a mutating `setPages` |
+| `useViewSettings` | guides, center guide, page numbers, onion skin, Layers panel; what a project saves |
+| `useToolDefaults` | each tool's settings for the next item, font list, saved text styles |
+| `useSelection` | current tool, selected items, text being edited, crop mode, page selection |
+| `useAnnotationEdits` | every change to items, plus the page filter |
+| `usePageOps` | rotate, insert blank, delete, reorder pages |
+| `useProject` | title, Save / Save As, opening `.znow`, the remembered file |
+| `useDialogs` | New Document, shortcuts, two-step erase confirmation |
+| `useDocumentFiles` | Load PDF, new blank document, Insert PDF |
+| `useExport` | Export PDF, Send to ZineArranger |
+| `useZoom`, `useOnionGhost` | zoom with the view centre kept in place; the previous-page ghost |
+| `useKeyboardShortcuts` | keys and image paste; reads the latest state through a ref, so listeners are attached once and are never stale |
+
 Where things went that might not be obvious:
 
 - `model/edgeShapes.js` keeps each edge effect (rounded, ellipse, torn,
@@ -120,7 +140,8 @@ ZineArranger), `convert/` (docx, epub, muse, HTML → Markdown), `App.jsx`,
 - [x] ZEditor's code moved, unchanged, from inline `<script type="text/babel">` to `src/main.jsx` (built to `dist/app.js`; Babel removed)
 - [ ] Shared CSS tokens/components and shared JS (`shared/styles`, `shared/js`)
 - [x] ZEditor split into `model/`, `render/`, `io/` and `ui/` (82 files; every statement moved byte-for-byte, only `import`/`export` lines added); `style.css` split into `styles/` (11 files, same 301 rules in the same order)
-- [ ] ZEditor `ui/App.jsx` (~1,750 lines, all app state) split into `state/` hooks; `ComposeCanvas.jsx` and `FormatPanel.jsx` broken up further (these change code, so they go one at a time with a browser check each)
+- [x] ZEditor `ui/App.jsx` split into 15 `state/` hooks (App.jsx 1,748 → 223 lines); PDF import/export, the `.znow` format and the ZineArranger hand-off moved to `io/`; Topbar, ToolBar and the live filter defs are their own components
+- [ ] ZEditor `ComposeCanvas.jsx` (517 lines) and `FormatPanel.jsx` (363 lines) broken up further
 - [ ] Markdown-to-PDF moved to `src/` (JSX source instead of the hand-converted `App.jsx`), `pdfGenerator.js` split
 - [ ] ZineArranger moved to `src/`; imposition rewritten as layout table + pure `impose()` (check every layout's page order against the old code first)
 - [ ] Launcher moved to `launcher/`

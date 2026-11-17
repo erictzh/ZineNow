@@ -1,5 +1,31 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // apps/ZEditor/src/model/pageNumbers.js
+  var DEFAULT_PAGE_NUMBERS = { on: false, from: 1, to: 0, first: 1, position: "bottom-outside", format: "n", size: 10, color: "#1a1a1a", marginIn: 0.4 };
+  var PAGE_NUMBER_POSITIONS = [
+    { key: "bottom-outside", label: "Bottom, outer corner" },
+    { key: "bottom-center", label: "Bottom, center" },
+    { key: "bottom-left", label: "Bottom left" },
+    { key: "bottom-right", label: "Bottom right" },
+    { key: "top-outside", label: "Top, outer corner" },
+    { key: "top-center", label: "Top, center" },
+    { key: "top-left", label: "Top left" },
+    { key: "top-right", label: "Top right" }
+  ];
+  var PAGE_NUMBER_FORMATS = [{ key: "n", label: "1" }, { key: "dash", label: "– 1 –" }, { key: "page", label: "Page 1" }];
+  function pageNumberSpec(settings, pageIdx, pageCount) {
+    if (!settings.on || pageIdx === null || pageIdx < 0) return null;
+    const position = pageIdx + 1;
+    const last = settings.to > 0 ? Math.min(settings.to, pageCount) : pageCount;
+    if (position < settings.from || position > last) return null;
+    const number = settings.first + (position - settings.from);
+    const text = settings.format === "dash" ? `– ${number} –` : settings.format === "page" ? `Page ${number}` : String(number);
+    let place = settings.position;
+    if (place.endsWith("-outside")) place = place.replace("outside", position % 2 === 1 ? "right" : "left");
+    const [vertical, horizontal] = place.split("-");
+    return { text, vertical, horizontal, size: settings.size, color: settings.color, marginIn: settings.marginIn };
+  }
+
   // apps/ZEditor/src/constants.js
   var THUMB_SCALE = 0.3;
   var MAIN_SCALE = 1.1;
@@ -57,80 +83,6 @@
     const minY = Math.min(...ys), maxY = Math.max(...ys);
     return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
   }
-
-  // apps/ZEditor/src/model/color.js
-  function rgbaCss(hex, alphaPercent) {
-    const { r, g, b } = hexToRgb(hex);
-    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
-  }
-  function hexToRgb(hex) {
-    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
-    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
-  }
-
-  // apps/ZEditor/src/model/controls.js
-  var OPACITY_CONTROL = { kind: "slider", prop: "opacity", label: "Opacity (%)", min: 0, max: 100, fallback: 100 };
-  var BLEND_CONTROL = {
-    kind: "select",
-    prop: "blend",
-    label: "Blend",
-    fallback: "normal",
-    options: [
-      { key: "normal", label: "Normal" },
-      { key: "multiply", label: "Multiply" },
-      { key: "screen", label: "Screen" },
-      { key: "overlay", label: "Overlay" },
-      { key: "soft-light", label: "Soft Light" },
-      { key: "darken", label: "Darken" },
-      { key: "lighten", label: "Lighten" },
-      { key: "difference", label: "Difference" }
-    ]
-  };
-  var ANGLE_CONTROL = { kind: "slider", prop: "angle", label: "Rotation (°)", min: 0, max: 359, fallback: 0 };
-  var angleOf = (ann) => ann.angle || 0;
-  function controlValues(source, controls) {
-    return Object.fromEntries(controls.map((c) => [c.prop, source[c.prop] != null ? source[c.prop] : c.fallback]));
-  }
-  function effectSettings(ann, effect) {
-    return controlValues(ann, effect.controls);
-  }
-  function opacityOf(ann) {
-    return controlValues(ann, [OPACITY_CONTROL]).opacity / 100;
-  }
-  function blendOf(ann) {
-    return controlValues(ann, [BLEND_CONTROL]).blend;
-  }
-
-  // apps/ZEditor/src/model/documentTitle.js
-  function titleStamp(date = /* @__PURE__ */ new Date()) {
-    const two = (n) => String(n).padStart(2, "0");
-    return two(date.getFullYear() % 100) + two(date.getMonth() + 1) + two(date.getDate()) + two(date.getHours()) + two(date.getMinutes());
-  }
-  function stripExtension(name) {
-    return String(name || "").replace(/\.[^./\\]+$/, "");
-  }
-  function titleToFileName(title, extension) {
-    const safe = String(title || "").replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/, "").trim();
-    return (safe || "zine") + extension;
-  }
-
-  // apps/ZEditor/src/model/guides.js
-  var GUIDE_FORMAT_PRESETS = [
-    { key: "match", label: "Match Page Size" },
-    { key: "half-letter", label: "Half Letter (5.5 × 8.5 in)", widthIn: 5.5, heightIn: 8.5 },
-    { key: "digest", label: "Digest (5.5 × 8.25 in)", widthIn: 5.5, heightIn: 8.25 },
-    { key: "a5", label: "A5 (5.83 × 8.27 in)", widthIn: 5.83, heightIn: 8.27 },
-    { key: "a6", label: "A6 (4.13 × 5.83 in)", widthIn: 4.13, heightIn: 5.83 },
-    { key: "quarter-letter", label: "Quarter Letter (4.25 × 5.5 in)", widthIn: 4.25, heightIn: 5.5 },
-    { key: "letter", label: "US Letter (8.5 × 11 in)", widthIn: 8.5, heightIn: 11 },
-    { key: "a4", label: "A4 (8.27 × 11.69 in)", widthIn: 8.27, heightIn: 11.69 }
-  ];
-  var DEFAULT_GUIDE_MARGIN_IN = 0.25;
-  var DEFAULT_GUIDE_BLEED_IN = 0.125;
-
-  // apps/ZEditor/src/model/history.js
-  var UNDO_COALESCE_MS = 700;
-  var MAX_UNDO_HISTORY = 50;
 
   // apps/ZEditor/src/model/pageFilters.js
   var PAGE_FILTER_OPTIONS = [
@@ -199,30 +151,37 @@
     return f;
   }
 
-  // apps/ZEditor/src/model/pageNumbers.js
-  var DEFAULT_PAGE_NUMBERS = { on: false, from: 1, to: 0, first: 1, position: "bottom-outside", format: "n", size: 10, color: "#1a1a1a", marginIn: 0.4 };
-  var PAGE_NUMBER_POSITIONS = [
-    { key: "bottom-outside", label: "Bottom, outer corner" },
-    { key: "bottom-center", label: "Bottom, center" },
-    { key: "bottom-left", label: "Bottom left" },
-    { key: "bottom-right", label: "Bottom right" },
-    { key: "top-outside", label: "Top, outer corner" },
-    { key: "top-center", label: "Top, center" },
-    { key: "top-left", label: "Top left" },
-    { key: "top-right", label: "Top right" }
-  ];
-  var PAGE_NUMBER_FORMATS = [{ key: "n", label: "1" }, { key: "dash", label: "– 1 –" }, { key: "page", label: "Page 1" }];
-  function pageNumberSpec(settings, pageIdx, pageCount) {
-    if (!settings.on || pageIdx === null || pageIdx < 0) return null;
-    const position = pageIdx + 1;
-    const last = settings.to > 0 ? Math.min(settings.to, pageCount) : pageCount;
-    if (position < settings.from || position > last) return null;
-    const number = settings.first + (position - settings.from);
-    const text = settings.format === "dash" ? `– ${number} –` : settings.format === "page" ? `Page ${number}` : String(number);
-    let place = settings.position;
-    if (place.endsWith("-outside")) place = place.replace("outside", position % 2 === 1 ? "right" : "left");
-    const [vertical, horizontal] = place.split("-");
-    return { text, vertical, horizontal, size: settings.size, color: settings.color, marginIn: settings.marginIn };
+  // apps/ZEditor/src/model/controls.js
+  var OPACITY_CONTROL = { kind: "slider", prop: "opacity", label: "Opacity (%)", min: 0, max: 100, fallback: 100 };
+  var BLEND_CONTROL = {
+    kind: "select",
+    prop: "blend",
+    label: "Blend",
+    fallback: "normal",
+    options: [
+      { key: "normal", label: "Normal" },
+      { key: "multiply", label: "Multiply" },
+      { key: "screen", label: "Screen" },
+      { key: "overlay", label: "Overlay" },
+      { key: "soft-light", label: "Soft Light" },
+      { key: "darken", label: "Darken" },
+      { key: "lighten", label: "Lighten" },
+      { key: "difference", label: "Difference" }
+    ]
+  };
+  var ANGLE_CONTROL = { kind: "slider", prop: "angle", label: "Rotation (°)", min: 0, max: 359, fallback: 0 };
+  var angleOf = (ann) => ann.angle || 0;
+  function controlValues(source, controls) {
+    return Object.fromEntries(controls.map((c) => [c.prop, source[c.prop] != null ? source[c.prop] : c.fallback]));
+  }
+  function effectSettings(ann, effect) {
+    return controlValues(ann, effect.controls);
+  }
+  function opacityOf(ann) {
+    return controlValues(ann, [OPACITY_CONTROL]).opacity / 100;
+  }
+  function blendOf(ann) {
+    return controlValues(ann, [BLEND_CONTROL]).blend;
   }
 
   // apps/ZEditor/src/model/rect.js
@@ -249,83 +208,6 @@
   var RECT_FILL_CONTROLS = RECT_CONTROLS.filter((c) => RECT_FILL_PROPS.includes(c.prop));
   var MIN_RECT_SIZE = 2;
   var DEFAULT_RECT_SIZE = { width: 160, height: 110 };
-
-  // apps/ZEditor/src/model/softEraser.js
-  var SOFT_ERASER_DEFAULTS = { size: 40, softness: 60, strength: 100 };
-  var SOFT_ERASER_DABS_PER_RADIUS = 4;
-
-  // apps/ZEditor/src/model/strokes.js
-  var PEN_COLOR_SWATCHES = ["#1a1a1a", "#dd531a", "#dc2626", "#2563eb"];
-  var HIGHLIGHTER_COLOR_SWATCHES = ["#ffe066", "#ffb84d", "#7ec8ff", "#ff9ecf", "#7dffb3"];
-  var PEN_DEFAULTS = { color: "#1a1a1a", width: 2.5 };
-  var HIGHLIGHTER_DEFAULTS = { color: "#ffe066", width: 14 };
-  function smoothPathD(points) {
-    if (points.length < 2) return "";
-    if (points.length === 2) {
-      return `M ${points[0][0]},${points[0][1]} L ${points[1][0]},${points[1][1]}`;
-    }
-    let d = `M ${points[0][0]},${points[0][1]}`;
-    for (let i = 1; i < points.length - 1; i++) {
-      const [x0, y0] = points[i];
-      const [x1, y1] = points[i + 1];
-      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-      d += ` Q ${x0},${y0} ${mx},${my}`;
-    }
-    const last = points[points.length - 1];
-    d += ` L ${last[0]},${last[1]}`;
-    return d;
-  }
-  function distToSegment(p, a, b) {
-    const dx = b[0] - a[0], dy = b[1] - a[1];
-    const lenSq = dx * dx + dy * dy;
-    let t = lenSq === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lenSq;
-    t = Math.max(0, Math.min(1, t));
-    const cx = a[0] + t * dx, cy = a[1] + t * dy;
-    return Math.hypot(p[0] - cx, p[1] - cy);
-  }
-  function strokeHitTest(point, ann) {
-    const threshold = (ann.strokeWidth || 8) / 2 + 6;
-    for (let i = 0; i < ann.points.length - 1; i++) {
-      if (distToSegment(point, ann.points[i], ann.points[i + 1]) <= threshold) return true;
-    }
-    return false;
-  }
-  function taperedPathD(points, baseWidth, taper) {
-    if (points.length < 2) return "";
-    const dists = [0];
-    for (let i = 1; i < points.length; i++) {
-      dists.push(dists[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
-    }
-    const total = dists[dists.length - 1] || 1;
-    const tf = Math.min(0.45, Math.max(0, taper));
-    function widthAt(t) {
-      if (tf <= 0) return baseWidth;
-      let factor;
-      if (t < tf) factor = t / tf;
-      else if (t > 1 - tf) factor = (1 - t) / tf;
-      else factor = 1;
-      return Math.max(baseWidth * 0.12, baseWidth * factor);
-    }
-    const left = [], right = [];
-    for (let i = 0; i < points.length; i++) {
-      const t = dists[i] / total;
-      const w = widthAt(t) / 2;
-      const prev = points[Math.max(0, i - 1)];
-      const next = points[Math.min(points.length - 1, i + 1)];
-      let dx = next[0] - prev[0], dy = next[1] - prev[1];
-      const len = Math.hypot(dx, dy) || 1;
-      dx /= len;
-      dy /= len;
-      const nx = -dy, ny = dx;
-      left.push([points[i][0] + nx * w, points[i][1] + ny * w]);
-      right.push([points[i][0] - nx * w, points[i][1] - ny * w]);
-    }
-    let d = `M ${left[0][0]},${left[0][1]}`;
-    for (let i = 1; i < left.length; i++) d += ` L ${left[i][0]},${left[i][1]}`;
-    for (let i = right.length - 1; i >= 0; i--) d += ` L ${right[i][0]},${right[i][1]}`;
-    d += " Z";
-    return d;
-  }
 
   // apps/ZEditor/src/model/noise.js
   function seededNoise(i, variation, j = 0) {
@@ -482,6 +364,43 @@
     };
   }
 
+  // apps/ZEditor/src/model/photoAdjust.js
+  var adjustSlider = (prop, label, fallback = 0, min = -100, max = 100) => ({ kind: "slider", prop, label, min, max, fallback });
+  var PHOTO_ADJUST_SECTIONS = [
+    {
+      id: "light",
+      title: "Light",
+      controls: [
+        adjustSlider("adjExposure", "Exposure"),
+        adjustSlider("adjBrightness", "Brightness"),
+        adjustSlider("adjContrast", "Contrast"),
+        adjustSlider("adjHighlights", "Highlights"),
+        adjustSlider("adjShadows", "Shadows")
+      ]
+    },
+    {
+      id: "color",
+      title: "Color",
+      controls: [
+        adjustSlider("adjSaturation", "Saturation"),
+        adjustSlider("adjTemperature", "White balance: cool ↔ warm"),
+        adjustSlider("adjTint", "Tint: green ↔ magenta")
+      ]
+    },
+    {
+      id: "levels",
+      title: "Levels",
+      controls: [
+        adjustSlider("adjBlack", "Black point", 0, 0, 254),
+        adjustSlider("adjWhite", "White point", 255, 1, 255),
+        adjustSlider("adjGamma", "Midtones (%)", 100, 10, 300)
+      ]
+    }
+  ];
+  var PHOTO_ADJUST_CONTROLS = PHOTO_ADJUST_SECTIONS.flatMap((s) => s.controls);
+  var isAdjusted = (ann, control) => ann[control.prop] != null && ann[control.prop] !== control.fallback;
+  var hasPhotoAdjust = (ann) => PHOTO_ADJUST_CONTROLS.some((c) => isAdjusted(ann, c));
+
   // apps/ZEditor/src/model/text/textControls.js
   var AUTO_TEXT_MAX_WIDTH = 320;
   var TEXT_BORDER_PX = 1;
@@ -580,88 +499,6 @@
   var TEXT_PHOTO_PROPS = ["fillSrc", "fillNatW", "fillNatH", ...TEXT_PHOTO_CONTROLS.map((c) => c.prop)];
   var DEFAULT_FONT_OPTIONS = ["Inter", "Georgia", "Courier New", "Comic Sans MS", "Impact"];
   var TEXT_COLOR_SWATCHES = ["#1a1a1a", "#ffffff", "#dd531a", "#2563eb", "#16a34a", "#dc2626", "#eab308"];
-
-  // apps/ZEditor/src/model/text/textStyles.js
-  var TEXT_STYLE_BASICS = ["fontFamily", "fontSize", "bold", "italic", "underline", "color", "align"];
-  var TEXT_STYLE_PROPS = [
-    ...TEXT_STYLE_BASICS,
-    "lineSpacing",
-    "letterSpacing",
-    "strike",
-    "textCase",
-    "vertical",
-    "fillAlpha",
-    ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
-  ];
-  var BUILT_IN_TEXT_STYLES = [
-    { name: "Title", builtIn: true, props: { fontSize: 56, bold: true, align: "center", letterSpacing: 4, lineSpacing: 100, textCase: "upper" } },
-    { name: "Subtitle", builtIn: true, props: { fontSize: 28, italic: true, align: "center", letterSpacing: 1 } },
-    { name: "Remark", builtIn: true, props: { fontSize: 12, italic: true } }
-  ];
-  function captureTextStyle(ann) {
-    const props = {};
-    TEXT_STYLE_PROPS.forEach((prop) => {
-      if (ann[prop] !== void 0) props[prop] = ann[prop];
-    });
-    return props;
-  }
-  var TEXT_STYLE_KEEP_IF_MISSING = ["fontFamily", "fontSize", "color"];
-  var TEXT_STYLE_RESETS = { bold: false, italic: false, underline: false, align: "left" };
-  function textStylePatch(style) {
-    const patch = {};
-    TEXT_STYLE_PROPS.forEach((prop) => {
-      if (style.props[prop] !== void 0) patch[prop] = style.props[prop];
-      else if (prop in TEXT_STYLE_RESETS) patch[prop] = TEXT_STYLE_RESETS[prop];
-      else if (!TEXT_STYLE_KEEP_IF_MISSING.includes(prop)) patch[prop] = void 0;
-    });
-    return patch;
-  }
-  var TEXT_STYLES_STORAGE_KEY = "zeditor.textStyles";
-  function readStoredTextStyles() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(TEXT_STYLES_STORAGE_KEY) || "[]");
-      return Array.isArray(saved) ? saved.filter((s) => s && s.name && s.props) : [];
-    } catch (err) {
-      return [];
-    }
-  }
-
-  // apps/ZEditor/src/model/photoAdjust.js
-  var adjustSlider = (prop, label, fallback = 0, min = -100, max = 100) => ({ kind: "slider", prop, label, min, max, fallback });
-  var PHOTO_ADJUST_SECTIONS = [
-    {
-      id: "light",
-      title: "Light",
-      controls: [
-        adjustSlider("adjExposure", "Exposure"),
-        adjustSlider("adjBrightness", "Brightness"),
-        adjustSlider("adjContrast", "Contrast"),
-        adjustSlider("adjHighlights", "Highlights"),
-        adjustSlider("adjShadows", "Shadows")
-      ]
-    },
-    {
-      id: "color",
-      title: "Color",
-      controls: [
-        adjustSlider("adjSaturation", "Saturation"),
-        adjustSlider("adjTemperature", "White balance: cool ↔ warm"),
-        adjustSlider("adjTint", "Tint: green ↔ magenta")
-      ]
-    },
-    {
-      id: "levels",
-      title: "Levels",
-      controls: [
-        adjustSlider("adjBlack", "Black point", 0, 0, 254),
-        adjustSlider("adjWhite", "White point", 255, 1, 255),
-        adjustSlider("adjGamma", "Midtones (%)", 100, 10, 300)
-      ]
-    }
-  ];
-  var PHOTO_ADJUST_CONTROLS = PHOTO_ADJUST_SECTIONS.flatMap((s) => s.controls);
-  var isAdjusted = (ann, control) => ann[control.prop] != null && ann[control.prop] !== control.fallback;
-  var hasPhotoAdjust = (ann) => PHOTO_ADJUST_CONTROLS.some((c) => isAdjusted(ann, c));
 
   // apps/ZEditor/src/render/boxEffects.js
   function drawTextureMarks(ctx, ann) {
@@ -787,6 +624,16 @@
     if (mixes) ctx.globalCompositeOperation = blend;
     ctx.drawImage(layer, 0, 0);
     ctx.restore();
+  }
+
+  // apps/ZEditor/src/model/color.js
+  function rgbaCss(hex, alphaPercent) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
+  }
+  function hexToRgb(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
   }
 
   // apps/ZEditor/src/render/filters/luma.js
@@ -1113,6 +960,79 @@
     drawBoxWithEffects(ctx, ann, scaleFactor, (target) => {
       target.drawImage(source, sx, sy, sw, sh, 0, 0, ann.width, ann.height);
     });
+  }
+
+  // apps/ZEditor/src/model/strokes.js
+  var PEN_COLOR_SWATCHES = ["#1a1a1a", "#dd531a", "#dc2626", "#2563eb"];
+  var HIGHLIGHTER_COLOR_SWATCHES = ["#ffe066", "#ffb84d", "#7ec8ff", "#ff9ecf", "#7dffb3"];
+  var PEN_DEFAULTS = { color: "#1a1a1a", width: 2.5 };
+  var HIGHLIGHTER_DEFAULTS = { color: "#ffe066", width: 14 };
+  function smoothPathD(points) {
+    if (points.length < 2) return "";
+    if (points.length === 2) {
+      return `M ${points[0][0]},${points[0][1]} L ${points[1][0]},${points[1][1]}`;
+    }
+    let d = `M ${points[0][0]},${points[0][1]}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const [x0, y0] = points[i];
+      const [x1, y1] = points[i + 1];
+      const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+      d += ` Q ${x0},${y0} ${mx},${my}`;
+    }
+    const last = points[points.length - 1];
+    d += ` L ${last[0]},${last[1]}`;
+    return d;
+  }
+  function distToSegment(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a[0] + t * dx, cy = a[1] + t * dy;
+    return Math.hypot(p[0] - cx, p[1] - cy);
+  }
+  function strokeHitTest(point, ann) {
+    const threshold = (ann.strokeWidth || 8) / 2 + 6;
+    for (let i = 0; i < ann.points.length - 1; i++) {
+      if (distToSegment(point, ann.points[i], ann.points[i + 1]) <= threshold) return true;
+    }
+    return false;
+  }
+  function taperedPathD(points, baseWidth, taper) {
+    if (points.length < 2) return "";
+    const dists = [0];
+    for (let i = 1; i < points.length; i++) {
+      dists.push(dists[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+    }
+    const total = dists[dists.length - 1] || 1;
+    const tf = Math.min(0.45, Math.max(0, taper));
+    function widthAt(t) {
+      if (tf <= 0) return baseWidth;
+      let factor;
+      if (t < tf) factor = t / tf;
+      else if (t > 1 - tf) factor = (1 - t) / tf;
+      else factor = 1;
+      return Math.max(baseWidth * 0.12, baseWidth * factor);
+    }
+    const left = [], right = [];
+    for (let i = 0; i < points.length; i++) {
+      const t = dists[i] / total;
+      const w = widthAt(t) / 2;
+      const prev = points[Math.max(0, i - 1)];
+      const next = points[Math.min(points.length - 1, i + 1)];
+      let dx = next[0] - prev[0], dy = next[1] - prev[1];
+      const len = Math.hypot(dx, dy) || 1;
+      dx /= len;
+      dy /= len;
+      const nx = -dy, ny = dx;
+      left.push([points[i][0] + nx * w, points[i][1] + ny * w]);
+      right.push([points[i][0] - nx * w, points[i][1] - ny * w]);
+    }
+    let d = `M ${left[0][0]},${left[0][1]}`;
+    for (let i = 1; i < left.length; i++) d += ` L ${left[i][0]},${left[i][1]}`;
+    for (let i = right.length - 1; i >= 0; i--) d += ` L ${right[i][0]},${right[i][1]}`;
+    d += " Z";
+    return d;
   }
 
   // apps/ZEditor/src/render/gradients.js
@@ -1967,44 +1887,488 @@
     ctx.fillRect(0, 0, w, h);
     return canvas.toDataURL();
   }
+  async function renderPdfThumb(doc, pageNumber, rotation) {
+    const pdfPage = await doc.getPage(pageNumber);
+    const viewport = pdfPage.getViewport({ scale: THUMB_SCALE, rotation });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL();
+  }
 
-  // apps/ZEditor/src/io/base64.js
-  function arrayBufferToBase64(buf) {
-    const bytes = new Uint8Array(buf);
-    const chunkSize = 32768;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  // apps/ZEditor/src/state/useAnnotationEdits.js
+  var { useRef } = React;
+  function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
+    const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
+    const { recordUndoCheckpoint } = history;
+    const {
+      tool,
+      selectTool,
+      editingAnnId,
+      setEditingAnnId,
+      selectedAnnId,
+      setSelectedAnnId,
+      selectedAnnIds,
+      setSelectedAnnIds,
+      selectedAnnotationIds,
+      currentAnnotations,
+      handleSelectAnnotation
+    } = selection;
+    const imageInputRef = useRef(null);
+    function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
+      recordUndoCheckpoint(coalesceKey);
+      setPages((prev) => prev.map((p, i) => i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p));
     }
-    return btoa(binary);
-  }
-  function base64ToArrayBuffer(b64) {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.buffer;
+    function updatePageFilter(patch) {
+      if (selectedIdx === null) return;
+      const targets = /* @__PURE__ */ new Set([selectedIdx, ...selectedPageIndices]);
+      recordUndoCheckpoint("pagefilter:" + [...targets].sort((a, b) => a - b).join(","));
+      setPages((prev) => prev.map((p, i) => targets.has(i) ? { ...p, filter: { ...p.filter || DEFAULT_PAGE_FILTER, ...patch } } : p));
+    }
+    function handleRotateAnnotations(originals, degrees, cx, cy) {
+      if (selectedIdx === null) return;
+      const turned = new Map(originals.map((a) => [a.id, rotatedAnnotation(a, degrees, cx, cy)]));
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => turned.get(a.id) || a), "rotate:" + [...turned.keys()].join());
+    }
+    function handleMoveAnnotations(originals, dx, dy) {
+      if (selectedIdx === null) return;
+      const moved = new Map(originals.map((a) => [a.id, translatedAnnotation(a, dx, dy)]));
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => moved.get(a.id) || a), "move:" + [...moved.keys()].join());
+    }
+    function finishTextEdit() {
+      if (editingAnnId === null) return;
+      const edited = selectedIdx === null ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === editingAnnId);
+      setEditingAnnId(null);
+      selection.setTool("select");
+      if (edited && !edited.text.trim()) {
+        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== edited.id), "ann:" + edited.id);
+        setSelectedAnnId((id) => id === edited.id ? null : id);
+      }
+    }
+    function handleGroupSelection() {
+      const ids = selectedAnnotationIds();
+      if (selectedIdx === null || ids.length < 2) return;
+      const groupId = "g" + nextAnnIdRef.current++;
+      updateAnnotationsFor(selectedIdx, (anns) => {
+        const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
+        const topIndex = Math.max(...anns.map((a, i) => ids.includes(a.id) ? i : -1));
+        const rest = anns.filter((a) => !ids.includes(a.id));
+        rest.splice(topIndex + 1 - members.length, 0, ...members);
+        return rest;
+      });
+    }
+    function handleUngroupSelection() {
+      const ids = selectedAnnotationIds();
+      if (selectedIdx === null) return;
+      const groups = new Set(currentAnnotations().filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+      if (groups.size === 0) return;
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => groups.has(a.groupId) ? { ...a, groupId: void 0 } : a));
+    }
+    function handleAddText(x, y, width) {
+      if (selectedIdx === null) return;
+      const id = nextAnnIdRef.current++;
+      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+        id,
+        type: "text",
+        x,
+        y,
+        text: "",
+        width,
+        fontFamily: toolDefaults.textFontFamily,
+        fontSize: toolDefaults.textFontSize,
+        bold: toolDefaults.textBold,
+        italic: toolDefaults.textItalic,
+        underline: toolDefaults.textUnderline,
+        color: toolDefaults.textColor,
+        align: toolDefaults.textAlign
+      }], "ann:" + id);
+      setSelectedAnnId(id);
+      setSelectedAnnIds([]);
+      setEditingAnnId(id);
+    }
+    function handleAddRect(box) {
+      if (selectedIdx === null) return;
+      const id = nextAnnIdRef.current++;
+      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+        id,
+        type: "rect",
+        shape: tool === "ellipse" ? "ellipse" : void 0,
+        x: box.x,
+        y: box.y,
+        width: Math.max(MIN_RECT_SIZE, box.width),
+        height: Math.max(MIN_RECT_SIZE, box.height),
+        ...toolDefaults.rectDefaults
+      }]);
+      selectTool("select");
+      setSelectedAnnId(id);
+    }
+    function handleAddStroke(stroke) {
+      if (selectedIdx === null) return;
+      const id = nextAnnIdRef.current++;
+      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+        id,
+        type: "stroke",
+        tool: stroke.tool,
+        points: stroke.points,
+        color: stroke.color,
+        strokeWidth: stroke.strokeWidth,
+        taper: stroke.taper || 0
+      }]);
+    }
+    function handleToggleLayerFlag(ann, flag) {
+      const on = !ann[flag];
+      handleUpdateAnnotation(ann.id, { [flag]: on });
+      if (on && (ann.id === selectedAnnId || selectedAnnIds.includes(ann.id))) handleSelectAnnotation(ann.id, true, true);
+    }
+    function handleReorderLayers(draggedIds, insertBeforeRow) {
+      const topFirst = (pages[selectedIdx].annotations || []).slice().reverse();
+      const ids = withGroupMates(topFirst, draggedIds);
+      const fromRows = topFirst.flatMap((a, row) => ids.includes(a.id) ? [row] : []);
+      const newOrder = orderAfterMove(topFirst.length, fromRows, insertBeforeRow);
+      if (newOrder) updateAnnotationsFor(selectedIdx, () => newOrder.map((row) => topFirst[row]).reverse());
+    }
+    function handleImageToolClick() {
+      if (selectedIdx === null) return;
+      imageInputRef.current && imageInputRef.current.click();
+    }
+    function addImageAnnotationFromFile(file, pageIdx) {
+      if (!file || pageIdx === null) return;
+      const pageAtChooseTime = pages[pageIdx];
+      const reader = new FileReader();
+      reader.onload = () => {
+        const src = reader.result;
+        const img = new Image();
+        img.onload = async () => {
+          const MAX_W = 260;
+          const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
+          const width = img.naturalWidth * scale;
+          const height = img.naturalHeight * scale;
+          const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
+          const x = Math.max(0, (display.width - width) / 2);
+          const y = Math.max(0, (display.height - height) / 2);
+          const id = nextAnnIdRef.current++;
+          updateAnnotationsFor(pageIdx, (anns) => [...anns, {
+            id,
+            type: "image",
+            x,
+            y,
+            width,
+            height,
+            naturalWidth: img.naturalWidth,
+            naturalHeight: img.naturalHeight,
+            src
+          }]);
+          selectTool("select");
+          setSelectedAnnId(id);
+        };
+        img.src = src;
+      };
+      reader.readAsDataURL(file);
+    }
+    function handleImageFileChosen(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      addImageAnnotationFromFile(file, selectedIdx);
+    }
+    function handleUpdateAnnotation(id, patch) {
+      if (selectedIdx === null) return;
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, ...patch } : a), "ann:" + id);
+    }
+    async function handleFlattenImage(ann) {
+      const pageIdx = selectedIdx;
+      const patch = await flattenedImagePatch(ann, pageFilter);
+      if (!patch) return;
+      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
+    }
+    async function handleRasterizeText(ann) {
+      const pageIdx = selectedIdx;
+      const patch = await rasterizedTextPatch(ann);
+      if (!patch) return;
+      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
+    }
+    async function handleRasterizeRect(ann) {
+      const pageIdx = selectedIdx;
+      const patch = await rasterizedRectPatch(ann);
+      if (!patch) return;
+      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
+    }
+    function handleDeleteAnnotation() {
+      if (selectedIdx === null || selectedAnnId === null) return;
+      const idsToDelete = [selectedAnnId, ...selectedAnnIds];
+      updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => !idsToDelete.includes(a.id)));
+      setSelectedAnnId(null);
+      setSelectedAnnIds([]);
+    }
+    function handleEraseStroke(id) {
+      if (selectedIdx === null) return;
+      updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id), "eraser");
+      setSelectedAnnId((cur) => cur === id ? null : cur);
+    }
+    function handleEraseImagePixels(id, src) {
+      if (selectedIdx === null) return;
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, src } : a));
+    }
+    return {
+      updateAnnotationsFor,
+      updatePageFilter,
+      handleRotateAnnotations,
+      handleMoveAnnotations,
+      finishTextEdit,
+      handleGroupSelection,
+      handleUngroupSelection,
+      handleAddText,
+      handleAddRect,
+      handleAddStroke,
+      handleToggleLayerFlag,
+      handleReorderLayers,
+      imageInputRef,
+      handleImageToolClick,
+      addImageAnnotationFromFile,
+      handleImageFileChosen,
+      handleUpdateAnnotation,
+      handleFlattenImage,
+      handleRasterizeText,
+      handleRasterizeRect,
+      handleDeleteAnnotation,
+      handleEraseStroke,
+      handleEraseImagePixels
+    };
   }
 
-  // apps/ZEditor/src/io/customFonts.js
-  var customFontStore = [];
-  async function registerCustomFont(family, bytes) {
-    const face = new FontFace(family, bytes.slice(0));
-    await face.load();
-    document.fonts.add(face);
+  // apps/ZEditor/src/state/useDialogs.js
+  var { useState } = React;
+  function useDialogs({ pages, openProjectPicker }) {
+    const [newDocOpen, setNewDocOpen] = useState(false);
+    const [newDocFromProject, setNewDocFromProject] = useState(false);
+    const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState(null);
+    const [confirmStep, setConfirmStep] = useState(1);
+    function openNewDocDialog(fromProject) {
+      setNewDocFromProject(fromProject);
+      setNewDocOpen(true);
+    }
+    function handleNewProjectClick() {
+      setConfirmAction("newProject");
+      setConfirmStep(1);
+    }
+    function handleLoadProjectClick() {
+      if (pages.length > 0) {
+        setConfirmAction("loadProject");
+        setConfirmStep(1);
+      } else {
+        openProjectPicker();
+      }
+    }
+    function handleConfirmProceed() {
+      setConfirmStep(2);
+    }
+    function handleConfirmCancel() {
+      setConfirmAction(null);
+      setConfirmStep(1);
+    }
+    function handleConfirmYes() {
+      const action = confirmAction;
+      setConfirmAction(null);
+      setConfirmStep(1);
+      if (action === "newProject") openNewDocDialog(true);
+      else if (action === "loadProject") openProjectPicker();
+    }
+    return {
+      newDocOpen,
+      setNewDocOpen,
+      newDocFromProject,
+      openNewDocDialog,
+      shortcutsOpen,
+      setShortcutsOpen,
+      confirmAction,
+      confirmStep,
+      handleNewProjectClick,
+      handleLoadProjectClick,
+      handleConfirmProceed,
+      handleConfirmCancel,
+      handleConfirmYes
+    };
   }
-  async function addCustomFontFile(file, takenNames) {
-    if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) throw new Error("Choose a .ttf, .otf, .woff or .woff2 font file.");
+
+  // apps/ZEditor/src/model/documentTitle.js
+  function titleStamp(date = /* @__PURE__ */ new Date()) {
+    const two = (n) => String(n).padStart(2, "0");
+    return two(date.getFullYear() % 100) + two(date.getMonth() + 1) + two(date.getDate()) + two(date.getHours()) + two(date.getMinutes());
+  }
+  function stripExtension(name) {
+    return String(name || "").replace(/\.[^./\\]+$/, "");
+  }
+  function titleToFileName(title, extension) {
+    const safe = String(title || "").replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/, "").trim();
+    return (safe || "zine") + extension;
+  }
+
+  // apps/ZEditor/src/io/pdfImport.js
+  async function importPdfFile(file, ids) {
     const bytes = await file.arrayBuffer();
-    const base = file.name.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/['"\\]/g, "").trim() || "Custom font";
-    let family = base, n = 2;
-    while (takenNames.includes(family)) family = `${base} ${n++}`;
-    try {
-      await registerCustomFont(family, bytes);
-    } catch (err) {
-      throw new Error("That file isn't a font the browser can read.");
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+    const docId = ids.docId();
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const dataUrl = await renderPdfThumb(doc, i, 0);
+      pages.push({ key: ids.pageKey(), docId, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
     }
-    customFontStore.push({ family, data: arrayBufferToBase64(bytes) });
-    return family;
+    const p1 = await doc.getPage(1);
+    const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+    return { docId, entry: { doc, bytes }, pages, firstPageSize: { width: vp1.width, height: vp1.height } };
+  }
+
+  // apps/ZEditor/src/state/useDocumentFiles.js
+  var { useState: useState2, useRef: useRef2 } = React;
+  function useDocumentFiles({ doc, history, status, project, selection, dialogs }) {
+    const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, pageSizeRef, ids } = doc;
+    const { setLoading, setErrorMsg } = status;
+    const fileInputRef = useRef2(null);
+    const insertPdfInputRef = useRef2(null);
+    const [pendingInsertFile, setPendingInsertFile] = useState2(null);
+    const [insertAfterPage, setInsertAfterPage] = useState2(0);
+    async function handleFile(file) {
+      setErrorMsg(null);
+      setLoading(true);
+      try {
+        const imported = await importPdfFile(file, ids);
+        pdfDocsRef.current = { [imported.docId]: imported.entry };
+        if (!pageSizeRef.current) pageSizeRef.current = imported.firstPageSize;
+        setPages(imported.pages);
+        setSelectedIdx(imported.pages.length > 0 ? 0 : null);
+        setSelectedPageIndices([]);
+        history.clearHistory();
+        project.startNewDocument(stripExtension(file.name) + " - " + titleStamp());
+      } catch (err) {
+        setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setLoading(false);
+      }
+    }
+    function handleLoadClick() {
+      fileInputRef.current && fileInputRef.current.click();
+    }
+    function handleFileInputChange(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) handleFile(file);
+    }
+    function handleCreateBlankDocument({ width, height, pageCount }) {
+      dialogs.setNewDocOpen(false);
+      setErrorMsg(null);
+      pdfDocsRef.current = {};
+      pageSizeRef.current = { width, height };
+      const thumb = makeBlankThumb(width, height, 0);
+      const newPages = Array.from({ length: pageCount }, () => ({
+        key: nextKeyRef.current++,
+        isBlank: true,
+        rotation: 0,
+        width,
+        height,
+        dataUrl: thumb,
+        annotations: []
+      }));
+      setPages(newPages);
+      setSelectedIdx(0);
+      setSelectedPageIndices([]);
+      selection.setSelectedAnnId(null);
+      selection.setSelectedAnnIds([]);
+      history.clearHistory();
+      project.startNewDocument("New Zine - " + titleStamp());
+    }
+    function handleNewDocumentOpenPdf() {
+      dialogs.setNewDocOpen(false);
+      handleLoadClick();
+    }
+    function handleInsertPdfClick() {
+      insertPdfInputRef.current && insertPdfInputRef.current.click();
+    }
+    function handleInsertPdfInputChange(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      setInsertAfterPage(selectedIdx !== null ? selectedIdx + 1 : pages.length);
+      setPendingInsertFile(file);
+    }
+    async function handleConfirmInsertPdf() {
+      const file = pendingInsertFile;
+      const atIndex = Math.max(0, Math.min(pages.length, insertAfterPage));
+      setPendingInsertFile(null);
+      if (!file) return;
+      setErrorMsg(null);
+      setLoading(true);
+      try {
+        const imported = await importPdfFile(file, ids);
+        pdfDocsRef.current[imported.docId] = imported.entry;
+        if (!pageSizeRef.current) pageSizeRef.current = imported.firstPageSize;
+        history.recordUndoCheckpoint();
+        setPages((prev) => {
+          const next = prev.slice();
+          next.splice(atIndex, 0, ...imported.pages);
+          return next;
+        });
+        setSelectedIdx(atIndex);
+        setSelectedPageIndices([]);
+      } catch (err) {
+        setErrorMsg("Couldn't insert that PDF — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setLoading(false);
+      }
+    }
+    return {
+      fileInputRef,
+      insertPdfInputRef,
+      handleFile,
+      handleLoadClick,
+      handleFileInputChange,
+      handleCreateBlankDocument,
+      handleNewDocumentOpenPdf,
+      handleInsertPdfClick,
+      handleInsertPdfInputChange,
+      pendingInsertFile,
+      setPendingInsertFile,
+      insertAfterPage,
+      setInsertAfterPage,
+      handleConfirmInsertPdf
+    };
+  }
+
+  // apps/ZEditor/src/state/useDocumentState.js
+  var { useState: useState3, useRef: useRef3, useMemo } = React;
+  function useDocumentState() {
+    const [pages, setPages] = useState3([]);
+    const [selectedIdx, setSelectedIdx] = useState3(null);
+    const [selectedPageIndices, setSelectedPageIndices] = useState3([]);
+    const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
+    const pageFilter = useMemo(() => selectedPage && selectedPage.filter || DEFAULT_PAGE_FILTER, [selectedPage]);
+    const pdfDocsRef = useRef3({});
+    const nextKeyRef = useRef3(1);
+    const nextAnnIdRef = useRef3(1);
+    const nextDocIdRef = useRef3(1);
+    const pageSizeRef = useRef3(null);
+    const ids = {
+      pageKey: () => nextKeyRef.current++,
+      docId: () => "doc" + nextDocIdRef.current++,
+      annId: () => nextAnnIdRef.current++
+    };
+    return {
+      pages,
+      setPages,
+      selectedIdx,
+      setSelectedIdx,
+      selectedPageIndices,
+      setSelectedPageIndices,
+      selectedPage,
+      pageFilter,
+      pdfDocsRef,
+      nextKeyRef,
+      nextAnnIdRef,
+      nextDocIdRef,
+      pageSizeRef,
+      ids
+    };
   }
 
   // apps/ZEditor/src/io/fileSave.js
@@ -2057,6 +2421,981 @@
     return saveFile(bytes, filename, "application/pdf", "PDF file", [".pdf"]);
   }
 
+  // apps/ZEditor/src/io/pdfExport.js
+  async function buildExportPdfBytes(pages, pdfDocsRef, pageNumbers) {
+    const outDoc = await PDFLib.PDFDocument.create();
+    for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+      const page = pages[pageIdx];
+      const canvas = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
+      const pngBytes = await canvasToArrayBuffer(canvas);
+      const pngImage = await outDoc.embedPng(pngBytes);
+      const pageWidthPts = canvas.width / EXPORT_SCALE;
+      const pageHeightPts = canvas.height / EXPORT_SCALE;
+      const outPage = outDoc.addPage([pageWidthPts, pageHeightPts]);
+      outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
+    }
+    return outDoc.save();
+  }
+
+  // apps/ZEditor/src/io/zineArrangerHandoff.js
+  async function sendPdfToZineArranger(buildBytes, filename) {
+    const win = window.open("../ZineArranger/index.html", "_blank");
+    if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
+    const readyPromise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
+      }, 15e3);
+      function onMessage(event) {
+        if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
+        clearTimeout(timeoutId);
+        window.removeEventListener("message", onMessage);
+        resolve();
+      }
+      window.addEventListener("message", onMessage);
+    });
+    const pdfBytes = await buildBytes();
+    const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+    await readyPromise;
+    win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename }, "*", [buffer]);
+  }
+
+  // apps/ZEditor/src/state/useExport.js
+  var { useState: useState4 } = React;
+  function useExport({ doc, status, view, project }) {
+    const { pages, pdfDocsRef } = doc;
+    const { setErrorMsg } = status;
+    const [exporting, setExporting] = useState4(false);
+    const [sendingToArranger, setSendingToArranger] = useState4(false);
+    const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers);
+    async function handleExportPdf() {
+      if (pages.length === 0 || exporting) return;
+      setErrorMsg(null);
+      setExporting(true);
+      try {
+        const pdfBytes = await buildBytes();
+        await savePdfBytes(pdfBytes, titleToFileName(project.docTitle, ".pdf"));
+      } catch (err) {
+        setErrorMsg("Couldn't export PDF — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setExporting(false);
+      }
+    }
+    async function handleSendToZineArranger() {
+      if (pages.length === 0 || exporting || sendingToArranger) return;
+      setErrorMsg(null);
+      setSendingToArranger(true);
+      try {
+        await sendPdfToZineArranger(buildBytes, titleToFileName(project.docTitle, ".pdf"));
+      } catch (err) {
+        setErrorMsg("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setSendingToArranger(false);
+      }
+    }
+    return { exporting, sendingToArranger, handleExportPdf, handleSendToZineArranger };
+  }
+
+  // apps/ZEditor/src/model/history.js
+  var UNDO_COALESCE_MS = 700;
+  var MAX_UNDO_HISTORY = 50;
+
+  // apps/ZEditor/src/state/useHistory.js
+  var { useState: useState5, useRef: useRef4 } = React;
+  function stripDataUrls(pagesArr) {
+    return pagesArr.map(({ dataUrl, ...rest }) => rest);
+  }
+  function useHistory({ pages, setPages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices, pdfDocsRef }) {
+    const [undoStack, setUndoStack] = useState5([]);
+    const [redoStack, setRedoStack] = useState5([]);
+    const lastCommitRef = useRef4({ time: 0, key: null });
+    function recordUndoCheckpoint(coalesceKey) {
+      const now = Date.now();
+      if (coalesceKey && lastCommitRef.current.key === coalesceKey && now - lastCommitRef.current.time < UNDO_COALESCE_MS) {
+        lastCommitRef.current.time = now;
+        return;
+      }
+      lastCommitRef.current = { time: now, key: coalesceKey || null };
+      setUndoStack((stack) => {
+        const next = [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }];
+        return next.length > MAX_UNDO_HISTORY ? next.slice(next.length - MAX_UNDO_HISTORY) : next;
+      });
+      setRedoStack([]);
+    }
+    function clearHistory() {
+      setUndoStack([]);
+      setRedoStack([]);
+    }
+    async function restoreSnapshot(snapshot) {
+      const currentByKey = new Map(pages.map((p) => [p.key, p]));
+      const withThumbs = await Promise.all(snapshot.pages.map(async (p) => {
+        const existing = currentByKey.get(p.key);
+        const reusable = existing && existing.dataUrl && existing.rotation === p.rotation && existing.isBlank === p.isBlank && existing.pageNumber === p.pageNumber && existing.docId === p.docId && existing.width === p.width && existing.height === p.height;
+        if (reusable) return { ...p, dataUrl: existing.dataUrl };
+        const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderPdfThumb(docFor(pdfDocsRef, p), p.pageNumber, p.rotation);
+        return { ...p, dataUrl };
+      }));
+      setPages(withThumbs);
+      setSelectedIdx(snapshot.selectedIdx);
+      setSelectedPageIndices(snapshot.selectedPageIndices);
+    }
+    function handleUndo() {
+      if (undoStack.length === 0) return;
+      const entry = undoStack[undoStack.length - 1];
+      setUndoStack((stack) => stack.slice(0, -1));
+      setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
+      lastCommitRef.current = { time: 0, key: null };
+      restoreSnapshot(entry);
+    }
+    function handleRedo() {
+      if (redoStack.length === 0) return;
+      const entry = redoStack[redoStack.length - 1];
+      setRedoStack((stack) => stack.slice(0, -1));
+      setUndoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
+      lastCommitRef.current = { time: 0, key: null };
+      restoreSnapshot(entry);
+    }
+    return { undoStack, redoStack, recordUndoCheckpoint, clearHistory, handleUndo, handleRedo };
+  }
+
+  // apps/ZEditor/src/state/useKeyboardShortcuts.js
+  var { useRef: useRef5, useEffect } = React;
+  function useKeyboardShortcuts(app) {
+    const appRef = useRef5(app);
+    appRef.current = app;
+    const clipboardRef = useRef5(null);
+    useEffect(() => {
+      function handleKeyDown(e) {
+        const { doc, history, selection, edits, pageOps, project, modalOpen } = appRef.current;
+        const { pages, selectedIdx, selectedPageIndices, setSelectedIdx, setSelectedPageIndices, nextAnnIdRef } = doc;
+        const { selectedAnnId, selectedAnnIds, setSelectedAnnId, selectTool } = selection;
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          if (!modalOpen) project.handleSaveProject({ saveAs: e.shiftKey });
+          return;
+        }
+        const tag = e.target && e.target.tagName || "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
+        if (modalOpen) return;
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod) {
+          if (key === "z" && !e.shiftKey) {
+            e.preventDefault();
+            history.handleUndo();
+            return;
+          }
+          if (key === "z" && e.shiftKey || key === "y") {
+            e.preventDefault();
+            history.handleRedo();
+            return;
+          }
+          if (key === "r") {
+            e.preventDefault();
+            if (selectedIdx !== null) pageOps.handleRotate(selectedIdx);
+            return;
+          }
+          if (key === "g") {
+            e.preventDefault();
+            if (e.shiftKey) edits.handleUngroupSelection();
+            else edits.handleGroupSelection();
+            return;
+          }
+          if (key === "c") {
+            if (selectedIdx !== null && selectedAnnId !== null) {
+              const ann = (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
+              if (ann) {
+                e.preventDefault();
+                clipboardRef.current = JSON.parse(JSON.stringify(ann));
+              }
+            }
+            return;
+          }
+          if (key === "v") {
+            if (clipboardRef.current && selectedIdx !== null) {
+              e.preventDefault();
+              const clip = clipboardRef.current;
+              const id = nextAnnIdRef.current++;
+              const newAnn = { ...translatedAnnotation(clip, 20, 20), id, groupId: void 0 };
+              edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
+              setSelectedAnnId(id);
+            }
+            return;
+          }
+          return;
+        }
+        if (key === "delete") {
+          e.preventDefault();
+          if (selectedAnnId !== null) edits.handleDeleteAnnotation();
+          else if (selectedIdx !== null) {
+            if (selectedPageIndices.length > 0) pageOps.handleDeleteSelectedPages();
+            else pageOps.handleDelete(selectedIdx);
+          }
+          return;
+        }
+        const nudge = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] }[key];
+        if (nudge && selectedAnnId !== null) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          const ids = [selectedAnnId, ...selectedAnnIds];
+          edits.handleMoveAnnotations((pages[selectedIdx].annotations || []).filter((a) => ids.includes(a.id)), nudge[0] * step, nudge[1] * step);
+          return;
+        }
+        if (key === "v") {
+          selectTool("select");
+          return;
+        }
+        if (key === "t") {
+          selectTool("text");
+          return;
+        }
+        if (key === "i") {
+          edits.handleImageToolClick();
+          return;
+        }
+        if (key === "r") {
+          selectTool("rect");
+          return;
+        }
+        if (key === "e") {
+          selectTool("ellipse");
+          return;
+        }
+        if (key === "h") {
+          selectTool("highlighter");
+          return;
+        }
+        if (key === "d") {
+          selectTool("pen");
+          return;
+        }
+        if (key === "arrowup") {
+          e.preventDefault();
+          setSelectedPageIndices([]);
+          setSelectedIdx((cur) => cur === null ? cur : Math.max(0, cur - 1));
+          return;
+        }
+        if (key === "arrowdown") {
+          e.preventDefault();
+          setSelectedPageIndices([]);
+          setSelectedIdx((cur) => cur === null ? cur : Math.min(pages.length - 1, cur + 1));
+          return;
+        }
+      }
+      function handlePaste(e) {
+        const { doc, edits, modalOpen } = appRef.current;
+        const tag = e.target && e.target.tagName || "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
+        if (modalOpen || doc.selectedIdx === null) return;
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
+        if (!imageItem) return;
+        e.preventDefault();
+        edits.addImageAnnotationFromFile(imageItem.getAsFile(), doc.selectedIdx);
+      }
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("paste", handlePaste);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("paste", handlePaste);
+      };
+    }, []);
+  }
+
+  // apps/ZEditor/src/state/useOnionGhost.js
+  var { useState: useState6, useEffect: useEffect2 } = React;
+  function useOnionGhost({ onionSkinOn, pages, selectedIdx, pdfDocsRef }) {
+    const [onionGhostSrc, setOnionGhostSrc] = useState6(null);
+    useEffect2(() => {
+      if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) {
+        setOnionGhostSrc(null);
+        return;
+      }
+      const prevPage = pages[selectedIdx - 1];
+      if (!prevPage) {
+        setOnionGhostSrc(null);
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        try {
+          const canvas = await renderPageToCanvas(prevPage, pdfDocsRef, MAIN_SCALE, prevPage.filter || DEFAULT_PAGE_FILTER);
+          if (!cancelled) setOnionGhostSrc(canvas.toDataURL());
+        } catch (err) {
+          if (!cancelled) setOnionGhostSrc(null);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [onionSkinOn, selectedIdx]);
+    return onionGhostSrc;
+  }
+
+  // apps/ZEditor/src/state/usePageOps.js
+  function usePageOps({ doc, history, selection }) {
+    const { pages, setPages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices, pdfDocsRef, nextKeyRef, pageSizeRef } = doc;
+    const { recordUndoCheckpoint } = history;
+    const { pagesActedOn } = selection;
+    async function handleRotate(idx) {
+      const updatesByKey = /* @__PURE__ */ new Map();
+      for (const i of pagesActedOn(idx)) {
+        const target = pages[i];
+        const rotation = (target.rotation + 90) % 360;
+        const dataUrl = target.isBlank ? makeBlankThumb(target.width, target.height, rotation) : await renderPdfThumb(docFor(pdfDocsRef, target), target.pageNumber, rotation);
+        updatesByKey.set(target.key, { rotation, dataUrl });
+      }
+      recordUndoCheckpoint();
+      setPages((prev) => prev.map((p) => updatesByKey.has(p.key) ? { ...p, ...updatesByKey.get(p.key) } : p));
+    }
+    function handleInsertBlank(atIndex) {
+      const size = pageSizeRef.current || DEFAULT_PAGE_SIZE;
+      const newPage = {
+        key: nextKeyRef.current++,
+        isBlank: true,
+        rotation: 0,
+        width: size.width,
+        height: size.height,
+        dataUrl: makeBlankThumb(size.width, size.height, 0),
+        annotations: []
+      };
+      recordUndoCheckpoint();
+      setPages((prev) => {
+        const next = prev.slice();
+        next.splice(atIndex, 0, newPage);
+        return next;
+      });
+      setSelectedIdx(atIndex);
+      setSelectedPageIndices([]);
+    }
+    function handleDelete(idx) {
+      recordUndoCheckpoint();
+      setPages((prev) => {
+        const next = prev.filter((_, i) => i !== idx);
+        return next;
+      });
+      setSelectedIdx((prevSel) => {
+        if (prevSel === null) return null;
+        if (idx === prevSel) return null;
+        if (idx < prevSel) return prevSel - 1;
+        return prevSel;
+      });
+    }
+    function handleDeleteSelectedPages() {
+      if (selectedIdx === null) return;
+      const idxToDelete = /* @__PURE__ */ new Set([selectedIdx, ...selectedPageIndices]);
+      recordUndoCheckpoint();
+      setPages((prev) => prev.filter((_, i) => !idxToDelete.has(i)));
+      setSelectedIdx(null);
+      setSelectedPageIndices([]);
+    }
+    function handleDeleteThumbnail(idx) {
+      if (selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx))) {
+        handleDeleteSelectedPages();
+      } else {
+        handleDelete(idx);
+      }
+    }
+    function handleReorder(fromIndices, insertBefore) {
+      const newOrder = orderAfterMove(pages.length, fromIndices, insertBefore);
+      if (!newOrder) return;
+      const newIdxOf = new Array(newOrder.length);
+      newOrder.forEach((oldIdx, newIdx) => {
+        newIdxOf[oldIdx] = newIdx;
+      });
+      recordUndoCheckpoint();
+      setPages((prev) => newOrder.map((oldIdx) => prev[oldIdx]));
+      setSelectedIdx((prevSel) => prevSel === null ? null : newIdxOf[prevSel]);
+      setSelectedPageIndices((prevSel) => prevSel.map((oldIdx) => newIdxOf[oldIdx]));
+    }
+    return { handleRotate, handleInsertBlank, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
+  }
+
+  // apps/ZEditor/src/io/base64.js
+  function arrayBufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 32768;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+  function base64ToArrayBuffer(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  // apps/ZEditor/src/io/customFonts.js
+  var customFontStore = [];
+  async function registerCustomFont(family, bytes) {
+    const face = new FontFace(family, bytes.slice(0));
+    await face.load();
+    document.fonts.add(face);
+  }
+  async function addCustomFontFile(file, takenNames) {
+    if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) throw new Error("Choose a .ttf, .otf, .woff or .woff2 font file.");
+    const bytes = await file.arrayBuffer();
+    const base = file.name.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/['"\\]/g, "").trim() || "Custom font";
+    let family = base, n = 2;
+    while (takenNames.includes(family)) family = `${base} ${n++}`;
+    try {
+      await registerCustomFont(family, bytes);
+    } catch (err) {
+      throw new Error("That file isn't a font the browser can read.");
+    }
+    customFontStore.push({ family, data: arrayBufferToBase64(bytes) });
+    return family;
+  }
+
+  // apps/ZEditor/src/io/projectFile.js
+  function serializeProject({ title, pdfDocs, pages, textStyles, settings }) {
+    const docs = {};
+    for (const docId of Object.keys(pdfDocs)) {
+      docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
+    }
+    const usedFamilies = /* @__PURE__ */ new Set();
+    pages.forEach((p) => (p.annotations || []).forEach((a) => {
+      if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily);
+    }));
+    const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
+    const project = {
+      version: 2,
+      // 2: the annotation list is the stacking order
+      title,
+      docs,
+      fonts,
+      textStyles,
+      pages: pages.map(({ dataUrl, ...rest }) => rest),
+      settings
+    };
+    return JSON.stringify(project);
+  }
+  async function readProjectFile(file, nextPageKey) {
+    const text = await file.text();
+    const project = JSON.parse(text);
+    if (!project || !Array.isArray(project.pages)) throw new Error("That doesn't look like a ZEditor project file.");
+    const docs = {};
+    for (const docId of Object.keys(project.docs || {})) {
+      const bytes = base64ToArrayBuffer(project.docs[docId]);
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+      docs[docId] = { doc, bytes };
+    }
+    const loadedFamilies = [];
+    for (const font of project.fonts || []) {
+      if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) {
+        loadedFamilies.push(font.family);
+        continue;
+      }
+      try {
+        await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
+        customFontStore.push({ family: font.family, data: font.data });
+        loadedFamilies.push(font.family);
+      } catch (err) {
+      }
+    }
+    const textStyles = Array.isArray(project.textStyles) ? project.textStyles.filter((s) => s && s.name && s.props) : [];
+    const pages = await Promise.all(project.pages.map(async (p) => {
+      const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderPdfThumb(docs[p.docId].doc, p.pageNumber, p.rotation);
+      const annotations = project.version >= 2 ? p.annotations : legacyLayerOrder(p.annotations || []);
+      return { ...p, annotations, key: nextPageKey(), dataUrl };
+    }));
+    let maxDocNum = 0;
+    Object.keys(docs).forEach((id) => {
+      const m = /^doc(\d+)$/.exec(id);
+      if (m) maxDocNum = Math.max(maxDocNum, Number(m[1]));
+    });
+    let maxAnnId = 0;
+    pages.forEach((p) => (p.annotations || []).forEach((a) => {
+      maxAnnId = Math.max(maxAnnId, a.id || 0);
+    }));
+    let pageSize = null;
+    const firstReal = pages.find((p) => !p.isBlank);
+    if (firstReal) {
+      const p1 = await docs[firstReal.docId].doc.getPage(firstReal.pageNumber);
+      const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+      pageSize = { width: vp1.width, height: vp1.height };
+    } else if (pages.length > 0) {
+      pageSize = { width: pages[0].width, height: pages[0].height };
+    }
+    return {
+      docs,
+      pages,
+      loadedFamilies,
+      textStyles,
+      maxDocNum,
+      maxAnnId,
+      pageSize,
+      // Projects saved before titles existed take their file's name (see the caller).
+      title: typeof project.title === "string" && project.title ? project.title : null,
+      settings: project.settings || {}
+    };
+  }
+
+  // apps/ZEditor/src/state/useProject.js
+  var { useState: useState7, useRef: useRef6 } = React;
+  function useProject({ doc, history, status, view, toolDefaults }) {
+    const { pages, setPages, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
+    const { setLoading, setErrorMsg } = status;
+    const projectInputRef = useRef6(null);
+    const [savingProject, setSavingProject] = useState7(false);
+    const [projectFile, setProjectFile] = useState7(null);
+    const [docTitle, setDocTitle] = useState7("");
+    const [justSaved, setJustSaved] = useState7(false);
+    const justSavedTimerRef = useRef6(null);
+    function flashSaved() {
+      setJustSaved(true);
+      clearTimeout(justSavedTimerRef.current);
+      justSavedTimerRef.current = setTimeout(() => setJustSaved(false), 1800);
+    }
+    function startNewDocument(title) {
+      setProjectFile(null);
+      setDocTitle(title);
+    }
+    async function handleSaveProject({ saveAs = false } = {}) {
+      if (pages.length === 0 || savingProject) return;
+      setErrorMsg(null);
+      setSavingProject(true);
+      try {
+        const json = serializeProject({
+          title: docTitle,
+          pdfDocs: pdfDocsRef.current,
+          pages,
+          textStyles: toolDefaults.textStyles,
+          settings: view.settingsForSave()
+        });
+        if (!saveAs && projectFile) {
+          try {
+            await writeFileHandle(projectFile.handle, json);
+            flashSaved();
+            return;
+          } catch (err) {
+          }
+        }
+        const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"]);
+        if (handle !== "cancelled") flashSaved();
+        if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
+      } catch (err) {
+        setErrorMsg("Couldn't save the project — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setSavingProject(false);
+      }
+    }
+    async function openProjectPicker() {
+      if (typeof window.showOpenFilePicker === "function") {
+        try {
+          const [handle] = await window.showOpenFilePicker({
+            types: [{ description: "ZEditor project file", accept: { "application/json": [".znow"] } }]
+          });
+          handleLoadProjectFile(await handle.getFile(), handle);
+          return;
+        } catch (err) {
+          if (err && err.name === "AbortError") return;
+        }
+      }
+      projectInputRef.current && projectInputRef.current.click();
+    }
+    function handleProjectInputChange(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) handleLoadProjectFile(file);
+    }
+    async function handleLoadProjectFile(file, handle = null) {
+      setErrorMsg(null);
+      setLoading(true);
+      try {
+        const loaded = await readProjectFile(file, () => nextKeyRef.current++);
+        pdfDocsRef.current = loaded.docs;
+        toolDefaults.mergeTextStyles(loaded.textStyles);
+        toolDefaults.addFontFamilies(loaded.loadedFamilies);
+        nextDocIdRef.current = loaded.maxDocNum + 1;
+        nextAnnIdRef.current = loaded.maxAnnId + 1;
+        if (!pageSizeRef.current && loaded.pageSize) pageSizeRef.current = loaded.pageSize;
+        setPages(loaded.pages);
+        setSelectedIdx(loaded.pages.length > 0 ? 0 : null);
+        setSelectedPageIndices([]);
+        history.clearHistory();
+        setProjectFile(handle ? { handle, name: handle.name } : null);
+        setDocTitle(loaded.title || stripExtension(file.name));
+        view.applySavedSettings(loaded.settings);
+      } catch (err) {
+        setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setLoading(false);
+      }
+    }
+    return {
+      docTitle,
+      setDocTitle,
+      projectFile,
+      justSaved,
+      savingProject,
+      projectInputRef,
+      startNewDocument,
+      handleSaveProject,
+      openProjectPicker,
+      handleProjectInputChange,
+      handleLoadProjectFile
+    };
+  }
+
+  // apps/ZEditor/src/state/useSelection.js
+  var { useState: useState8, useEffect: useEffect3 } = React;
+  function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
+    const [tool, setTool] = useState8("select");
+    const [selectedAnnId, setSelectedAnnId] = useState8(null);
+    const [selectedAnnIds, setSelectedAnnIds] = useState8([]);
+    const [editingAnnId, setEditingAnnId] = useState8(null);
+    const [croppingAnnId, setCroppingAnnId] = useState8(null);
+    function selectTool(t) {
+      setTool(t);
+      setEditingAnnId(null);
+      if (t === "select") return;
+      setSelectedAnnId(null);
+      setSelectedAnnIds([]);
+    }
+    const currentAnnotations = () => selectedIdx === null ? [] : pages[selectedIdx].annotations || [];
+    function handleSelectAnnotations(ids, additive) {
+      const existing = additive && selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [];
+      const all = [.../* @__PURE__ */ new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])];
+      setSelectedAnnId(all.length > 0 ? all[0] : null);
+      setSelectedAnnIds(all.slice(1));
+    }
+    function handleSelectAnnotation(id, shiftKey, single) {
+      if (id === null) {
+        setSelectedAnnId(null);
+        setSelectedAnnIds([]);
+        return;
+      }
+      const members = single ? [id] : withGroupMates(currentAnnotations(), [id]);
+      if (!shiftKey) {
+        setSelectedAnnId(id);
+        setSelectedAnnIds(members.filter((m) => m !== id));
+        return;
+      }
+      const currentAll = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
+      if (currentAll.includes(id)) {
+        const next = currentAll.filter((x) => !members.includes(x));
+        setSelectedAnnId(next.length > 0 ? next[0] : null);
+        setSelectedAnnIds(next.slice(1));
+      } else {
+        setSelectedAnnIds([.../* @__PURE__ */ new Set([...currentAll, ...members.filter((m) => m !== id)])]);
+        setSelectedAnnId(id);
+      }
+    }
+    function handleSelectLayer(id, shiftKey, single) {
+      selectTool("select");
+      handleSelectAnnotation(id, shiftKey, single);
+    }
+    function selectedAnnotationIds() {
+      return [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
+    }
+    function handleSelectPage(idx, shiftKey) {
+      if (!shiftKey || idx === null) {
+        setSelectedIdx(idx);
+        setSelectedPageIndices([]);
+        return;
+      }
+      const currentAll = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : [...selectedPageIndices];
+      if (currentAll.includes(idx)) {
+        const next = currentAll.filter((x) => x !== idx);
+        setSelectedIdx(next.length > 0 ? next[0] : null);
+        setSelectedPageIndices(next.slice(1));
+      } else {
+        setSelectedPageIndices(currentAll);
+        setSelectedIdx(idx);
+      }
+    }
+    function handleSelectAllPages() {
+      if (pages.length === 0) return;
+      const primary = selectedIdx !== null ? selectedIdx : 0;
+      setSelectedIdx(primary);
+      setSelectedPageIndices(pages.map((_, i) => i).filter((i) => i !== primary));
+    }
+    function pagesActedOn(idx) {
+      const inMultiSelection = selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx));
+      return inMultiSelection ? [selectedIdx, ...selectedPageIndices] : [idx];
+    }
+    function handleToggleCrop(id) {
+      setCroppingAnnId((cur) => cur === id ? null : id);
+    }
+    useEffect3(() => {
+      setSelectedAnnId(null);
+    }, [selectedIdx]);
+    useEffect3(() => {
+      if (croppingAnnId !== null && croppingAnnId !== selectedAnnId) setCroppingAnnId(null);
+    }, [selectedAnnId]);
+    return {
+      tool,
+      setTool,
+      selectTool,
+      selectedAnnId,
+      setSelectedAnnId,
+      selectedAnnIds,
+      setSelectedAnnIds,
+      selectedAnnotationIds,
+      currentAnnotations,
+      editingAnnId,
+      setEditingAnnId,
+      croppingAnnId,
+      handleToggleCrop,
+      handleSelectAnnotations,
+      handleSelectAnnotation,
+      handleSelectLayer,
+      handleSelectPage,
+      handleSelectAllPages,
+      pagesActedOn
+    };
+  }
+
+  // apps/ZEditor/src/state/useStatus.js
+  var { useState: useState9 } = React;
+  function useStatus() {
+    const [loading, setLoading] = useState9(false);
+    const [errorMsg, setErrorMsg] = useState9(null);
+    return { loading, setLoading, errorMsg, setErrorMsg };
+  }
+
+  // apps/ZEditor/src/model/softEraser.js
+  var SOFT_ERASER_DEFAULTS = { size: 40, softness: 60, strength: 100 };
+  var SOFT_ERASER_DABS_PER_RADIUS = 4;
+
+  // apps/ZEditor/src/model/text/textStyles.js
+  var TEXT_STYLE_BASICS = ["fontFamily", "fontSize", "bold", "italic", "underline", "color", "align"];
+  var TEXT_STYLE_PROPS = [
+    ...TEXT_STYLE_BASICS,
+    "lineSpacing",
+    "letterSpacing",
+    "strike",
+    "textCase",
+    "vertical",
+    "fillAlpha",
+    ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
+  ];
+  var BUILT_IN_TEXT_STYLES = [
+    { name: "Title", builtIn: true, props: { fontSize: 56, bold: true, align: "center", letterSpacing: 4, lineSpacing: 100, textCase: "upper" } },
+    { name: "Subtitle", builtIn: true, props: { fontSize: 28, italic: true, align: "center", letterSpacing: 1 } },
+    { name: "Remark", builtIn: true, props: { fontSize: 12, italic: true } }
+  ];
+  function captureTextStyle(ann) {
+    const props = {};
+    TEXT_STYLE_PROPS.forEach((prop) => {
+      if (ann[prop] !== void 0) props[prop] = ann[prop];
+    });
+    return props;
+  }
+  var TEXT_STYLE_KEEP_IF_MISSING = ["fontFamily", "fontSize", "color"];
+  var TEXT_STYLE_RESETS = { bold: false, italic: false, underline: false, align: "left" };
+  function textStylePatch(style) {
+    const patch = {};
+    TEXT_STYLE_PROPS.forEach((prop) => {
+      if (style.props[prop] !== void 0) patch[prop] = style.props[prop];
+      else if (prop in TEXT_STYLE_RESETS) patch[prop] = TEXT_STYLE_RESETS[prop];
+      else if (!TEXT_STYLE_KEEP_IF_MISSING.includes(prop)) patch[prop] = void 0;
+    });
+    return patch;
+  }
+  var TEXT_STYLES_STORAGE_KEY = "zeditor.textStyles";
+  function readStoredTextStyles() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(TEXT_STYLES_STORAGE_KEY) || "[]");
+      return Array.isArray(saved) ? saved.filter((s) => s && s.name && s.props) : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  // apps/ZEditor/src/state/useToolDefaults.js
+  var { useState: useState10, useEffect: useEffect4 } = React;
+  function useToolDefaults() {
+    const [fontOptions, setFontOptions] = useState10(DEFAULT_FONT_OPTIONS);
+    const [textStyles, setTextStyles] = useState10(readStoredTextStyles);
+    useEffect4(() => {
+      try {
+        localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles));
+      } catch (err) {
+      }
+    }, [textStyles]);
+    function handleSaveTextStyle(name, ann) {
+      setTextStyles((prev) => [...prev.filter((s) => s.name !== name), { name, props: captureTextStyle(ann) }]);
+    }
+    function handleDeleteTextStyle(name) {
+      setTextStyles((prev) => prev.filter((s) => s.name !== name));
+    }
+    function mergeTextStyles(incoming) {
+      if (!incoming.length) return;
+      setTextStyles((prev) => [...prev.filter((s) => !incoming.some((i) => i.name === s.name)), ...incoming]);
+    }
+    function addFontFamilies(families) {
+      if (!families.length) return;
+      setFontOptions((prev) => Array.from(/* @__PURE__ */ new Set([...prev, ...families])).sort((a, b) => a.localeCompare(b)));
+    }
+    const [penColor, setPenColor] = useState10(PEN_DEFAULTS.color);
+    const [penWidth, setPenWidth] = useState10(PEN_DEFAULTS.width);
+    const [penTaper, setPenTaper] = useState10(0);
+    const [eraserMode, setEraserMode] = useState10("soft");
+    const [softEraser, setSoftEraser] = useState10(SOFT_ERASER_DEFAULTS);
+    const [highlighterColor, setHighlighterColor] = useState10(HIGHLIGHTER_DEFAULTS.color);
+    const [highlighterWidth, setHighlighterWidth] = useState10(HIGHLIGHTER_DEFAULTS.width);
+    const [highlighterTaper, setHighlighterTaper] = useState10(0);
+    const [textFontFamily, setTextFontFamily] = useState10(DEFAULT_FONT_OPTIONS[0]);
+    const [textFontSize, setTextFontSize] = useState10(16);
+    const [textBold, setTextBold] = useState10(false);
+    const [textItalic, setTextItalic] = useState10(false);
+    const [textUnderline, setTextUnderline] = useState10(false);
+    const [textColor, setTextColor] = useState10("#1a1a1a");
+    const [textAlign, setTextAlign] = useState10("left");
+    const [rectDefaults, setRectDefaults] = useState10(() => controlValues({}, RECT_CONTROLS));
+    return {
+      fontOptions,
+      setFontOptions,
+      addFontFamilies,
+      textStyles,
+      handleSaveTextStyle,
+      handleDeleteTextStyle,
+      mergeTextStyles,
+      penColor,
+      setPenColor,
+      penWidth,
+      setPenWidth,
+      penTaper,
+      setPenTaper,
+      eraserMode,
+      setEraserMode,
+      softEraser,
+      setSoftEraser,
+      highlighterColor,
+      setHighlighterColor,
+      highlighterWidth,
+      setHighlighterWidth,
+      highlighterTaper,
+      setHighlighterTaper,
+      textFontFamily,
+      setTextFontFamily,
+      textFontSize,
+      setTextFontSize,
+      textBold,
+      setTextBold,
+      textItalic,
+      setTextItalic,
+      textUnderline,
+      setTextUnderline,
+      textColor,
+      setTextColor,
+      textAlign,
+      setTextAlign,
+      rectDefaults,
+      setRectDefaults
+    };
+  }
+
+  // apps/ZEditor/src/model/guides.js
+  var GUIDE_FORMAT_PRESETS = [
+    { key: "match", label: "Match Page Size" },
+    { key: "half-letter", label: "Half Letter (5.5 × 8.5 in)", widthIn: 5.5, heightIn: 8.5 },
+    { key: "digest", label: "Digest (5.5 × 8.25 in)", widthIn: 5.5, heightIn: 8.25 },
+    { key: "a5", label: "A5 (5.83 × 8.27 in)", widthIn: 5.83, heightIn: 8.27 },
+    { key: "a6", label: "A6 (4.13 × 5.83 in)", widthIn: 4.13, heightIn: 5.83 },
+    { key: "quarter-letter", label: "Quarter Letter (4.25 × 5.5 in)", widthIn: 4.25, heightIn: 5.5 },
+    { key: "letter", label: "US Letter (8.5 × 11 in)", widthIn: 8.5, heightIn: 11 },
+    { key: "a4", label: "A4 (8.27 × 11.69 in)", widthIn: 8.27, heightIn: 11.69 }
+  ];
+  var DEFAULT_GUIDE_MARGIN_IN = 0.25;
+  var DEFAULT_GUIDE_BLEED_IN = 0.125;
+
+  // apps/ZEditor/src/state/useViewSettings.js
+  var { useState: useState11 } = React;
+  function useViewSettings() {
+    const [guidesOn, setGuidesOn] = useState11(false);
+    const [centerGuideOn, setCenterGuideOn] = useState11(false);
+    const [guideFormat, setGuideFormat] = useState11("match");
+    const [guideMarginIn, setGuideMarginIn] = useState11(DEFAULT_GUIDE_MARGIN_IN);
+    const [guideBleedIn, setGuideBleedIn] = useState11(DEFAULT_GUIDE_BLEED_IN);
+    const [pageNumbers, setPageNumbers] = useState11(DEFAULT_PAGE_NUMBERS);
+    const [onionSkinOn, setOnionSkinOn] = useState11(false);
+    const [onionSkinOpacity, setOnionSkinOpacity] = useState11(0.3);
+    const [layersOpen, setLayersOpen] = useState11(true);
+    const [layersPosition, setLayersPosition] = useState11(null);
+    function settingsForSave() {
+      return {
+        guidesOn,
+        guideFormat,
+        guideMarginIn,
+        guideBleedIn,
+        centerGuideOn,
+        onionSkinOn,
+        onionSkinOpacity,
+        pageNumbers
+      };
+    }
+    function applySavedSettings(s) {
+      if (s.guidesOn !== void 0) setGuidesOn(s.guidesOn);
+      if (s.centerGuideOn !== void 0) setCenterGuideOn(s.centerGuideOn);
+      if (s.guideFormat !== void 0) setGuideFormat(s.guideFormat);
+      if (s.guideMarginIn !== void 0) setGuideMarginIn(s.guideMarginIn);
+      if (s.guideBleedIn !== void 0) setGuideBleedIn(s.guideBleedIn);
+      if (s.onionSkinOn !== void 0) setOnionSkinOn(s.onionSkinOn);
+      if (s.onionSkinOpacity !== void 0) setOnionSkinOpacity(s.onionSkinOpacity);
+      setPageNumbers({ ...DEFAULT_PAGE_NUMBERS, ...s.pageNumbers || {} });
+    }
+    return {
+      guidesOn,
+      setGuidesOn,
+      centerGuideOn,
+      setCenterGuideOn,
+      guideFormat,
+      setGuideFormat,
+      guideMarginIn,
+      setGuideMarginIn,
+      guideBleedIn,
+      setGuideBleedIn,
+      pageNumbers,
+      setPageNumbers,
+      onionSkinOn,
+      setOnionSkinOn,
+      onionSkinOpacity,
+      setOnionSkinOpacity,
+      layersOpen,
+      setLayersOpen,
+      layersPosition,
+      setLayersPosition,
+      settingsForSave,
+      applySavedSettings
+    };
+  }
+
+  // apps/ZEditor/src/state/useZoom.js
+  var { useState: useState12, useRef: useRef7, useLayoutEffect } = React;
+  function useZoom() {
+    const [zoomPercent, setZoomPercent] = useState12(ZOOM_PERCENT.initial);
+    const previewPaneRef = useRef7(null);
+    const zoomAnchorRef = useRef7(null);
+    function artboardElement() {
+      return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
+    }
+    function handleZoomChange(percent) {
+      const pane = previewPaneRef.current, board = artboardElement();
+      if (board) {
+        zoomAnchorRef.current = {
+          x: (pane.scrollLeft + pane.clientWidth / 2 - board.offsetLeft) / zoomPercent,
+          y: (pane.scrollTop + pane.clientHeight / 2 - board.offsetTop) / zoomPercent
+        };
+      }
+      setZoomPercent(percent);
+    }
+    useLayoutEffect(() => {
+      const anchor = zoomAnchorRef.current, pane = previewPaneRef.current, board = artboardElement();
+      if (!anchor || !board) return;
+      zoomAnchorRef.current = null;
+      pane.scrollLeft = anchor.x * zoomPercent + board.offsetLeft - pane.clientWidth / 2;
+      pane.scrollTop = anchor.y * zoomPercent + board.offsetTop - pane.clientHeight / 2;
+    }, [zoomPercent]);
+    return { zoomPercent, previewPaneRef, handleZoomChange };
+  }
+
   // apps/ZEditor/src/render/softErase.js
   function imagePixelAt(ann, px, py) {
     const cx = ann.x + ann.width / 2, cy = ann.y + ann.height / 2;
@@ -2091,12 +3430,12 @@
   }
 
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef, useEffect } = React;
+  var { useRef: useRef8, useEffect: useEffect5 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
-    const textureCanvasRef = useRef(null);
+    const textureCanvasRef = useRef8(null);
     const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
     const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-    useEffect(() => {
+    useEffect5(() => {
       const canvas = textureCanvasRef.current;
       if (!textureKey || !canvas) return;
       canvas.width = Math.max(1, Math.ceil(ann.width));
@@ -2210,10 +3549,10 @@
   }
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
-  var { useRef: useRef2, useEffect: useEffect2 } = React;
+  var { useRef: useRef9, useEffect: useEffect6 } = React;
   var MIN_CROP_SIZE = 20;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
-    const halftoneCanvasRef = useRef2(null);
+    const halftoneCanvasRef = useRef9(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
     const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
@@ -2292,7 +3631,7 @@
     const adjusted = hasPhotoAdjust(ann);
     const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
     const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null]) : null;
-    useEffect2(() => {
+    useEffect6(() => {
       if (!usesFilterCanvas || isCropping) return;
       let cancelled = false;
       (async () => {
@@ -2386,13 +3725,13 @@
   var textSelectionStore = { annId: null, start: 0, end: 0 };
 
   // apps/ZEditor/src/ui/canvas/AnnotationText.jsx
-  var { useRef: useRef3, useEffect: useEffect3, useLayoutEffect } = React;
+  var { useRef: useRef10, useEffect: useEffect7, useLayoutEffect: useLayoutEffect2 } = React;
   function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate }) {
-    const boxRef = useRef3(null);
-    const inputRef = useRef3(null);
-    const pendingCaretRef = useRef3(null);
-    const liveCanvasRef = useRef3(null);
-    useLayoutEffect(() => {
+    const boxRef = useRef10(null);
+    const inputRef = useRef10(null);
+    const pendingCaretRef = useRef10(null);
+    const liveCanvasRef = useRef10(null);
+    useLayoutEffect2(() => {
       if (!isEditing || !inputRef.current) return;
       const caret = pendingCaretRef.current != null ? pendingCaretRef.current : ann.text.length;
       pendingCaretRef.current = null;
@@ -2443,7 +3782,7 @@
     const liveBox = canvasMode ? measureTextBox(ann) : null;
     const canvasMargin = canvasMode ? textCanvasMargin(ann, look) : 0;
     const liveDrawKey = canvasMode ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: void 0, hidden: void 0, name: void 0, blend: void 0 }) : "";
-    useEffect3(() => {
+    useEffect7(() => {
       if (!canvasMode) return void 0;
       let cancelled = false;
       (async () => {
@@ -2685,7 +4024,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
-  var { useState, useRef: useRef4, useEffect: useEffect4 } = React;
+  var { useState: useState13, useRef: useRef11, useEffect: useEffect8 } = React;
   function ComposeCanvas({
     pdfDocsRef,
     page,
@@ -2727,15 +4066,15 @@
     onEraseImagePixels,
     zoom
   }) {
-    const canvasRef = useRef4(null);
-    const layerRef = useRef4(null);
-    const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-    const [dragRect, setDragRect] = useState(null);
-    const drawingRef = useRef4(null);
-    const [brushPos, setBrushPos] = useState(null);
+    const canvasRef = useRef11(null);
+    const layerRef = useRef11(null);
+    const [canvasSize, setCanvasSize] = useState13({ width: 0, height: 0 });
+    const [dragRect, setDragRect] = useState13(null);
+    const drawingRef = useRef11(null);
+    const [brushPos, setBrushPos] = useState13(null);
     const softErasing = tool === "eraser" && eraserMode === "soft";
-    const [drawTick, setDrawTick] = useState(0);
-    useEffect4(() => {
+    const [drawTick, setDrawTick] = useState13(0);
+    useEffect8(() => {
       if (!page) return;
       let cancelled = false;
       (async () => {
@@ -3156,51 +4495,12 @@
     ))));
   }
 
-  // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState2 } = React;
-  function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState2(null);
-    return {
-      value: draft != null ? draft : value,
-      onChange: (e) => {
-        setDraft(e.target.value);
-        commitText(e.target.value);
-      },
-      onBlur: () => setDraft(null)
-    };
+  // apps/ZEditor/src/ui/canvas/LiveFilterDefs.jsx
+  function LiveFilterDefs({ pageFilter }) {
+    const dark = hexToRgb(pageFilter.darkColor || DEFAULT_DUOTONE_DARK);
+    const light = hexToRgb(pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT);
+    return /* @__PURE__ */ React.createElement("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("filter", { id: "ze-filter-grayscale", colorInterpolationFilters: "sRGB" }, /* @__PURE__ */ React.createElement("feColorMatrix", { type: "matrix", values: LUMINANCE_MATRIX_VALUES })), /* @__PURE__ */ React.createElement("filter", { id: "ze-filter-duotone", colorInterpolationFilters: "sRGB" }, /* @__PURE__ */ React.createElement("feColorMatrix", { type: "matrix", values: LUMINANCE_MATRIX_VALUES }), /* @__PURE__ */ React.createElement("feComponentTransfer", null, /* @__PURE__ */ React.createElement("feFuncR", { type: "linear", slope: (light.r - dark.r) / 255, intercept: dark.r / 255 }), /* @__PURE__ */ React.createElement("feFuncG", { type: "linear", slope: (light.g - dark.g) / 255, intercept: dark.g / 255 }), /* @__PURE__ */ React.createElement("feFuncB", { type: "linear", slope: (light.b - dark.b) / 255, intercept: dark.b / 255 })))));
   }
-  function SliderNumberInput({ min, max, value, onChange }) {
-    const numberProps = useDraftInputProps(value, (text) => {
-      const n = Number(text);
-      if (text.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))));
-    });
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        type: "range",
-        className: "ze-format-slider",
-        min,
-        max,
-        step: "1",
-        value,
-        onChange: (e) => onChange(Number(e.target.value))
-      }
-    ), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min, max, step: "1", ...numberProps }));
-  }
-  function CustomColorInput({ value, onChange }) {
-    return /* @__PURE__ */ React.createElement("label", { className: "ze-custom-color", title: "Custom color — pick any color" }, /* @__PURE__ */ React.createElement("input", { type: "color", value, onChange: (e) => onChange(e.target.value), "aria-label": "Custom color" }), /* @__PURE__ */ React.createElement("span", { className: "ze-custom-color-face", style: { backgroundColor: value } }), /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "m2 22 1-1h3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21v-3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" })));
-  }
-  function HexColorInput({ value, onChange }) {
-    const hexProps = useDraftInputProps(value, (text) => {
-      const hex = "#" + text.trim().replace(/^#/, "");
-      if (/^#[0-9a-f]{6}$/i.test(hex)) onChange(hex.toLowerCase());
-    });
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value, onChange: (e) => onChange(e.target.value) }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "ze-format-number", spellCheck: "false", maxLength: "7", "aria-label": "Hex color", ...hexProps }));
-  }
-  function SelectInput({ options, value, onChange }) {
-    return /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value, onChange: (e) => onChange(e.target.value) }, options.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label)));
-  }
-  var EFFECT_CONTROL_INPUTS = { slider: SliderNumberInput, color: HexColorInput, select: SelectInput };
 
   // apps/ZEditor/src/ui/dialogs/ConfirmDialog.jsx
   function ConfirmDialog({ step, onProceed, onYes, onCancel }) {
@@ -3226,11 +4526,11 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
-  var { useState: useState3 } = React;
+  var { useState: useState14 } = React;
   function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
-    const [presetKey, setPresetKey] = useState3("a5");
-    const [orientation, setOrientation] = useState3("portrait");
-    const [pageCountText, setPageCountText] = useState3("1");
+    const [presetKey, setPresetKey] = useState14("a5");
+    const [orientation, setOrientation] = useState14("portrait");
+    const [pageCountText, setPageCountText] = useState14("1");
     if (!open) return null;
     const preset = NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
     const landscape = orientation === "landscape";
@@ -3299,9 +4599,9 @@
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect5 } = React;
+  var { useEffect: useEffect9 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect5(() => {
+    useEffect9(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -3313,6 +4613,52 @@
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onClose }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-modal--shortcuts", role: "dialog", "aria-label": "Keyboard shortcuts", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head ze-modal-head--with-close" }, "Keyboard Shortcuts", /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn ze-tool-icon-btn--round", title: "Close (Esc)", "aria-label": "Close", onClick: onClose }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 6l12 12M18 6L6 18" })))), /* @__PURE__ */ React.createElement("div", { className: "ze-shortcuts-scroll" }, /* @__PURE__ */ React.createElement("table", { className: "ze-shortcuts-table" }, KEYBOARD_SHORTCUTS.map(({ group, rows }) => /* @__PURE__ */ React.createElement("tbody", { key: group }, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { colSpan: "2" }, group)), rows.map(([keys, action]) => /* @__PURE__ */ React.createElement("tr", { key: keys }, /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("kbd", null, keys)), /* @__PURE__ */ React.createElement("td", null, action)))))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "On a Mac, use Cmd instead of Ctrl. Shortcuts pause while you're typing in a text box or field."))));
   }
 
+  // apps/ZEditor/src/ui/controls/inputs.jsx
+  var { useState: useState15 } = React;
+  function useDraftInputProps(value, commitText) {
+    const [draft, setDraft] = useState15(null);
+    return {
+      value: draft != null ? draft : value,
+      onChange: (e) => {
+        setDraft(e.target.value);
+        commitText(e.target.value);
+      },
+      onBlur: () => setDraft(null)
+    };
+  }
+  function SliderNumberInput({ min, max, value, onChange }) {
+    const numberProps = useDraftInputProps(value, (text) => {
+      const n = Number(text);
+      if (text.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))));
+    });
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "range",
+        className: "ze-format-slider",
+        min,
+        max,
+        step: "1",
+        value,
+        onChange: (e) => onChange(Number(e.target.value))
+      }
+    ), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min, max, step: "1", ...numberProps }));
+  }
+  function CustomColorInput({ value, onChange }) {
+    return /* @__PURE__ */ React.createElement("label", { className: "ze-custom-color", title: "Custom color — pick any color" }, /* @__PURE__ */ React.createElement("input", { type: "color", value, onChange: (e) => onChange(e.target.value), "aria-label": "Custom color" }), /* @__PURE__ */ React.createElement("span", { className: "ze-custom-color-face", style: { backgroundColor: value } }), /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "m2 22 1-1h3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21v-3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" })));
+  }
+  function HexColorInput({ value, onChange }) {
+    const hexProps = useDraftInputProps(value, (text) => {
+      const hex = "#" + text.trim().replace(/^#/, "");
+      if (/^#[0-9a-f]{6}$/i.test(hex)) onChange(hex.toLowerCase());
+    });
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value, onChange: (e) => onChange(e.target.value) }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "ze-format-number", spellCheck: "false", maxLength: "7", "aria-label": "Hex color", ...hexProps }));
+  }
+  function SelectInput({ options, value, onChange }) {
+    return /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value, onChange: (e) => onChange(e.target.value) }, options.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label)));
+  }
+  var EFFECT_CONTROL_INPUTS = { slider: SliderNumberInput, color: HexColorInput, select: SelectInput };
+
   // apps/ZEditor/src/ui/controls/ControlList.jsx
   function ControlList({ controls, source, onPatch }) {
     const values = controlValues(source, controls);
@@ -3323,18 +4669,18 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState4, useRef: useRef5, useEffect: useEffect6 } = React;
+  var { useState: useState16, useRef: useRef12, useEffect: useEffect10 } = React;
   var sectionOpenMemory = {};
   function PanelSection({ id, title, checked, onToggle, disabled, defaultOpen = false, group, hint, summary, onReset, children }) {
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState4(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState16(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
-    const wasChecked = useRef5(checked);
-    useEffect6(() => {
+    const wasChecked = useRef12(checked);
+    useEffect10(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -3414,9 +4760,9 @@
   }
 
   // apps/ZEditor/src/ui/panels/LetterColors.jsx
-  var { useState: useState5 } = React;
+  var { useState: useState17 } = React;
   function LetterColors({ ann, patch }) {
-    const [message, setMessage] = useState5(null);
+    const [message, setMessage] = useState17(null);
     const keepFocus = (e) => e.preventDefault();
     function applyColor(color) {
       const text = ann.text || "";
@@ -3437,25 +4783,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState6, useRef: useRef6, useEffect: useEffect7, useMemo } = React;
+  var { useState: useState18, useRef: useRef13, useEffect: useEffect11, useMemo: useMemo2 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState6(value || "");
-    const [typed, setTyped] = useState6(false);
-    const [open, setOpen] = useState6(false);
-    const [highlight, setHighlight] = useState6(-1);
-    const previewFromRef = useRef6(null);
-    const listRef = useRef6(null);
-    const [status, setStatus] = useState6(null);
-    const [loadingFonts, setLoadingFonts] = useState6(false);
-    const containerRef = useRef6(null);
-    const uploadInputRef = useRef6(null);
-    useEffect7(() => {
+    const [query, setQuery] = useState18(value || "");
+    const [typed, setTyped] = useState18(false);
+    const [open, setOpen] = useState18(false);
+    const [highlight, setHighlight] = useState18(-1);
+    const previewFromRef = useRef13(null);
+    const listRef = useRef13(null);
+    const [status, setStatus] = useState18(null);
+    const [loadingFonts, setLoadingFonts] = useState18(false);
+    const containerRef = useRef13(null);
+    const uploadInputRef = useRef13(null);
+    useEffect11(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect7(() => {
+    useEffect11(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -3464,12 +4810,12 @@
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [value]);
-    const filtered = useMemo(() => {
+    const filtered = useMemo2(() => {
       const q = typed ? query.trim().toLowerCase() : "";
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect7(() => {
+    useEffect11(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -3624,10 +4970,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState7, useRef: useRef7 } = React;
+  var { useState: useState19, useRef: useRef14 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef7(null);
-    const [error, setError] = useState7(null);
+    const inputRef = useRef14(null);
+    const [error, setError] = useState19(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -3658,10 +5004,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState8 } = React;
+  var { useState: useState20 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle }) {
-    const [name, setName] = useState8("");
-    const [message, setMessage] = useState8(null);
+    const [name, setName] = useState20("");
+    const [message, setMessage] = useState20(null);
     function save() {
       const clean = name.trim();
       if (!clean) {
@@ -3958,7 +5304,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState9, useRef: useRef8, useEffect: useEffect8 } = React;
+  var { useState: useState21, useRef: useRef15, useEffect: useEffect12 } = React;
   function layerName(ann) {
     if (ann.name) return ann.name;
     if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
@@ -3974,12 +5320,12 @@
     return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color), strokeWidth: "3", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 16c4-9 6-9 8-4s4 5 10-5" })));
   }
   function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onToggleFlag, onRename, onReorder }) {
-    const [renamingId, setRenamingId] = useState9(null);
-    const [dropInfo, setDropInfo] = useState9(null);
-    const dragIdRef = useRef8(null);
-    const listRef = useRef8(null);
-    const panelRef = useRef8(null);
-    const headRef = useRef8(null);
+    const [renamingId, setRenamingId] = useState21(null);
+    const [dropInfo, setDropInfo] = useState21(null);
+    const dragIdRef = useRef15(null);
+    const listRef = useRef15(null);
+    const panelRef = useRef15(null);
+    const headRef = useRef15(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     function inView(x, y) {
@@ -3988,7 +5334,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect8(() => {
+    useEffect12(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -4004,7 +5350,7 @@
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
     }
-    useEffect8(() => {
+    useEffect12(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -4115,6 +5461,204 @@
     );
   }
 
+  // apps/ZEditor/src/ui/sidebar/PageGap.jsx
+  function PageGap({ onInsert }) {
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-page-gap",
+        role: "button",
+        tabIndex: 0,
+        title: "Add blank page",
+        onClick: onInsert,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onInsert();
+          }
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-page-gap-line" }),
+      /* @__PURE__ */ React.createElement("span", { className: "ze-page-gap-btn", "aria-hidden": "true" }, "+")
+    );
+  }
+
+  // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
+  function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-thumb" + (isSelected ? " is-selected" : ""),
+        draggable: "true",
+        onClick: (e) => onSelect(idx, e.shiftKey),
+        ...dragHandlers
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { src: p.dataUrl, alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "log-btn",
+          title: "Rotate",
+          onClick: (e) => {
+            e.stopPropagation();
+            onRotate(idx);
+          }
+        },
+        "⟳"
+      ), /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "log-btn",
+          title: "Delete",
+          onClick: (e) => {
+            e.stopPropagation();
+            onDelete(idx);
+          }
+        },
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
+      )))
+    );
+  }
+
+  // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
+  var { useState: useState22, useRef: useRef16, useEffect: useEffect13 } = React;
+  var EDGE_SCROLL_ZONE = 44;
+  var EDGE_SCROLL_SPEED = 4;
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
+    const dragIndexRef = useRef16(null);
+    const bodyRef = useRef16(null);
+    const scrollDirRef = useRef16(0);
+    const rafRef = useRef16(null);
+    const [dragOverInfo, setDragOverInfo] = useState22(null);
+    function startAutoScroll() {
+      if (rafRef.current) return;
+      const step = () => {
+        const el = bodyRef.current;
+        if (el && scrollDirRef.current !== 0) {
+          el.scrollTop += scrollDirRef.current * EDGE_SCROLL_SPEED;
+        }
+        rafRef.current = requestAnimationFrame(step);
+      };
+      rafRef.current = requestAnimationFrame(step);
+    }
+    function stopAutoScroll() {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      scrollDirRef.current = 0;
+    }
+    useEffect13(() => stopAutoScroll, []);
+    function handleContainerDragOver(e) {
+      const el = bodyRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const distFromTop = e.clientY - rect.top;
+      const distFromBottom = rect.bottom - e.clientY;
+      if (distFromTop < EDGE_SCROLL_ZONE) {
+        scrollDirRef.current = -1;
+      } else if (distFromBottom < EDGE_SCROLL_ZONE) {
+        scrollDirRef.current = 1;
+      } else {
+        scrollDirRef.current = 0;
+      }
+    }
+    function dragHandlersFor(idx) {
+      return {
+        onDragStart: () => {
+          dragIndexRef.current = idx;
+          startAutoScroll();
+        },
+        onDragOver: (e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          setDragOverInfo({ idx, before });
+        },
+        onDragLeave: () => setDragOverInfo((cur) => cur && cur.idx === idx ? null : cur),
+        onDragEnd: () => {
+          dragIndexRef.current = null;
+          setDragOverInfo(null);
+          stopAutoScroll();
+        },
+        onDrop: (e) => {
+          e.preventDefault();
+          const from = dragIndexRef.current;
+          const info = dragOverInfo;
+          setDragOverInfo(null);
+          dragIndexRef.current = null;
+          stopAutoScroll();
+          if (from === null || !info || from === idx) return;
+          const selection = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : selectedPageIndices;
+          onReorder(selection.includes(from) ? selection : [from], idx + (info.before ? 0 : 1));
+        }
+      };
+    }
+    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
+      Thumbnail,
+      {
+        p,
+        idx,
+        isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
+        onSelect,
+        onRotate,
+        onDelete,
+        dragHandlers: dragHandlersFor(idx)
+      }
+    )), dragOverInfo && dragOverInfo.idx === idx && !dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(idx + 1) }))))));
+  }
+
+  // apps/ZEditor/src/ui/toolbar/ToolBar.jsx
+  function ToolBar({ selection, edits, view, zoom, dialogs }) {
+    const { tool, selectTool, selectedAnnId } = selection;
+    const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn" + (layersOpen ? " active" : ""),
+        "aria-pressed": layersOpen,
+        "aria-label": "Layers panel",
+        title: layersOpen ? "Minimize the Layers panel" : "Show the Layers panel",
+        onClick: () => setLayersOpen((open) => !open)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 3l9 5-9 5-9-5z" }), /* @__PURE__ */ React.createElement("path", { d: "M3 12.5l9 5 9-5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 17l9 5 9-5" }))
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn" + (centerGuideOn ? " active" : ""),
+        "aria-pressed": centerGuideOn,
+        "aria-label": "Center guide",
+        title: centerGuideOn ? "Hide the center guide" : "Show a guide down the middle of the page (for covers and two-page spreads)",
+        onClick: () => setCenterGuideOn((on) => !on)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "5", width: "18", height: "14", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M12 3v18", strokeDasharray: "2.5 2.5" }))
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-zoom-control" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Zoom (%)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: ZOOM_PERCENT.min, max: ZOOM_PERCENT.max, value: zoom.zoomPercent, onChange: zoom.handleZoomChange })), /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn",
+        title: "Delete selected (Delete)",
+        disabled: selectedAnnId === null,
+        onClick: edits.handleDeleteAnnotation
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn ze-tool-icon-btn--round",
+        title: "Keyboard shortcuts",
+        "aria-label": "Keyboard shortcuts",
+        onClick: () => dialogs.setShortcutsOpen(true)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 11v7" }), /* @__PURE__ */ React.createElement("path", { d: "M12 6.5v.01" }))
+    )));
+  }
+
   // apps/ZEditor/src/ui/settings/FilterSettings.jsx
   function FilterSettings({
     filterType,
@@ -4178,159 +5722,10 @@
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Start numbering on page"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "1", max: Math.max(1, pageCount), value: settings.from, onChange: (e) => onChange({ from: whole(e.target.value, 1, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stop after page (empty = last)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "1", max: Math.max(1, pageCount), placeholder: "last", value: settings.to || "", onChange: (e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "First page shows number"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", step: "1", value: settings.first, onChange: (e) => onChange({ first: Math.round(Number(e.target.value)) || 0 }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Position"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_POSITIONS, value: settings.position, onChange: (position) => onChange({ position }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Style"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_FORMATS, value: settings.format, onChange: (format) => onChange({ format }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size (pt)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "4", max: "48", value: settings.size, onChange: (e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Distance from edge (in)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "0", max: "3", step: "0.05", value: settings.marginIn, onChange: (e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: settings.color, onChange: (e) => onChange({ color: e.target.value }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.'));
   }
 
-  // apps/ZEditor/src/ui/sidebar/PageGap.jsx
-  function PageGap({ onInsert }) {
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        className: "ze-page-gap",
-        role: "button",
-        tabIndex: 0,
-        title: "Add blank page",
-        onClick: onInsert,
-        onKeyDown: (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onInsert();
-          }
-        }
-      },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-page-gap-line" }),
-      /* @__PURE__ */ React.createElement("span", { className: "ze-page-gap-btn", "aria-hidden": "true" }, "+")
-    );
-  }
-
-  // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
-  function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        className: "ze-thumb" + (isSelected ? " is-selected" : ""),
-        draggable: "true",
-        onClick: (e) => onSelect(idx, e.shiftKey),
-        ...dragHandlers
-      },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { src: p.dataUrl, alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          type: "button",
-          className: "log-btn",
-          title: "Rotate",
-          onClick: (e) => {
-            e.stopPropagation();
-            onRotate(idx);
-          }
-        },
-        "⟳"
-      ), /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          type: "button",
-          className: "log-btn",
-          title: "Delete",
-          onClick: (e) => {
-            e.stopPropagation();
-            onDelete(idx);
-          }
-        },
-        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
-      )))
-    );
-  }
-
-  // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState10, useRef: useRef9, useEffect: useEffect9 } = React;
-  var EDGE_SCROLL_ZONE = 44;
-  var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef9(null);
-    const bodyRef = useRef9(null);
-    const scrollDirRef = useRef9(0);
-    const rafRef = useRef9(null);
-    const [dragOverInfo, setDragOverInfo] = useState10(null);
-    function startAutoScroll() {
-      if (rafRef.current) return;
-      const step = () => {
-        const el = bodyRef.current;
-        if (el && scrollDirRef.current !== 0) {
-          el.scrollTop += scrollDirRef.current * EDGE_SCROLL_SPEED;
-        }
-        rafRef.current = requestAnimationFrame(step);
-      };
-      rafRef.current = requestAnimationFrame(step);
-    }
-    function stopAutoScroll() {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      scrollDirRef.current = 0;
-    }
-    useEffect9(() => stopAutoScroll, []);
-    function handleContainerDragOver(e) {
-      const el = bodyRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const distFromTop = e.clientY - rect.top;
-      const distFromBottom = rect.bottom - e.clientY;
-      if (distFromTop < EDGE_SCROLL_ZONE) {
-        scrollDirRef.current = -1;
-      } else if (distFromBottom < EDGE_SCROLL_ZONE) {
-        scrollDirRef.current = 1;
-      } else {
-        scrollDirRef.current = 0;
-      }
-    }
-    function dragHandlersFor(idx) {
-      return {
-        onDragStart: () => {
-          dragIndexRef.current = idx;
-          startAutoScroll();
-        },
-        onDragOver: (e) => {
-          e.preventDefault();
-          const rect = e.currentTarget.getBoundingClientRect();
-          const before = e.clientY < rect.top + rect.height / 2;
-          setDragOverInfo({ idx, before });
-        },
-        onDragLeave: () => setDragOverInfo((cur) => cur && cur.idx === idx ? null : cur),
-        onDragEnd: () => {
-          dragIndexRef.current = null;
-          setDragOverInfo(null);
-          stopAutoScroll();
-        },
-        onDrop: (e) => {
-          e.preventDefault();
-          const from = dragIndexRef.current;
-          const info = dragOverInfo;
-          setDragOverInfo(null);
-          dragIndexRef.current = null;
-          stopAutoScroll();
-          if (from === null || !info || from === idx) return;
-          const selection = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : selectedPageIndices;
-          onReorder(selection.includes(from) ? selection : [from], idx + (info.before ? 0 : 1));
-        }
-      };
-    }
-    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
-      Thumbnail,
-      {
-        p,
-        idx,
-        isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
-        onSelect,
-        onRotate,
-        onDelete,
-        dragHandlers: dragHandlersFor(idx)
-      }
-    )), dragOverInfo && dragOverInfo.idx === idx && !dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(idx + 1) }))))));
-  }
-
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState11 } = React;
+  var { useState: useState23 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState11(null);
+    const [customizing, setCustomizing] = useState23(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -4339,11 +5734,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState12, useRef: useRef10, useEffect: useEffect10, useLayoutEffect: useLayoutEffect2 } = React;
+  var { useState: useState24, useRef: useRef17, useEffect: useEffect14, useLayoutEffect: useLayoutEffect3 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState12(false);
-    const containerRef = useRef10(null);
-    useEffect10(() => {
+    const [open, setOpen] = useState24(false);
+    const containerRef = useRef17(null);
+    useEffect14(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -4358,8 +5753,8 @@
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef10(null);
-    useLayoutEffect2(() => {
+    const menuRef = useRef17(null);
+    useLayoutEffect3(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
       const fit = () => {
@@ -4408,1025 +5803,13 @@
     );
   }
 
-  // apps/ZEditor/src/ui/App.jsx
-  var { useState: useState13, useRef: useRef11, useEffect: useEffect11, useLayoutEffect: useLayoutEffect3, useMemo: useMemo2 } = React;
-  function App() {
-    const [guidesOn, setGuidesOn] = useState13(false);
-    const [centerGuideOn, setCenterGuideOn] = useState13(false);
-    const [guideFormat, setGuideFormat] = useState13("match");
-    const [guideMarginIn, setGuideMarginIn] = useState13(DEFAULT_GUIDE_MARGIN_IN);
-    const [guideBleedIn, setGuideBleedIn] = useState13(DEFAULT_GUIDE_BLEED_IN);
-    const [pageNumbers, setPageNumbers] = useState13(DEFAULT_PAGE_NUMBERS);
-    const [onionSkinOn, setOnionSkinOn] = useState13(false);
-    const [onionSkinOpacity, setOnionSkinOpacity] = useState13(0.3);
-    const [onionGhostSrc, setOnionGhostSrc] = useState13(null);
-    const [pages, setPages] = useState13([]);
-    const [selectedIdx, setSelectedIdx] = useState13(null);
-    const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
-    const [undoStack, setUndoStack] = useState13([]);
-    const [redoStack, setRedoStack] = useState13([]);
-    const lastCommitRef = useRef11({ time: 0, key: null });
-    const clipboardRef = useRef11(null);
-    const [loading, setLoading] = useState13(false);
-    const [errorMsg, setErrorMsg] = useState13(null);
-    const [exporting, setExporting] = useState13(false);
-    const [sendingToArranger, setSendingToArranger] = useState13(false);
-    const [tool, setTool] = useState13("select");
-    const [selectedAnnId, setSelectedAnnId] = useState13(null);
-    const [selectedAnnIds, setSelectedAnnIds] = useState13([]);
-    const [selectedPageIndices, setSelectedPageIndices] = useState13([]);
-    const [editingAnnId, setEditingAnnId] = useState13(null);
-    const [croppingAnnId, setCroppingAnnId] = useState13(null);
-    const [pendingInsertFile, setPendingInsertFile] = useState13(null);
-    const [newDocOpen, setNewDocOpen] = useState13(false);
-    const [newDocFromProject, setNewDocFromProject] = useState13(false);
-    const [insertAfterPage, setInsertAfterPage] = useState13(0);
-    const [savingProject, setSavingProject] = useState13(false);
-    const [confirmAction, setConfirmAction] = useState13(null);
-    const [confirmStep, setConfirmStep] = useState13(1);
-    const [shortcutsOpen, setShortcutsOpen] = useState13(false);
-    const [zoomPercent, setZoomPercent] = useState13(ZOOM_PERCENT.initial);
-    const previewPaneRef = useRef11(null);
-    const zoomAnchorRef = useRef11(null);
-    function artboardElement() {
-      return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
-    }
-    function handleZoomChange(percent) {
-      const pane = previewPaneRef.current, board = artboardElement();
-      if (board) {
-        zoomAnchorRef.current = {
-          x: (pane.scrollLeft + pane.clientWidth / 2 - board.offsetLeft) / zoomPercent,
-          y: (pane.scrollTop + pane.clientHeight / 2 - board.offsetTop) / zoomPercent
-        };
-      }
-      setZoomPercent(percent);
-    }
-    useLayoutEffect3(() => {
-      const anchor = zoomAnchorRef.current, pane = previewPaneRef.current, board = artboardElement();
-      if (!anchor || !board) return;
-      zoomAnchorRef.current = null;
-      pane.scrollLeft = anchor.x * zoomPercent + board.offsetLeft - pane.clientWidth / 2;
-      pane.scrollTop = anchor.y * zoomPercent + board.offsetTop - pane.clientHeight / 2;
-    }, [zoomPercent]);
-    const [fontOptions, setFontOptions] = useState13(DEFAULT_FONT_OPTIONS);
-    const [textStyles, setTextStyles] = useState13(readStoredTextStyles);
-    useEffect11(() => {
-      try {
-        localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles));
-      } catch (err) {
-      }
-    }, [textStyles]);
-    function handleSaveTextStyle(name, ann) {
-      setTextStyles((prev) => [...prev.filter((s) => s.name !== name), { name, props: captureTextStyle(ann) }]);
-    }
-    function handleDeleteTextStyle(name) {
-      setTextStyles((prev) => prev.filter((s) => s.name !== name));
-    }
-    const [penColor, setPenColor] = useState13(PEN_DEFAULTS.color);
-    const [penWidth, setPenWidth] = useState13(PEN_DEFAULTS.width);
-    const [penTaper, setPenTaper] = useState13(0);
-    const [eraserMode, setEraserMode] = useState13("soft");
-    const [softEraser, setSoftEraser] = useState13(SOFT_ERASER_DEFAULTS);
-    const [highlighterColor, setHighlighterColor] = useState13(HIGHLIGHTER_DEFAULTS.color);
-    const [highlighterWidth, setHighlighterWidth] = useState13(HIGHLIGHTER_DEFAULTS.width);
-    const [highlighterTaper, setHighlighterTaper] = useState13(0);
-    const [textFontFamily, setTextFontFamily] = useState13(DEFAULT_FONT_OPTIONS[0]);
-    const [textFontSize, setTextFontSize] = useState13(16);
-    const [textBold, setTextBold] = useState13(false);
-    const [textItalic, setTextItalic] = useState13(false);
-    const [textUnderline, setTextUnderline] = useState13(false);
-    const [textColor, setTextColor] = useState13("#1a1a1a");
-    const [textAlign, setTextAlign] = useState13("left");
-    const [rectDefaults, setRectDefaults] = useState13(() => controlValues({}, RECT_CONTROLS));
-    const [layersOpen, setLayersOpen] = useState13(true);
-    const [layersPosition, setLayersPosition] = useState13(null);
-    function selectTool(t) {
-      setTool(t);
-      setEditingAnnId(null);
-      if (t === "select") return;
-      setSelectedAnnId(null);
-      setSelectedAnnIds([]);
-    }
-    const currentAnnotations = () => selectedIdx === null ? [] : pages[selectedIdx].annotations || [];
-    function handleSelectAnnotations(ids, additive) {
-      const existing = additive && selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [];
-      const all = [.../* @__PURE__ */ new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])];
-      setSelectedAnnId(all.length > 0 ? all[0] : null);
-      setSelectedAnnIds(all.slice(1));
-    }
-    function handleRotateAnnotations(originals, degrees, cx, cy) {
-      if (selectedIdx === null) return;
-      const turned = new Map(originals.map((a) => [a.id, rotatedAnnotation(a, degrees, cx, cy)]));
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => turned.get(a.id) || a), "rotate:" + [...turned.keys()].join());
-    }
-    function handleMoveAnnotations(originals, dx, dy) {
-      if (selectedIdx === null) return;
-      const moved = new Map(originals.map((a) => [a.id, translatedAnnotation(a, dx, dy)]));
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => moved.get(a.id) || a), "move:" + [...moved.keys()].join());
-    }
-    function finishTextEdit() {
-      if (editingAnnId === null) return;
-      const edited = selectedIdx === null ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === editingAnnId);
-      setEditingAnnId(null);
-      setTool("select");
-      if (edited && !edited.text.trim()) {
-        updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== edited.id), "ann:" + edited.id);
-        setSelectedAnnId((id) => id === edited.id ? null : id);
-      }
-    }
-    function handleSelectAnnotation(id, shiftKey, single) {
-      if (id === null) {
-        setSelectedAnnId(null);
-        setSelectedAnnIds([]);
-        return;
-      }
-      const members = single ? [id] : withGroupMates(currentAnnotations(), [id]);
-      if (!shiftKey) {
-        setSelectedAnnId(id);
-        setSelectedAnnIds(members.filter((m) => m !== id));
-        return;
-      }
-      const currentAll = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
-      if (currentAll.includes(id)) {
-        const next = currentAll.filter((x) => !members.includes(x));
-        setSelectedAnnId(next.length > 0 ? next[0] : null);
-        setSelectedAnnIds(next.slice(1));
-      } else {
-        setSelectedAnnIds([.../* @__PURE__ */ new Set([...currentAll, ...members.filter((m) => m !== id)])]);
-        setSelectedAnnId(id);
-      }
-    }
-    function selectedAnnotationIds() {
-      return [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
-    }
-    function handleGroupSelection() {
-      const ids = selectedAnnotationIds();
-      if (selectedIdx === null || ids.length < 2) return;
-      const groupId = "g" + nextAnnIdRef.current++;
-      updateAnnotationsFor(selectedIdx, (anns) => {
-        const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
-        const topIndex = Math.max(...anns.map((a, i) => ids.includes(a.id) ? i : -1));
-        const rest = anns.filter((a) => !ids.includes(a.id));
-        rest.splice(topIndex + 1 - members.length, 0, ...members);
-        return rest;
-      });
-    }
-    function handleUngroupSelection() {
-      const ids = selectedAnnotationIds();
-      if (selectedIdx === null) return;
-      const groups = new Set(currentAnnotations().filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
-      if (groups.size === 0) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => groups.has(a.groupId) ? { ...a, groupId: void 0 } : a));
-    }
-    function handleSelectPage(idx, shiftKey) {
-      if (!shiftKey || idx === null) {
-        setSelectedIdx(idx);
-        setSelectedPageIndices([]);
-        return;
-      }
-      const currentAll = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : [...selectedPageIndices];
-      if (currentAll.includes(idx)) {
-        const next = currentAll.filter((x) => x !== idx);
-        setSelectedIdx(next.length > 0 ? next[0] : null);
-        setSelectedPageIndices(next.slice(1));
-      } else {
-        setSelectedPageIndices(currentAll);
-        setSelectedIdx(idx);
-      }
-    }
-    function handleSelectAllPages() {
-      if (pages.length === 0) return;
-      const primary = selectedIdx !== null ? selectedIdx : 0;
-      setSelectedIdx(primary);
-      setSelectedPageIndices(pages.map((_, i) => i).filter((i) => i !== primary));
-    }
-    function pagesActedOn(idx) {
-      const inMultiSelection = selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx));
-      return inMultiSelection ? [selectedIdx, ...selectedPageIndices] : [idx];
-    }
-    const pdfDocsRef = useRef11({});
-    const fileInputRef = useRef11(null);
-    const imageInputRef = useRef11(null);
-    const insertPdfInputRef = useRef11(null);
-    const projectInputRef = useRef11(null);
-    const [projectFile, setProjectFile] = useState13(null);
-    const [docTitle, setDocTitle] = useState13("");
-    const [justSaved, setJustSaved] = useState13(false);
-    const justSavedTimerRef = useRef11(null);
-    function flashSaved() {
-      setJustSaved(true);
-      clearTimeout(justSavedTimerRef.current);
-      justSavedTimerRef.current = setTimeout(() => setJustSaved(false), 1800);
-    }
-    const nextKeyRef = useRef11(1);
-    const nextAnnIdRef = useRef11(1);
-    const nextDocIdRef = useRef11(1);
-    const pageSizeRef = useRef11(null);
-    const pageFilter = useMemo2(() => selectedPage && selectedPage.filter || DEFAULT_PAGE_FILTER, [selectedPage]);
-    const duotoneDarkRgb = hexToRgb(pageFilter.darkColor || DEFAULT_DUOTONE_DARK);
-    const duotoneLightRgb = hexToRgb(pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT);
-    useEffect11(() => {
-      if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) {
-        setOnionGhostSrc(null);
-        return;
-      }
-      const prevPage = pages[selectedIdx - 1];
-      if (!prevPage) {
-        setOnionGhostSrc(null);
-        return;
-      }
-      let cancelled = false;
-      (async () => {
-        try {
-          const canvas = await renderPageToCanvas(prevPage, pdfDocsRef, MAIN_SCALE, prevPage.filter || DEFAULT_PAGE_FILTER);
-          if (!cancelled) setOnionGhostSrc(canvas.toDataURL());
-        } catch (err) {
-          if (!cancelled) setOnionGhostSrc(null);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [onionSkinOn, selectedIdx]);
-    async function renderThumb(doc, pageNumber, rotation) {
-      const pdfPage = await doc.getPage(pageNumber);
-      const viewport = pdfPage.getViewport({ scale: THUMB_SCALE, rotation });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d");
-      await pdfPage.render({ canvasContext: ctx, viewport }).promise;
-      return canvas.toDataURL();
-    }
-    async function handleFile(file) {
-      setErrorMsg(null);
-      setLoading(true);
-      try {
-        const buf = await file.arrayBuffer();
-        const doc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
-        const docId = "doc" + nextDocIdRef.current++;
-        pdfDocsRef.current = { [docId]: { doc, bytes: buf } };
-        const newPages = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const dataUrl = await renderThumb(doc, i, 0);
-          newPages.push({ key: nextKeyRef.current++, docId, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
-        }
-        if (!pageSizeRef.current) {
-          const p1 = await doc.getPage(1);
-          const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
-          pageSizeRef.current = { width: vp1.width, height: vp1.height };
-        }
-        setPages(newPages);
-        setSelectedIdx(newPages.length > 0 ? 0 : null);
-        setSelectedPageIndices([]);
-        setUndoStack([]);
-        setRedoStack([]);
-        setProjectFile(null);
-        setDocTitle(stripExtension(file.name) + " - " + titleStamp());
-      } catch (err) {
-        setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setLoading(false);
-      }
-    }
-    function handleLoadClick() {
-      fileInputRef.current && fileInputRef.current.click();
-    }
-    function handleCreateBlankDocument({ width, height, pageCount }) {
-      setNewDocOpen(false);
-      setErrorMsg(null);
-      pdfDocsRef.current = {};
-      pageSizeRef.current = { width, height };
-      const thumb = makeBlankThumb(width, height, 0);
-      const newPages = Array.from({ length: pageCount }, () => ({
-        key: nextKeyRef.current++,
-        isBlank: true,
-        rotation: 0,
-        width,
-        height,
-        dataUrl: thumb,
-        annotations: []
-      }));
-      setPages(newPages);
-      setSelectedIdx(0);
-      setSelectedPageIndices([]);
-      setSelectedAnnId(null);
-      setSelectedAnnIds([]);
-      setUndoStack([]);
-      setRedoStack([]);
-      setProjectFile(null);
-      setDocTitle("New Zine - " + titleStamp());
-    }
-    function handleNewDocumentOpenPdf() {
-      setNewDocOpen(false);
-      handleLoadClick();
-    }
-    function handleFileInputChange(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (file) handleFile(file);
-    }
-    function handleInsertPdfClick() {
-      insertPdfInputRef.current && insertPdfInputRef.current.click();
-    }
-    function handleInsertPdfInputChange(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (!file) return;
-      setInsertAfterPage(selectedIdx !== null ? selectedIdx + 1 : pages.length);
-      setPendingInsertFile(file);
-    }
-    async function handleConfirmInsertPdf() {
-      const file = pendingInsertFile;
-      const atIndex = Math.max(0, Math.min(pages.length, insertAfterPage));
-      setPendingInsertFile(null);
-      if (!file) return;
-      setErrorMsg(null);
-      setLoading(true);
-      try {
-        const buf = await file.arrayBuffer();
-        const doc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
-        const docId = "doc" + nextDocIdRef.current++;
-        pdfDocsRef.current[docId] = { doc, bytes: buf };
-        const newPages = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const dataUrl = await renderThumb(doc, i, 0);
-          newPages.push({ key: nextKeyRef.current++, docId, pageNumber: i, rotation: 0, dataUrl, isBlank: false, annotations: [] });
-        }
-        if (!pageSizeRef.current) {
-          const p1 = await doc.getPage(1);
-          const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
-          pageSizeRef.current = { width: vp1.width, height: vp1.height };
-        }
-        recordUndoCheckpoint();
-        setPages((prev) => {
-          const next = prev.slice();
-          next.splice(atIndex, 0, ...newPages);
-          return next;
-        });
-        setSelectedIdx(atIndex);
-        setSelectedPageIndices([]);
-      } catch (err) {
-        setErrorMsg("Couldn't insert that PDF — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setLoading(false);
-      }
-    }
-    async function buildExportPdfBytes() {
-      const outDoc = await PDFLib.PDFDocument.create();
-      for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
-        const page = pages[pageIdx];
-        const canvas = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
-        const pngBytes = await canvasToArrayBuffer(canvas);
-        const pngImage = await outDoc.embedPng(pngBytes);
-        const pageWidthPts = canvas.width / EXPORT_SCALE;
-        const pageHeightPts = canvas.height / EXPORT_SCALE;
-        const outPage = outDoc.addPage([pageWidthPts, pageHeightPts]);
-        outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
-      }
-      return outDoc.save();
-    }
-    async function handleExportPdf() {
-      if (pages.length === 0 || exporting) return;
-      setErrorMsg(null);
-      setExporting(true);
-      try {
-        const pdfBytes = await buildExportPdfBytes();
-        await savePdfBytes(pdfBytes, titleToFileName(docTitle, ".pdf"));
-      } catch (err) {
-        setErrorMsg("Couldn't export PDF — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setExporting(false);
-      }
-    }
-    async function handleSaveProject({ saveAs = false } = {}) {
-      if (pages.length === 0 || savingProject) return;
-      setErrorMsg(null);
-      setSavingProject(true);
-      try {
-        const docs = {};
-        for (const docId of Object.keys(pdfDocsRef.current)) {
-          docs[docId] = arrayBufferToBase64(pdfDocsRef.current[docId].bytes);
-        }
-        const usedFamilies = /* @__PURE__ */ new Set();
-        pages.forEach((p) => (p.annotations || []).forEach((a) => {
-          if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily);
-        }));
-        const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
-        const project = {
-          version: 2,
-          // 2: the annotation list is the stacking order
-          title: docTitle,
-          docs,
-          fonts,
-          textStyles,
-          pages: pages.map(({ dataUrl, ...rest }) => rest),
-          settings: {
-            guidesOn,
-            guideFormat,
-            guideMarginIn,
-            guideBleedIn,
-            centerGuideOn,
-            onionSkinOn,
-            onionSkinOpacity,
-            pageNumbers
-          }
-        };
-        const json = JSON.stringify(project);
-        if (!saveAs && projectFile) {
-          try {
-            await writeFileHandle(projectFile.handle, json);
-            flashSaved();
-            return;
-          } catch (err) {
-          }
-        }
-        const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"]);
-        if (handle !== "cancelled") flashSaved();
-        if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
-      } catch (err) {
-        setErrorMsg("Couldn't save the project — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setSavingProject(false);
-      }
-    }
-    async function openProjectPicker() {
-      if (typeof window.showOpenFilePicker === "function") {
-        try {
-          const [handle] = await window.showOpenFilePicker({
-            types: [{ description: "ZEditor project file", accept: { "application/json": [".znow"] } }]
-          });
-          handleLoadProjectFile(await handle.getFile(), handle);
-          return;
-        } catch (err) {
-          if (err && err.name === "AbortError") return;
-        }
-      }
-      projectInputRef.current && projectInputRef.current.click();
-    }
-    function handleNewProjectClick() {
-      setConfirmAction("newProject");
-      setConfirmStep(1);
-    }
-    function handleLoadProjectClick() {
-      if (pages.length > 0) {
-        setConfirmAction("loadProject");
-        setConfirmStep(1);
-      } else {
-        openProjectPicker();
-      }
-    }
-    function handleConfirmProceed() {
-      setConfirmStep(2);
-    }
-    function handleConfirmCancel() {
-      setConfirmAction(null);
-      setConfirmStep(1);
-    }
-    function handleConfirmYes() {
-      const action = confirmAction;
-      setConfirmAction(null);
-      setConfirmStep(1);
-      if (action === "newProject") {
-        setNewDocFromProject(true);
-        setNewDocOpen(true);
-      } else if (action === "loadProject") openProjectPicker();
-    }
-    function handleProjectInputChange(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (file) handleLoadProjectFile(file);
-    }
-    async function handleLoadProjectFile(file, handle = null) {
-      setErrorMsg(null);
-      setLoading(true);
-      try {
-        const text = await file.text();
-        const project = JSON.parse(text);
-        if (!project || !Array.isArray(project.pages)) throw new Error("That doesn't look like a ZEditor project file.");
-        const newDocsMap = {};
-        for (const docId of Object.keys(project.docs || {})) {
-          const bytes = base64ToArrayBuffer(project.docs[docId]);
-          const doc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
-          newDocsMap[docId] = { doc, bytes };
-        }
-        pdfDocsRef.current = newDocsMap;
-        const loadedFamilies = [];
-        for (const font of project.fonts || []) {
-          if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) {
-            loadedFamilies.push(font.family);
-            continue;
-          }
-          try {
-            await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
-            customFontStore.push({ family: font.family, data: font.data });
-            loadedFamilies.push(font.family);
-          } catch (err) {
-          }
-        }
-        if (Array.isArray(project.textStyles) && project.textStyles.length) {
-          const incoming = project.textStyles.filter((s2) => s2 && s2.name && s2.props);
-          setTextStyles((prev) => [...prev.filter((s2) => !incoming.some((i) => i.name === s2.name)), ...incoming]);
-        }
-        if (loadedFamilies.length) setFontOptions((prev) => Array.from(/* @__PURE__ */ new Set([...prev, ...loadedFamilies])).sort((a, b) => a.localeCompare(b)));
-        const newPages = await Promise.all(project.pages.map(async (p) => {
-          const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderThumb(newDocsMap[p.docId].doc, p.pageNumber, p.rotation);
-          const annotations = project.version >= 2 ? p.annotations : legacyLayerOrder(p.annotations || []);
-          return { ...p, annotations, key: nextKeyRef.current++, dataUrl };
-        }));
-        let maxDocNum = 0;
-        Object.keys(newDocsMap).forEach((id) => {
-          const m = /^doc(\d+)$/.exec(id);
-          if (m) maxDocNum = Math.max(maxDocNum, Number(m[1]));
-        });
-        nextDocIdRef.current = maxDocNum + 1;
-        let maxAnnId = 0;
-        newPages.forEach((p) => (p.annotations || []).forEach((a) => {
-          maxAnnId = Math.max(maxAnnId, a.id || 0);
-        }));
-        nextAnnIdRef.current = maxAnnId + 1;
-        if (!pageSizeRef.current) {
-          const firstReal = newPages.find((p) => !p.isBlank);
-          if (firstReal) {
-            const p1 = await newDocsMap[firstReal.docId].doc.getPage(firstReal.pageNumber);
-            const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
-            pageSizeRef.current = { width: vp1.width, height: vp1.height };
-          } else if (newPages.length > 0) {
-            pageSizeRef.current = { width: newPages[0].width, height: newPages[0].height };
-          }
-        }
-        setPages(newPages);
-        setSelectedIdx(newPages.length > 0 ? 0 : null);
-        setSelectedPageIndices([]);
-        setUndoStack([]);
-        setRedoStack([]);
-        setProjectFile(handle ? { handle, name: handle.name } : null);
-        setDocTitle(typeof project.title === "string" && project.title ? project.title : stripExtension(file.name));
-        const s = project.settings || {};
-        if (s.guidesOn !== void 0) setGuidesOn(s.guidesOn);
-        if (s.centerGuideOn !== void 0) setCenterGuideOn(s.centerGuideOn);
-        if (s.guideFormat !== void 0) setGuideFormat(s.guideFormat);
-        if (s.guideMarginIn !== void 0) setGuideMarginIn(s.guideMarginIn);
-        if (s.guideBleedIn !== void 0) setGuideBleedIn(s.guideBleedIn);
-        if (s.onionSkinOn !== void 0) setOnionSkinOn(s.onionSkinOn);
-        if (s.onionSkinOpacity !== void 0) setOnionSkinOpacity(s.onionSkinOpacity);
-        setPageNumbers({ ...DEFAULT_PAGE_NUMBERS, ...s.pageNumbers || {} });
-      } catch (err) {
-        setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setLoading(false);
-      }
-    }
-    async function handleSendToZineArranger() {
-      if (pages.length === 0 || exporting || sendingToArranger) return;
-      setErrorMsg(null);
-      setSendingToArranger(true);
-      let win = null;
-      try {
-        win = window.open("../ZineArranger/index.html", "_blank");
-        if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
-        const readyPromise = new Promise((resolve, reject) => {
-          const timeoutId = setTimeout(() => {
-            window.removeEventListener("message", onMessage);
-            reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
-          }, 15e3);
-          function onMessage(event) {
-            if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
-            clearTimeout(timeoutId);
-            window.removeEventListener("message", onMessage);
-            resolve();
-          }
-          window.addEventListener("message", onMessage);
-        });
-        const pdfBytes = await buildExportPdfBytes();
-        const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
-        await readyPromise;
-        win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename: titleToFileName(docTitle, ".pdf") }, "*", [buffer]);
-      } catch (err) {
-        setErrorMsg("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
-      } finally {
-        setSendingToArranger(false);
-      }
-    }
-    async function handleRotate(idx) {
-      const updatesByKey = /* @__PURE__ */ new Map();
-      for (const i of pagesActedOn(idx)) {
-        const target = pages[i];
-        const rotation = (target.rotation + 90) % 360;
-        const dataUrl = target.isBlank ? makeBlankThumb(target.width, target.height, rotation) : await renderThumb(docFor(pdfDocsRef, target), target.pageNumber, rotation);
-        updatesByKey.set(target.key, { rotation, dataUrl });
-      }
-      recordUndoCheckpoint();
-      setPages((prev) => prev.map((p) => updatesByKey.has(p.key) ? { ...p, ...updatesByKey.get(p.key) } : p));
-    }
-    function handleInsertBlank(atIndex) {
-      const size = pageSizeRef.current || DEFAULT_PAGE_SIZE;
-      const newPage = {
-        key: nextKeyRef.current++,
-        isBlank: true,
-        rotation: 0,
-        width: size.width,
-        height: size.height,
-        dataUrl: makeBlankThumb(size.width, size.height, 0),
-        annotations: []
-      };
-      recordUndoCheckpoint();
-      setPages((prev) => {
-        const next = prev.slice();
-        next.splice(atIndex, 0, newPage);
-        return next;
-      });
-      setSelectedIdx(atIndex);
-      setSelectedPageIndices([]);
-    }
-    function handleDelete(idx) {
-      recordUndoCheckpoint();
-      setPages((prev) => {
-        const next = prev.filter((_, i) => i !== idx);
-        return next;
-      });
-      setSelectedIdx((prevSel) => {
-        if (prevSel === null) return null;
-        if (idx === prevSel) return null;
-        if (idx < prevSel) return prevSel - 1;
-        return prevSel;
-      });
-    }
-    function handleDeleteSelectedPages() {
-      if (selectedIdx === null) return;
-      const idxToDelete = /* @__PURE__ */ new Set([selectedIdx, ...selectedPageIndices]);
-      recordUndoCheckpoint();
-      setPages((prev) => prev.filter((_, i) => !idxToDelete.has(i)));
-      setSelectedIdx(null);
-      setSelectedPageIndices([]);
-    }
-    function handleDeleteThumbnail(idx) {
-      if (selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx))) {
-        handleDeleteSelectedPages();
-      } else {
-        handleDelete(idx);
-      }
-    }
-    function handleReorder(fromIndices, insertBefore) {
-      const newOrder = orderAfterMove(pages.length, fromIndices, insertBefore);
-      if (!newOrder) return;
-      const newIdxOf = new Array(newOrder.length);
-      newOrder.forEach((oldIdx, newIdx) => {
-        newIdxOf[oldIdx] = newIdx;
-      });
-      recordUndoCheckpoint();
-      setPages((prev) => newOrder.map((oldIdx) => prev[oldIdx]));
-      setSelectedIdx((prevSel) => prevSel === null ? null : newIdxOf[prevSel]);
-      setSelectedPageIndices((prevSel) => prevSel.map((oldIdx) => newIdxOf[oldIdx]));
-    }
-    function stripDataUrls(pagesArr) {
-      return pagesArr.map(({ dataUrl, ...rest }) => rest);
-    }
-    function recordUndoCheckpoint(coalesceKey) {
-      const now = Date.now();
-      if (coalesceKey && lastCommitRef.current.key === coalesceKey && now - lastCommitRef.current.time < UNDO_COALESCE_MS) {
-        lastCommitRef.current.time = now;
-        return;
-      }
-      lastCommitRef.current = { time: now, key: coalesceKey || null };
-      setUndoStack((stack) => {
-        const next = [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }];
-        return next.length > MAX_UNDO_HISTORY ? next.slice(next.length - MAX_UNDO_HISTORY) : next;
-      });
-      setRedoStack([]);
-    }
-    async function restoreSnapshot(snapshot) {
-      const currentByKey = new Map(pages.map((p) => [p.key, p]));
-      const withThumbs = await Promise.all(snapshot.pages.map(async (p) => {
-        const existing = currentByKey.get(p.key);
-        const reusable = existing && existing.dataUrl && existing.rotation === p.rotation && existing.isBlank === p.isBlank && existing.pageNumber === p.pageNumber && existing.docId === p.docId && existing.width === p.width && existing.height === p.height;
-        if (reusable) return { ...p, dataUrl: existing.dataUrl };
-        const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderThumb(docFor(pdfDocsRef, p), p.pageNumber, p.rotation);
-        return { ...p, dataUrl };
-      }));
-      setPages(withThumbs);
-      setSelectedIdx(snapshot.selectedIdx);
-      setSelectedPageIndices(snapshot.selectedPageIndices);
-    }
-    function handleUndo() {
-      if (undoStack.length === 0) return;
-      const entry = undoStack[undoStack.length - 1];
-      setUndoStack((stack) => stack.slice(0, -1));
-      setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
-      lastCommitRef.current = { time: 0, key: null };
-      restoreSnapshot(entry);
-    }
-    function handleRedo() {
-      if (redoStack.length === 0) return;
-      const entry = redoStack[redoStack.length - 1];
-      setRedoStack((stack) => stack.slice(0, -1));
-      setUndoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
-      lastCommitRef.current = { time: 0, key: null };
-      restoreSnapshot(entry);
-    }
-    const saveProjectRef = useRef11(handleSaveProject);
-    saveProjectRef.current = handleSaveProject;
-    useEffect11(() => {
-      function handleKeyDown(e) {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-          e.preventDefault();
-          if (!(pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen)) saveProjectRef.current({ saveAs: e.shiftKey });
-          return;
-        }
-        const tag = e.target && e.target.tagName || "";
-        if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
-        if (pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen) return;
-        const key = e.key.toLowerCase();
-        const mod = e.ctrlKey || e.metaKey;
-        if (mod) {
-          if (key === "z" && !e.shiftKey) {
-            e.preventDefault();
-            handleUndo();
-            return;
-          }
-          if (key === "z" && e.shiftKey || key === "y") {
-            e.preventDefault();
-            handleRedo();
-            return;
-          }
-          if (key === "r") {
-            e.preventDefault();
-            if (selectedIdx !== null) handleRotate(selectedIdx);
-            return;
-          }
-          if (key === "g") {
-            e.preventDefault();
-            if (e.shiftKey) handleUngroupSelection();
-            else handleGroupSelection();
-            return;
-          }
-          if (key === "c") {
-            if (selectedIdx !== null && selectedAnnId !== null) {
-              const ann = (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
-              if (ann) {
-                e.preventDefault();
-                clipboardRef.current = JSON.parse(JSON.stringify(ann));
-              }
-            }
-            return;
-          }
-          if (key === "v") {
-            if (clipboardRef.current && selectedIdx !== null) {
-              e.preventDefault();
-              const clip = clipboardRef.current;
-              const id = nextAnnIdRef.current++;
-              const newAnn = { ...translatedAnnotation(clip, 20, 20), id, groupId: void 0 };
-              updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
-              setSelectedAnnId(id);
-            }
-            return;
-          }
-          return;
-        }
-        if (key === "delete") {
-          e.preventDefault();
-          if (selectedAnnId !== null) handleDeleteAnnotation();
-          else if (selectedIdx !== null) {
-            if (selectedPageIndices.length > 0) handleDeleteSelectedPages();
-            else handleDelete(selectedIdx);
-          }
-          return;
-        }
-        const nudge = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] }[key];
-        if (nudge && selectedAnnId !== null) {
-          e.preventDefault();
-          const step = e.shiftKey ? 10 : 1;
-          const ids = [selectedAnnId, ...selectedAnnIds];
-          handleMoveAnnotations((pages[selectedIdx].annotations || []).filter((a) => ids.includes(a.id)), nudge[0] * step, nudge[1] * step);
-          return;
-        }
-        if (key === "v") {
-          selectTool("select");
-          return;
-        }
-        if (key === "t") {
-          selectTool("text");
-          return;
-        }
-        if (key === "i") {
-          handleImageToolClick();
-          return;
-        }
-        if (key === "r") {
-          selectTool("rect");
-          return;
-        }
-        if (key === "e") {
-          selectTool("ellipse");
-          return;
-        }
-        if (key === "h") {
-          selectTool("highlighter");
-          return;
-        }
-        if (key === "d") {
-          selectTool("pen");
-          return;
-        }
-        if (key === "arrowup") {
-          e.preventDefault();
-          setSelectedPageIndices([]);
-          setSelectedIdx((cur) => cur === null ? cur : Math.max(0, cur - 1));
-          return;
-        }
-        if (key === "arrowdown") {
-          e.preventDefault();
-          setSelectedPageIndices([]);
-          setSelectedIdx((cur) => cur === null ? cur : Math.min(pages.length - 1, cur + 1));
-          return;
-        }
-      }
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [undoStack, redoStack, pages, selectedIdx, selectedAnnId, selectedAnnIds, selectedPageIndices, pendingInsertFile, confirmAction, shortcutsOpen, newDocOpen]);
-    useEffect11(() => {
-      function handlePaste(e) {
-        const tag = e.target && e.target.tagName || "";
-        if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
-        if (pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen || selectedIdx === null) return;
-        const items = e.clipboardData && e.clipboardData.items;
-        if (!items) return;
-        const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
-        if (!imageItem) return;
-        e.preventDefault();
-        addImageAnnotationFromFile(imageItem.getAsFile(), selectedIdx);
-      }
-      window.addEventListener("paste", handlePaste);
-      return () => window.removeEventListener("paste", handlePaste);
-    }, [selectedIdx, pendingInsertFile, confirmAction, shortcutsOpen, newDocOpen]);
-    function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
-      recordUndoCheckpoint(coalesceKey);
-      setPages((prev) => prev.map((p, i) => i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p));
-    }
-    function updatePageFilter(patch) {
-      if (selectedIdx === null) return;
-      const targets = /* @__PURE__ */ new Set([selectedIdx, ...selectedPageIndices]);
-      recordUndoCheckpoint("pagefilter:" + [...targets].sort((a, b) => a - b).join(","));
-      setPages((prev) => prev.map((p, i) => targets.has(i) ? { ...p, filter: { ...p.filter || DEFAULT_PAGE_FILTER, ...patch } } : p));
-    }
-    function handleAddText(x, y, width) {
-      if (selectedIdx === null) return;
-      const id = nextAnnIdRef.current++;
-      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
-        id,
-        type: "text",
-        x,
-        y,
-        text: "",
-        width,
-        fontFamily: textFontFamily,
-        fontSize: textFontSize,
-        bold: textBold,
-        italic: textItalic,
-        underline: textUnderline,
-        color: textColor,
-        align: textAlign
-      }], "ann:" + id);
-      setSelectedAnnId(id);
-      setSelectedAnnIds([]);
-      setEditingAnnId(id);
-    }
-    function handleAddRect(box) {
-      if (selectedIdx === null) return;
-      const id = nextAnnIdRef.current++;
-      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
-        id,
-        type: "rect",
-        shape: tool === "ellipse" ? "ellipse" : void 0,
-        x: box.x,
-        y: box.y,
-        width: Math.max(MIN_RECT_SIZE, box.width),
-        height: Math.max(MIN_RECT_SIZE, box.height),
-        ...rectDefaults
-      }]);
-      selectTool("select");
-      setSelectedAnnId(id);
-    }
-    function handleSelectLayer(id, shiftKey, single) {
-      selectTool("select");
-      handleSelectAnnotation(id, shiftKey, single);
-    }
-    function handleToggleLayerFlag(ann, flag) {
-      const on = !ann[flag];
-      handleUpdateAnnotation(ann.id, { [flag]: on });
-      if (on && (ann.id === selectedAnnId || selectedAnnIds.includes(ann.id))) handleSelectAnnotation(ann.id, true, true);
-    }
-    function handleReorderLayers(draggedIds, insertBeforeRow) {
-      const topFirst = (pages[selectedIdx].annotations || []).slice().reverse();
-      const ids = withGroupMates(topFirst, draggedIds);
-      const fromRows = topFirst.flatMap((a, row) => ids.includes(a.id) ? [row] : []);
-      const newOrder = orderAfterMove(topFirst.length, fromRows, insertBeforeRow);
-      if (newOrder) updateAnnotationsFor(selectedIdx, () => newOrder.map((row) => topFirst[row]).reverse());
-    }
-    function handleAddStroke(stroke) {
-      if (selectedIdx === null) return;
-      const id = nextAnnIdRef.current++;
-      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
-        id,
-        type: "stroke",
-        tool: stroke.tool,
-        points: stroke.points,
-        color: stroke.color,
-        strokeWidth: stroke.strokeWidth,
-        taper: stroke.taper || 0
-      }]);
-    }
-    function handleImageToolClick() {
-      if (selectedIdx === null) return;
-      imageInputRef.current && imageInputRef.current.click();
-    }
-    function addImageAnnotationFromFile(file, pageIdx) {
-      if (!file || pageIdx === null) return;
-      const pageAtChooseTime = pages[pageIdx];
-      const reader = new FileReader();
-      reader.onload = () => {
-        const src = reader.result;
-        const img = new Image();
-        img.onload = async () => {
-          const MAX_W = 260;
-          const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
-          const width = img.naturalWidth * scale;
-          const height = img.naturalHeight * scale;
-          const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
-          const x = Math.max(0, (display.width - width) / 2);
-          const y = Math.max(0, (display.height - height) / 2);
-          const id = nextAnnIdRef.current++;
-          updateAnnotationsFor(pageIdx, (anns) => [...anns, {
-            id,
-            type: "image",
-            x,
-            y,
-            width,
-            height,
-            naturalWidth: img.naturalWidth,
-            naturalHeight: img.naturalHeight,
-            src
-          }]);
-          selectTool("select");
-          setSelectedAnnId(id);
-        };
-        img.src = src;
-      };
-      reader.readAsDataURL(file);
-    }
-    function handleImageFileChosen(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      addImageAnnotationFromFile(file, selectedIdx);
-    }
-    function handleUpdateAnnotation(id, patch) {
-      if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, ...patch } : a), "ann:" + id);
-    }
-    async function handleFlattenImage(ann) {
-      const pageIdx = selectedIdx;
-      const patch = await flattenedImagePatch(ann, pageFilter);
-      if (!patch) return;
-      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
-    }
-    async function handleRasterizeText(ann) {
-      const pageIdx = selectedIdx;
-      const patch = await rasterizedTextPatch(ann);
-      if (!patch) return;
-      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
-    }
-    async function handleRasterizeRect(ann) {
-      const pageIdx = selectedIdx;
-      const patch = await rasterizedRectPatch(ann);
-      if (!patch) return;
-      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
-    }
-    function handleDeleteAnnotation() {
-      if (selectedIdx === null || selectedAnnId === null) return;
-      const idsToDelete = [selectedAnnId, ...selectedAnnIds];
-      updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => !idsToDelete.includes(a.id)));
-      setSelectedAnnId(null);
-      setSelectedAnnIds([]);
-    }
-    function handleEraseStroke(id) {
-      if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id), "eraser");
-      setSelectedAnnId((cur) => cur === id ? null : cur);
-    }
-    function handleEraseImagePixels(id, src) {
-      if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, src } : a));
-    }
-    useEffect11(() => {
-      setSelectedAnnId(null);
-    }, [selectedIdx]);
-    useEffect11(() => {
-      if (croppingAnnId !== null && croppingAnnId !== selectedAnnId) setCroppingAnnId(null);
-    }, [selectedAnnId]);
-    function handleToggleCrop(id) {
-      setCroppingAnnId((cur) => cur === id ? null : id);
-    }
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle" }, "Compose zine pages"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: undoStack.length === 0, onClick: handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: redoStack.length === 0, onClick: handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" })))), /* @__PURE__ */ React.createElement(
+  // apps/ZEditor/src/ui/topbar/Topbar.jsx
+  function Topbar({ doc, history, view, edits, project, dialogs, exporter, status }) {
+    const { pages, selectedPage, pageFilter } = doc;
+    const { updatePageFilter } = edits;
+    const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
+    const { exporting, sendingToArranger } = exporter;
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle" }, "Compose zine pages"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" })))), /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "text",
@@ -5473,38 +5856,38 @@
           {
             key: "onion",
             label: "Onion Skin",
-            checked: onionSkinOn,
-            onToggle: setOnionSkinOn,
-            settings: /* @__PURE__ */ React.createElement(OnionSkinSettings, { opacity: onionSkinOpacity, onOpacityChange: setOnionSkinOpacity })
+            checked: view.onionSkinOn,
+            onToggle: view.setOnionSkinOn,
+            settings: /* @__PURE__ */ React.createElement(OnionSkinSettings, { opacity: view.onionSkinOpacity, onOpacityChange: view.setOnionSkinOpacity })
           },
           {
             key: "pageNumbers",
             label: "Page Numbers",
-            checked: pageNumbers.on,
-            onToggle: (on) => setPageNumbers((current) => ({ ...current, on })),
+            checked: view.pageNumbers.on,
+            onToggle: (on) => view.setPageNumbers((current) => ({ ...current, on })),
             settings: /* @__PURE__ */ React.createElement(
               PageNumbersSettings,
               {
-                settings: pageNumbers,
+                settings: view.pageNumbers,
                 pageCount: pages.length,
-                onChange: (patch) => setPageNumbers((current) => ({ ...current, ...patch }))
+                onChange: (patch) => view.setPageNumbers((current) => ({ ...current, ...patch }))
               }
             )
           },
           {
             key: "guides",
             label: "Guides",
-            checked: guidesOn,
-            onToggle: setGuidesOn,
+            checked: view.guidesOn,
+            onToggle: view.setGuidesOn,
             settings: /* @__PURE__ */ React.createElement(
               GuidesSettings,
               {
-                format: guideFormat,
-                onFormatChange: setGuideFormat,
-                marginIn: guideMarginIn,
-                onMarginChange: setGuideMarginIn,
-                bleedIn: guideBleedIn,
-                onBleedChange: setGuideBleedIn
+                format: view.guideFormat,
+                onFormatChange: view.setGuideFormat,
+                marginIn: view.guideMarginIn,
+                onMarginChange: view.setGuideMarginIn,
+                bleedIn: view.guideBleedIn,
+                onBleedChange: view.setGuideBleedIn
               }
             )
           }
@@ -5516,7 +5899,7 @@
         close,
         label: "New Project",
         disabled: pages.length === 0,
-        onClick: handleNewProjectClick,
+        onClick: dialogs.handleNewProjectClick,
         hint: "Start over by loading a different PDF — erases the current unsaved project"
       }
     ), /* @__PURE__ */ React.createElement(
@@ -5527,7 +5910,7 @@
         shortcut: "Ctrl+S",
         detail: projectFile ? projectFile.name : null,
         disabled: pages.length === 0 || savingProject,
-        onClick: () => handleSaveProject(),
+        onClick: () => project.handleSaveProject(),
         hint: projectFile ? "Saves over " + projectFile.name : "Saves an editable project file — pages, text, images, and settings — to reopen and keep editing later"
       }
     ), /* @__PURE__ */ React.createElement(
@@ -5537,7 +5920,7 @@
         label: "Save As…",
         shortcut: "Ctrl+Shift+S",
         disabled: pages.length === 0 || savingProject,
-        onClick: () => handleSaveProject({ saveAs: true }),
+        onClick: () => project.handleSaveProject({ saveAs: true }),
         hint: "Saves this project to a new file, and keeps saving there"
       }
     ), /* @__PURE__ */ React.createElement(
@@ -5545,8 +5928,8 @@
       {
         close,
         label: "Load Project",
-        disabled: loading,
-        onClick: handleLoadProjectClick,
+        disabled: status.loading,
+        onClick: dialogs.handleLoadProjectClick,
         hint: "Reopen a saved ZEditor project file"
       }
     ))), /* @__PURE__ */ React.createElement(TopMenu, { label: exporting ? "Exporting…" : sendingToArranger ? "Sending…" : "Export", solid: true }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
@@ -5555,7 +5938,7 @@
         close,
         label: "Export PDF",
         disabled: pages.length === 0 || exporting,
-        onClick: handleExportPdf
+        onClick: exporter.handleExportPdf
       }
     ), /* @__PURE__ */ React.createElement(
       MenuItem,
@@ -5563,242 +5946,185 @@
         close,
         label: "Send to ZineArranger",
         disabled: pages.length === 0 || exporting || sendingToArranger,
-        onClick: handleSendToZineArranger,
+        onClick: exporter.handleSendToZineArranger,
         hint: "Exports the current zine and opens it directly in ZineArranger — no manual save/reopen step"
       }
-    ))))), errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, errorMsg), /* @__PURE__ */ React.createElement("div", { className: "ze-body" }, /* @__PURE__ */ React.createElement(
+    )))));
+  }
+
+  // apps/ZEditor/src/ui/App.jsx
+  function App() {
+    const status = useStatus();
+    const doc = useDocumentState();
+    const history = useHistory(doc);
+    const view = useViewSettings();
+    const toolDefaults = useToolDefaults();
+    const selection = useSelection(doc);
+    const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
+    const pageOps = usePageOps({ doc, history, selection });
+    const project = useProject({ doc, history, status, view, toolDefaults });
+    const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
+    const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
+    const exporter = useExport({ doc, status, view, project });
+    const zoom = useZoom();
+    const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
+    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
+    useKeyboardShortcuts({ doc, history, selection, edits, pageOps, project, modalOpen });
+    const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
+    const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
+    const t = toolDefaults;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), /* @__PURE__ */ React.createElement("div", { className: "ze-body" }, /* @__PURE__ */ React.createElement(
       Sidebar,
       {
         pages,
         selectedIdx,
         selectedPageIndices,
-        onSelect: handleSelectPage,
-        onSelectAll: handleSelectAllPages,
-        onRotate: handleRotate,
-        onDelete: handleDeleteThumbnail,
-        onReorder: handleReorder,
-        onLoadClick: handleLoadClick,
-        onNewDocClick: () => {
-          setNewDocFromProject(false);
-          setNewDocOpen(true);
-        },
-        onInsertPdfClick: handleInsertPdfClick,
-        onInsertBlank: handleInsertBlank,
-        loading
+        onSelect: selection.handleSelectPage,
+        onSelectAll: selection.handleSelectAllPages,
+        onRotate: pageOps.handleRotate,
+        onDelete: pageOps.handleDeleteThumbnail,
+        onReorder: pageOps.handleReorder,
+        onLoadClick: files.handleLoadClick,
+        onNewDocClick: () => dialogs.openNewDocDialog(false),
+        onInsertPdfClick: files.handleInsertPdfClick,
+        onInsertBlank: pageOps.handleInsertBlank,
+        loading: status.loading
       }
-    ), /* @__PURE__ */ React.createElement("div", { className: "ze-compose-area" }, selectedPage && /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn" + (layersOpen ? " active" : ""),
-        "aria-pressed": layersOpen,
-        "aria-label": "Layers panel",
-        title: layersOpen ? "Minimize the Layers panel" : "Show the Layers panel",
-        onClick: () => setLayersOpen((open) => !open)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 3l9 5-9 5-9-5z" }), /* @__PURE__ */ React.createElement("path", { d: "M3 12.5l9 5 9-5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 17l9 5 9-5" }))
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn" + (centerGuideOn ? " active" : ""),
-        "aria-pressed": centerGuideOn,
-        "aria-label": "Center guide",
-        title: centerGuideOn ? "Hide the center guide" : "Show a guide down the middle of the page (for covers and two-page spreads)",
-        onClick: () => setCenterGuideOn((on) => !on)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "5", width: "18", height: "14", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M12 3v18", strokeDasharray: "2.5 2.5" }))
-    )), /* @__PURE__ */ React.createElement("div", { className: "ze-zoom-control" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Zoom (%)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: ZOOM_PERCENT.min, max: ZOOM_PERCENT.max, value: zoomPercent, onChange: handleZoomChange })), /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn",
-        title: "Delete selected (Delete)",
-        disabled: selectedAnnId === null,
-        onClick: handleDeleteAnnotation
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn ze-tool-icon-btn--round",
-        title: "Keyboard shortcuts",
-        "aria-label": "Keyboard shortcuts",
-        onClick: () => setShortcutsOpen(true)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 11v7" }), /* @__PURE__ */ React.createElement("path", { d: "M12 6.5v.01" }))
-    ))), /* @__PURE__ */ React.createElement("div", { className: "preview-pane", ref: previewPaneRef }, /* @__PURE__ */ React.createElement("div", { className: "preview-canvas-wrapper" }, /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("div", { className: "ze-compose-area" }, selectedPage && /* @__PURE__ */ React.createElement(ToolBar, { selection, edits, view, zoom, dialogs }), /* @__PURE__ */ React.createElement("div", { className: "preview-pane", ref: zoom.previewPaneRef }, /* @__PURE__ */ React.createElement("div", { className: "preview-canvas-wrapper" }, /* @__PURE__ */ React.createElement(
       ComposeCanvas,
       {
-        zoom: zoomPercent / 100,
-        pdfDocsRef,
+        zoom: zoom.zoomPercent / 100,
+        pdfDocsRef: doc.pdfDocsRef,
         page: selectedPage,
-        guidesOn,
-        centerGuideOn,
-        guideFormat,
-        guideMarginIn,
-        guideBleedIn,
+        guidesOn: view.guidesOn,
+        centerGuideOn: view.centerGuideOn,
+        guideFormat: view.guideFormat,
+        guideMarginIn: view.guideMarginIn,
+        guideBleedIn: view.guideBleedIn,
         pageFilter,
-        onionGhostSrc: onionSkinOn ? onionGhostSrc : null,
-        onionSkinOpacity,
-        pageNumberSpec: pageNumberSpec(pageNumbers, selectedIdx, pages.length),
+        onionGhostSrc: view.onionSkinOn ? onionGhostSrc : null,
+        onionSkinOpacity: view.onionSkinOpacity,
+        pageNumberSpec: pageNumberSpec(view.pageNumbers, selectedIdx, pages.length),
         tool,
-        penColor,
-        penWidth,
-        penTaper,
-        highlighterColor,
-        highlighterWidth,
-        highlighterTaper,
+        penColor: t.penColor,
+        penWidth: t.penWidth,
+        penTaper: t.penTaper,
+        highlighterColor: t.highlighterColor,
+        highlighterWidth: t.highlighterWidth,
+        highlighterTaper: t.highlighterTaper,
         annotations: selectedPage ? selectedPage.annotations || [] : [],
         selectedAnnId,
         selectedAnnIds,
         editingAnnId,
-        onStartTextEdit: setEditingAnnId,
-        onFinishTextEdit: finishTextEdit,
-        onSelectAnnotations: handleSelectAnnotations,
-        onMoveAnnotations: handleMoveAnnotations,
-        onRotateAnnotations: handleRotateAnnotations,
+        onStartTextEdit: selection.setEditingAnnId,
+        onFinishTextEdit: edits.finishTextEdit,
+        onSelectAnnotations: selection.handleSelectAnnotations,
+        onMoveAnnotations: edits.handleMoveAnnotations,
+        onRotateAnnotations: edits.handleRotateAnnotations,
         croppingAnnId,
-        onSelectAnnotation: handleSelectAnnotation,
-        onAddText: handleAddText,
-        onAddRect: handleAddRect,
-        onAddStroke: handleAddStroke,
-        onUpdateAnnotation: handleUpdateAnnotation,
-        onEraseStroke: handleEraseStroke,
-        onToggleCrop: handleToggleCrop,
-        eraserMode,
-        softEraser,
-        onEraseImagePixels: handleEraseImagePixels
+        onSelectAnnotation: selection.handleSelectAnnotation,
+        onAddText: edits.handleAddText,
+        onAddRect: edits.handleAddRect,
+        onAddStroke: edits.handleAddStroke,
+        onUpdateAnnotation: edits.handleUpdateAnnotation,
+        onEraseStroke: edits.handleEraseStroke,
+        onToggleCrop: selection.handleToggleCrop,
+        eraserMode: t.eraserMode,
+        softEraser: t.softEraser,
+        onEraseImagePixels: edits.handleEraseImagePixels
       }
     )))), selectedPage && /* @__PURE__ */ React.createElement(
       FormatPanel,
       {
         key: selectedAnnId,
         tool,
-        rectDefaults,
-        onChangeRectDefaults: (patch) => setRectDefaults((d) => ({ ...d, ...patch })),
+        rectDefaults: t.rectDefaults,
+        onChangeRectDefaults: (patch) => t.setRectDefaults((d) => ({ ...d, ...patch })),
         selectedAnn: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null,
-        onUpdate: handleUpdateAnnotation,
-        onFlattenImage: handleFlattenImage,
-        onRasterizeRect: handleRasterizeRect,
-        onRasterizeText: handleRasterizeText,
-        textStyles,
-        onSaveTextStyle: handleSaveTextStyle,
-        onDeleteTextStyle: handleDeleteTextStyle,
-        fontOptions,
-        setFontOptions,
+        onUpdate: edits.handleUpdateAnnotation,
+        onFlattenImage: edits.handleFlattenImage,
+        onRasterizeRect: edits.handleRasterizeRect,
+        onRasterizeText: edits.handleRasterizeText,
+        textStyles: t.textStyles,
+        onSaveTextStyle: t.handleSaveTextStyle,
+        onDeleteTextStyle: t.handleDeleteTextStyle,
+        fontOptions: t.fontOptions,
+        setFontOptions: t.setFontOptions,
         croppingAnnId,
-        onToggleCrop: handleToggleCrop,
-        textFontFamily,
-        textFontSize,
-        textBold,
-        textItalic,
-        textUnderline,
-        textColor,
-        textAlign,
-        onChangeTextFontFamily: setTextFontFamily,
-        onChangeTextFontSize: setTextFontSize,
-        onChangeTextBold: setTextBold,
-        onChangeTextItalic: setTextItalic,
-        onChangeTextUnderline: setTextUnderline,
-        onChangeTextColor: setTextColor,
-        onChangeTextAlign: setTextAlign,
-        penColor,
-        penWidth,
-        penTaper,
-        onChangePenColor: setPenColor,
-        onChangePenWidth: setPenWidth,
-        onChangePenTaper: setPenTaper,
-        highlighterColor,
-        highlighterWidth,
-        highlighterTaper,
-        onChangeHighlighterColor: setHighlighterColor,
-        onChangeHighlighterWidth: setHighlighterWidth,
-        onChangeHighlighterTaper: setHighlighterTaper,
-        eraserMode,
-        onChangeEraserMode: setEraserMode,
-        softEraser,
-        onChangeSoftEraser: (patch) => setSoftEraser((cur) => ({ ...cur, ...patch }))
+        onToggleCrop: selection.handleToggleCrop,
+        textFontFamily: t.textFontFamily,
+        textFontSize: t.textFontSize,
+        textBold: t.textBold,
+        textItalic: t.textItalic,
+        textUnderline: t.textUnderline,
+        textColor: t.textColor,
+        textAlign: t.textAlign,
+        onChangeTextFontFamily: t.setTextFontFamily,
+        onChangeTextFontSize: t.setTextFontSize,
+        onChangeTextBold: t.setTextBold,
+        onChangeTextItalic: t.setTextItalic,
+        onChangeTextUnderline: t.setTextUnderline,
+        onChangeTextColor: t.setTextColor,
+        onChangeTextAlign: t.setTextAlign,
+        penColor: t.penColor,
+        penWidth: t.penWidth,
+        penTaper: t.penTaper,
+        onChangePenColor: t.setPenColor,
+        onChangePenWidth: t.setPenWidth,
+        onChangePenTaper: t.setPenTaper,
+        highlighterColor: t.highlighterColor,
+        highlighterWidth: t.highlighterWidth,
+        highlighterTaper: t.highlighterTaper,
+        onChangeHighlighterColor: t.setHighlighterColor,
+        onChangeHighlighterWidth: t.setHighlighterWidth,
+        onChangeHighlighterTaper: t.setHighlighterTaper,
+        eraserMode: t.eraserMode,
+        onChangeEraserMode: t.setEraserMode,
+        softEraser: t.softEraser,
+        onChangeSoftEraser: (patch) => t.setSoftEraser((cur) => ({ ...cur, ...patch }))
       }
-    )), selectedPage && layersOpen && /* @__PURE__ */ React.createElement(
+    )), selectedPage && view.layersOpen && /* @__PURE__ */ React.createElement(
       LayersPanel,
       {
-        position: layersPosition,
-        onMove: setLayersPosition,
-        onMinimize: () => setLayersOpen(false),
+        position: view.layersPosition,
+        onMove: view.setLayersPosition,
+        onMinimize: () => view.setLayersOpen(false),
         annotations: selectedPage.annotations || [],
-        selectedIds: [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null),
-        onSelect: handleSelectLayer,
-        onGroup: handleGroupSelection,
-        onUngroup: handleUngroupSelection,
-        onToggleFlag: handleToggleLayerFlag,
-        onRename: (id, name) => handleUpdateAnnotation(id, { name }),
-        onReorder: handleReorderLayers
+        selectedIds: selection.selectedAnnotationIds(),
+        onSelect: selection.handleSelectLayer,
+        onGroup: edits.handleGroupSelection,
+        onUngroup: edits.handleUngroupSelection,
+        onToggleFlag: edits.handleToggleLayerFlag,
+        onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
+        onReorder: edits.handleReorderLayers
       }
-    ), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        ref: fileInputRef,
-        type: "file",
-        accept: "application/pdf",
-        style: { display: "none" },
-        onChange: handleFileInputChange
-      }
-    ), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        ref: imageInputRef,
-        type: "file",
-        accept: "image/*",
-        style: { display: "none" },
-        onChange: handleImageFileChosen
-      }
-    ), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        ref: insertPdfInputRef,
-        type: "file",
-        accept: "application/pdf",
-        style: { display: "none" },
-        onChange: handleInsertPdfInputChange
-      }
-    ), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        ref: projectInputRef,
-        type: "file",
-        accept: ".znow",
-        style: { display: "none" },
-        onChange: handleProjectInputChange
-      }
-    ), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
       InsertPdfDialog,
       {
-        file: pendingInsertFile,
+        file: files.pendingInsertFile,
         pageCount: pages.length,
-        afterPage: insertAfterPage,
-        onChangeAfterPage: setInsertAfterPage,
-        onConfirm: handleConfirmInsertPdf,
-        onCancel: () => setPendingInsertFile(null)
+        afterPage: files.insertAfterPage,
+        onChangeAfterPage: files.setInsertAfterPage,
+        onConfirm: files.handleConfirmInsertPdf,
+        onCancel: () => files.setPendingInsertFile(null)
       }
     ), /* @__PURE__ */ React.createElement(
       NewDocumentDialog,
       {
-        open: newDocOpen,
-        onCreate: handleCreateBlankDocument,
-        onOpenPdf: newDocFromProject ? handleNewDocumentOpenPdf : void 0,
-        onCancel: () => setNewDocOpen(false)
+        open: dialogs.newDocOpen,
+        onCreate: files.handleCreateBlankDocument,
+        onOpenPdf: dialogs.newDocFromProject ? files.handleNewDocumentOpenPdf : void 0,
+        onCancel: () => dialogs.setNewDocOpen(false)
       }
-    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: shortcutsOpen, onClose: () => setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(
       ConfirmDialog,
       {
-        step: confirmAction ? confirmStep : 0,
-        onProceed: handleConfirmProceed,
-        onYes: handleConfirmYes,
-        onCancel: handleConfirmCancel
+        step: dialogs.confirmAction ? dialogs.confirmStep : 0,
+        onProceed: dialogs.handleConfirmProceed,
+        onYes: dialogs.handleConfirmYes,
+        onCancel: dialogs.handleConfirmCancel
       }
-    ), /* @__PURE__ */ React.createElement("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("filter", { id: "ze-filter-grayscale", colorInterpolationFilters: "sRGB" }, /* @__PURE__ */ React.createElement("feColorMatrix", { type: "matrix", values: LUMINANCE_MATRIX_VALUES })), /* @__PURE__ */ React.createElement("filter", { id: "ze-filter-duotone", colorInterpolationFilters: "sRGB" }, /* @__PURE__ */ React.createElement("feColorMatrix", { type: "matrix", values: LUMINANCE_MATRIX_VALUES }), /* @__PURE__ */ React.createElement("feComponentTransfer", null, /* @__PURE__ */ React.createElement("feFuncR", { type: "linear", slope: (duotoneLightRgb.r - duotoneDarkRgb.r) / 255, intercept: duotoneDarkRgb.r / 255 }), /* @__PURE__ */ React.createElement("feFuncG", { type: "linear", slope: (duotoneLightRgb.g - duotoneDarkRgb.g) / 255, intercept: duotoneDarkRgb.g / 255 }), /* @__PURE__ */ React.createElement("feFuncB", { type: "linear", slope: (duotoneLightRgb.b - duotoneDarkRgb.b) / 255, intercept: duotoneDarkRgb.b / 255 }))))));
+    ), /* @__PURE__ */ React.createElement(LiveFilterDefs, { pageFilter }));
   }
 
   // apps/ZEditor/src/main.jsx
