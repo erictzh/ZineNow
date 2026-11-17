@@ -1,22 +1,9 @@
 /* ==========================================================================
-   ZineNow dashboard (static-config edition) — same component-kit.css token
-   language as MD2eBook and Zine Arranger.
+   ZineNow dashboard (static-config edition). Tokens and scrollbars come
+   from shared/styles/ (tokens.css, scrollbars.css).
    ========================================================================== */
 
 :root {
-    --ui-bg: #171312;
-    --ui-bg-alt: #241d1bb0;
-    --ui-bg-card: #201918e8;
-    --ui-border: #3f3634;
-    --ui-fg: #e9e9ee;
-    --ui-fg-muted: #9a9ca6;
-    --ui-accent: #dd531a;
-    --ui-accent-hover: #bf6836;
-    --ui-accent-text: #dd531a;
-    --ui-radius: 10px;
-    --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --ui-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-
     --zn-header-height: 64px;
     --zn-card-w: 300px;
     --zn-sidebar-width: 420px;
@@ -34,11 +21,6 @@ html, body {
     background-size: cover;
 }
 body { overflow-x: hidden; }
-
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-thumb { background: var(--ui-border); border-radius: 9999px; }
-*::-webkit-scrollbar-thumb:hover { background: var(--ui-fg-muted); }
-*::-webkit-scrollbar-track { background: transparent; }
 
 button {
     background-color: var(--ui-bg-card);

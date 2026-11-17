@@ -1,27 +1,9 @@
-/* ==========================================================================
-   COMPONENT KIT — extracted verbatim from Zine Arranger's style.css, as it
-   currently stands (including all manual amendments: the semi-transparent
-   bg tokens, the color-mix()/gradient buttons, --preview-bar). Drop this
-   file into another project and use it as-is — nothing here is redescribed
-   or paraphrased, so there's no interpretation gap.
-   ========================================================================== */
+/* Markdown-to-PDF's own parts of the suite kit: layout tokens, page base, the topbar bar,
+   text inputs, file-input button, card, toggle row, log output and preview pane.
+   The --ui-* tokens, buttons, tabs, topbar parts, toggle switch and scrollbars come from
+   shared/styles/ (linked just before this file in index.html). */
 
 :root {
-    --ui-bg: #171312;
-    --ui-bg-alt: #241d1bb0;
-    --ui-bg-card: #201918e8;
-    --ui-bg-terminal: #100d0c6b;
-    --ui-border: #3f3634;
-    --ui-fg: #e9e9ee;
-    --ui-fg-muted: #9a9ca6;
-    --ui-accent: #dd531a;
-    --ui-accent-hover: #bf6836;
-    --ui-accent-text: #dd531a;
-    --ui-radius: 10px;
-    --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --ui-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --preview-bar: #151313c9;
-
     --md2ebook-sidebar-width: 40vw;
     --md2ebook-header-height: 64px;
     --md2ebook-border: var(--ui-border);
@@ -56,58 +38,6 @@ p, label {
     background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
 }
 
-.topbar-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-}
-
-/* the logo mark — a small gradient badge with a 1-2 letter mark */
-.topbar-logo {
-    flex: 0 0 auto;
-    height: 32px;
-    min-width: 32px;
-    border-radius: 8px;
-    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
-    font-weight: 700;
-    font-size: 14px;
-}
-
-.topbar-brand-text {
-    min-width: 0;
-}
-
-.topbar-title {
-    font-weight: 600;
-    font-size: 14px;
-    line-height: 1.25;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.topbar-subtitle {
-    font-size: 11px;
-    line-height: 1.25;
-    color: var(--ui-fg-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-}
-
 /* ---- Text inputs ---- */
 input[type="text"],
 input[type="number"],
@@ -135,46 +65,7 @@ input[type="radio"] {
     transform: scale(1.1);
 }
 
-/* ---- Buttons — hollow by default; .btn-solid is the one primary
-   call-to-action exception per screen. .btn-solid uses the same gradient
-   as the logo mark, so the two read as a matched pair. ---- */
-button {
-    background-color: var(--ui-bg-card);
-    color: var(--ui-fg-muted);
-    border: 1px solid var(--ui-border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-}
-
-button:hover {
-    background-color: var(--ui-bg);
-    color: var(--ui-fg);
-}
-
-button:active {
-    transform: scale(0.97);
-}
-
-button.btn-solid {
-    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
-    color: #fff;
-    border: 1px solid var(--ui-accent);
-    border-radius: 6px;
-    padding: 6px 16px;
-    min-width: 85px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-button.btn-solid:hover {
-    background-color: var(--ui-accent-hover);
-    border-color: var(--ui-accent-hover);
-}
-
+/* ---- File-input button — matches the hollow buttons in shared/styles/buttons.css ---- */
 input[type="file"]::file-selector-button {
     background-color: var(--ui-bg-card);
     color: var(--ui-fg-muted);
@@ -203,43 +94,6 @@ input[type="file"]::file-selector-button:hover {
     padding: 14px 16px;
 }
 
-/* ---- Tabs ---- */
-.tabbar {
-    display: flex;
-    flex: 0 0 auto;
-    border-bottom: 1px solid var(--ui-border);
-}
-
-.tab {
-    flex: 1 1 0;
-    margin: 0;
-    padding: 12px 16px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
-    color: var(--ui-fg-muted);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
-}
-
-.tab:hover {
-    color: var(--ui-fg);
-}
-
-.tab.active {
-    color: var(--ui-accent);
-    border-bottom-color: var(--ui-accent);
-}
-
-.tab[disabled] {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-
 /* ---- Toggle switch ---- */
 .toggle-row {
     display: flex;
@@ -258,69 +112,6 @@ input[type="file"]::file-selector-button:hover {
     width: 40px;
     height: 22px;
     margin-top: 2px;
-}
-
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
-}
-
-.toggle-slider {
-    position: absolute;
-    inset: 0;
-    background-color: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    border-radius: 9999px;
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.toggle-slider::before {
-    content: "";
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    left: 2px;
-    top: 2px;
-    border-radius: 50%;
-    background-color: var(--ui-fg-muted);
-    transition: transform 0.15s ease, background-color 0.15s ease;
-}
-
-.toggle-switch input:checked + .toggle-slider {
-    background-color: var(--ui-accent);
-    border-color: var(--ui-accent);
-}
-
-.toggle-switch input:checked + .toggle-slider::before {
-    transform: translateX(18px);
-    background-color: #fff;
-}
-
-.toggle-switch input:focus-visible + .toggle-slider {
-    outline: 2px solid var(--ui-accent-text);
-    outline-offset: 2px;
-}
-
-/* ---- Small toolbar buttons ---- */
-.log-btn {
-    margin: 0 0 0 6px;
-    padding: 4px 10px;
-    min-width: unset;
-    font-size: 11px;
-    font-weight: 500;
-    background-color: var(--ui-bg-card);
-    border: 1px solid var(--ui-border);
-    border-radius: 6px;
-    color: var(--ui-fg-muted);
-}
-
-.log-btn:hover {
-    color: var(--ui-fg);
-    background-color: var(--ui-bg);
-    border-color: var(--ui-border);
 }
 
 /* ---- Terminal / log output ---- */
@@ -385,23 +176,4 @@ input[type="file"]::file-selector-button:hover {
     background-color: var(--preview-bar);
     color: var(--md2ebook-canvas-fg);
     font-size: 12px;
-}
-
-/* ---- Thin custom scrollbars ---- */
-*::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-*::-webkit-scrollbar-thumb {
-    background: var(--ui-border);
-    border-radius: 9999px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-    background: var(--ui-fg-muted);
-}
-
-*::-webkit-scrollbar-track {
-    background: transparent;
 }
