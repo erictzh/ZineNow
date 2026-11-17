@@ -120,14 +120,21 @@ options + page count to sheets), `render/` (`sheetsDom.js`,
 `guideClasses.js`, `pdfPages.js`), `reverseImpose.js`, `optionsPanel.js`,
 `print.js`, `activityLog.js`, `main.js`.
 
-### Markdown-to-PDF `src/` (target)
+### Markdown-to-PDF `src/`
 
-`ui/` (Header, Sidebar, PreviewCanvas, fields), `editor/` (insert actions,
-document import, Markdown file), `settings/` (config file,
-`normalizeConfig`), `document/` (Markdown → HTML, style block, ToC,
-document assembly), `export/` (print export, raster export for
-ZineArranger), `convert/` (docx, epub, muse, HTML → Markdown), `App.jsx`,
-`main.jsx`.
+| Folder | Holds |
+|---|---|
+| `settings/` | Paper sizes, defaults (merged with `defaultConfig.json`), font stacks; `normalizeConfig`; the editor's starting settings; reading/naming settings files. Imports only `settings/`. |
+| `document/` | Markdown → the HTML document: editor markers (`\pagebreak`, `\space{n}`, `\toc`), CSS (`styleBlock.js`), fonts, ToC, assembly, and the Paged.js preview document. |
+| `convert/` | Other formats → Markdown: docx, epub, muse, HTML. |
+| `export/` | Download PDF (browser print engine) and the rasterised document for Send to ZineArranger. |
+| `io/` | Native Open/Save dialogs with fallbacks, and copying text. |
+| `editor/` | Editor actions as plain functions: inserting a marker line, importing a document. |
+| `ui/` | `App.jsx` (state, export, hand-off, layout), `Header`, `PreviewCanvas`, `Sidebar` (just the two tabs), `editor/EditorTab`, `typography/` (one file per settings section, plus `ConfigFiles`), `fields.jsx`, `FontCombobox`. |
+
+`defaultConfig.json` and `sample.md` stay plain `<script>` files (globals
+`MD2eBookDefaultConfig`, `MD2eBookSampleMarkdown`) loaded before
+`dist/app.js`, so defaults and the sample text can be edited without a build.
 
 ## Rules
 
@@ -152,7 +159,7 @@ ZineArranger), `convert/` (docx, epub, muse, HTML → Markdown), `App.jsx`,
 - [x] ZEditor split into `model/`, `render/`, `io/` and `ui/` (82 files; every statement moved byte-for-byte, only `import`/`export` lines added); `style.css` split into `styles/` (11 files, same 301 rules in the same order)
 - [x] ZEditor `ui/App.jsx` split into 15 `state/` hooks (App.jsx 1,748 → 223 lines); PDF import/export, the `.znow` format and the ZineArranger hand-off moved to `io/`; Topbar, ToolBar and the live filter defs are their own components
 - [x] ZEditor `FormatPanel.jsx` is now a router over one panel per item type plus the tool panels (`ui/panels/format/`); `ComposeCanvas.jsx` (517 → 253 lines) delegates the page background, soft-eraser gesture, selection rotate knob, per-type item rendering and page overlays to their own files
-- [ ] Markdown-to-PDF moved to `src/` (JSX source instead of the hand-converted `App.jsx`), `pdfGenerator.js` split
+- [x] Markdown-to-PDF moved to `src/`: `App.jsx` converted back to JSX by a codemod (compiles to the identical program); `pdfGenerator.js` and `App.jsx` split into 36 files; the Sidebar broken into tabs and sections, with shared file-dialog helpers. Preview document and sidebar HTML verified identical to the old version.
 - [ ] ZineArranger moved to `src/`; imposition rewritten as layout table + pure `impose()` (check every layout's page order against the old code first)
 - [ ] Launcher moved to `launcher/`
 

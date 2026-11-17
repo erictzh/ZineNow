@@ -12,7 +12,7 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 |---|---|---|
 | ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `styles/` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
 | ZineArranger | `apps/ZineArranger/index.html` | Imposes a multi-page PDF into a printable zine booklet. |
-| Md to PDF Converter | `apps/Markdown-to-PDF/` | Markdown → paginated PDF eBook. |
+| Md to PDF Converter | `apps/Markdown-to-PDF/src/` (built to `dist/app.js`) + `index.html` + CSS | Markdown → paginated PDF eBook. |
 | Launcher | `index.html`, `app.js`, `style.css`, `bg.jpg` (root) | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
 
 ## 2. Architecture notes per app
@@ -32,8 +32,8 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 - Page reorder in the sidebar uses native HTML5 drag-and-drop (`Sidebar` → `dragHandlersFor`); annotation dragging uses manual mouse listeners — different mechanisms.
 
 ### Md to PDF Converter
-- **`App.jsx` is precompiled plain JS — `React.createElement(...)`, NOT JSX.** There is no Babel here. Edit it as plain JS or the page silently breaks.
-- Normal export (`exportToPdf` in `pdfGenerator.js`) uses the browser's native print dialog (`window.print()` in a hidden iframe). It never yields PDF bytes in JS — the code comments explain it deliberately avoids html2canvas.
+- JSX source in `src/` (settings/, document/, convert/, export/, io/, editor/, ui/ — see docs/ARCHITECTURE.md), built by `npm run build` into `dist/app.js`. The old hand-converted `App.jsx` and the `window.MD2eBook` global are gone; `pdfGenerator.js`'s functions now live in those folders under the same names. `defaultConfig.json` and `sample.md` are still plain `<script>` files (globals `MD2eBookDefaultConfig`, `MD2eBookSampleMarkdown`) loaded before the bundle, so they can be edited without a build.
+- Normal export (`exportToPdf` in `src/export/printExport.js`) uses the browser's native print dialog (`window.print()` in a hidden iframe). It never yields PDF bytes in JS — the code comments explain it deliberately avoids html2canvas.
 - Live preview: `renderHtmlDocument()` in a `sandbox="allow-scripts"` iframe (opaque origin, on purpose) paginated by Paged.js; talks to the parent only via `postMessage`.
 - Depends on CDNs (marked, mammoth, turndown, jszip, pdf-lib, DOMPurify, Tailwind, React, Google Fonts, Paged.js, html2canvas) — needs internet.
 
@@ -83,11 +83,11 @@ ZEditor:
 - **Center guide** toggle (icon button in the tool bar, next to Layers): a dashed vertical line at the page's middle for covers/two-page spreads. State `centerGuideOn`, independent of the Guides popover; editor-only overlay (never exported), saved in project `settings`.
 
 Md to PDF Converter:
-- **"Send to ZineArranger" button** (`handleSendToZineArranger` in `App.jsx`; `renderRasterizationDocument` in `pdfGenerator.js`). Pipeline: hidden iframe → Paged.js paginates → html2canvas rasterizes each `.pagedjs_page` at scale 2 → images `postMessage`d back → pdf-lib assembles a PDF → handoff to ZineArranger.
+- **"Send to ZineArranger" button** (`handleSendToZineArranger` in `src/ui/App.jsx`; `renderRasterizationDocument` in `src/export/rasterDocument.js`). Pipeline: hidden iframe → Paged.js paginates → html2canvas rasterizes each `.pagedjs_page` at scale 2 → images `postMessage`d back → pdf-lib assembles a PDF → handoff to ZineArranger.
 - Security decision: html2canvas **hangs forever** inside a `sandbox="allow-scripts"`-only iframe, so the export iframe uses `allow-scripts allow-same-origin`. That combo would let a `<script>` smuggled via pasted Markdown raw HTML reach the parent app, so the rendered HTML is run through **DOMPurify first**. Do not remove the sanitize step or the reasoning comments. The live preview iframe stays opaque-origin and untouched.
 
 ### Md-to-PDF typography changes (2026-11)
-- Fixed stretched last lines in justified text: Paged.js stamps `text-align-last: justify` on the `.page` wrapper and paragraphs inherit it (`paginationJustifyFix` in `pdfGenerator.js`).
+- Fixed stretched last lines in justified text: Paged.js stamps `text-align-last: justify` on the `.page` wrapper and paragraphs inherit it (`paginationJustifyFix` in `src/document/styleBlock.js`).
 - Hyphenation is off (`hyphens: none`), so words never split across lines.
 - Blockquotes get one blank body line above and below (margin = font-size × line-height; collapses with paragraph spacing).
 - Per-heading (H1–H3) `hNLineHeight` and `hNUnderline` settings (rule beneath the heading; H1 on by default, H2/H3 off). New keys live in `HARDCODED_FALLBACK_DEFAULTS`, `defaultConfig.json`, `INITIAL_CONFIG` + `BOOLEAN_CONFIG_KEYS` in `App.jsx`, and the `HeadingLineControls` component.
@@ -109,7 +109,7 @@ Dev server: any static server rooted at the project folder, e.g. `python -m http
 
 Things that looked like bugs but weren't:
 - **Hidden browser pane throttles `requestAnimationFrame`** → pdf.js rendering, Paged.js and html2canvas appear to hang. Taking a screenshot foregrounds the pane briefly; it reverts to hidden between tool calls. Poll with screenshot + wait inside one `browser_batch`, and keep patience (Paged.js + html2canvas take ~10–30s here).
-- **HTTP cache is sticky**: after editing `pdfGenerator.js` etc., a plain reload kept serving the stale script, even in a new tab. Use a **new port** (new origin) or a cache-busting query on the page; note sub-resources (`<script src="pdfGenerator.js">`) do not inherit the page's query string. Verify with `fn.toString().includes("...")`.
+- **HTTP cache is sticky**: after rebuilding `dist/app.js` etc., a plain reload kept serving the stale script, even in a new tab. Use a **new port** (new origin) or a cache-busting query on the page; note sub-resources (`<script src="pdfGenerator.js">`) do not inherit the page's query string. Verify with `fn.toString().includes("...")`.
 - **`window.open(_, "_blank")` in the test pane replaces the current tab**, destroying the sender before it can finish the handoff. Not representative of a real browser.
 - The network-request tool only logs same-origin requests; CDN loads never appear. Console history can persist across navigations.
 - Loading a PDF into ZEditor without a file dialog: build a `File`, put it in a `DataTransfer`, assign to the hidden `input[type=file][accept="application/pdf"]`, dispatch `input` + `change`. A tiny test PDF can be made in-page with `PDFLib`.
