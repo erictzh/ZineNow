@@ -118,7 +118,10 @@ Plain JavaScript (no React).
 |---|---|
 | `state.js` | Every value that changes: the chosen options, computed sheet/page sizes, UI flags (was ~30 globals). |
 | `sizes.js` | Zine sizes and the automatic signature-size cap. |
-| `optionsPanel.js` | Tabs, size buttons, paper presets, the Reverse Impose toggle, and `refreshSpecs` (reads every option into `state`, computes sizes, reloads). |
+| `optionsPanel.js` | Tabs, size buttons, paper presets, the Reverse Impose toggle, and `refreshSpecs` (the short list of steps that re-lays out after any option change). |
+| `readOptions.js` | Reads every option from the form into `state`; the spec string (`8-1ps`). |
+| `sheetGrid.js` | Pure: for a size and options, the page grid on a sheet, pages per sheet, and paper orientation. |
+| `sheetSizes.js` | On-screen sheet/page sizes from the paper size and grid; the CSS variables preview and print use. |
 | `loadPdf.js` | Loads the PDF and draws each page into its canvas cell. |
 | `imposition/layouts.js` | **Data**: for each size × sides × orientation × spine (× copy), which page goes in which cell, rotation and guide lines. Format documented at the top of the file. |
 | `imposition/impose.js` | Pure: options + page count → padded page count and sheets of cells. |
@@ -175,7 +178,7 @@ sizes × page counts 0–300: 1,267,712 cases, 0 differences).
 - [x] ZEditor `FormatPanel.jsx` is now a router over one panel per item type plus the tool panels (`ui/panels/format/`); `ComposeCanvas.jsx` (517 → 253 lines) delegates the page background, soft-eraser gesture, selection rotate knob, per-type item rendering and page overlays to their own files
 - [x] Markdown-to-PDF moved to `src/`: `App.jsx` converted back to JSX by a codemod (compiles to the identical program); `pdfGenerator.js` and `App.jsx` split into 36 files; the Sidebar broken into tabs and sections, with shared file-dialog helpers. Preview document and sidebar HTML verified identical to the old version.
 - [x] ZineArranger moved to `src/` (14 files, ~30 globals into one `state`); the 4,770-line imposition function replaced by `layouts.js` data + `impose()` + `sheetsHtml()`, identical on all 1,267,712 checked cases and in the browser against the old page
-- [ ] ZineArranger `refreshSpecs` (~290 lines in `optionsPanel.js`) split into reading options vs computing sizes
+- [x] ZineArranger `refreshSpecs` split: `readOptions.js` (form → state, spec string), `sheetGrid.js` (pure: grid, pages per sheet, paper orientation per size — replaces a 130-line switch, identical on all 80 combinations), `sheetSizes.js` (on-screen sizes, CSS variables); `optionsPanel.js` 480 → 188 lines; browser output identical to the pre-refactor page in 9 scenarios
 - [x] Launcher moved to `launcher/` (`launcher.js`, `launcher.css`, `bg.jpg`; `index.html` stays at the root so app links are unchanged)
 
 The last state before this refactor is tagged `pre-modular-refactor`.
