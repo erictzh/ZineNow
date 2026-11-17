@@ -241,10 +241,13 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   }
 
   // Soft eraser: the erased picture replaces the image's own pixels.
-  // No coalesce key, so every swipe is its own undo step.
-  function handleEraseImagePixels(id, src) {
-    if (selectedIdx === null) return;
-    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, src } : a)));
+  // No coalesce key, so every swipe is its own undo step. `pageIdx` is for the
+  // magic eraser's preview, which can be applied after the page has changed;
+  // it defaults to the current page.
+  function handleEraseImagePixels(id, src, pageIdx) {
+    const idx = pageIdx === undefined ? selectedIdx : pageIdx;
+    if (idx === null) return;
+    updateAnnotationsFor(idx, (anns) => anns.map((a) => (a.id === id ? { ...a, src } : a)));
   }
 
   return {

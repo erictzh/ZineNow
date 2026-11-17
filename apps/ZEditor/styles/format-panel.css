@@ -293,3 +293,48 @@
 .ze-format-inline .ze-format-number { flex: 1 1 auto; min-width: 0; }
 .ze-format-inline .ze-format-toggle { flex: 0 0 auto; }
 
+
+/* ---- Magic eraser preview bar (Apply / Cancel) --------------------------- */
+/* Pinned to the top of the scrolling panel body, so Apply is always in reach
+   however far down the sliders you've scrolled. The negative margins cancel
+   the body's padding so it spans the full width. */
+.ze-magic-bar {
+    position: sticky;
+    top: -16px;
+    z-index: 2;
+    margin: -16px -16px 16px;
+    padding: 12px 16px;
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    border-bottom: 1px solid var(--ui-border);
+}
+
+/* ---- Segmented tabs (neutral black and grey, no accent colour) ------------ */
+/* For choosing one of a few modes in a panel, e.g. the magic eraser's Erase a
+   colour / Refine edge. The active tab is a lighter grey chip on a dark track. */
+.ze-seg-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background-color: #0c0b0b;
+    border: 1px solid var(--ui-border);
+}
+.ze-seg-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+    padding: 7px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ui-fg-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 120ms ease, background-color 120ms ease;
+}
+.ze-seg-tab:hover { color: var(--ui-fg); }
+.ze-seg-tab.active {
+    background-color: #3a3a3e;
+    color: var(--ui-fg);
+}

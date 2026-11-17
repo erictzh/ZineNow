@@ -105,6 +105,7 @@ passes each the ones it builds on, as plain objects:
 | `useDocumentFiles` | Load PDF, new blank document, Insert PDF |
 | `useExport` | Export PDF, Send to ZineArranger |
 | `useZoom`, `useOnionGhost` | zoom with the view centre kept in place; the previous-page ghost |
+| `useMagicErase` | the magic eraser's live preview: a click opens it, the Eraser panel's settings re-run it, Apply writes one undo step, Cancel/Undo drops it; the page draws the image from `preview` until then |
 | `useKeyboardShortcuts` | keys and image paste; reads the latest state through a ref, so listeners are attached once and are never stale |
 
 Where things went that might not be obvious:
