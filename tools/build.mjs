@@ -79,8 +79,11 @@ if (mode === "watch") {
     if (write) {
       console.log(`✓ ${app.name} → ${out}`);
     } else {
-      const built = result.outputFiles[0].text;
-      const committed = existsSync(app.outfile) ? readFileSync(app.outfile, "utf8") : null;
+      // Line endings are ignored: esbuild writes \n, but Git on Windows
+      // (core.autocrlf) checks files out with \r\n, which isn't a real change.
+      const lf = (s) => s.replace(/\r\n/g, "\n");
+      const built = lf(result.outputFiles[0].text);
+      const committed = existsSync(app.outfile) ? lf(readFileSync(app.outfile, "utf8")) : null;
       if (built !== committed) {
         stale++;
         console.error(`✗ ${out} is out of date — run \`npm run build\`.`);
