@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-09-19.
+Last updated: 2026-11-17 (after the modular refactor and the magic eraser).
 
 ## 1. Project overview
 
@@ -99,6 +99,14 @@ Md to PDF Converter:
 
 ## 4. Pending / known gaps (priority order)
 
+**Current (2026-11-17), do these first:**
+
+- **A. Magic eraser report, not yet reproduced.** The user saw "Connected only" erase as if "Whole image" were selected. In tests (a white image with a black ring, thick and 1px; Tolerance 32 and 8; after toggling modes) it behaves correctly: the inside of the ring is kept. Likely causes: (1) the image has a filter or photo adjustment, and the eraser compares the *original* pixels, not what's on screen; a boundary that looks solid after Threshold/Halftone may be pale in the original. Possible fix: sample the filtered/adjusted pixels (render the image the way `render/drawImage.js` does, then flood-fill on that while erasing the original). (2) The boundary colour is within the Tolerance. Ask the user which; code is `render/magicErase.js` and `ui/canvas/magicEraseGesture.js`.
+- **B. Three real-browser clicks never run by hand** (the test pane can't open a second tab): ZEditor → Send to ZineArranger, Markdown-to-PDF → Send to ZineArranger, Markdown-to-PDF → Download PDF (print dialog).
+- **C. Optional:** `apps/ZineArranger/src/optionsPanel.js` (188 lines) and the stray `Md to PDF Converter.pdf` at the repo root.
+
+**Older items:**
+
 1. ~~Group drag-reorder of multi-selected pages.~~ Done 2026-11-09: `handleReorder(fromIndices, insertBefore)` now handles single and group moves. Verified with scripted drag events; not yet tried by hand with a real mouse drag.
 2. Md-to-PDF "Send to ZineArranger", verified in two halves on 2026-11-10 (the test browser navigates the same tab on `window.open`, so the true two-window flow can't run there): (a) sending half, with an iframe standing in for the opened tab and a ready ping posted *from inside that frame* (event.source must be the opened window), delivered `the-art-of-slow-mornings.pdf`, 486 KB, `%PDF-1.7`, in ~1 s; (b) receiving half, posting `zeditor-handoff-pdf` to a loaded ZineArranger processed the file ("Received ... from ZEditor"). Still worth one try by hand in normal Chrome/Edge (popups allowed). Gotcha: in a hidden Browser pane the off-screen Paged.js/html2canvas render times out (no animation frames); show the pane first.
 3. Md-to-PDF rasterization with Markdown images (`![](url)`): cross-origin images could taint the canvas (`useCORS: true` is set, untested with remote images).
@@ -119,14 +127,14 @@ Things that looked like bugs but weren't:
 - The network-request tool only logs same-origin requests; CDN loads never appear. Console history can persist across navigations.
 - Loading a PDF into ZEditor without a file dialog: build a `File`, put it in a `DataTransfer`, assign to the hidden `input[type=file][accept="application/pdf"]`, dispatch `input` + `change`. A tiny test PDF can be made in-page with `PDFLib`.
 - Capturing Export/Save output: set `window.showSaveFilePicker = undefined`, monkey-patch `URL.createObjectURL` to stash the Blob, click the button, then inspect the blob (e.g. render pages with `pdfjsLib` and sample pixels).
-- ZEditor helper functions such as `renderPageToCanvas` and `applyPageFilter` are top-level and reachable from the console; anything inside `App()` is not.
+- Since the modular refactor, each app's code is one bundled `dist/app.js` (an IIFE), so functions such as `renderPageToCanvas` are **not** reachable from the console any more. To exercise a pure function, bundle it for Node with esbuild (as was done for the ZineArranger imposition check), or drive the UI. ZineArranger's `onclick` handlers are the exception: `src/main.js` puts them on `window`.
 
 ## 6. Resuming on a new machine
 
-1. Copy the whole `ZineNow` folder (this file included). It is plain files; no install step.
+1. Clone the repo (see §7). Using the apps needs no install; **changing code needs Node.js and `npm install`** (for esbuild). Then `npm run watch` while you work.
 2. Claude Code's auto-memory and session transcripts are local to the old machine and do **not** transfer — this file is the substitute. Consider renaming/copying it to `CLAUDE.md` in the project root so a new session loads it automatically.
-3. Start with pending item #2 (real-browser test of the Md-to-PDF handoff) unless priorities changed.
-4. Working conventions carried over from the previous sessions: keep edits inside the existing single-file structure, preserve immutable state updates in ZEditor, default to no code comments unless the *why* is non-obvious, and test UI changes in a browser before calling them done.
+3. Read **docs/MAINTAINING.md** (how to work on the code, where things are, recipes) and **docs/ARCHITECTURE.md** (structure and rules). Then start with pending item A in §4 unless priorities changed.
+4. Working conventions: edit `src/`, never `dist/`; rebuild and commit both, and run `npm run check` before committing. Keep one job per file (each file's first line says what it does), imports pointing one way, and preview and export on the same renderer. Preserve immutable state updates in ZEditor and call `recordUndoCheckpoint` before changing `pages`. Test UI changes in a browser before calling them done. Commit from PowerShell with `git commit -F <file>`, because `-m "…"` mangles quotes.
 
 ## 7. Step-by-step: continuing on another PC
 
@@ -143,17 +151,19 @@ Check https://github.com/erictzh/ZineNow/commits/main shows your latest commit.
 
 ### First time on the new PC
 1. Install Git: `winget install --id Git.Git -e --source winget` (click Yes on the admin prompt), then close and reopen PowerShell. Verify with `git --version`.
-2. Install and sign in to Claude Code (desktop app or CLI).
-3. Clone: `git clone https://github.com/erictzh/ZineNow.git` — sign in as `erictzh` in the browser window that opens.
-4. Set the commit identity once (so pushes are attributed to you):
+2. Install Node.js (needed to rebuild the apps after editing code): `winget install --id OpenJS.NodeJS.LTS -e --source winget`, then reopen PowerShell and check `node -v`.
+3. Install and sign in to Claude Code (desktop app or CLI).
+4. Clone: `git clone https://github.com/erictzh/ZineNow.git` — sign in as `erictzh` in the browser window that opens.
+5. Set the commit identity once (so pushes are attributed to you):
    `git config --global user.name "TSANG ZHI HAO"` and `git config --global user.email "ericzhihaotsang@gmail.com"`.
-5. Open the cloned `ZineNow` folder in Claude Code.
-6. First message: "Read HANDOFF.md and continue from the pending tasks."
+6. In the cloned folder run `npm install` once.
+7. Open the cloned `ZineNow` folder in Claude Code.
+8. First message: "Read HANDOFF.md and docs/MAINTAINING.md, then continue from the pending tasks."
 
 ### Every later session on any PC
-1. Start: `git pull` (always, before editing).
-2. Work as usual. Run the apps by double-clicking `index.html`, or serve the folder: `python -m http.server 8000` then open http://localhost:8000. Md to PDF needs internet (CDN libraries).
-3. End: `git add -A`, `git commit -m "..."`, `git push`.
+1. Start: `git pull` (always, before editing), then `npm install` if `package.json` changed.
+2. Work as usual: `npm run watch` while editing `src/`. Run the apps by double-clicking `index.html`, or serve the folder: `python -m http.server 8000` then open http://localhost:8000. Md to PDF needs internet (CDN libraries).
+3. End: `npm run check`, then `git add -A`, commit, `git push`.
 
 ### If something goes wrong
 - `git push` rejected ("non-fast-forward"): the other PC pushed first. Run `git pull`, resolve any conflicts (ask Claude Code), then `git push`.
