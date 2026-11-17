@@ -89,3 +89,15 @@ export function makeBlankThumb(width, height, rotation, scale) {
   ctx.fillRect(0, 0, w, h);
   return canvas.toDataURL();
 }
+
+// A sidebar thumbnail of one page of a loaded PDF, as a PNG data URL.
+export async function renderPdfThumb(doc, pageNumber, rotation) {
+  const pdfPage = await doc.getPage(pageNumber);
+  const viewport = pdfPage.getViewport({ scale: THUMB_SCALE, rotation });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL();
+}
