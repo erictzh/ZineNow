@@ -1,0 +1,14 @@
+{
+  "name": "zinenow",
+  "private": true,
+  "description": "ZineNow zine-making tools. Apps run from plain files (file://); this package only builds each app's src/ into dist/app.js.",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "check": "node tools/build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

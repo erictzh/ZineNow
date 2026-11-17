@@ -6,11 +6,11 @@ Last updated: 2026-09-19.
 
 ## 1. Project overview
 
-ZineNow is a suite of zero-build, browser-only tools for making zines. Everything is static files — no npm, no bundler. Open via `file://` or any static server.
+ZineNow is a suite of browser-only tools for making zines. Everything runs from static files: open via `file://` or any static server. Apps being refactored into modules (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)) have a `src/` folder that `npm run build` (esbuild) turns into a committed `dist/app.js`. Using the apps needs no build; changing an app with a `src/` folder does.
 
 | App | Path | Purpose |
 |---|---|---|
-| ZEditor | `apps/ZEditor/index.html` + `style.css` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
+| ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `style.css` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
 | ZineArranger | `apps/ZineArranger/index.html` | Imposes a multi-page PDF into a printable zine booklet. |
 | Md to PDF Converter | `apps/Markdown-to-PDF/` | Markdown → paginated PDF eBook. |
 | Launcher | `index.html`, `app.js`, `style.css`, `bg.jpg` (root) | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
@@ -18,7 +18,7 @@ ZineNow is a suite of zero-build, browser-only tools for making zines. Everythin
 ## 2. Architecture notes per app
 
 ### ZEditor (single ~3400-line file)
-- React + Babel Standalone in one `<script type="text/babel">`. Local vendored `pdfjs/` (rendering) and `pdf-lib/` (export).
+- React (UMD globals) app whose code is in `src/main.jsx` (being split up, see docs/ARCHITECTURE.md), built by `npm run build` into `dist/app.js`. No Babel in the browser any more. pdf.js (rendering) and pdf-lib (export) come from the shared copies in `shared/vendor/`.
 - **State is immutable everywhere** (`.map` / spread, never mutate). Undo snapshots rely on this for structural sharing — keep it that way.
 - Page object: `{ key, docId, pageNumber, rotation, dataUrl, isBlank, annotations, filter }`. Blank pages have `width/height` instead of `docId/pageNumber`.
 - `pdfDocsRef.current` = `{ docId: { doc, bytes } }` — multiple source PDFs can be loaded (Insert PDF). Use `docFor(pdfDocsRef, page)`.
