@@ -291,10 +291,109 @@ button.btn-solid:hover { background-color: var(--ui-accent-hover); border-color:
 }
 .ze-topbar-popover .ze-format-field:last-of-type { margin-bottom: 0; }
 
-.ze-filter-toggle-btn.active {
-    color: #fff;
-    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
-    border-color: var(--ui-accent);
+/* ---- Topbar menu bar (Page / Project / Export) — TopMenu's trigger and
+   dropdown. The Page menu's toggle rows swap to a settings sub-view
+   (.ze-menu-settings) in place rather than opening a second popup. */
+.ze-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: unset;
+    padding: 6px 10px 6px 12px;
+}
+.ze-menu-trigger svg { transition: transform 0.15s ease; }
+.ze-menu-trigger.open svg { transform: rotate(180deg); }
+.ze-menu-trigger.open:not(.btn-solid) { background-color: var(--ui-bg); color: var(--ui-fg); }
+button.ze-menu-trigger.btn-solid { min-width: unset; padding: 6px 10px 6px 14px; }
+
+.ze-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    background-color: #201918; /* opaque --ui-bg-card, so the page doesn't show through */
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+    padding: 4px;
+}
+.ze-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: 5px;
+    padding: 8px 10px;
+    color: var(--ui-fg);
+    white-space: nowrap;
+}
+.ze-menu-item:hover:not(:disabled) { background-color: var(--ui-bg); }
+.ze-menu-item:active { transform: none; }
+.ze-menu-item-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ze-menu-item-detail { font-size: 11px; color: var(--ui-fg-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.ze-menu-item-shortcut { flex: 0 0 auto; font-size: 11px; color: var(--ui-fg-muted); }
+
+.ze-menu-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 300px;
+    max-width: calc(100vw - 32px);
+    padding: 7px 8px 7px 10px;
+    border-radius: 5px;
+}
+.ze-menu-toggle-row:hover { background-color: var(--ui-bg); }
+.ze-menu-toggle-row.disabled { opacity: 0.5; }
+.ze-menu-toggle-text { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.ze-menu-toggle-label { font-size: 12px; color: var(--ui-fg); white-space: nowrap; }
+.ze-menu-toggle-detail { font-size: 11px; color: var(--ui-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ze-menu-customize {
+    flex: 0 0 auto;
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    font-size: 11px;
+    color: var(--ui-fg-muted);
+}
+.ze-menu-customize:hover:not(:disabled) { background: none; color: var(--ui-accent-text); text-decoration: underline; }
+.ze-menu-toggle-row .toggle-switch { width: 34px; height: 19px; }
+.ze-menu-toggle-row .toggle-slider::before { width: 13px; height: 13px; }
+.ze-menu-toggle-row .toggle-switch input:checked + .toggle-slider::before { transform: translateX(15px); }
+.ze-menu-toggle-row .toggle-switch input:disabled + .toggle-slider { cursor: not-allowed; }
+
+.ze-menu-settings {
+    width: 260px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 4px 10px 10px;
+}
+.ze-menu-settings .ze-format-field:last-of-type { margin-bottom: 0; }
+.ze-menu-settings-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 -6px 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ui-border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ui-fg);
+}
+.ze-menu-back {
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 0;
 }
 
 /* ---- Onion-skin ghost — the previous page's flattened composite, faded

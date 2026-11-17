@@ -2444,7 +2444,10 @@
     // Same native Save-As pattern Markdown-to-PDF and Zine Arranger use —
     // falls back to a forced download for browsers without the File
     // System Access API (Firefox, Safari). Shared by Export PDF and Save
-    // Project — `data` can be bytes, a string, or a Blob.
+    // Project — `data` can be bytes, a string, or a Blob. Resolves to the
+    // chosen file's handle (so Save Project can write to it again without
+    // asking), "cancelled" if the dialog was closed, or null after the
+    // download fallback (no handle to keep).
     async function saveFile(data, filename, mimeType, description, extensions) {
       if (typeof window.showSaveFilePicker === "function") {
         try {
@@ -2452,12 +2455,10 @@
             suggestedName: filename,
             types: [{ description, accept: { [mimeType]: extensions } }],
           });
-          const writable = await handle.createWritable();
-          await writable.write(data);
-          await writable.close();
-          return;
+          await writeFileHandle(handle, data);
+          return handle;
         } catch (err) {
-          if (err && err.name === "AbortError") return; // user closed the dialog — not an error
+          if (err && err.name === "AbortError") return "cancelled"; // user closed the dialog — not an error
           // fall through to the download fallback below
         }
       }
@@ -2470,6 +2471,21 @@
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return null;
+    }
+
+    // Overwrites a file picked earlier (File System Access API). The browser
+    // may ask once per session to allow editing it; if that's refused this
+    // throws, and the caller falls back to Save As.
+    async function writeFileHandle(handle, data) {
+      if (handle.queryPermission && (await handle.queryPermission({ mode: "readwrite" })) !== "granted") {
+        if ((await handle.requestPermission({ mode: "readwrite" })) !== "granted") {
+          throw Object.assign(new Error("Permission to edit the file was refused"), { name: "NotAllowedError" });
+        }
+      }
+      const writable = await handle.createWritable();
+      await writable.write(data);
+      await writable.close();
     }
 
     async function savePdfBytes(bytes, filename) {
@@ -5079,260 +5095,276 @@
       );
     }
 
-    // ---- Guides control — the topbar toggle switch plus a settings
-    // caret that opens a popover for format/margin/bleed, same
-    // click-outside-closes pattern as FontCombobox.
-    function GuidesControl({ guidesOn, onToggleGuides, format, onFormatChange, marginIn, onMarginChange, bleedIn, onBleedChange }) {
+    // ---- Topbar menus — the topbar is a compact menu bar (Page / Project /
+    // Export). TopMenu is the shared dropdown shell: a trigger button plus a
+    // panel that closes on click-outside or Escape, same pattern as
+    // FontCombobox. Its contents only mount while open, so any view state
+    // inside (like the Page menu's "Customize…" sub-view) resets each time.
+    function TopMenu({ label, solid, children }) {
       const [open, setOpen] = useState(false);
       const containerRef = useRef(null);
 
       useEffect(() => {
+        if (!open) return;
         function handleClickOutside(e) {
           if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
         }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }, []);
-
-      return (
-        <div className="ze-topbar-control" ref={containerRef}>
-          <div className="toggle-row">
-            <div className="toggle-row-text">
-              <p>Guides</p>
-            </div>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={guidesOn} onChange={(e) => onToggleGuides(e.target.checked)} />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-          <button type="button" className="ze-guides-settings-btn" title="Guide settings" onClick={() => setOpen((o) => !o)}>
-            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
-            </svg>
-          </button>
-          {open && (
-            <div className="ze-topbar-popover">
-              <div className="ze-format-field">
-                <span className="ze-format-label">Format</span>
-                <select className="ze-format-select" value={format} onChange={(e) => onFormatChange(e.target.value)}>
-                  {GUIDE_FORMAT_PRESETS.map((p) => (
-                    <option key={p.key} value={p.key}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <label className="ze-format-field">
-                <span className="ze-format-label">Margin (in)</span>
-                <input
-                  type="number" className="ze-format-number" min="0" max="3" step="0.0625"
-                  value={marginIn}
-                  onChange={(e) => onMarginChange(Math.max(0, Number(e.target.value) || 0))}
-                />
-              </label>
-              <label className="ze-format-field">
-                <span className="ze-format-label">Bleed (in)</span>
-                <input
-                  type="number" className="ze-format-number" min="0" max="1" step="0.0625"
-                  value={bleedIn}
-                  onChange={(e) => onBleedChange(Math.max(0, Number(e.target.value) || 0))}
-                />
-              </label>
-              <span className="ze-format-hint">
-                Trim is centered on the page; margin sits inside it, bleed extends outside. Pick "Match Page Size" if the page is already trimmed to its final size.
-              </span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ---- Page numbers control — topbar toggle plus a popover for which pages
-    // are numbered (from / to), the first number, and the look.
-    function PageNumbersControl({ settings, pageCount, onChange }) {
-      const [open, setOpen] = useState(false);
-      const containerRef = useRef(null);
-
-      useEffect(() => {
-        function handleClickOutside(e) {
-          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+        function handleEscape(e) {
+          if (e.key === "Escape") setOpen(false);
         }
         document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }, []);
+        document.addEventListener("keydown", handleEscape);
+        return () => {
+          document.removeEventListener("mousedown", handleClickOutside);
+          document.removeEventListener("keydown", handleEscape);
+        };
+      }, [open]);
 
-      const whole = (value, fallback, min = 0) => Math.max(min, Math.round(Number(value)) || fallback);
-      return (
-        <div className="ze-topbar-control" ref={containerRef}>
-          <div className="toggle-row">
-            <div className="toggle-row-text">
-              <p>Page Numbers</p>
-            </div>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={settings.on} onChange={(e) => onChange({ on: e.target.checked })} />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-          <button type="button" className="ze-guides-settings-btn" title="Page number settings" onClick={() => setOpen((o) => !o)}>
-            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
-            </svg>
-          </button>
-          {open && (
-            <div className="ze-topbar-popover">
-              <label className="ze-format-field">
-                <span className="ze-format-label">Start numbering on page</span>
-                <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} value={settings.from} onChange={(e) => onChange({ from: whole(e.target.value, 1, 1) })} />
-              </label>
-              <label className="ze-format-field">
-                <span className="ze-format-label">Stop after page (empty = last)</span>
-                <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} placeholder="last" value={settings.to || ""} onChange={(e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) })} />
-              </label>
-              <label className="ze-format-field">
-                <span className="ze-format-label">First page shows number</span>
-                <input type="number" className="ze-format-number" step="1" value={settings.first} onChange={(e) => onChange({ first: Math.round(Number(e.target.value)) || 0 })} />
-              </label>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Position</span>
-                <SelectInput options={PAGE_NUMBER_POSITIONS} value={settings.position} onChange={(position) => onChange({ position })} />
-              </div>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Style</span>
-                <SelectInput options={PAGE_NUMBER_FORMATS} value={settings.format} onChange={(format) => onChange({ format })} />
-              </div>
-              <label className="ze-format-field">
-                <span className="ze-format-label">Size (pt)</span>
-                <input type="number" className="ze-format-number" min="4" max="48" value={settings.size} onChange={(e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) })} />
-              </label>
-              <label className="ze-format-field">
-                <span className="ze-format-label">Distance from edge (in)</span>
-                <input type="number" className="ze-format-number" min="0" max="3" step="0.05" value={settings.marginIn} onChange={(e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) })} />
-              </label>
-              <div className="ze-format-field">
-                <span className="ze-format-label">Color</span>
-                <input type="color" className="ze-format-color-input" value={settings.color} onChange={(e) => onChange({ color: e.target.value })} />
-              </div>
-              <span className="ze-format-hint">
-                Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.
-              </span>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // ---- Filter control — a page-background treatment (grayscale/duotone/
-    // halftone), same popover shell as GuidesControl. Baked into Export
-    // PDF too via applyPageFilter, so preview and output always match.
-    function FilterControl({
-      filterType, onFilterTypeChange,
-      duotoneDark, duotoneLight, onDuotoneDarkChange, onDuotoneLightChange,
-      filter, onFilterPatch,
-    }) {
-      const [open, setOpen] = useState(false);
-      const containerRef = useRef(null);
-
-      useEffect(() => {
-        function handleClickOutside(e) {
-          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }, []);
-
-      const activeLabel = (PAGE_FILTER_OPTIONS.find((o) => o.key === filterType) || PAGE_FILTER_OPTIONS[0]).label;
+      // The panel hangs right-aligned under its trigger; on a narrow window
+      // that can push it off the left edge, so nudge it back on screen.
+      // Re-checked whenever its size changes (e.g. into a Customize view).
+      const menuRef = useRef(null);
+      useLayoutEffect(() => {
+        const menu = menuRef.current;
+        if (!open || !menu) return;
+        const fit = () => {
+          menu.style.transform = "";
+          const { left } = menu.getBoundingClientRect();
+          if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+        };
+        fit();
+        const observer = new ResizeObserver(fit);
+        observer.observe(menu);
+        window.addEventListener("resize", fit);
+        return () => { observer.disconnect(); window.removeEventListener("resize", fit); };
+      }, [open]);
 
       return (
         <div className="ze-topbar-control" ref={containerRef}>
           <button
             type="button"
-            className={"ze-filter-toggle-btn" + (filterType !== "none" ? " active" : "")}
+            className={"ze-menu-trigger" + (solid ? " btn-solid" : "") + (open ? " open" : "")}
+            aria-haspopup="menu"
+            aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
           >
-            Filter: {activeLabel}
+            {label}
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+            </svg>
           </button>
           {open && (
-            <div className="ze-topbar-popover">
-              <div className="ze-format-field">
-                <span className="ze-format-label">Filter</span>
-                <select className="ze-format-select" value={filterType} onChange={(e) => onFilterTypeChange(e.target.value)}>
-                  {PAGE_FILTER_OPTIONS.map((o) => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              {filterType === "duotone" && (
-                <React.Fragment>
-                  <div className="ze-format-field">
-                    <span className="ze-format-label">Dark tone</span>
-                    <input type="color" className="ze-format-color-input" value={duotoneDark} onChange={(e) => onDuotoneDarkChange(e.target.value)} />
-                  </div>
-                  <div className="ze-format-field">
-                    <span className="ze-format-label">Light tone</span>
-                    <input type="color" className="ze-format-color-input" value={duotoneLight} onChange={(e) => onDuotoneLightChange(e.target.value)} />
-                  </div>
-                </React.Fragment>
-              )}
-              {FILTER_CONTROLS[filterType] && (
-                <ControlList controls={FILTER_CONTROLS[filterType]} source={filter} onPatch={onFilterPatch} />
-              )}
-              <span className="ze-format-hint">
-                Applies to the selected pages' backgrounds and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too.
-              </span>
+            <div className="ze-menu" role="menu" ref={menuRef}>
+              {children({ close: () => setOpen(false) })}
             </div>
           )}
         </div>
       );
     }
 
-    // ---- Onion-skin control — ghosts the previous page on top of the
+    // A plain action row in a TopMenu. Runs the action, then closes the menu.
+    // `detail` is a muted second line (e.g. the file Save writes to);
+    // `shortcut` sits on the right.
+    function MenuItem({ label, detail, shortcut, hint, disabled, onClick, close }) {
+      return (
+        <button
+          type="button"
+          role="menuitem"
+          className="ze-menu-item"
+          disabled={disabled}
+          title={hint}
+          onClick={() => { close(); onClick(); }}
+        >
+          <span className="ze-menu-item-text">
+            <span>{label}</span>
+            {detail && <span className="ze-menu-item-detail">{detail}</span>}
+          </span>
+          {shortcut && <span className="ze-menu-item-shortcut">{shortcut}</span>}
+        </button>
+      );
+    }
+
+    // ---- Page menu — Filter, Onion Skin, Page Numbers and Guides, each a row
+    // with an on/off toggle and "Customize…", which swaps the menu to that
+    // feature's settings (with a back arrow) instead of opening a second popup.
+    function PageMenuBody({ rows }) {
+      const [customizing, setCustomizing] = useState(null);
+      const active = rows.find((r) => r.key === customizing);
+
+      if (active) {
+        return (
+          <div className="ze-menu-settings">
+            <div className="ze-menu-settings-head">
+              <button type="button" className="ze-menu-back" title="Back" onClick={() => setCustomizing(null)}>
+                <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12.5 5.5L8 10l4.5 4.5" />
+                </svg>
+              </button>
+              <span>{active.label}</span>
+            </div>
+            {active.settings}
+          </div>
+        );
+      }
+
+      return rows.map((row) => (
+        <div key={row.key} className={"ze-menu-toggle-row" + (row.disabled ? " disabled" : "")}>
+          <div className="ze-menu-toggle-text">
+            <span className="ze-menu-toggle-label">{row.label}</span>
+            {row.detail && <span className="ze-menu-toggle-detail">{row.detail}</span>}
+          </div>
+          <button type="button" className="ze-menu-customize" disabled={row.disabled} onClick={() => setCustomizing(row.key)}>
+            Customize…
+          </button>
+          <label className="toggle-switch" title={(row.checked ? "Turn off " : "Turn on ") + row.label}>
+            <input type="checkbox" checked={row.checked} disabled={row.disabled} onChange={(e) => row.onToggle(e.target.checked)} />
+            <span className="toggle-slider"></span>
+          </label>
+        </div>
+      ));
+    }
+
+    // ---- Guides settings — format/margin/bleed for the trim guides.
+    function GuidesSettings({ format, onFormatChange, marginIn, onMarginChange, bleedIn, onBleedChange }) {
+      return (
+        <React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Format</span>
+            <select className="ze-format-select" value={format} onChange={(e) => onFormatChange(e.target.value)}>
+              {GUIDE_FORMAT_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Margin (in)</span>
+            <input
+              type="number" className="ze-format-number" min="0" max="3" step="0.0625"
+              value={marginIn}
+              onChange={(e) => onMarginChange(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </label>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Bleed (in)</span>
+            <input
+              type="number" className="ze-format-number" min="0" max="1" step="0.0625"
+              value={bleedIn}
+              onChange={(e) => onBleedChange(Math.max(0, Number(e.target.value) || 0))}
+            />
+          </label>
+          <span className="ze-format-hint">
+            Trim is centered on the page; margin sits inside it, bleed extends outside. Pick "Match Page Size" if the page is already trimmed to its final size.
+          </span>
+        </React.Fragment>
+      );
+    }
+
+    // ---- Page number settings — which pages are numbered (from / to), the
+    // first number, and the look.
+    function PageNumbersSettings({ settings, pageCount, onChange }) {
+      const whole = (value, fallback, min = 0) => Math.max(min, Math.round(Number(value)) || fallback);
+      return (
+        <React.Fragment>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Start numbering on page</span>
+            <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} value={settings.from} onChange={(e) => onChange({ from: whole(e.target.value, 1, 1) })} />
+          </label>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Stop after page (empty = last)</span>
+            <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} placeholder="last" value={settings.to || ""} onChange={(e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) })} />
+          </label>
+          <label className="ze-format-field">
+            <span className="ze-format-label">First page shows number</span>
+            <input type="number" className="ze-format-number" step="1" value={settings.first} onChange={(e) => onChange({ first: Math.round(Number(e.target.value)) || 0 })} />
+          </label>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Position</span>
+            <SelectInput options={PAGE_NUMBER_POSITIONS} value={settings.position} onChange={(position) => onChange({ position })} />
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Style</span>
+            <SelectInput options={PAGE_NUMBER_FORMATS} value={settings.format} onChange={(format) => onChange({ format })} />
+          </div>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Size (pt)</span>
+            <input type="number" className="ze-format-number" min="4" max="48" value={settings.size} onChange={(e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) })} />
+          </label>
+          <label className="ze-format-field">
+            <span className="ze-format-label">Distance from edge (in)</span>
+            <input type="number" className="ze-format-number" min="0" max="3" step="0.05" value={settings.marginIn} onChange={(e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) })} />
+          </label>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Color</span>
+            <input type="color" className="ze-format-color-input" value={settings.color} onChange={(e) => onChange({ color: e.target.value })} />
+          </div>
+          <span className="ze-format-hint">
+            Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.
+          </span>
+        </React.Fragment>
+      );
+    }
+
+    // ---- Filter settings — a page-background treatment (grayscale/duotone/
+    // halftone…). Baked into Export PDF too via applyPageFilter, so preview
+    // and output always match.
+    function FilterSettings({
+      filterType, onFilterTypeChange,
+      duotoneDark, duotoneLight, onDuotoneDarkChange, onDuotoneLightChange,
+      filter, onFilterPatch,
+    }) {
+      return (
+        <React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Filter</span>
+            <select className="ze-format-select" value={filterType} onChange={(e) => onFilterTypeChange(e.target.value)}>
+              {PAGE_FILTER_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          {filterType === "duotone" && (
+            <React.Fragment>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Dark tone</span>
+                <input type="color" className="ze-format-color-input" value={duotoneDark} onChange={(e) => onDuotoneDarkChange(e.target.value)} />
+              </div>
+              <div className="ze-format-field">
+                <span className="ze-format-label">Light tone</span>
+                <input type="color" className="ze-format-color-input" value={duotoneLight} onChange={(e) => onDuotoneLightChange(e.target.value)} />
+              </div>
+            </React.Fragment>
+          )}
+          {FILTER_CONTROLS[filterType] && (
+            <ControlList controls={FILTER_CONTROLS[filterType]} source={filter} onPatch={onFilterPatch} />
+          )}
+          <span className="ze-format-hint">
+            Applies to the selected pages' backgrounds and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too.
+          </span>
+        </React.Fragment>
+      );
+    }
+
+    // ---- Onion-skin settings — ghosts the previous page on top of the
     // current one at reduced opacity, to help align content across a
     // spread. Deliberately scoped to previous-page-only (no next-page or
     // spread-aware left/right detection) and doesn't live-update while
     // that previous page is still being edited — see the effect in App
     // that builds onionGhostSrc for why.
-    function OnionSkinControl({ onionOn, onToggleOnion, opacity, onOpacityChange }) {
-      const [open, setOpen] = useState(false);
-      const containerRef = useRef(null);
-
-      useEffect(() => {
-        function handleClickOutside(e) {
-          if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }, []);
-
+    function OnionSkinSettings({ opacity, onOpacityChange }) {
       return (
-        <div className="ze-topbar-control" ref={containerRef}>
-          <div className="toggle-row">
-            <div className="toggle-row-text">
-              <p>Onion Skin</p>
-            </div>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={onionOn} onChange={(e) => onToggleOnion(e.target.checked)} />
-              <span className="toggle-slider"></span>
-            </label>
+        <React.Fragment>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Opacity ({Math.round(opacity * 100)}%)</span>
+            <input
+              type="range" className="ze-format-slider" min="0.05" max="0.8" step="0.05"
+              value={opacity}
+              onChange={(e) => onOpacityChange(Number(e.target.value))}
+            />
           </div>
-          <button type="button" className="ze-guides-settings-btn" title="Onion skin settings" onClick={() => setOpen((o) => !o)}>
-            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
-            </svg>
-          </button>
-          {open && (
-            <div className="ze-topbar-popover">
-              <div className="ze-format-field">
-                <span className="ze-format-label">Opacity ({Math.round(opacity * 100)}%)</span>
-                <input
-                  type="range" className="ze-format-slider" min="0.05" max="0.8" step="0.05"
-                  value={opacity}
-                  onChange={(e) => onOpacityChange(Number(e.target.value))}
-                />
-              </div>
-              <span className="ze-format-hint">
-                Shows the previous page faintly on top, for aligning content across a spread. Switch pages and back to refresh it after editing that page.
-              </span>
-            </div>
-          )}
-        </div>
+          <span className="ze-format-hint">
+            Shows the previous page faintly on top, for aligning content across a spread. Switch pages and back to refresh it after editing that page.
+          </span>
+        </React.Fragment>
       );
     }
 
@@ -5393,6 +5425,8 @@
           ["Ctrl + Shift + Z, or Ctrl + Y", "Redo"],
           ["Ctrl + C", "Copy the selected item"],
           ["Ctrl + V", "Paste a copied item, or an image from the clipboard"],
+          ["Ctrl + S", "Save the project (asks where, the first time)"],
+          ["Ctrl + Shift + S", "Save the project to a new file"],
           ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
           ["Double-click text", "Edit it (Move tool)"],
           ["Esc", "Finish editing and keep the text selected"],
@@ -5811,6 +5845,20 @@
       const imageInputRef = useRef(null);
       const insertPdfInputRef = useRef(null);
       const projectInputRef = useRef(null);
+      // The .znow file this project was last saved to or opened from, so
+      // Save can write straight back to it (Save As picks a new one). Only
+      // browsers with the File System Access API give us a handle; elsewhere
+      // this stays null and Save always downloads a copy.
+      const [projectFile, setProjectFile] = useState(null); // { handle, name } | null
+      // Briefly true after a save lands, so the Project menu button can say
+      // "Saved" — a quick Save (or Ctrl+S) opens no dialog to show it worked.
+      const [justSaved, setJustSaved] = useState(false);
+      const justSavedTimerRef = useRef(null);
+      function flashSaved() {
+        setJustSaved(true);
+        clearTimeout(justSavedTimerRef.current);
+        justSavedTimerRef.current = setTimeout(() => setJustSaved(false), 1800);
+      }
       const nextKeyRef = useRef(1);
       const nextAnnIdRef = useRef(1);
       const nextDocIdRef = useRef(1);
@@ -5884,6 +5932,7 @@
           setSelectedPageIndices([]);
           setUndoStack([]); // loading a document is a fresh start, not an undoable step
           setRedoStack([]);
+          setProjectFile(null); // a new document — Save must not overwrite the previous project's file
         } catch (err) {
           setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -5921,6 +5970,7 @@
         setSelectedAnnIds([]);
         setUndoStack([]);
         setRedoStack([]);
+        setProjectFile(null); // a new document — Save must not overwrite the previous project's file
       }
 
       function handleNewDocumentOpenPdf() {
@@ -6026,7 +6076,9 @@
       // regenerated on load instead of saved, same reasoning as the undo
       // snapshots — they're the one part that's both heavy and fully
       // derivable from everything else here.
-      async function handleSaveProject() {
+      // `saveAs` always asks where to save; otherwise it overwrites the
+      // file from the last save/open, asking only the first time.
+      async function handleSaveProject({ saveAs = false } = {}) {
         if (pages.length === 0 || savingProject) return;
         setErrorMsg(null);
         setSavingProject(true);
@@ -6053,7 +6105,20 @@
           // Plain JSON under the hood — .znow is just a distinct extension
           // so a saved project doesn't get mistaken for a generic .json
           // file (or opened by something else that happens to claim it).
-          await saveFile(JSON.stringify(project), "zine-project.znow", "application/json", "ZEditor project file", [".znow"]);
+          const json = JSON.stringify(project);
+          if (!saveAs && projectFile) {
+            try {
+              await writeFileHandle(projectFile.handle, json);
+              flashSaved();
+              return;
+            } catch (err) {
+              // The file was moved/deleted or editing it was refused — fall
+              // back to asking where to save, rather than losing the save.
+            }
+          }
+          const handle = await saveFile(json, (projectFile && projectFile.name) || "zine-project.znow", "application/json", "ZEditor project file", [".znow"]);
+          if (handle !== "cancelled") flashSaved();
+          if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
         } catch (err) {
           setErrorMsg("Couldn't save the project — " + (err && err.message ? err.message : "unknown error"));
         } finally {
@@ -6061,7 +6126,21 @@
         }
       }
 
-      function openProjectPicker() {
+      // Prefers the File System Access picker so the opened file's handle can
+      // be kept, letting Save write back to it. Falls back to the hidden file
+      // input (no handle) where that API isn't available.
+      async function openProjectPicker() {
+        if (typeof window.showOpenFilePicker === "function") {
+          try {
+            const [handle] = await window.showOpenFilePicker({
+              types: [{ description: "ZEditor project file", accept: { "application/json": [".znow"] } }],
+            });
+            handleLoadProjectFile(await handle.getFile(), handle);
+            return;
+          } catch (err) {
+            if (err && err.name === "AbortError") return; // dialog closed
+          }
+        }
         projectInputRef.current && projectInputRef.current.click();
       }
 
@@ -6106,7 +6185,7 @@
         if (file) handleLoadProjectFile(file);
       }
 
-      async function handleLoadProjectFile(file) {
+      async function handleLoadProjectFile(file, handle = null) {
         setErrorMsg(null);
         setLoading(true);
         try {
@@ -6177,6 +6256,7 @@
           setSelectedPageIndices([]);
           setUndoStack([]);
           setRedoStack([]);
+          setProjectFile(handle ? { handle, name: handle.name } : null);
 
           const s = project.settings || {};
           if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn);
@@ -6394,8 +6474,21 @@
         restoreSnapshot(entry);
       }
 
+      // Ctrl+S calls Save through this ref: the keydown effect below only
+      // re-subscribes on some state, and a stale handleSaveProject would
+      // save stale settings (guides, page numbers, styles…).
+      const saveProjectRef = useRef(handleSaveProject);
+      saveProjectRef.current = handleSaveProject;
+
       useEffect(() => {
         function handleKeyDown(e) {
+          // Save works even mid-typing in a field; the browser's own "Save
+          // page" dialog is always suppressed.
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+            e.preventDefault();
+            if (!(pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen)) saveProjectRef.current({ saveAs: e.shiftKey });
+            return;
+          }
           const tag = (e.target && e.target.tagName) || "";
           if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return; // let native undo/typing run inside text fields
           if (pendingInsertFile || confirmAction || shortcutsOpen || newDocOpen) return; // a modal is up — its own buttons handle input
@@ -6713,80 +6806,136 @@
                   </svg>
                 </button>
               </div>
-              {selectedPage && (
-                <FilterControl
-                  filterType={pageFilter.type}
-                  onFilterTypeChange={(type) => updatePageFilter({ type })}
-                  duotoneDark={pageFilter.darkColor || DEFAULT_DUOTONE_DARK}
-                  duotoneLight={pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT}
-                  onDuotoneDarkChange={(darkColor) => updatePageFilter({ darkColor })}
-                  onDuotoneLightChange={(lightColor) => updatePageFilter({ lightColor })}
-                  filter={pageFilter}
-                  onFilterPatch={updatePageFilter}
-                />
-              )}
-              <OnionSkinControl
-                onionOn={onionSkinOn}
-                onToggleOnion={setOnionSkinOn}
-                opacity={onionSkinOpacity}
-                onOpacityChange={setOnionSkinOpacity}
-              />
-              <PageNumbersControl
-                settings={pageNumbers}
-                pageCount={pages.length}
-                onChange={(patch) => setPageNumbers((current) => ({ ...current, ...patch }))}
-              />
-              <GuidesControl
-                guidesOn={guidesOn}
-                onToggleGuides={setGuidesOn}
-                format={guideFormat}
-                onFormatChange={setGuideFormat}
-                marginIn={guideMarginIn}
-                onMarginChange={setGuideMarginIn}
-                bleedIn={guideBleedIn}
-                onBleedChange={setGuideBleedIn}
-              />
-              {pages.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleNewProjectClick}
-                  title="Start over by loading a different PDF — erases the current unsaved project"
-                >
-                  New Project
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={pages.length === 0 || savingProject}
-                onClick={handleSaveProject}
-                title="Saves an editable project file — pages, text, images, and settings — to reopen and keep editing later"
-              >
-                {savingProject ? "Saving…" : "Save Project"}
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={handleLoadProjectClick}
-                title="Reopen a saved ZEditor project file"
-              >
-                Load Project
-              </button>
-              <button
-                type="button"
-                disabled={pages.length === 0 || exporting || sendingToArranger}
-                onClick={handleSendToZineArranger}
-                title="Exports the current zine and opens it directly in ZineArranger — no manual save/reopen step"
-              >
-                {sendingToArranger ? "Sending…" : "Send to ZineArranger"}
-              </button>
-              <button
-                type="button"
-                className="btn-solid"
-                disabled={pages.length === 0 || exporting}
-                onClick={handleExportPdf}
-              >
-                {exporting ? "Exporting…" : "Export PDF"}
-              </button>
+              <TopMenu label="Page">
+                {() => (
+                  <PageMenuBody
+                    rows={[
+                      {
+                        key: "filter",
+                        label: "Filter",
+                        // Per page, so it needs a page to act on. Turning it off
+                        // remembers the filter it was on, and turning it back on
+                        // restores that (its settings stay on the page throughout).
+                        disabled: !selectedPage,
+                        detail: pageFilter.type !== "none"
+                          ? (PAGE_FILTER_OPTIONS.find((o) => o.key === pageFilter.type) || PAGE_FILTER_OPTIONS[0]).label
+                          : null,
+                        checked: pageFilter.type !== "none",
+                        onToggle: (on) => updatePageFilter(on
+                          ? { type: pageFilter.lastType && pageFilter.lastType !== "none" ? pageFilter.lastType : "grayscale" }
+                          : { type: "none", lastType: pageFilter.type }),
+                        settings: (
+                          <FilterSettings
+                            filterType={pageFilter.type}
+                            onFilterTypeChange={(type) => updatePageFilter({ type })}
+                            duotoneDark={pageFilter.darkColor || DEFAULT_DUOTONE_DARK}
+                            duotoneLight={pageFilter.lightColor || DEFAULT_DUOTONE_LIGHT}
+                            onDuotoneDarkChange={(darkColor) => updatePageFilter({ darkColor })}
+                            onDuotoneLightChange={(lightColor) => updatePageFilter({ lightColor })}
+                            filter={pageFilter}
+                            onFilterPatch={updatePageFilter}
+                          />
+                        ),
+                      },
+                      {
+                        key: "onion",
+                        label: "Onion Skin",
+                        checked: onionSkinOn,
+                        onToggle: setOnionSkinOn,
+                        settings: <OnionSkinSettings opacity={onionSkinOpacity} onOpacityChange={setOnionSkinOpacity} />,
+                      },
+                      {
+                        key: "pageNumbers",
+                        label: "Page Numbers",
+                        checked: pageNumbers.on,
+                        onToggle: (on) => setPageNumbers((current) => ({ ...current, on })),
+                        settings: (
+                          <PageNumbersSettings
+                            settings={pageNumbers}
+                            pageCount={pages.length}
+                            onChange={(patch) => setPageNumbers((current) => ({ ...current, ...patch }))}
+                          />
+                        ),
+                      },
+                      {
+                        key: "guides",
+                        label: "Guides",
+                        checked: guidesOn,
+                        onToggle: setGuidesOn,
+                        settings: (
+                          <GuidesSettings
+                            format={guideFormat}
+                            onFormatChange={setGuideFormat}
+                            marginIn={guideMarginIn}
+                            onMarginChange={setGuideMarginIn}
+                            bleedIn={guideBleedIn}
+                            onBleedChange={setGuideBleedIn}
+                          />
+                        ),
+                      },
+                    ]}
+                  />
+                )}
+              </TopMenu>
+              <TopMenu label={savingProject ? "Saving…" : justSaved ? "Saved ✓" : "Project"}>
+                {({ close }) => (
+                  <React.Fragment>
+                    <MenuItem
+                      close={close}
+                      label="New Project"
+                      // Only meaningful once something is loaded — it starts over.
+                      disabled={pages.length === 0}
+                      onClick={handleNewProjectClick}
+                      hint="Start over by loading a different PDF — erases the current unsaved project"
+                    />
+                    <MenuItem
+                      close={close}
+                      label="Save"
+                      shortcut="Ctrl+S"
+                      detail={projectFile ? projectFile.name : null}
+                      disabled={pages.length === 0 || savingProject}
+                      onClick={() => handleSaveProject()}
+                      hint={projectFile
+                        ? "Saves over " + projectFile.name
+                        : "Saves an editable project file — pages, text, images, and settings — to reopen and keep editing later"}
+                    />
+                    <MenuItem
+                      close={close}
+                      label="Save As…"
+                      shortcut="Ctrl+Shift+S"
+                      disabled={pages.length === 0 || savingProject}
+                      onClick={() => handleSaveProject({ saveAs: true })}
+                      hint="Saves this project to a new file, and keeps saving there"
+                    />
+                    <MenuItem
+                      close={close}
+                      label="Load Project"
+                      disabled={loading}
+                      onClick={handleLoadProjectClick}
+                      hint="Reopen a saved ZEditor project file"
+                    />
+                  </React.Fragment>
+                )}
+              </TopMenu>
+              <TopMenu label={exporting ? "Exporting…" : sendingToArranger ? "Sending…" : "Export"} solid>
+                {({ close }) => (
+                  <React.Fragment>
+                    <MenuItem
+                      close={close}
+                      label="Export PDF"
+                      disabled={pages.length === 0 || exporting}
+                      onClick={handleExportPdf}
+                    />
+                    <MenuItem
+                      close={close}
+                      label="Send to ZineArranger"
+                      disabled={pages.length === 0 || exporting || sendingToArranger}
+                      onClick={handleSendToZineArranger}
+                      hint="Exports the current zine and opens it directly in ZineArranger — no manual save/reopen step"
+                    />
+                  </React.Fragment>
+                )}
+              </TopMenu>
             </div>
           </header>
 
