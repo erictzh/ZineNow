@@ -7,6 +7,7 @@ import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 import { AnnotationItem } from "./AnnotationItem.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
+import { magicEraseAt } from "./magicEraseGesture.js";
 import { startSoftEraseGesture } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 
@@ -19,7 +20,7 @@ export function ComposeCanvas({
   annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit,
-  eraserMode, softEraser, onEraseImagePixels,
+  eraserMode, softEraser, magicEraser, onEraseImagePixels,
   zoom,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
@@ -28,6 +29,7 @@ export function ComposeCanvas({
   const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
   const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
   const softErasing = tool === "eraser" && eraserMode === "soft";
+  const magicErasing = tool === "eraser" && eraserMode === "magic";
   const [, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
 
   function overlayPoint(e) {
@@ -43,6 +45,10 @@ export function ComposeCanvas({
     }
     if (softErasing) {
       startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels });
+      return;
+    }
+    if (magicErasing) {
+      magicEraseAt(e, { annotations, magicEraser, toPagePoint: overlayPoint, onEraseImagePixels });
       return;
     }
     if (tool === "eraser") {
@@ -190,7 +196,7 @@ export function ComposeCanvas({
   const cursorClass =
     tool === "text" ? "ze-tool-text" :
     (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse") ? "ze-tool-draw" :
-    softErasing ? "ze-tool-soft-erase" :
+    softErasing || magicErasing ? "ze-tool-soft-erase" : // both work on image pixels: crosshair over everything
     tool === "eraser" ? "ze-tool-erase" : "";
 
   // The page is scaled visually; this outer box takes up the scaled

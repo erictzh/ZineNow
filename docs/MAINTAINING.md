@@ -115,6 +115,7 @@ above it in this list:
 | Image effects (rounded, torn, scissor, stroke, shadow, texture) | definitions: `model/imageEffects.js`, `model/edgeShapes.js`; drawing: `render/boxEffects.js`; live preview: `ui/canvas/BoxEffectOverlays.jsx`, `ui/canvas/boxStyles.js` |
 | How text is laid out or drawn | layout and wrapping: `render/textLayout.js`; drawing: `render/drawText.js`; settings and effects: `model/text/` |
 | Rectangles/ellipses, pen/highlighter | `model/rect.js`, `model/strokes.js`, `render/drawShapes.js` |
+| Erasers (stroke, soft, magic) | settings: `model/softEraser.js`, `model/magicEraser.js`; pixels: `render/softErase.js`, `render/magicErase.js`; mouse: `ui/canvas/softEraseGesture.js`, `ui/canvas/magicEraseGesture.js`; panel: `EraserToolPanel` in `ui/panels/format/ToolPanels.jsx` |
 | What Export PDF produces | `io/pdfExport.js` → `render/pageRender.js` (draws a whole page) |
 | The `.znow` project format | `io/projectFile.js` |
 | Opening / inserting PDFs | `io/pdfImport.js`, `state/useDocumentFiles.js` |

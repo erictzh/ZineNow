@@ -3166,6 +3166,10 @@
     return { loading, setLoading, errorMsg, setErrorMsg };
   }
 
+  // apps/ZEditor/src/model/magicEraser.js
+  var MAGIC_ERASER_DEFAULTS = { tolerance: 32, contiguous: true };
+  var MAGIC_TOLERANCE_MAX = 255;
+
   // apps/ZEditor/src/model/softEraser.js
   var SOFT_ERASER_DEFAULTS = { size: 40, softness: 60, strength: 100 };
   var SOFT_ERASER_DABS_PER_RADIUS = 4;
@@ -3245,6 +3249,7 @@
     const [penTaper, setPenTaper] = useState10(0);
     const [eraserMode, setEraserMode] = useState10("soft");
     const [softEraser, setSoftEraser] = useState10(SOFT_ERASER_DEFAULTS);
+    const [magicEraser, setMagicEraser] = useState10(MAGIC_ERASER_DEFAULTS);
     const [highlighterColor, setHighlighterColor] = useState10(HIGHLIGHTER_DEFAULTS.color);
     const [highlighterWidth, setHighlighterWidth] = useState10(HIGHLIGHTER_DEFAULTS.width);
     const [highlighterTaper, setHighlighterTaper] = useState10(0);
@@ -3274,6 +3279,8 @@
       setEraserMode,
       softEraser,
       setSoftEraser,
+      magicEraser,
+      setMagicEraser,
       highlighterColor,
       setHighlighterColor,
       highlighterWidth,
@@ -4166,6 +4173,57 @@
     ));
   }
 
+  // apps/ZEditor/src/render/magicErase.js
+  function magicErase(imageData, x, y, tolerance, contiguous) {
+    const { data, width, height } = imageData;
+    const px = Math.floor(x), py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= width || py >= height) return 0;
+    const start = py * width + px;
+    if (data[start * 4 + 3] === 0) return 0;
+    const r0 = data[start * 4], g0 = data[start * 4 + 1], b0 = data[start * 4 + 2];
+    const matches = (i) => {
+      const o = i * 4;
+      return data[o + 3] !== 0 && Math.abs(data[o] - r0) <= tolerance && Math.abs(data[o + 1] - g0) <= tolerance && Math.abs(data[o + 2] - b0) <= tolerance;
+    };
+    let erased = 0;
+    if (!contiguous) {
+      for (let i = 0; i < width * height; i++) {
+        if (matches(i)) {
+          data[i * 4 + 3] = 0;
+          erased++;
+        }
+      }
+      return erased;
+    }
+    const seen = new Uint8Array(width * height);
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length) {
+      const i = stack.pop();
+      if (!matches(i)) continue;
+      data[i * 4 + 3] = 0;
+      erased++;
+      const cx = i % width, cy = (i - cx) / width;
+      if (cx > 0 && !seen[i - 1]) {
+        seen[i - 1] = 1;
+        stack.push(i - 1);
+      }
+      if (cx < width - 1 && !seen[i + 1]) {
+        seen[i + 1] = 1;
+        stack.push(i + 1);
+      }
+      if (cy > 0 && !seen[i - width]) {
+        seen[i - width] = 1;
+        stack.push(i - width);
+      }
+      if (cy < height - 1 && !seen[i + width]) {
+        seen[i + width] = 1;
+        stack.push(i + width);
+      }
+    }
+    return erased;
+  }
+
   // apps/ZEditor/src/render/softErase.js
   function imagePixelAt(ann, px, py) {
     const cx = ann.x + ann.width / 2, cy = ann.y + ann.height / 2;
@@ -4197,6 +4255,37 @@
     ctx.arc(0, 0, 1, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  // apps/ZEditor/src/ui/canvas/magicEraseGesture.js
+  async function magicEraseAt(e, { annotations, magicEraser, toPagePoint, onEraseImagePixels }) {
+    e.preventDefault();
+    const p = toPagePoint(e);
+    let ann = null, hit = null;
+    for (let i = annotations.length - 1; i >= 0; i--) {
+      const a = annotations[i];
+      if (a.type !== "image" || a.hidden || a.locked) continue;
+      const h = imagePixelAt(a, p.x, p.y);
+      if (h.inside) {
+        ann = a;
+        hit = h;
+        break;
+      }
+    }
+    if (!ann) return;
+    const source = await loadImageElement(ann.src);
+    const canvas = document.createElement("canvas");
+    canvas.width = ann.naturalWidth;
+    canvas.height = ann.naturalHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const x = Math.min(canvas.width - 1, Math.max(0, hit.x));
+    const y = Math.min(canvas.height - 1, Math.max(0, hit.y));
+    const erased = magicErase(imageData, x, y, magicEraser.tolerance, magicEraser.contiguous);
+    if (erased === 0) return;
+    ctx.putImageData(imageData, 0, 0);
+    onEraseImagePixels(ann.id, canvas.toDataURL("image/png"));
   }
 
   // apps/ZEditor/src/ui/canvas/softEraseGesture.js
@@ -4384,6 +4473,7 @@
     onFinishTextEdit,
     eraserMode,
     softEraser,
+    magicEraser,
     onEraseImagePixels,
     zoom
   }) {
@@ -4393,6 +4483,7 @@
     const drawingRef = useRef12(null);
     const [brushPos, setBrushPos] = useState14(null);
     const softErasing = tool === "eraser" && eraserMode === "soft";
+    const magicErasing = tool === "eraser" && eraserMode === "magic";
     const [, setDrawTick] = useState14(0);
     function overlayPoint(e) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -4406,6 +4497,10 @@
       }
       if (softErasing) {
         startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels });
+        return;
+      }
+      if (magicErasing) {
+        magicEraseAt(e, { annotations, magicEraser, toPagePoint: overlayPoint, onEraseImagePixels });
         return;
       }
       if (tool === "eraser") {
@@ -4528,7 +4623,10 @@
     }
     const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
     const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
-    const cursorClass = tool === "text" ? "ze-tool-text" : tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" ? "ze-tool-draw" : softErasing ? "ze-tool-soft-erase" : tool === "eraser" ? "ze-tool-erase" : "";
+    const cursorClass = tool === "text" ? "ze-tool-text" : tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" ? "ze-tool-draw" : softErasing || magicErasing ? "ze-tool-soft-erase" : (
+      // both work on image pixels: crosshair over everything
+      tool === "eraser" ? "ze-tool-erase" : ""
+    );
     return /* @__PURE__ */ React.createElement("div", { className: "ze-artboard-zoom", style: { width: canvasSize.width * zoom, height: canvasSize.height * zoom } }, /* @__PURE__ */ React.createElement("div", { className: "ze-page ze-page--rendered", style: { transform: zoom === 1 ? void 0 : `scale(${zoom})`, "--ze-zoom": zoom } }, /* @__PURE__ */ React.createElement("canvas", { ref: canvasRef }), onionGhostSrc && /* @__PURE__ */ React.createElement("img", { className: "ze-onion-ghost", src: onionGhostSrc, alt: "", style: { opacity: onionSkinOpacity } }), /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -5338,7 +5436,8 @@
     )));
   }
   function EraserToolPanel({ toolDefaults }) {
-    const { eraserMode, setEraserMode, softEraser, setSoftEraser } = toolDefaults;
+    const { eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser } = toolDefaults;
+    const onChangeMagic = (patch) => setMagicEraser((cur) => ({ ...cur, ...patch }));
     const onChangeSoftEraser = (patch) => setSoftEraser((cur) => ({ ...cur, ...patch }));
     const slider = (prop, label, min, max, unit) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label, " (", softEraser[prop], unit, ")"), /* @__PURE__ */ React.createElement(
       "input",
@@ -5352,7 +5451,7 @@
         onChange: (e) => onChangeSoftEraser({ [prop]: Number(e.target.value) })
       }
     ));
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Eraser" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.mode", title: "Mode", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : ""), onClick: () => setEraserMode("stroke") }, "Strokes"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : ""), onClick: () => setEraserMode("soft") }, "Soft (images)")), eraserMode === "stroke" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Removes any pen or highlighter stroke you drag across.")), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Eraser" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.mode", title: "Mode", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : ""), onClick: () => setEraserMode("stroke") }, "Strokes"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : ""), onClick: () => setEraserMode("soft") }, "Soft (images)"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "magic" ? " active" : ""), onClick: () => setEraserMode("magic") }, "Magic")), eraserMode === "stroke" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Removes any pen or highlighter stroke you drag across.")), eraserMode === "magic" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.magic", title: "Magic eraser", defaultOpen: true, hint: "Click an image: the colour you click, and every colour within the Tolerance of it, becomes transparent. Each click is its own Ctrl+Z step. To use it on text or a shape, Rasterize to Image first." }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Tolerance (0 = exact colour, ", MAGIC_TOLERANCE_MAX, " = everything)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: MAGIC_TOLERANCE_MAX, value: magicEraser.tolerance, onChange: (tolerance) => onChangeMagic({ tolerance }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Erase"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: true }) }, "Connected only"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: false }) }, "Whole image")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, magicEraser.contiguous ? "Only matching pixels touching the one you click (like Photoshop's Contiguous)." : "Every matching pixel in the image, connected or not."))), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
   }
 
   // apps/ZEditor/src/ui/panels/FormatPanel.jsx
@@ -6107,6 +6206,7 @@
         onToggleCrop: selection.handleToggleCrop,
         eraserMode: t.eraserMode,
         softEraser: t.softEraser,
+        magicEraser: t.magicEraser,
         onEraseImagePixels: edits.handleEraseImagePixels
       }
     )))), selectedPage && /* @__PURE__ */ React.createElement(
