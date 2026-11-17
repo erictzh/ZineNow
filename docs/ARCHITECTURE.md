@@ -176,6 +176,6 @@ sizes × page counts 0–300: 1,267,712 cases, 0 differences).
 - [x] Markdown-to-PDF moved to `src/`: `App.jsx` converted back to JSX by a codemod (compiles to the identical program); `pdfGenerator.js` and `App.jsx` split into 36 files; the Sidebar broken into tabs and sections, with shared file-dialog helpers. Preview document and sidebar HTML verified identical to the old version.
 - [x] ZineArranger moved to `src/` (14 files, ~30 globals into one `state`); the 4,770-line imposition function replaced by `layouts.js` data + `impose()` + `sheetsHtml()`, identical on all 1,267,712 checked cases and in the browser against the old page
 - [ ] ZineArranger `refreshSpecs` (~290 lines in `optionsPanel.js`) split into reading options vs computing sizes
-- [ ] Launcher moved to `launcher/`
+- [x] Launcher moved to `launcher/` (`launcher.js`, `launcher.css`, `bg.jpg`; `index.html` stays at the root so app links are unchanged)
 
 The last state before this refactor is tagged `pre-modular-refactor`.
