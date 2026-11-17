@@ -116,6 +116,7 @@ export function App() {
                 onToggleCrop={selection.handleToggleCrop}
                 eraserMode={t.eraserMode}
                 softEraser={t.softEraser}
+                magicEraser={t.magicEraser}
                 onEraseImagePixels={edits.handleEraseImagePixels}
               />
             </div>

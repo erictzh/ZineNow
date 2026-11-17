@@ -1,9 +1,11 @@
 // Format panels for a tool with nothing selected: the settings for the next rectangle/ellipse, text box or stroke, and the eraser.
 
 import { BLEND_CONTROL, OPACITY_CONTROL } from "../../../model/controls.js";
+import { MAGIC_TOLERANCE_MAX } from "../../../model/magicEraser.js";
 import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/strokes.js";
 import { ControlList } from "../../controls/ControlList.jsx";
+import { SliderNumberInput } from "../../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { StrokeFormatFields } from "../../controls/StrokeFormatFields.jsx";
 import { TextBasicSection } from "../TextBasicSection.jsx";
@@ -69,7 +71,8 @@ export function StrokeToolPanel({ tool, toolDefaults: t }) {
 }
 
 export function EraserToolPanel({ toolDefaults }) {
-  const { eraserMode, setEraserMode, softEraser, setSoftEraser } = toolDefaults;
+  const { eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser } = toolDefaults;
+  const onChangeMagic = (patch) => setMagicEraser((cur) => ({ ...cur, ...patch }));
   const onChangeSoftEraser = (patch) => setSoftEraser((cur) => ({ ...cur, ...patch }));
   const slider = (prop, label, min, max, unit) => (
     <div className="ze-format-field">
@@ -84,9 +87,30 @@ export function EraserToolPanel({ toolDefaults }) {
         <div className="ze-format-row">
           <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : "")} onClick={() => setEraserMode("stroke")}>Strokes</button>
           <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : "")} onClick={() => setEraserMode("soft")}>Soft (images)</button>
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "magic" ? " active" : "")} onClick={() => setEraserMode("magic")}>Magic</button>
         </div>
         {eraserMode === "stroke" && <span className="ze-format-hint">Removes any pen or highlighter stroke you drag across.</span>}
       </PanelSection>
+      {eraserMode === "magic" && (
+        <PanelSection id="eraser.magic" title="Magic eraser" defaultOpen hint="Click an image: the colour you click, and every colour within the Tolerance of it, becomes transparent. Each click is its own Ctrl+Z step. To use it on text or a shape, Rasterize to Image first.">
+          <div className="ze-format-field">
+            <span className="ze-format-label">Tolerance (0 = exact colour, {MAGIC_TOLERANCE_MAX} = everything)</span>
+            <SliderNumberInput min={0} max={MAGIC_TOLERANCE_MAX} value={magicEraser.tolerance} onChange={(tolerance) => onChangeMagic({ tolerance })} />
+          </div>
+          <div className="ze-format-field">
+            <span className="ze-format-label">Erase</span>
+            <div className="ze-format-row">
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: true })}>Connected only</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: false })}>Whole image</button>
+            </div>
+            <span className="ze-format-hint">
+              {magicEraser.contiguous
+                ? "Only matching pixels touching the one you click (like Photoshop's Contiguous)."
+                : "Every matching pixel in the image, connected or not."}
+            </span>
+          </div>
+        </PanelSection>
+      )}
       {eraserMode === "soft" && (
         <PanelSection id="eraser.brush" title="Brush" defaultOpen hint="Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first.">
           {slider("size", "Size", 4, 300, "px")}

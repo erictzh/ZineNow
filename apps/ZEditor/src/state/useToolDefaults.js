@@ -2,6 +2,7 @@
 
 import { controlValues } from "../model/controls.js";
 import { RECT_CONTROLS } from "../model/rect.js";
+import { MAGIC_ERASER_DEFAULTS } from "../model/magicEraser.js";
 import { SOFT_ERASER_DEFAULTS } from "../model/softEraser.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../model/strokes.js";
 import { DEFAULT_FONT_OPTIONS } from "../model/text/textControls.js";
@@ -37,9 +38,11 @@ export function useToolDefaults() {
   const [penColor, setPenColor] = useState(PEN_DEFAULTS.color);
   const [penWidth, setPenWidth] = useState(PEN_DEFAULTS.width);
   const [penTaper, setPenTaper] = useState(0);
-  // Eraser: "soft" fades image pixels (the default); "stroke" removes whole pen strokes.
+  // Eraser: "soft" fades image pixels (the default); "stroke" removes whole
+  // pen strokes; "magic" erases the clicked colour (within a tolerance).
   const [eraserMode, setEraserMode] = useState("soft");
   const [softEraser, setSoftEraser] = useState(SOFT_ERASER_DEFAULTS);
+  const [magicEraser, setMagicEraser] = useState(MAGIC_ERASER_DEFAULTS);
   const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
   const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);
   const [highlighterTaper, setHighlighterTaper] = useState(0);
@@ -59,7 +62,7 @@ export function useToolDefaults() {
     fontOptions, setFontOptions, addFontFamilies,
     textStyles, handleSaveTextStyle, handleDeleteTextStyle, mergeTextStyles,
     penColor, setPenColor, penWidth, setPenWidth, penTaper, setPenTaper,
-    eraserMode, setEraserMode, softEraser, setSoftEraser,
+    eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser,
     highlighterColor, setHighlighterColor, highlighterWidth, setHighlighterWidth, highlighterTaper, setHighlighterTaper,
     textFontFamily, setTextFontFamily, textFontSize, setTextFontSize, textBold, setTextBold,
     textItalic, setTextItalic, textUnderline, setTextUnderline, textColor, setTextColor, textAlign, setTextAlign,
