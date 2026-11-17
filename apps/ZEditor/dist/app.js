@@ -2371,6 +2371,18 @@
     };
   }
 
+  // shared/js/download.js
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+  }
+
   // apps/ZEditor/src/io/fileSave.js
   function canvasToArrayBuffer(canvas) {
     return new Promise((resolve, reject) => {
@@ -2397,14 +2409,7 @@
       }
     }
     const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    downloadBlob(blob, filename);
     return null;
   }
   async function writeFileHandle(handle, data) {
@@ -2437,7 +2442,9 @@
     return outDoc.save();
   }
 
-  // apps/ZEditor/src/io/zineArrangerHandoff.js
+  // shared/js/zineArrangerHandoff.js
+  var ARRANGER_READY_MESSAGE = "zinearranger-ready";
+  var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
   async function sendPdfToZineArranger(buildBytes, filename) {
     const win = window.open("../ZineArranger/index.html", "_blank");
     if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
@@ -2447,7 +2454,7 @@
         reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
       }, 15e3);
       function onMessage(event) {
-        if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
+        if (event.source !== win || !event.data || event.data.type !== ARRANGER_READY_MESSAGE) return;
         clearTimeout(timeoutId);
         window.removeEventListener("message", onMessage);
         resolve();
@@ -2457,7 +2464,7 @@
     const pdfBytes = await buildBytes();
     const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
     await readyPromise;
-    win.postMessage({ type: "zeditor-handoff-pdf", buffer, filename }, "*", [buffer]);
+    win.postMessage({ type: HANDOFF_PDF_MESSAGE, buffer, filename }, "*", [buffer]);
   }
 
   // apps/ZEditor/src/state/useExport.js

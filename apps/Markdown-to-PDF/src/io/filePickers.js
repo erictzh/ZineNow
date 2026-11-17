@@ -1,5 +1,7 @@
 // Opening and saving files with the browser's native dialogs (falling back to a hidden input / a download), and copying text.
 
+import { downloadBlob } from "../../../../shared/js/download.js";
+
 // Each dialog passes an `id`: the browser remembers, per id, the folder
 // last used with it — so Open and Save sharing one id share one folder.
 // No web page can point a dialog at a folder by itself.
@@ -46,14 +48,7 @@ export async function saveTextFile(text, { id, filename, mimeType, description, 
 
 function downloadText(text, filename, mimeType) {
   const blob = new Blob([text], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(blob, filename);
   return { downloaded: filename };
 }
 

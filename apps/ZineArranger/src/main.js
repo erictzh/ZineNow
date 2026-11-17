@@ -2,6 +2,7 @@
 // onclick/onchange attributes call. The code lives in the files next to this one —
 // see docs/ARCHITECTURE.md for what goes where.
 
+import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
 import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
 import { getPreviewTargetWidth } from "./sheetSizes.js";
@@ -24,6 +25,7 @@ document.getElementById("selector").addEventListener("change", refreshSpecs, fal
 refreshSpecs();
 
 // ---- ZEditor handoff --------------------------------------------------
+// The receiving half of shared/js/zineArrangerHandoff.js, whose sender ZEditor and Markdown-to-PDF both use.
 // Lets ZEditor's "Send to ZineArranger" button skip the manual
 // export-then-reopen round trip: it opens this app in a new tab via
 // window.open(), waits for the "ready" postMessage below, then posts
@@ -41,7 +43,7 @@ refreshSpecs();
 
     window.addEventListener("message", function (event) {
         var data = event.data;
-        if (!data || data.type !== "zeditor-handoff-pdf" || !(data.buffer instanceof ArrayBuffer)) return;
+        if (!data || data.type !== HANDOFF_PDF_MESSAGE || !(data.buffer instanceof ArrayBuffer)) return;
         var file = new File([data.buffer], data.filename || "zine.pdf", { type: "application/pdf" });
         receivePdf(file);
         logSys("Received \"" + file.name + "\" from ZEditor (" + Math.round(file.size / 1024) + " KB).");
@@ -61,7 +63,7 @@ refreshSpecs();
         var pingInterval = setInterval(function () {
             pingCount++;
             try {
-                window.opener.postMessage({ type: "zinearranger-ready" }, "*");
+                window.opener.postMessage({ type: ARRANGER_READY_MESSAGE }, "*");
             } catch (err) {
                 clearInterval(pingInterval); // opener gone or unreachable — this tab still works standalone
             }

@@ -1,5 +1,6 @@
 // The app: Markdown text and settings state, export and hand-off, and the page layout.
 
+import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
 import { exportToPdf } from "../export/printExport.js";
 import { renderRasterizationDocument } from "../export/rasterDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
@@ -116,28 +117,11 @@ export function App() {
     if (isSendingToArranger) return;
     setExportError(null);
     setIsSendingToArranger(true);
-    let win = null;
     let iframe = null;
-    try {
-      win = window.open("../ZineArranger/index.html", "_blank");
-      if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
-      // Attach the "ready" listener before anything else — see
-      // ZEditor's own handleSendToZineArranger for why (ZineArranger
-      // can finish loading and fire its ready ping while we're still
-      // off rendering/rasterizing pages here).
-      const readyPromise = new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          window.removeEventListener("message", onReady);
-          reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
-        }, 15000);
-        function onReady(event) {
-          if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
-          clearTimeout(timeoutId);
-          window.removeEventListener("message", onReady);
-          resolve();
-        }
-        window.addEventListener("message", onReady);
-      });
+    // sendPdfToZineArranger opens the tab and starts listening for its
+    // "ready" ping before calling this, so the ping can't be missed while
+    // pages are still being rendered/rasterized here.
+    async function buildBytes() {
       const paper = PAPER_SIZES[config.paperSize] || PAPER_SIZES.a4;
       const DPI = 96;
       const rasterResult = await new Promise((resolve, reject) => {
@@ -200,18 +184,10 @@ export function App() {
           height: pageHeightPts,
         });
       }
-      const pdfBytes = await outDoc.save();
-      const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
-      await readyPromise;
-      win.postMessage(
-        {
-          type: "zeditor-handoff-pdf",
-          buffer,
-          filename: deriveFilename(markdown),
-        },
-        "*",
-        [buffer],
-      );
+      return outDoc.save();
+    }
+    try {
+      await sendPdfToZineArranger(buildBytes, deriveFilename(markdown));
     } catch (err) {
       setExportError("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
     } finally {

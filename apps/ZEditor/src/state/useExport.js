@@ -3,7 +3,7 @@
 import { titleToFileName } from "../model/documentTitle.js";
 import { savePdfBytes } from "../io/fileSave.js";
 import { buildExportPdfBytes } from "../io/pdfExport.js";
-import { sendPdfToZineArranger } from "../io/zineArrangerHandoff.js";
+import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
 
 const { useState } = React;
 

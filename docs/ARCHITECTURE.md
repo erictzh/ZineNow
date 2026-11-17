@@ -39,8 +39,8 @@ ZineNow/
 ├─ index.html, config/, launcher/   Launcher page (app grid, readme sidebar)
 ├─ shared/
 │  ├─ vendor/pdfjs/, vendor/pdf-lib/   One copy of each library for all apps
-│  ├─ styles/                          Design tokens + shared components (buttons, toggle, topbar, modal)
-│  └─ js/                              Code more than one app uses: ZineArranger hand-off, file saving, base64, font picker
+│  ├─ styles/                          Design tokens + shared components (buttons, topbar parts, tabs, toggle, scrollbars)
+│  └─ js/                              Code more than one app uses: ZineArranger hand-off, download fallback
 ├─ tools/build.mjs                  Builds apps/<App>/src → apps/<App>/dist/app.js
 ├─ docs/                            This file
 └─ apps/<App>/
@@ -49,6 +49,28 @@ ZineNow/
    ├─ styles/                       The app's CSS, split by area of the screen
    └─ src/                          The app's code (layout below)
 ```
+
+### Shared code (`shared/`)
+
+Only code that was identical in more than one app lives here; an app keeps
+its own variant of anything that differs.
+
+| File | Holds | Used by |
+|---|---|---|
+| `styles/tokens.css` | The `--ui-*` theme tokens and `--preview-bar` | every page |
+| `styles/buttons.css` | Hollow `button`, `.btn-solid`, `.log-btn` | ZEditor, ZineArranger, Markdown-to-PDF |
+| `styles/topbar.css` | Topbar brand, logo mark, title/subtitle, actions (each app styles the `.topbar` bar itself) | ZEditor, Markdown-to-PDF |
+| `styles/tabs.css`, `styles/toggle.css` | Tabs; the toggle switch's track, knob and states (each app sets `.toggle-row` / `.toggle-switch`) | ZEditor, Markdown-to-PDF |
+| `styles/scrollbars.css` | Thin custom scrollbars | ZEditor, Markdown-to-PDF, launcher |
+| `js/zineArrangerHandoff.js` | The hand-off message types and `sendPdfToZineArranger(buildBytes, filename)` | ZEditor and Markdown-to-PDF send; ZineArranger receives |
+| `js/download.js` | `downloadBlob(blob, filename)`, the fallback when there is no Save As dialog | ZEditor, Markdown-to-PDF |
+
+Pages link the shared stylesheets they use **before** their own CSS, so an
+app rule still wins a tie. App code imports shared JS by relative path
+(`../../../../shared/js/...` from `src/<folder>/`); esbuild bundles it into
+`dist/app.js`, so it still works on `file://`. Not shared, because the
+copies differ: inputs, log output, the preview pane, `FontCombobox`
+(ZEditor's can upload fonts), and ZEditor-only helpers such as base64.
 
 ### ZEditor `src/` (target)
 
@@ -172,7 +194,7 @@ sizes × page counts 0–300: 1,267,712 cases, 0 differences).
 - [x] Build step (`package.json`, `tools/build.mjs`, `npm run build/watch/check`)
 - [x] One shared copy of pdf.js and pdf-lib in `shared/vendor/`
 - [x] ZEditor's code moved, unchanged, from inline `<script type="text/babel">` to `src/main.jsx` (built to `dist/app.js`; Babel removed)
-- [ ] Shared CSS tokens/components and shared JS (`shared/styles`, `shared/js`)
+- [x] Shared CSS tokens/components and shared JS (`shared/styles`, `shared/js`): tokens, buttons, topbar parts, tabs, toggle and scrollbars, linked by every page that had a verbatim copy (every element's computed style identical before/after on all four pages); the ZineArranger hand-off and the download fallback in `shared/js/` (hand-off and Export PDF download produce the same file as before)
 - [x] ZEditor split into `model/`, `render/`, `io/` and `ui/` (82 files; every statement moved byte-for-byte, only `import`/`export` lines added); `style.css` split into `styles/` (11 files, same 301 rules in the same order)
 - [x] ZEditor `ui/App.jsx` split into 15 `state/` hooks (App.jsx 1,748 → 223 lines); PDF import/export, the `.znow` format and the ZineArranger hand-off moved to `io/`; Topbar, ToolBar and the live filter defs are their own components
 - [x] ZEditor `FormatPanel.jsx` is now a router over one panel per item type plus the tool panels (`ui/panels/format/`); `ComposeCanvas.jsx` (517 → 253 lines) delegates the page background, soft-eraser gesture, selection rotate knob, per-type item rendering and page overlays to their own files
