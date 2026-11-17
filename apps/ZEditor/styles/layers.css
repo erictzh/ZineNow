@@ -1,0 +1,102 @@
+/* The floating Layers panel. */
+
+/* ---- Layers panel --------------------------------------------------------- */
+.ze-layers-panel {
+    position: fixed;
+    top: 128px;
+    right: calc(var(--ze-format-panel-width) + 16px);
+    width: 230px;
+    z-index: 15; /* under the topbar popovers and modals */
+    overflow: hidden;
+    background-color: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.ze-layers-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px 8px 16px;
+    cursor: move;
+    user-select: none;
+}
+.ze-layers-list {
+    height: min(240px, 36vh);
+    overflow-y: auto;
+    padding: 6px;
+}
+.ze-layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.ze-layer-row:hover { background-color: var(--ui-bg); }
+.ze-layer-row.is-selected {
+    border-color: var(--ui-accent);
+    background-color: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+}
+/* Layers that belong to a group share a coloured bar on their left edge. */
+.ze-layer-row.is-grouped { border-left: 3px solid var(--ze-group-color); }
+.ze-layers-head-actions { display: flex; align-items: center; gap: 2px; cursor: default; }
+.ze-layers-head-actions .ze-guides-settings-btn { border: 0; background: none; }
+.ze-layers-head-actions .ze-guides-settings-btn:hover:not(:disabled) { color: var(--ui-fg); }
+.ze-layer-row.is-hidden .ze-layer-thumb,
+.ze-layer-row.is-hidden .ze-layer-name { opacity: 0.4; }
+.ze-layer-row--page { cursor: default; }
+.ze-layer-row--page:hover { background-color: transparent; }
+.ze-layer-row--page .ze-layer-name { color: var(--ui-fg-muted); }
+.ze-layer-thumb {
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid var(--ui-border);
+    border-radius: 3px;
+    background-color: #dbdbdb;
+}
+.ze-layer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ze-layer-thumb-fill { width: 100%; height: 100%; }
+.ze-layer-thumb-text { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.ze-layer-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ui-fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ze-layer-name-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 4px;
+    font-family: var(--ui-font);
+    font-size: 12px;
+    color: var(--ui-fg);
+    background-color: #0c0c0cab;
+    border: 1px solid var(--ui-accent);
+    border-radius: 3px;
+    outline: none;
+}
+.ze-layer-icon-btn {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+}
+.ze-layer-icon-btn.active { color: var(--ui-accent-text); }
+

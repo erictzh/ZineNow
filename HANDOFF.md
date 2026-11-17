@@ -10,7 +10,7 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 
 | App | Path | Purpose |
 |---|---|---|
-| ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `style.css` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
+| ZEditor | `apps/ZEditor/src/` (built to `dist/app.js`) + `index.html` + `styles/` | Edit PDF pages: text, images, drawing, filters, page management. Saves editable `.znow` projects. |
 | ZineArranger | `apps/ZineArranger/index.html` | Imposes a multi-page PDF into a printable zine booklet. |
 | Md to PDF Converter | `apps/Markdown-to-PDF/` | Markdown → paginated PDF eBook. |
 | Launcher | `index.html`, `app.js`, `style.css`, `bg.jpg` (root) | Landing page linking to the apps. (`app-logo.png` referenced by it is missing — pre-existing 404, harmless.) |
@@ -18,7 +18,7 @@ ZineNow is a suite of browser-only tools for making zines. Everything runs from 
 ## 2. Architecture notes per app
 
 ### ZEditor (single ~3400-line file)
-- React (UMD globals) app whose code is in `src/main.jsx` (being split up, see docs/ARCHITECTURE.md), built by `npm run build` into `dist/app.js`. No Babel in the browser any more. pdf.js (rendering) and pdf-lib (export) come from the shared copies in `shared/vendor/`.
+- React (UMD globals) app whose code is split across `src/` (`model/`, `render/`, `io/`, `ui/`; the app state is still in one `ui/App.jsx` — see docs/ARCHITECTURE.md), built by `npm run build` into `dist/app.js`. Function names mentioned below are unchanged; search `src/` for them. No Babel in the browser any more. pdf.js (rendering) and pdf-lib (export) come from the shared copies in `shared/vendor/`.
 - **State is immutable everywhere** (`.map` / spread, never mutate). Undo snapshots rely on this for structural sharing — keep it that way.
 - Page object: `{ key, docId, pageNumber, rotation, dataUrl, isBlank, annotations, filter }`. Blank pages have `width/height` instead of `docId/pageNumber`.
 - `pdfDocsRef.current` = `{ docId: { doc, bytes } }` — multiple source PDFs can be loaded (Insert PDF). Use `docFor(pdfDocsRef, page)`.

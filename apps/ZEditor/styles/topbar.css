@@ -1,0 +1,159 @@
+/* Topbar controls: popovers, the title box and the Page / Project / Export menus. */
+
+/* ---- Topbar popover controls (Guides, Filter, Onion Skin) — shared
+   shell: a small trigger in the topbar plus an absolutely-positioned
+   panel of ze-format-* fields, same click-outside-closes pattern as
+   FontCombobox. */
+.ze-topbar-control { position: relative; display: flex; align-items: center; gap: 6px; }
+.ze-guides-settings-btn {
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-fg-muted);
+}
+.ze-topbar-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 230px;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+    padding: 14px;
+}
+.ze-topbar-popover .ze-format-field:last-of-type { margin-bottom: 0; }
+
+/* ---- Title box — between undo/redo and the menus. Reads as plain text
+   until hovered or focused, like a document name in an editor. */
+.ze-title-input {
+    width: 240px;
+    min-width: 80px;
+    flex: 0 1 auto;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ui-fg);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    text-overflow: ellipsis;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ze-title-input:hover:not(:disabled) { border-color: var(--ui-border); }
+.ze-title-input:focus { outline: none; border-color: var(--ui-accent); background-color: var(--ui-bg); }
+.ze-title-input::placeholder { color: var(--ui-fg-muted); }
+.ze-title-input:disabled { opacity: 0.5; }
+
+/* ---- Topbar menu bar (Page / Project / Export) — TopMenu's trigger and
+   dropdown. The Page menu's toggle rows swap to a settings sub-view
+   (.ze-menu-settings) in place rather than opening a second popup. */
+.ze-menu-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: unset;
+    padding: 6px 10px 6px 12px;
+}
+.ze-menu-trigger svg { transition: transform 0.15s ease; }
+.ze-menu-trigger.open svg { transform: rotate(180deg); }
+.ze-menu-trigger.open:not(.btn-solid) { background-color: var(--ui-bg); color: var(--ui-fg); }
+button.ze-menu-trigger.btn-solid { min-width: unset; padding: 6px 10px 6px 14px; }
+
+.ze-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    background-color: #201918; /* opaque --ui-bg-card, so the page doesn't show through */
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    z-index: 20;
+    padding: 4px;
+}
+.ze-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: 5px;
+    padding: 8px 10px;
+    color: var(--ui-fg);
+    white-space: nowrap;
+}
+.ze-menu-item:hover:not(:disabled) { background-color: var(--ui-bg); }
+.ze-menu-item:active { transform: none; }
+.ze-menu-item-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ze-menu-item-detail { font-size: 11px; color: var(--ui-fg-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.ze-menu-item-shortcut { flex: 0 0 auto; font-size: 11px; color: var(--ui-fg-muted); }
+
+.ze-menu-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 300px;
+    max-width: calc(100vw - 32px);
+    padding: 7px 8px 7px 10px;
+    border-radius: 5px;
+}
+.ze-menu-toggle-row:hover { background-color: var(--ui-bg); }
+.ze-menu-toggle-row.disabled { opacity: 0.5; }
+.ze-menu-toggle-text { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.ze-menu-toggle-label { font-size: 12px; color: var(--ui-fg); white-space: nowrap; }
+.ze-menu-toggle-detail { font-size: 11px; color: var(--ui-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ze-menu-customize {
+    flex: 0 0 auto;
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    font-size: 11px;
+    color: var(--ui-fg-muted);
+}
+.ze-menu-customize:hover:not(:disabled) { background: none; color: var(--ui-accent-text); text-decoration: underline; }
+.ze-menu-toggle-row .toggle-switch { width: 34px; height: 19px; }
+.ze-menu-toggle-row .toggle-slider::before { width: 13px; height: 13px; }
+.ze-menu-toggle-row .toggle-switch input:checked + .toggle-slider::before { transform: translateX(15px); }
+.ze-menu-toggle-row .toggle-switch input:disabled + .toggle-slider { cursor: not-allowed; }
+
+.ze-menu-settings {
+    width: 260px;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    padding: 4px 10px 10px;
+}
+.ze-menu-settings .ze-format-field:last-of-type { margin-bottom: 0; }
+.ze-menu-settings-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 -6px 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--ui-border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ui-fg);
+}
+.ze-menu-back {
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 0;
+}
+
