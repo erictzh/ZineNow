@@ -1,0 +1,295 @@
+/* Right-hand Format panel: fields, swatches, sliders, collapsible sections. */
+
+/* ---- Right-side format panel ------------------------------------------- */
+.ze-format-panel {
+    width: var(--ze-format-panel-width);
+    flex: 0 0 auto;
+    border-left: 1px solid var(--ui-border);
+    background-color: color-mix(in srgb, var(--ui-bg-alt) 95%, black);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.ze-format-panel-head {
+    flex: 0 0 auto;
+    padding: 14px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ui-fg-muted);
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-format-panel-body { flex: 1 1 auto; overflow-y: auto; padding: 16px; }
+.ze-format-empty { font-size: 12px; color: var(--ui-fg-muted); line-height: 1.6; }
+
+.ze-format-field { display: block; margin-bottom: 16px; }
+.ze-format-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ui-fg-muted);
+    margin-bottom: 6px;
+}
+.ze-format-hint {
+    display: block;
+    font-size: 10px;
+    color: var(--ui-fg-muted);
+    opacity: 0.75;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+.ze-format-select,
+.ze-format-number {
+    width: 100%;
+    background-color: #0c0c0cab;
+    color: var(--ui-fg);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: var(--ui-font);
+    font-size: 12px;
+}
+.ze-format-select:focus,
+.ze-format-number:focus {
+    outline: 2px solid var(--ui-accent-text);
+    outline-offset: 1px;
+}
+
+.ze-format-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.ze-format-toggle {
+    width: 30px;
+    height: 30px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+.ze-format-toggle.active {
+    color: #fff;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    border-color: var(--ui-accent);
+}
+.ze-format-toggle-wide { width: auto; padding: 0 12px; }
+
+.ze-format-swatches { row-gap: 8px; }
+.ze-format-swatch {
+    width: 22px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--ui-border);
+}
+.ze-format-swatch.active { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.ze-format-color-input {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--ui-border);
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+}
+.ze-format-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.ze-format-color-input::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+/* The custom-colour picker next to a row of swatches: a rainbow ring around
+   the chosen colour, with an eyedropper on top. The real colour input sits
+   invisibly over all of it so the whole circle opens the picker. */
+.ze-custom-color {
+    position: relative;
+    display: block;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 3px;
+    border-radius: 50%;
+    background: conic-gradient(#ff3b30, #ffcc00, #34c759, #00c7be, #007aff, #af52de, #ff3b30);
+    cursor: pointer;
+}
+.ze-custom-color:hover { filter: brightness(1.15); }
+.ze-custom-color input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.ze-custom-color-face {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.45);
+}
+.ze-custom-color svg {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 13px;
+    height: 13px;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    mix-blend-mode: difference;
+    pointer-events: none;
+}
+
+.ze-format-hint.is-error { color: #ff9b81; }
+
+/* ---- Thickness slider --------------------------------------------------- */
+.ze-format-slider {
+    width: 100%;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--ui-border);
+    border-radius: 999px;
+    outline: none;
+}
+.ze-format-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--ui-accent);
+    cursor: pointer;
+    border: 2px solid #fff;
+}
+.ze-format-slider::-moz-range-thumb {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--ui-accent);
+    cursor: pointer;
+    border: 2px solid #fff;
+}
+
+.ze-format-slider-row { display: flex; align-items: center; gap: 8px; }
+.ze-format-slider-row .ze-format-slider { flex: 1 1 auto; min-width: 0; }
+.ze-format-slider-row .ze-format-number { flex: 0 0 auto; width: 76px; }
+.ze-format-slider-row input[type="number"].ze-format-number { width: 58px; }
+.ze-format-slider-row .ze-format-color-input { flex: 0 0 auto; }
+
+/* ---- Collapsible sections (CapCut-style) ---------------------------------
+   Every group of controls in the Format panel is a section: an optional
+   checkbox that switches the feature on, a title that expands/collapses
+   the controls, an optional "?" tooltip and a reset button. Unchecked
+   sections stay collapsed, so only what is in use takes up room. */
+.ze-format-panel-body.ze-sections { padding: 0; }
+.ze-sec { border-bottom: 1px solid var(--ui-border); }
+.ze-sec-head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px; min-height: 40px; }
+.ze-sec-check {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--ui-fg-muted) 75%, transparent);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    display: grid;
+    place-content: center;
+}
+.ze-sec-check:hover:not(:disabled) { border-color: var(--ui-fg); }
+.ze-sec-check:checked { background: var(--ui-accent); border-color: var(--ui-accent); }
+.ze-sec-check:checked::after {
+    content: "";
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: translateY(-1px) rotate(-45deg);
+}
+.ze-sec-check:disabled { opacity: 0.4; cursor: not-allowed; }
+.ze-sec-check:focus-visible,
+.ze-sec-title:focus-visible { outline: 2px solid var(--ui-accent-text); outline-offset: 2px; }
+.ze-sec-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--ui-fg);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+}
+.ze-sec-title:hover { background: none; color: var(--ui-fg); }
+.ze-sec-title:active { transform: none; }
+.ze-sec.is-off .ze-sec-title { color: var(--ui-fg-muted); font-weight: 500; }
+.ze-sec-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ze-sec-caret { flex: 0 0 auto; color: var(--ui-fg-muted); transition: transform 0.15s ease; }
+.ze-sec.is-open .ze-sec-caret { transform: rotate(180deg); }
+.ze-sec-caret.is-hidden { visibility: hidden; }
+.ze-sec-summary {
+    margin-left: auto;
+    padding-left: 8px;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--ui-fg-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ze-sec-help {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border: 1px solid color-mix(in srgb, var(--ui-fg-muted) 60%, transparent);
+    border-radius: 50%;
+    color: var(--ui-fg-muted);
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 12px;
+    text-align: center;
+    cursor: help;
+}
+.ze-sec-reset {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    min-width: unset;
+    padding: 0;
+    border: 0;
+    background: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-fg-muted);
+}
+.ze-sec-reset:hover { background: none; color: var(--ui-fg); }
+.ze-sec-body { padding: 2px 16px 16px; }
+.ze-sec-body > .ze-format-field:last-child { margin-bottom: 0; }
+.ze-sec-body .ze-format-field { margin-bottom: 14px; }
+/* A parent section holding child sections (e.g. Filters → Light, Color, Levels, Style). */
+.ze-sec-body.is-group { padding: 0; border-top: 1px solid var(--ui-border); background-color: rgba(0, 0, 0, 0.12); }
+.ze-sec-body.is-group > .ze-sec { border-bottom: 0; border-top: 1px solid var(--ui-border); }
+.ze-sec-body.is-group > .ze-sec:first-child { border-top: 0; }
+.ze-sec-body.is-group .ze-sec-head { padding-left: 28px; min-height: 36px; }
+.ze-sec-body.is-group .ze-sec-title { font-weight: 500; }
+.ze-sec-body.is-group .ze-sec-body { padding-left: 28px; }
+.ze-sec-intro { display: block; padding: 12px 16px; font-size: 11px; line-height: 1.5; color: var(--ui-fg-muted); border-bottom: 1px solid var(--ui-border); }
+
+/* Font + size + B/I/U sit on one tidy row inside a section. */
+.ze-format-inline { display: flex; align-items: center; gap: 6px; }
+.ze-format-inline .ze-format-number { flex: 1 1 auto; min-width: 0; }
+.ze-format-inline .ze-format-toggle { flex: 0 0 auto; }
+

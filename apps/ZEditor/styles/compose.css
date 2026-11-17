@@ -1,0 +1,330 @@
+/* Compose area: tool bar, items on the page, handles, selection, crop, text boxes, text-style chips. */
+
+/* ---- Compose area: tool bar + preview pane, stacked -------------------- */
+.ze-compose-area {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ze-tool-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-tool-bar-group { display: flex; align-items: center; gap: 4px; }
+.ze-zoom-control {
+    flex: 0 1 240px;
+    min-width: 170px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ze-zoom-control .ze-format-label { margin-bottom: 0; white-space: nowrap; }
+.ze-zoom-control .ze-format-slider-row { flex: 1 1 auto; min-width: 0; }
+
+.ze-tool-icon-btn {
+    width: 32px;
+    height: 32px;
+    min-width: unset;
+    padding: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ze-tool-icon-btn.active {
+    color: #fff;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    border-color: var(--ui-accent);
+}
+.ze-tool-icon-btn.active:hover { color: #fff; }
+.ze-tool-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ze-tool-icon-btn:disabled:hover { color: var(--ui-fg-muted); background-color: var(--ui-bg-card); }
+
+.ze-tool-icon-text { font-size: 15px; font-weight: 700; line-height: 1; }
+
+/* ---- Annotation layer (Compose mode) ------------------------------------
+   Sits absolutely positioned directly on top of the rendered page canvas,
+   pixel-for-pixel — see .ze-page (position:relative) and the canvas's own
+   natural (unpositioned) size, which .ze-annotation-layer's width/height is
+   kept in sync with from React state. */
+.ze-annotation-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+.ze-tool-text { cursor: text; }
+.ze-tool-draw { cursor: crosshair; }
+.ze-tool-erase { cursor: cell; }
+/* Soft eraser: a circle the size of the brush follows the pointer. */
+.ze-tool-soft-erase,
+.ze-tool-soft-erase * { cursor: crosshair !important; }
+.ze-brush-cursor {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: calc(1px / var(--ze-zoom, 1)) solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 calc(1px / var(--ze-zoom, 1)) rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    z-index: 50;
+}
+.ze-brush-cursor-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: calc(1px / var(--ze-zoom, 1)) dashed rgba(0, 0, 0, 0.55);
+}
+
+/* ---- Placed images -------------------------------------------------------- */
+.ze-ann-image {
+    position: absolute;
+    cursor: move;
+}
+/* An overlay rather than a border, so the image area is exactly the
+   annotation's size and edge outlines line up with it. */
+.ze-ann-image.is-selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px dashed var(--ui-accent);
+    pointer-events: none;
+    z-index: 10; /* stays visible when the item sits under another layer */
+}
+.ze-ann-rect-fill { width: 100%; height: 100%; }
+.is-locked { pointer-events: none; }
+.ze-ann-image img, .ze-ann-image canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none; /* the wrapper div handles drag; the media element itself shouldn't intercept */
+    -webkit-user-drag: none;
+}
+/* Counter-scaled so handles stay the same size on screen at any zoom. */
+.ze-resize-handle {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    background-color: #fff;
+    border: 2px solid var(--ui-accent);
+    transform: translate(-50%, -50%) scale(calc(1 / var(--ze-zoom, 1)));
+    z-index: 11; /* reachable even when the item sits under another layer */
+}
+/* The knob above a selected item that turns it. It sits ~22 screen px above
+   the item's top edge, and the stem below it reaches back to that edge. */
+.ze-rotate-handle {
+    position: absolute;
+    left: 50%;
+    top: calc(-22px / var(--ze-zoom, 1));
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background-color: #fff;
+    border: 2px solid var(--ui-accent);
+    transform: translate(-50%, -50%) scale(calc(1 / var(--ze-zoom, 1)));
+    cursor: grab;
+    z-index: 11;
+}
+/* Live preview of the page number that Export prints. */
+.ze-page-number {
+    position: absolute;
+    font-family: 'Inter', sans-serif;
+    line-height: 1;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+}
+
+/* The dashed box around a multi-item selection (the rotate knob sits above it). */
+.ze-group-outline {
+    position: absolute;
+    border: 1px dashed var(--ui-accent);
+    pointer-events: none;
+    z-index: 10;
+}
+.ze-rotate-handle::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    height: 15px;
+    border-left: 1.5px solid var(--ui-accent);
+    transform: translateX(-50%);
+}
+.ze-resize-handle-nw { left: 0; top: 0; cursor: nwse-resize; }
+.ze-resize-handle-n { left: 50%; top: 0; cursor: ns-resize; }
+.ze-resize-handle-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.ze-resize-handle-e { left: 100%; top: 50%; cursor: ew-resize; }
+.ze-resize-handle-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.ze-resize-handle-s { left: 50%; top: 100%; cursor: ns-resize; }
+.ze-resize-handle-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.ze-resize-handle-w { left: 0; top: 50%; cursor: ew-resize; }
+
+/* The box being dragged out on empty page, for selecting or new text. */
+.ze-drag-rect {
+    position: absolute;
+    border: calc(1px / var(--ze-zoom, 1)) dashed var(--ui-accent);
+    background-color: color-mix(in srgb, var(--ui-accent) 10%, transparent);
+    pointer-events: none;
+}
+
+/* Tools other than Move work straight through placed items. */
+.ze-tool-text .ze-ann-image, .ze-tool-text .ze-ann-text { cursor: text; }
+.ze-tool-draw .ze-ann-image { cursor: crosshair; }
+.ze-tool-erase .ze-ann-image { cursor: cell; }
+
+.ze-ann-image-shadow {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+.ze-ann-image-texture {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.ze-ann-image-stroke {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+}
+
+/* ---- Image crop (frame for the normal display, editor for crop mode) ---- */
+.ze-ann-image-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+.ze-ann-image--cropping {
+    cursor: default; /* the crop window/handles below carry their own cursors; the surrounding dimmed area isn't draggable */
+    z-index: 10; /* cropping a lower layer brings it to the front while it lasts */
+}
+/* While cropping, the whole source image is faint so what's behind it shows
+   through; the crop window repaints its own part solid on top. */
+.ze-crop-full-img { opacity: 0.35; }
+.ze-crop-window {
+    position: absolute;
+    outline: 1px dashed #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55); /* keeps the edge visible on a white page */
+    cursor: move;
+}
+.ze-crop-window-clip {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.ze-crop-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background-color: var(--ui-accent);
+    border: 2px solid #fff;
+    border-radius: 2px;
+}
+.ze-crop-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.ze-crop-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.ze-crop-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ze-crop-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+
+.ze-stroke-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* individual strokes opt back in via inline style when Select is active */
+}
+
+.ze-ann-text {
+    position: absolute;
+    min-width: 40px;
+    padding: 2px 4px;
+    font-size: 16px;
+    line-height: 1.3;
+    color: #1a1a1a;
+    background: transparent;
+    border: 1px dashed transparent;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: move;
+    font-family: var(--ui-font);
+}
+.ze-ann-text.is-selected { border-color: var(--ui-accent); }
+/* Ransom/distress text is painted on a canvas that reaches past the box. */
+.ze-ann-text-canvas { position: absolute; pointer-events: none; }
+.ze-ann-text-placeholder { color: rgba(0, 0, 0, 0.35); font-style: italic; }
+
+.ze-ann-text.is-editing { border: 1px solid var(--ui-accent); cursor: text; }
+/* Lays out the box while hidden; the extra sliver stops the input
+   wrapping a line a pixel too early. */
+.ze-ann-text-mirror { display: inline-block; visibility: hidden; padding-right: 2px; }
+.ze-ann-text-mirror.is-visible { visibility: visible; }
+
+/* Saved text styles in the text panel */
+.ze-style-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ze-style-chip { display: inline-flex; align-items: stretch; }
+.ze-style-chip .ze-format-toggle { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.ze-style-chip-delete {
+    border: 1px solid var(--ui-border);
+    border-left: 0;
+    border-radius: 0 4px 4px 0;
+    background: transparent;
+    color: inherit;
+    padding: 0 6px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+}
+.ze-style-chip-delete:hover { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+/* Style chips and the Save button hold words, not icons: size them to their text. */
+.ze-style-chips .ze-format-toggle,
+.ze-format-toggle.ze-style-save { width: auto; padding: 0 10px; white-space: nowrap; }
+/* A long name shrinks with "…" so the chip (and its × delete) stays inside the panel. */
+.ze-style-chips > .ze-format-toggle,
+.ze-style-chip { max-width: 100%; min-width: 0; }
+.ze-style-chips .ze-format-toggle {
+    display: block;
+    min-width: 0;
+    line-height: 28px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ze-style-chip .ze-format-toggle { flex: 0 1 auto; }
+.ze-style-chip-delete { flex: 0 0 auto; }
+.ze-style-row { flex-wrap: nowrap; }
+.ze-format-row .ze-style-name { flex: 1 1 0; min-width: 0; width: auto; text-align: left; }
+.ze-ann-text-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: inherit;
+    border: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    font-variant-caps: inherit;
+    text-align: inherit;
+    text-decoration: inherit;
+    white-space: inherit;
+    word-break: inherit;
+}
+

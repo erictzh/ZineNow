@@ -82,6 +82,13 @@
     layout on top without fighting it on specificity — see the note at
     the top of styles.css for exactly what still lives there.
   -->
+  <!-- Suite-wide tokens and components shared with the other apps. -->
+  <link rel="stylesheet" href="../../shared/styles/tokens.css" />
+  <link rel="stylesheet" href="../../shared/styles/buttons.css" />
+  <link rel="stylesheet" href="../../shared/styles/topbar.css" />
+  <link rel="stylesheet" href="../../shared/styles/tabs.css" />
+  <link rel="stylesheet" href="../../shared/styles/toggle.css" />
+  <link rel="stylesheet" href="../../shared/styles/scrollbars.css" />
   <link rel="stylesheet" href="component-kit.css" />
 
   <!-- marked.js — Markdown parsing (version pinned so a future release can't change behavior under you) -->
@@ -89,10 +96,10 @@
 
   <!--
     Document import libraries — used only by the sidebar's "Upload"
-    button (see pdfGenerator.js's convertDocxToMarkdown/
-    convertEpubToMarkdown). Unlike marked.js above, the app works fine
+    button (see src/convert/docx.js and
+    src/convert/epub.js). Unlike marked.js above, the app works fine
     without these ever loading; they're only touched if you actually
-    import a .docx or .epub file, and pdfGenerator.js's requireGlobal()
+    import a .docx or .epub file, and src/convert/requireGlobal.js
     gives a clear error naming whichever one didn't load rather than
     failing silently. All three pinned to a specific version, same
     reasoning as marked.js above.
@@ -104,16 +111,16 @@
   <!--
     pdf-lib — assembles a real PDF from the rasterized page images used
     only by "Send to ZineArranger" (see handleSendToZineArranger in
-    App.jsx and renderRasterizationDocument in pdfGenerator.js). The main
+    src/ui/App.jsx and src/export/rasterDocument.js). The main
     "Download PDF eBook" export doesn't use this at all — it drives the
     browser's own print engine instead (see the note on exportToPdf in
-    pdfGenerator.js). Same library ZEditor uses for its own PDF export,
+    src/export/printExport.js). Same library ZEditor uses for its own PDF export,
     version pinned like the other libraries above.
   -->
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
   <!--
-    DOMPurify — used only by renderRasterizationDocument (pdfGenerator.js)
+    DOMPurify — used only by renderRasterizationDocument (src/export/rasterDocument.js)
     to sanitize the markdown-rendered HTML before "Send to ZineArranger"
     rasterizes it. That path's hidden iframe needs the allow-same-origin
     sandbox flag for html2canvas to work at all (confirmed: it silently
@@ -132,16 +139,15 @@
     Note: this app does NOT use html2pdf.js/html2canvas for PDF export.
     That rasterization-based approach turned out to be unreliable (a
     well-known html2canvas bug clips off-screen-rendered content), so
-    pdfGenerator.js instead drives the browser's own native print engine
+    src/export/printExport.js instead drives the browser's own native print engine
     (window.print(), page sized via @page CSS) to produce the PDF —
     higher quality output (real selectable text, not a raster image)
     with no extra library needed. See the comment on exportToPdf() in
-    pdfGenerator.js for the full explanation.
+    src/export/printExport.js for the full explanation.
   -->
 
-  <!-- React 18 (UMD), version pinned. App.jsx below is precompiled to plain
-       React.createElement calls (see the note at the top of that file), so
-       no in-browser JSX transpiler (Babel) is loaded or needed at all. -->
+  <!-- React 18 (UMD), version pinned. The app (dist/app.js) is built ahead of time,
+       so no in-browser JSX transpiler (Babel) is loaded or needed. -->
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 
@@ -153,36 +159,27 @@
 
   <!--
     Default typography/page values, exposed as window.MD2eBookDefaultConfig.
-    Loaded before pdfGenerator.js (which reads it) for the same file://
-    reason as App.jsx below — see the comment at the top of
+    Loaded before dist/app.js (which reads it) for the same file://
+    reason as dist/app.js below — see the comment at the top of
     defaultConfig.json for the full explanation.
   -->
   <script src="defaultConfig.json"></script>
 
-  <!-- Plain JS: PDF/HTML generation engine, exposed on window.MD2eBook -->
-  <script src="pdfGenerator.js"></script>
 
   <!--
     The sample Markdown shown on first load, exposed as
-    window.MD2eBookSampleMarkdown. Loaded before App.jsx (which reads
+    window.MD2eBookSampleMarkdown. Loaded before dist/app.js (which reads
     it) for the same file:// reason — see the comment at the top of
     sample.md.
   -->
   <script src="sample.md"></script>
 
   <!--
-    React application. App.jsx is loaded here as a normal script — not
-    via a text/babel tag with a src, and not via a manual fetch() of it
-    either. Both of those approaches read App.jsx's contents at runtime
-    (via an internal XHR or fetch), which most browsers silently block
-    when this page is opened directly as a file (file://) instead of
-    through a web server — the read comes back empty, nothing renders,
-    and the page is left blank with no visible error. Because App.jsx
-    ships here pre-transpiled to plain JavaScript, a normal <script src>
-    works instead: that kind of resource load isn't subject to the same
-    restriction, so this page runs identically whether it's opened by
-    double-clicking it on disk or served from a real web host.
+    The app itself, built from src/ by `npm run build` (see
+    docs/ARCHITECTURE.md). It is a plain classic script, so the page still
+    works opened straight from disk (file://) — and it runs after
+    defaultConfig.json and sample.md above, which it reads.
   -->
-  <script src="App.jsx"></script>
+  <script src="dist/app.js"></script>
 </body>
 </html>

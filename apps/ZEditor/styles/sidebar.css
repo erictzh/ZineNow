@@ -1,0 +1,99 @@
+/* Page thumbnails, the insert gaps between them, drag-and-drop indicator. */
+
+/* ---- Page thumbnails -------------------------------------------------------- */
+.ze-thumb-list { display: flex; flex-direction: column; }
+
+.ze-thumb-slot { border-radius: 8px; }
+
+/* Hover gap between (or around) thumbnails — click/tap to insert a blank
+   page at that exact spot. Hover reveal is pure CSS. */
+.ze-page-gap {
+    position: relative;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+.ze-page-gap-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: translateY(-50%);
+    background-color: transparent;
+    border-radius: 999px;
+    transition: background-color 0.12s ease;
+}
+.ze-page-gap:hover .ze-page-gap-line,
+.ze-page-gap:focus-visible .ze-page-gap-line {
+    background-color: var(--ui-accent);
+}
+.ze-page-gap-btn {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.6);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--ui-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.ze-page-gap:hover .ze-page-gap-btn,
+.ze-page-gap:focus-visible .ze-page-gap-btn {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+.ze-page-gap:focus-visible { outline: none; }
+
+/* Drop-target indicator while dragging a thumbnail — a thin accent line
+   showing exactly where the page will land. */
+.ze-drop-line {
+    height: 2px;
+    margin: -1px 2px;
+    border-radius: 999px;
+    background-color: var(--ui-accent);
+}
+
+.ze-thumb {
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background-color: var(--ui-bg-card);
+    cursor: grab;
+    overflow: hidden;
+    transition: border-color 0.12s ease;
+}
+.ze-thumb:active { cursor: grabbing; }
+.ze-thumb.is-selected { border-color: var(--ui-accent); box-shadow: 0 0 0 1px var(--ui-accent); }
+
+.ze-thumb-img-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--ui-bg);
+    padding: 10px;
+    min-height: 60px;
+}
+.ze-thumb-img-wrap img { max-width: 100%; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+.ze-thumb-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-top: 1px solid var(--ui-border);
+}
+.ze-thumb-num { font-size: 11px; color: var(--ui-fg-muted); font-weight: 600; }
+/* no extra gap here — .log-btn already carries its own left margin for
+   spacing consecutive toolbar buttons, per component-kit.css */
+.ze-thumb-actions { display: flex; }
+
