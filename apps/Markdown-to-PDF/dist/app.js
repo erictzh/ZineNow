@@ -1,5 +1,30 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/zineArrangerHandoff.js
+  var ARRANGER_READY_MESSAGE = "zinearranger-ready";
+  var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
+  async function sendPdfToZineArranger(buildBytes, filename) {
+    const win = window.open("../ZineArranger/index.html", "_blank");
+    if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
+    const readyPromise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
+      }, 15e3);
+      function onMessage(event) {
+        if (event.source !== win || !event.data || event.data.type !== ARRANGER_READY_MESSAGE) return;
+        clearTimeout(timeoutId);
+        window.removeEventListener("message", onMessage);
+        resolve();
+      }
+      window.addEventListener("message", onMessage);
+    });
+    const pdfBytes = await buildBytes();
+    const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+    await readyPromise;
+    win.postMessage({ type: HANDOFF_PDF_MESSAGE, buffer, filename }, "*", [buffer]);
+  }
+
   // apps/Markdown-to-PDF/src/document/html.js
   function escapeHtml(str) {
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -993,6 +1018,18 @@
     return Math.min(200, Math.max(1, parseInt(value, 10) || 5));
   }
 
+  // shared/js/download.js
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+  }
+
   // apps/Markdown-to-PDF/src/io/filePickers.js
   async function pickFile({ id, description, accept }) {
     if (typeof window.showOpenFilePicker !== "function") return "fallback";
@@ -1023,14 +1060,7 @@
   }
   function downloadText(text, filename, mimeType) {
     const blob = new Blob([text], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+    downloadBlob(blob, filename);
     return { downloaded: filename };
   }
   async function copyText(text) {
@@ -1918,24 +1948,8 @@
       if (isSendingToArranger) return;
       setExportError(null);
       setIsSendingToArranger(true);
-      let win = null;
       let iframe = null;
-      try {
-        win = window.open("../ZineArranger/index.html", "_blank");
-        if (!win) throw new Error("The browser blocked the new tab — allow popups for this page and try again.");
-        const readyPromise = new Promise((resolve, reject) => {
-          const timeoutId = setTimeout(() => {
-            window.removeEventListener("message", onReady);
-            reject(new Error("ZineArranger didn't respond — it may still be loading, or didn't open as a new tab."));
-          }, 15e3);
-          function onReady(event) {
-            if (event.source !== win || !event.data || event.data.type !== "zinearranger-ready") return;
-            clearTimeout(timeoutId);
-            window.removeEventListener("message", onReady);
-            resolve();
-          }
-          window.addEventListener("message", onReady);
-        });
+      async function buildBytes() {
         const paper = PAPER_SIZES[config.paperSize] || PAPER_SIZES.a4;
         const DPI = 96;
         const rasterResult = await new Promise((resolve, reject) => {
@@ -1985,18 +1999,10 @@
             height: pageHeightPts
           });
         }
-        const pdfBytes = await outDoc.save();
-        const buffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
-        await readyPromise;
-        win.postMessage(
-          {
-            type: "zeditor-handoff-pdf",
-            buffer,
-            filename: deriveFilename(markdown)
-          },
-          "*",
-          [buffer]
-        );
+        return outDoc.save();
+      }
+      try {
+        await sendPdfToZineArranger(buildBytes, deriveFilename(markdown));
       } catch (err) {
         setExportError("Couldn't send to ZineArranger — " + (err && err.message ? err.message : "unknown error"));
       } finally {

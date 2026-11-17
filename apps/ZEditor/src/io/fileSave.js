@@ -1,5 +1,7 @@
 // Saving files: native save picker, writing back to a remembered file, download fallback.
 
+import { downloadBlob } from "../../../../shared/js/download.js";
+
 export function canvasToArrayBuffer(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(async (blob) => {
@@ -31,14 +33,7 @@ export async function saveFile(data, filename, mimeType, description, extensions
     }
   }
   const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(blob, filename);
   return null;
 }
 

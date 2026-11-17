@@ -1,5 +1,9 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/zineArrangerHandoff.js
+  var ARRANGER_READY_MESSAGE = "zinearranger-ready";
+  var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
+
   // apps/ZineArranger/src/sizes.js
   var SIZE_HALF = 0;
   var SIZE_QUARTER = 1;
@@ -4697,7 +4701,7 @@
     }
     window.addEventListener("message", function(event) {
       var data = event.data;
-      if (!data || data.type !== "zeditor-handoff-pdf" || !(data.buffer instanceof ArrayBuffer)) return;
+      if (!data || data.type !== HANDOFF_PDF_MESSAGE || !(data.buffer instanceof ArrayBuffer)) return;
       var file = new File([data.buffer], data.filename || "zine.pdf", { type: "application/pdf" });
       receivePdf(file);
       logSys('Received "' + file.name + '" from ZEditor (' + Math.round(file.size / 1024) + " KB).");
@@ -4707,7 +4711,7 @@
       var pingInterval = setInterval(function() {
         pingCount++;
         try {
-          window.opener.postMessage({ type: "zinearranger-ready" }, "*");
+          window.opener.postMessage({ type: ARRANGER_READY_MESSAGE }, "*");
         } catch (err) {
           clearInterval(pingInterval);
         }
