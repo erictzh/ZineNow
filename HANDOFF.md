@@ -2,6 +2,8 @@
 
 Read this first when resuming on another machine. It covers what the project is, how it's built, what was done, what's pending, and the testing gotchas that cost the most time.
 
+New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
+
 Last updated: 2026-09-19.
 
 ## 1. Project overview

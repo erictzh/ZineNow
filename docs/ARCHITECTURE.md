@@ -1,8 +1,9 @@
 # ZineNow — Architecture
 
-How the code is organised, and the rules that keep it maintainable. The
-refactor towards this layout is in progress; **Status** at the bottom says
-what has moved so far.
+How the code is organised, and the rules that keep it maintainable.
+**Status** at the bottom records how the code got to this layout (the 2026-11
+modular refactor, now complete). For day-to-day work (where to find things,
+step-by-step recipes, gotchas) see **[MAINTAINING.md](MAINTAINING.md)**.
 
 ## Running and building
 
