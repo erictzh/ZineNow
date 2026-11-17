@@ -8,10 +8,10 @@ import { TextFormat } from "./format/TextFormat.jsx";
 import { EraserToolPanel, ShapeToolPanel, StrokeToolPanel, TextToolPanel } from "./format/ToolPanels.jsx";
 
 // `toolDefaults` is the useToolDefaults hook object (fonts, text styles and
-// each tool's settings for the next item).
+// each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js).
 export function FormatPanel({
   tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
-  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults,
+  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase,
 }) {
   const ann = selectedAnn;
   if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} />;
@@ -22,7 +22,7 @@ export function FormatPanel({
   if (tool === "rect" || tool === "ellipse") return <ShapeToolPanel tool={tool} toolDefaults={toolDefaults} />;
   if (tool === "text") return <TextToolPanel toolDefaults={toolDefaults} />;
   if (tool === "pen" || tool === "highlighter") return <StrokeToolPanel tool={tool} toolDefaults={toolDefaults} />;
-  if (tool === "eraser") return <EraserToolPanel toolDefaults={toolDefaults} />;
+  if (tool === "eraser") return <EraserToolPanel toolDefaults={toolDefaults} magicErase={magicErase} />;
 
   return (
     <FormatPanelShell title="Format" sections={false}>

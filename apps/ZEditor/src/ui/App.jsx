@@ -8,6 +8,7 @@ import { useDocumentState } from "../state/useDocumentState.js";
 import { useExport } from "../state/useExport.js";
 import { useHistory } from "../state/useHistory.js";
 import { useKeyboardShortcuts } from "../state/useKeyboardShortcuts.js";
+import { useMagicErase } from "../state/useMagicErase.js";
 import { useOnionGhost } from "../state/useOnionGhost.js";
 import { usePageOps } from "../state/usePageOps.js";
 import { useProject } from "../state/useProject.js";
@@ -37,6 +38,9 @@ export function App() {
   const toolDefaults = useToolDefaults();
   const selection = useSelection(doc);
   const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
+  const magic = useMagicErase({ doc, selection, edits, toolDefaults });
+  // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
+  const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
   const project = useProject({ doc, history, status, view, toolDefaults });
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
@@ -45,7 +49,7 @@ export function App() {
   const zoom = useZoom();
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
   const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
-  useKeyboardShortcuts({ doc, history, selection, edits, pageOps, project, modalOpen });
+  useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, modalOpen });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
   const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
@@ -53,7 +57,7 @@ export function App() {
 
   return (
     <div className="ze-shell">
-      <Topbar doc={doc} history={history} view={view} edits={edits} project={project} dialogs={dialogs} exporter={exporter} status={status} />
+      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
       {status.errorMsg && <div className="ze-error-bar">{status.errorMsg}</div>}
 
@@ -116,8 +120,9 @@ export function App() {
                 onToggleCrop={selection.handleToggleCrop}
                 eraserMode={t.eraserMode}
                 softEraser={t.softEraser}
-                magicEraser={t.magicEraser}
                 onEraseImagePixels={edits.handleEraseImagePixels}
+                magicPreview={magic.preview}
+                onMagicClick={magic.start}
               />
             </div>
           </div>
@@ -134,6 +139,7 @@ export function App() {
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}
             toolDefaults={toolDefaults}
+            magicErase={magic}
           />
         )}
       </div>

@@ -30,6 +30,7 @@ export const KEYBOARD_SHORTCUTS = [
       ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
       ["Double-click text", "Edit it (Move tool)"],
       ["Esc", "Finish editing and keep the text selected"],
+      ["Enter / Esc", "Magic eraser preview: apply it / cancel it (Ctrl + Z also cancels)"],
     ],
   },
   {

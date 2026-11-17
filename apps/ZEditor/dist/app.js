@@ -2106,9 +2106,10 @@
       updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== id), "eraser");
       setSelectedAnnId((cur) => cur === id ? null : cur);
     }
-    function handleEraseImagePixels(id, src) {
-      if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, src } : a));
+    function handleEraseImagePixels(id, src, pageIdx) {
+      const idx = pageIdx === void 0 ? selectedIdx : pageIdx;
+      if (idx === null) return;
+      updateAnnotationsFor(idx, (anns) => anns.map((a) => a.id === id ? { ...a, src } : a));
     }
     return {
       updateAnnotationsFor,
@@ -2710,11 +2711,447 @@
     }, []);
   }
 
-  // apps/ZEditor/src/state/useOnionGhost.js
-  var { useState: useState6, useEffect: useEffect2 } = React;
-  function useOnionGhost({ onionSkinOn, pages, selectedIdx, pdfDocsRef }) {
-    const [onionGhostSrc, setOnionGhostSrc] = useState6(null);
+  // apps/ZEditor/src/render/magicErase.js
+  var COLOR_SCALE = 1.5;
+  function magicMatchKey(s) {
+    if (s.clickMode === "refine") return "refine";
+    return [s.tolerance, s.colorTolerance, s.smoothing, s.contiguous, s.diagonal, s.softness].join("|");
+  }
+  function magicMatch(imageData, x, y, settings) {
+    const { data, width, height } = imageData;
+    if (settings.clickMode === "refine") {
+      const cov2 = new Float32Array(width * height);
+      let any = false;
+      for (let i = 0; i < cov2.length; i++) if (data[i * 4 + 3] === 0) {
+        cov2[i] = 1;
+        any = true;
+      }
+      return any ? cov2 : null;
+    }
+    const px = Math.floor(x), py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= width || py >= height) return null;
+    const start = py * width + px;
+    if (data[start * 4 + 3] === 0) return null;
+    const cov = matchCoverage(data, width, height, start, settings);
+    for (let i = 0; i < width * height; i++) if (data[i * 4 + 3] === 0) cov[i] = 1;
+    return cov;
+  }
+  function magicFinish(imageData, cov, x, y, settings) {
+    const { data, width, height } = imageData;
+    const start = settings.clickMode === "refine" ? -1 : Math.floor(y) * width + Math.floor(x);
+    const N = width * height;
+    const clearIslands = !settings.contiguous && settings.clickMode !== "refine";
+    if (settings.specks > 0) removeSpecks(cov, width, height, settings.specks, clearIslands, start);
+    if (settings.edgeShift) shiftEdge(cov, width, height, settings.edgeShift);
+    if (settings.feather > 0) featherEdge(cov, width, height, settings.feather);
+    if (settings.defringe > 0) defringeEdge(data, cov, width, height, settings.defringe / 100);
+    const strength = Math.min(1, Math.max(0, settings.opacity / 100));
+    let changed = 0;
+    for (let i = 0; i < N; i++) {
+      const c = cov[i];
+      if (c <= 0) continue;
+      const o = i * 4 + 3, a = data[o];
+      const next = Math.round(a * (1 - Math.min(1, c) * strength));
+      if (next !== a) {
+        data[o] = next;
+        changed++;
+      }
+    }
+    return changed;
+  }
+  function matchCoverage(data, width, height, start, settings) {
+    const { tolerance, colorTolerance, smoothing, contiguous, diagonal, softness } = settings;
+    const radius = Math.max(0, Math.round(smoothing));
+    const colorLimit = colorTolerance * COLOR_SCALE;
+    const fade = Math.max(0, softness) / 100;
+    const reach = 1 + fade;
+    const N = width * height;
+    const mean = [0, 0, 0];
+    const smooth = (i) => {
+      const cx = i % width, cy = (i - cx) / width;
+      const x0 = Math.max(0, cx - radius), x1 = Math.min(width - 1, cx + radius);
+      const y0 = Math.max(0, cy - radius), y1 = Math.min(height - 1, cy + radius);
+      let r = 0, g = 0, b = 0, w = 0;
+      for (let yy = y0; yy <= y1; yy++) {
+        for (let xx = x0; xx <= x1; xx++) {
+          const o = (yy * width + xx) * 4, a = data[o + 3];
+          if (a === 0) continue;
+          r += data[o] * a;
+          g += data[o + 1] * a;
+          b += data[o + 2] * a;
+          w += a;
+        }
+      }
+      mean[0] = r / w;
+      mean[1] = g / w;
+      mean[2] = b / w;
+    };
+    smooth(start);
+    const r0 = mean[0], g0 = mean[1], b0 = mean[2];
+    const ratio = (diff, limit) => limit > 0 ? diff / limit : diff > 0 ? Infinity : 0;
+    const score = (i) => {
+      if (data[i * 4 + 3] === 0) return 0;
+      smooth(i);
+      const dr = mean[0] - r0, dg = mean[1] - g0, db = mean[2] - b0;
+      const dLuma = (dr + dg + db) / 3;
+      const dChroma = Math.hypot(dr - dLuma, dg - dLuma, db - dLuma);
+      const d = Math.max(ratio(Math.abs(dLuma), tolerance), ratio(dChroma, colorLimit));
+      if (d <= 1) return 1;
+      if (d >= reach) return 0;
+      return (reach - d) / fade;
+    };
+    const cov = new Float32Array(N);
+    if (!contiguous) {
+      for (let i = 0; i < N; i++) cov[i] = score(i);
+      return cov;
+    }
+    const seen = new Uint8Array(N);
+    const stack = [start];
+    seen[start] = 1;
+    const push = (j) => {
+      if (!seen[j]) {
+        seen[j] = 1;
+        stack.push(j);
+      }
+    };
+    while (stack.length) {
+      const i = stack.pop();
+      const s = score(i);
+      if (s <= 0) continue;
+      cov[i] = s;
+      const cx = i % width, cy = (i - cx) / width;
+      const left = cx > 0, right = cx < width - 1, up = cy > 0, down = cy < height - 1;
+      if (left) push(i - 1);
+      if (right) push(i + 1);
+      if (up) push(i - width);
+      if (down) push(i + width);
+      if (diagonal) {
+        if (left && up) push(i - width - 1);
+        if (right && up) push(i - width + 1);
+        if (left && down) push(i + width - 1);
+        if (right && down) push(i + width + 1);
+      }
+    }
+    return cov;
+  }
+  function removeSpecks(cov, width, height, maxSize, clearIslands, protect) {
+    const N = width * height;
+    const seen = new Uint8Array(N);
+    const stack = [], members = [];
+    for (let s = 0; s < N; s++) {
+      if (seen[s]) continue;
+      const erasedPatch = cov[s] >= 0.5;
+      seen[s] = 1;
+      stack.push(s);
+      members.length = 0;
+      let size = 0, hasProtect = false;
+      while (stack.length) {
+        const i = stack.pop();
+        size++;
+        if (size <= maxSize) members.push(i);
+        if (i === protect) hasProtect = true;
+        const cx = i % width, cy = (i - cx) / width;
+        const visit = (j) => {
+          if (!seen[j] && cov[j] >= 0.5 === erasedPatch) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        };
+        if (cx > 0) visit(i - 1);
+        if (cx < width - 1) visit(i + 1);
+        if (cy > 0) visit(i - width);
+        if (cy < height - 1) visit(i + width);
+      }
+      if (size > maxSize) continue;
+      if (!erasedPatch) for (const i of members) cov[i] = 1;
+      else if (clearIslands && !hasProtect) for (const i of members) cov[i] = 0;
+    }
+  }
+  function shiftEdge(cov, width, height, shift) {
+    const grow = shift > 0;
+    const steps = Math.abs(shift);
+    let src = cov, dst = new Float32Array(cov.length);
+    for (let k = 0; k < steps; k++) {
+      const diag = k % 2 === 1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = y * width + x;
+          let v = src[i];
+          const take = (j) => {
+            const n = src[j];
+            if (grow ? n > v : n < v) v = n;
+          };
+          if (x > 0) take(i - 1);
+          if (x < width - 1) take(i + 1);
+          if (y > 0) take(i - width);
+          if (y < height - 1) take(i + width);
+          if (diag) {
+            if (x > 0 && y > 0) take(i - width - 1);
+            if (x < width - 1 && y > 0) take(i - width + 1);
+            if (x > 0 && y < height - 1) take(i + width - 1);
+            if (x < width - 1 && y < height - 1) take(i + width + 1);
+          }
+          dst[i] = v;
+        }
+      }
+      [src, dst] = [dst, src];
+    }
+    if (src !== cov) cov.set(src);
+  }
+  function featherEdge(cov, width, height, feather) {
+    const radius = Math.max(1, Math.round(feather / 2));
+    const tmp = new Float32Array(cov.length);
+    for (let pass = 0; pass < 2; pass++) {
+      boxBlurRows(cov, tmp, width, height, radius);
+      boxBlurColumns(tmp, cov, width, height, radius);
+    }
+  }
+  function boxBlurRows(src, dst, width, height, r) {
+    const n = 2 * r + 1;
+    for (let y = 0; y < height; y++) {
+      const row = y * width;
+      let sum = 0;
+      for (let k = -r; k <= r; k++) sum += src[row + Math.min(width - 1, Math.max(0, k))];
+      for (let x = 0; x < width; x++) {
+        dst[row + x] = sum / n;
+        sum += src[row + Math.min(width - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+      }
+    }
+  }
+  function boxBlurColumns(src, dst, width, height, r) {
+    const n = 2 * r + 1;
+    for (let x = 0; x < width; x++) {
+      let sum = 0;
+      for (let k = -r; k <= r; k++) sum += src[Math.min(height - 1, Math.max(0, k)) * width + x];
+      for (let y = 0; y < height; y++) {
+        dst[y * width + x] = sum / n;
+        sum += src[Math.min(height - 1, y + r + 1) * width + x] - src[Math.max(0, y - r) * width + x];
+      }
+    }
+  }
+  function defringeEdge(data, cov, width, height, strength) {
+    const R = 3;
+    for (let i = 0; i < cov.length; i++) {
+      const c = cov[i];
+      if (c <= 0.02 || c >= 0.98 || data[i * 4 + 3] === 0) continue;
+      const cx = i % width, cy = (i - cx) / width;
+      const x0 = Math.max(0, cx - R), x1 = Math.min(width - 1, cx + R);
+      const y0 = Math.max(0, cy - R), y1 = Math.min(height - 1, cy + R);
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let yy = y0; yy <= y1; yy++) {
+        for (let xx = x0; xx <= x1; xx++) {
+          const j = yy * width + xx;
+          if (cov[j] > 0.02 || data[j * 4 + 3] === 0) continue;
+          r += data[j * 4];
+          g += data[j * 4 + 1];
+          b += data[j * 4 + 2];
+          n++;
+        }
+      }
+      if (n === 0) continue;
+      const k = strength * Math.sqrt(c), o = i * 4;
+      data[o] += (r / n - data[o]) * k;
+      data[o + 1] += (g / n - data[o + 1]) * k;
+      data[o + 2] += (b / n - data[o + 2]) * k;
+    }
+  }
+
+  // apps/ZEditor/src/state/useMagicErase.js
+  var { useState: useState6, useRef: useRef6, useEffect: useEffect2 } = React;
+  var RECOMPUTE_DELAY_MS = 60;
+  var NO_EDGE_REFINING = { feather: 0, edgeShift: 0, specks: 0, defringe: 0 };
+  function useMagicErase({ doc, selection, edits, toolDefaults }) {
+    const [active, setActive] = useState6(false);
+    const [preview, setPreview] = useState6(null);
+    const [notice, setNotice] = useState6(null);
+    const noticeTimerRef = useRef6(null);
+    const sessionRef = useRef6(null);
+    const loadTokenRef = useRef6(0);
+    const settings = toolDefaults.magicEraser;
+    const latest = useRef6(null);
+    latest.current = { settings, edits, doc };
+    function compute(s) {
+      const st = { ...latest.current.settings, clickMode: s.mode };
+      if (s.mode === "match") Object.assign(st, NO_EDGE_REFINING);
+      const key = magicMatchKey(st);
+      const base = { data: s.base, width: s.width, height: s.height };
+      if (!s.cache || s.cache.key !== key) {
+        s.cache = { key, cov: magicMatch(base, s.seed ? s.seed.x : null, s.seed ? s.seed.y : null, st) };
+      }
+      const work = { data: new Uint8ClampedArray(s.base), width: s.width, height: s.height };
+      s.changed = s.cache.cov ? magicFinish(work, s.cache.cov.slice(), s.seed ? s.seed.x : null, s.seed ? s.seed.y : null, st) : 0;
+      s.result = work;
+      s.computedFor = latest.current.settings;
+      s.ctx.putImageData(new ImageData(work.data, s.width, s.height), 0, 0);
+    }
+    function paint(s) {
+      const version = ++s.version;
+      s.canvas.toBlob((blob) => {
+        if (!blob || sessionRef.current !== s || version !== s.version) return;
+        const url = URL.createObjectURL(blob);
+        if (s.url) URL.revokeObjectURL(s.url);
+        s.url = url;
+        setPreview({ annId: s.annId, src: url });
+      }, "image/png");
+    }
+    function schedule(s) {
+      if (s.timer) clearTimeout(s.timer);
+      s.timer = setTimeout(() => {
+        s.timer = null;
+        if (sessionRef.current !== s) return;
+        compute(s);
+        paint(s);
+      }, RECOMPUTE_DELAY_MS);
+    }
+    function endSession(s) {
+      if (s.timer) clearTimeout(s.timer);
+      if (s.url) URL.revokeObjectURL(s.url);
+      if (sessionRef.current === s) sessionRef.current = null;
+      setPreview(null);
+      setActive(false);
+    }
+    function settle(s) {
+      if (s.timer) {
+        clearTimeout(s.timer);
+        s.timer = null;
+      }
+      if (s.computedFor !== latest.current.settings) compute(s);
+    }
+    function commit() {
+      const s = sessionRef.current;
+      if (!s) return false;
+      settle(s);
+      if (s.changed > 0) latest.current.edits.handleEraseImagePixels(s.annId, s.canvas.toDataURL("image/png"), s.pageIdx);
+      endSession(s);
+      return true;
+    }
+    function cancel() {
+      const s = sessionRef.current;
+      if (!s) return false;
+      endSession(s);
+      return true;
+    }
+    async function start(ann, hit, quiet) {
+      const token = ++loadTokenRef.current;
+      const mode = latest.current.settings.clickMode;
+      const pageIdx = latest.current.doc.selectedIdx;
+      const prev = sessionRef.current;
+      let base = null, width = 0, height = 0;
+      if (prev && prev.annId === ann.id) {
+        settle(prev);
+        base = new Uint8ClampedArray(prev.result.data);
+        width = prev.width;
+        height = prev.height;
+      }
+      if (prev) commit();
+      if (!base) {
+        const source = await loadImageElement(ann.src);
+        if (token !== loadTokenRef.current) return false;
+        const canvas2 = document.createElement("canvas");
+        canvas2.width = width = ann.naturalWidth;
+        canvas2.height = height = ann.naturalHeight;
+        const ctx = canvas2.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(source, 0, 0, width, height);
+        base = ctx.getImageData(0, 0, width, height).data;
+      }
+      let seed = null;
+      if (mode === "match") {
+        seed = { x: Math.min(width - 1, Math.max(0, hit.x)), y: Math.min(height - 1, Math.max(0, hit.y)) };
+        if (base[(Math.floor(seed.y) * width + Math.floor(seed.x)) * 4 + 3] === 0) return false;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const s = {
+        annId: ann.id,
+        pageIdx,
+        mode,
+        seed,
+        base,
+        width,
+        height,
+        canvas,
+        ctx: canvas.getContext("2d"),
+        cache: null,
+        result: null,
+        computedFor: null,
+        changed: 0,
+        timer: null,
+        url: null,
+        version: 0
+      };
+      sessionRef.current = s;
+      setActive(true);
+      compute(s);
+      if (mode === "refine" && !s.cache.cov) {
+        endSession(s);
+        if (!quiet) showNotice("That image has no transparent areas to refine. Erase a background first.");
+        return false;
+      }
+      setNotice(null);
+      paint(s);
+      return true;
+    }
+    async function startRefine() {
+      if (latest.current.settings.clickMode !== "refine") return;
+      const page = latest.current.doc.selectedPage;
+      const images = (page && page.annotations || []).filter((a) => a.type === "image" && !a.hidden && !a.locked).reverse();
+      if (images.length === 0) {
+        showNotice("There's no image on this page to refine.");
+        return;
+      }
+      for (const ann of images) {
+        if (await start(ann, null, true)) return;
+      }
+      showNotice("No image on this page has transparent areas to refine. Erase a background first.");
+    }
+    function showNotice(text) {
+      setNotice(text);
+      clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = setTimeout(() => setNotice(null), 6e3);
+    }
     useEffect2(() => {
+      const s = sessionRef.current;
+      if (!s) return;
+      if (selection.tool !== "eraser" || toolDefaults.eraserMode !== "magic" || doc.selectedIdx !== s.pageIdx || settings.clickMode !== s.mode) {
+        commit();
+        return;
+      }
+      schedule(s);
+    }, [selection.tool, toolDefaults.eraserMode, doc.selectedIdx, settings]);
+    useEffect2(() => {
+      function handleKeyDown(e) {
+        if (!sessionRef.current) return;
+        const target = e.target || {};
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        } else if (e.key === "Enter" && target.tagName !== "BUTTON" && target.type !== "number") {
+          e.preventDefault();
+          commit();
+        }
+      }
+      function handlePointerDown(e) {
+        if (!sessionRef.current) return;
+        const t = e.target;
+        if (t && t.closest && t.closest(".ze-format-panel, .preview-pane")) return;
+        commit();
+      }
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("pointerdown", handlePointerDown, true);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("pointerdown", handlePointerDown, true);
+      };
+    }, []);
+    return { active, preview, notice, start, startRefine, commit, cancel };
+  }
+
+  // apps/ZEditor/src/state/useOnionGhost.js
+  var { useState: useState7, useEffect: useEffect3 } = React;
+  function useOnionGhost({ onionSkinOn, pages, selectedIdx, pdfDocsRef }) {
+    const [onionGhostSrc, setOnionGhostSrc] = useState7(null);
+    useEffect3(() => {
       if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) {
         setOnionGhostSrc(null);
         return;
@@ -2943,16 +3380,16 @@
   }
 
   // apps/ZEditor/src/state/useProject.js
-  var { useState: useState7, useRef: useRef6 } = React;
+  var { useState: useState8, useRef: useRef7 } = React;
   function useProject({ doc, history, status, view, toolDefaults }) {
     const { pages, setPages, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
     const { setLoading, setErrorMsg } = status;
-    const projectInputRef = useRef6(null);
-    const [savingProject, setSavingProject] = useState7(false);
-    const [projectFile, setProjectFile] = useState7(null);
-    const [docTitle, setDocTitle] = useState7("");
-    const [justSaved, setJustSaved] = useState7(false);
-    const justSavedTimerRef = useRef6(null);
+    const projectInputRef = useRef7(null);
+    const [savingProject, setSavingProject] = useState8(false);
+    const [projectFile, setProjectFile] = useState8(null);
+    const [docTitle, setDocTitle] = useState8("");
+    const [justSaved, setJustSaved] = useState8(false);
+    const justSavedTimerRef = useRef7(null);
     function flashSaved() {
       setJustSaved(true);
       clearTimeout(justSavedTimerRef.current);
@@ -3050,13 +3487,13 @@
   }
 
   // apps/ZEditor/src/state/useSelection.js
-  var { useState: useState8, useEffect: useEffect3 } = React;
+  var { useState: useState9, useEffect: useEffect4 } = React;
   function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
-    const [tool, setTool] = useState8("select");
-    const [selectedAnnId, setSelectedAnnId] = useState8(null);
-    const [selectedAnnIds, setSelectedAnnIds] = useState8([]);
-    const [editingAnnId, setEditingAnnId] = useState8(null);
-    const [croppingAnnId, setCroppingAnnId] = useState8(null);
+    const [tool, setTool] = useState9("select");
+    const [selectedAnnId, setSelectedAnnId] = useState9(null);
+    const [selectedAnnIds, setSelectedAnnIds] = useState9([]);
+    const [editingAnnId, setEditingAnnId] = useState9(null);
+    const [croppingAnnId, setCroppingAnnId] = useState9(null);
     function selectTool(t) {
       setTool(t);
       setEditingAnnId(null);
@@ -3129,10 +3566,10 @@
     function handleToggleCrop(id) {
       setCroppingAnnId((cur) => cur === id ? null : id);
     }
-    useEffect3(() => {
+    useEffect4(() => {
       setSelectedAnnId(null);
     }, [selectedIdx]);
-    useEffect3(() => {
+    useEffect4(() => {
       if (croppingAnnId !== null && croppingAnnId !== selectedAnnId) setCroppingAnnId(null);
     }, [selectedAnnId]);
     return {
@@ -3159,16 +3596,33 @@
   }
 
   // apps/ZEditor/src/state/useStatus.js
-  var { useState: useState9 } = React;
+  var { useState: useState10 } = React;
   function useStatus() {
-    const [loading, setLoading] = useState9(false);
-    const [errorMsg, setErrorMsg] = useState9(null);
+    const [loading, setLoading] = useState10(false);
+    const [errorMsg, setErrorMsg] = useState10(null);
     return { loading, setLoading, errorMsg, setErrorMsg };
   }
 
   // apps/ZEditor/src/model/magicEraser.js
-  var MAGIC_ERASER_DEFAULTS = { tolerance: 32, contiguous: true };
+  var MAGIC_ERASER_DEFAULTS = {
+    clickMode: "match",
+    tolerance: 32,
+    colorTolerance: 13,
+    smoothing: 2,
+    contiguous: true,
+    diagonal: false,
+    softness: 20,
+    feather: 1,
+    edgeShift: 0,
+    specks: 0,
+    defringe: 50,
+    opacity: 100
+  };
   var MAGIC_TOLERANCE_MAX = 255;
+  var MAGIC_SMOOTHING_MAX = 6;
+  var MAGIC_FEATHER_MAX = 12;
+  var MAGIC_SHIFT_MAX = 8;
+  var MAGIC_SPECKS_MAX = 500;
 
   // apps/ZEditor/src/model/softEraser.js
   var SOFT_ERASER_DEFAULTS = { size: 40, softness: 60, strength: 100 };
@@ -3220,11 +3674,11 @@
   }
 
   // apps/ZEditor/src/state/useToolDefaults.js
-  var { useState: useState10, useEffect: useEffect4 } = React;
+  var { useState: useState11, useEffect: useEffect5 } = React;
   function useToolDefaults() {
-    const [fontOptions, setFontOptions] = useState10(DEFAULT_FONT_OPTIONS);
-    const [textStyles, setTextStyles] = useState10(readStoredTextStyles);
-    useEffect4(() => {
+    const [fontOptions, setFontOptions] = useState11(DEFAULT_FONT_OPTIONS);
+    const [textStyles, setTextStyles] = useState11(readStoredTextStyles);
+    useEffect5(() => {
       try {
         localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles));
       } catch (err) {
@@ -3244,23 +3698,23 @@
       if (!families.length) return;
       setFontOptions((prev) => Array.from(/* @__PURE__ */ new Set([...prev, ...families])).sort((a, b) => a.localeCompare(b)));
     }
-    const [penColor, setPenColor] = useState10(PEN_DEFAULTS.color);
-    const [penWidth, setPenWidth] = useState10(PEN_DEFAULTS.width);
-    const [penTaper, setPenTaper] = useState10(0);
-    const [eraserMode, setEraserMode] = useState10("soft");
-    const [softEraser, setSoftEraser] = useState10(SOFT_ERASER_DEFAULTS);
-    const [magicEraser, setMagicEraser] = useState10(MAGIC_ERASER_DEFAULTS);
-    const [highlighterColor, setHighlighterColor] = useState10(HIGHLIGHTER_DEFAULTS.color);
-    const [highlighterWidth, setHighlighterWidth] = useState10(HIGHLIGHTER_DEFAULTS.width);
-    const [highlighterTaper, setHighlighterTaper] = useState10(0);
-    const [textFontFamily, setTextFontFamily] = useState10(DEFAULT_FONT_OPTIONS[0]);
-    const [textFontSize, setTextFontSize] = useState10(16);
-    const [textBold, setTextBold] = useState10(false);
-    const [textItalic, setTextItalic] = useState10(false);
-    const [textUnderline, setTextUnderline] = useState10(false);
-    const [textColor, setTextColor] = useState10("#1a1a1a");
-    const [textAlign, setTextAlign] = useState10("left");
-    const [rectDefaults, setRectDefaults] = useState10(() => controlValues({}, RECT_CONTROLS));
+    const [penColor, setPenColor] = useState11(PEN_DEFAULTS.color);
+    const [penWidth, setPenWidth] = useState11(PEN_DEFAULTS.width);
+    const [penTaper, setPenTaper] = useState11(0);
+    const [eraserMode, setEraserMode] = useState11("soft");
+    const [softEraser, setSoftEraser] = useState11(SOFT_ERASER_DEFAULTS);
+    const [magicEraser, setMagicEraser] = useState11(MAGIC_ERASER_DEFAULTS);
+    const [highlighterColor, setHighlighterColor] = useState11(HIGHLIGHTER_DEFAULTS.color);
+    const [highlighterWidth, setHighlighterWidth] = useState11(HIGHLIGHTER_DEFAULTS.width);
+    const [highlighterTaper, setHighlighterTaper] = useState11(0);
+    const [textFontFamily, setTextFontFamily] = useState11(DEFAULT_FONT_OPTIONS[0]);
+    const [textFontSize, setTextFontSize] = useState11(16);
+    const [textBold, setTextBold] = useState11(false);
+    const [textItalic, setTextItalic] = useState11(false);
+    const [textUnderline, setTextUnderline] = useState11(false);
+    const [textColor, setTextColor] = useState11("#1a1a1a");
+    const [textAlign, setTextAlign] = useState11("left");
+    const [rectDefaults, setRectDefaults] = useState11(() => controlValues({}, RECT_CONTROLS));
     return {
       fontOptions,
       setFontOptions,
@@ -3321,18 +3775,18 @@
   var DEFAULT_GUIDE_BLEED_IN = 0.125;
 
   // apps/ZEditor/src/state/useViewSettings.js
-  var { useState: useState11 } = React;
+  var { useState: useState12 } = React;
   function useViewSettings() {
-    const [guidesOn, setGuidesOn] = useState11(false);
-    const [centerGuideOn, setCenterGuideOn] = useState11(false);
-    const [guideFormat, setGuideFormat] = useState11("match");
-    const [guideMarginIn, setGuideMarginIn] = useState11(DEFAULT_GUIDE_MARGIN_IN);
-    const [guideBleedIn, setGuideBleedIn] = useState11(DEFAULT_GUIDE_BLEED_IN);
-    const [pageNumbers, setPageNumbers] = useState11(DEFAULT_PAGE_NUMBERS);
-    const [onionSkinOn, setOnionSkinOn] = useState11(false);
-    const [onionSkinOpacity, setOnionSkinOpacity] = useState11(0.3);
-    const [layersOpen, setLayersOpen] = useState11(true);
-    const [layersPosition, setLayersPosition] = useState11(null);
+    const [guidesOn, setGuidesOn] = useState12(false);
+    const [centerGuideOn, setCenterGuideOn] = useState12(false);
+    const [guideFormat, setGuideFormat] = useState12("match");
+    const [guideMarginIn, setGuideMarginIn] = useState12(DEFAULT_GUIDE_MARGIN_IN);
+    const [guideBleedIn, setGuideBleedIn] = useState12(DEFAULT_GUIDE_BLEED_IN);
+    const [pageNumbers, setPageNumbers] = useState12(DEFAULT_PAGE_NUMBERS);
+    const [onionSkinOn, setOnionSkinOn] = useState12(false);
+    const [onionSkinOpacity, setOnionSkinOpacity] = useState12(0.3);
+    const [layersOpen, setLayersOpen] = useState12(true);
+    const [layersPosition, setLayersPosition] = useState12(null);
     function settingsForSave() {
       return {
         guidesOn,
@@ -3382,11 +3836,11 @@
   }
 
   // apps/ZEditor/src/state/useZoom.js
-  var { useState: useState12, useRef: useRef7, useLayoutEffect } = React;
+  var { useState: useState13, useRef: useRef8, useLayoutEffect } = React;
   function useZoom() {
-    const [zoomPercent, setZoomPercent] = useState12(ZOOM_PERCENT.initial);
-    const previewPaneRef = useRef7(null);
-    const zoomAnchorRef = useRef7(null);
+    const [zoomPercent, setZoomPercent] = useState13(ZOOM_PERCENT.initial);
+    const previewPaneRef = useRef8(null);
+    const zoomAnchorRef = useRef8(null);
     function artboardElement() {
       return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
     }
@@ -3448,12 +3902,12 @@
   }
 
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef: useRef8, useEffect: useEffect5 } = React;
+  var { useRef: useRef9, useEffect: useEffect6 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
-    const textureCanvasRef = useRef8(null);
+    const textureCanvasRef = useRef9(null);
     const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
     const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-    useEffect5(() => {
+    useEffect6(() => {
       const canvas = textureCanvasRef.current;
       if (!textureKey || !canvas) return;
       canvas.width = Math.max(1, Math.ceil(ann.width));
@@ -3530,10 +3984,10 @@
   }
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
-  var { useRef: useRef9, useEffect: useEffect6 } = React;
+  var { useRef: useRef10, useEffect: useEffect7 } = React;
   var MIN_CROP_SIZE = 20;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
-    const halftoneCanvasRef = useRef9(null);
+    const halftoneCanvasRef = useRef10(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
     const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
@@ -3612,7 +4066,7 @@
     const adjusted = hasPhotoAdjust(ann);
     const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
     const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null]) : null;
-    useEffect6(() => {
+    useEffect7(() => {
       if (!usesFilterCanvas || isCropping) return;
       let cancelled = false;
       (async () => {
@@ -3706,12 +4160,12 @@
   var textSelectionStore = { annId: null, start: 0, end: 0 };
 
   // apps/ZEditor/src/ui/canvas/AnnotationText.jsx
-  var { useRef: useRef10, useEffect: useEffect7, useLayoutEffect: useLayoutEffect2 } = React;
+  var { useRef: useRef11, useEffect: useEffect8, useLayoutEffect: useLayoutEffect2 } = React;
   function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate }) {
-    const boxRef = useRef10(null);
-    const inputRef = useRef10(null);
-    const pendingCaretRef = useRef10(null);
-    const liveCanvasRef = useRef10(null);
+    const boxRef = useRef11(null);
+    const inputRef = useRef11(null);
+    const pendingCaretRef = useRef11(null);
+    const liveCanvasRef = useRef11(null);
     useLayoutEffect2(() => {
       if (!isEditing || !inputRef.current) return;
       const caret = pendingCaretRef.current != null ? pendingCaretRef.current : ann.text.length;
@@ -3763,7 +4217,7 @@
     const liveBox = canvasMode ? measureTextBox(ann) : null;
     const canvasMargin = canvasMode ? textCanvasMargin(ann, look) : 0;
     const liveDrawKey = canvasMode ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: void 0, hidden: void 0, name: void 0, blend: void 0 }) : "";
-    useEffect7(() => {
+    useEffect8(() => {
       if (!canvasMode) return void 0;
       let cancelled = false;
       (async () => {
@@ -4173,57 +4627,6 @@
     ));
   }
 
-  // apps/ZEditor/src/render/magicErase.js
-  function magicErase(imageData, x, y, tolerance, contiguous) {
-    const { data, width, height } = imageData;
-    const px = Math.floor(x), py = Math.floor(y);
-    if (px < 0 || py < 0 || px >= width || py >= height) return 0;
-    const start = py * width + px;
-    if (data[start * 4 + 3] === 0) return 0;
-    const r0 = data[start * 4], g0 = data[start * 4 + 1], b0 = data[start * 4 + 2];
-    const matches = (i) => {
-      const o = i * 4;
-      return data[o + 3] !== 0 && Math.abs(data[o] - r0) <= tolerance && Math.abs(data[o + 1] - g0) <= tolerance && Math.abs(data[o + 2] - b0) <= tolerance;
-    };
-    let erased = 0;
-    if (!contiguous) {
-      for (let i = 0; i < width * height; i++) {
-        if (matches(i)) {
-          data[i * 4 + 3] = 0;
-          erased++;
-        }
-      }
-      return erased;
-    }
-    const seen = new Uint8Array(width * height);
-    const stack = [start];
-    seen[start] = 1;
-    while (stack.length) {
-      const i = stack.pop();
-      if (!matches(i)) continue;
-      data[i * 4 + 3] = 0;
-      erased++;
-      const cx = i % width, cy = (i - cx) / width;
-      if (cx > 0 && !seen[i - 1]) {
-        seen[i - 1] = 1;
-        stack.push(i - 1);
-      }
-      if (cx < width - 1 && !seen[i + 1]) {
-        seen[i + 1] = 1;
-        stack.push(i + 1);
-      }
-      if (cy > 0 && !seen[i - width]) {
-        seen[i - width] = 1;
-        stack.push(i - width);
-      }
-      if (cy < height - 1 && !seen[i + width]) {
-        seen[i + width] = 1;
-        stack.push(i + width);
-      }
-    }
-    return erased;
-  }
-
   // apps/ZEditor/src/render/softErase.js
   function imagePixelAt(ann, px, py) {
     const cx = ann.x + ann.width / 2, cy = ann.y + ann.height / 2;
@@ -4258,34 +4661,18 @@
   }
 
   // apps/ZEditor/src/ui/canvas/magicEraseGesture.js
-  async function magicEraseAt(e, { annotations, magicEraser, toPagePoint, onEraseImagePixels }) {
+  function magicEraseAt(e, { annotations, toPagePoint, onMagicClick }) {
     e.preventDefault();
     const p = toPagePoint(e);
-    let ann = null, hit = null;
     for (let i = annotations.length - 1; i >= 0; i--) {
       const a = annotations[i];
       if (a.type !== "image" || a.hidden || a.locked) continue;
-      const h = imagePixelAt(a, p.x, p.y);
-      if (h.inside) {
-        ann = a;
-        hit = h;
-        break;
+      const hit = imagePixelAt(a, p.x, p.y);
+      if (hit.inside) {
+        onMagicClick(a, hit);
+        return;
       }
     }
-    if (!ann) return;
-    const source = await loadImageElement(ann.src);
-    const canvas = document.createElement("canvas");
-    canvas.width = ann.naturalWidth;
-    canvas.height = ann.naturalHeight;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const x = Math.min(canvas.width - 1, Math.max(0, hit.x));
-    const y = Math.min(canvas.height - 1, Math.max(0, hit.y));
-    const erased = magicErase(imageData, x, y, magicEraser.tolerance, magicEraser.contiguous);
-    if (erased === 0) return;
-    ctx.putImageData(imageData, 0, 0);
-    onEraseImagePixels(ann.id, canvas.toDataURL("image/png"));
   }
 
   // apps/ZEditor/src/ui/canvas/softEraseGesture.js
@@ -4389,11 +4776,11 @@
   }
 
   // apps/ZEditor/src/ui/canvas/usePageBackground.js
-  var { useState: useState13, useRef: useRef11, useEffect: useEffect8 } = React;
+  var { useState: useState14, useRef: useRef12, useEffect: useEffect9 } = React;
   function usePageBackground(page, pdfDocsRef, pageFilter) {
-    const canvasRef = useRef11(null);
-    const [canvasSize, setCanvasSize] = useState13({ width: 0, height: 0 });
-    useEffect8(() => {
+    const canvasRef = useRef12(null);
+    const [canvasSize, setCanvasSize] = useState14({ width: 0, height: 0 });
+    useEffect9(() => {
       if (!page) return;
       let cancelled = false;
       (async () => {
@@ -4434,7 +4821,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
-  var { useState: useState14, useRef: useRef12 } = React;
+  var { useState: useState15, useRef: useRef13 } = React;
   function ComposeCanvas({
     pdfDocsRef,
     page,
@@ -4473,18 +4860,19 @@
     onFinishTextEdit,
     eraserMode,
     softEraser,
-    magicEraser,
     onEraseImagePixels,
+    magicPreview,
+    onMagicClick,
     zoom
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
-    const layerRef = useRef12(null);
-    const [dragRect, setDragRect] = useState14(null);
-    const drawingRef = useRef12(null);
-    const [brushPos, setBrushPos] = useState14(null);
+    const layerRef = useRef13(null);
+    const [dragRect, setDragRect] = useState15(null);
+    const drawingRef = useRef13(null);
+    const [brushPos, setBrushPos] = useState15(null);
     const softErasing = tool === "eraser" && eraserMode === "soft";
     const magicErasing = tool === "eraser" && eraserMode === "magic";
-    const [, setDrawTick] = useState14(0);
+    const [, setDrawTick] = useState15(0);
     function overlayPoint(e) {
       const rect = canvasRef.current.getBoundingClientRect();
       return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
@@ -4500,7 +4888,7 @@
         return;
       }
       if (magicErasing) {
-        magicEraseAt(e, { annotations, magicEraser, toPagePoint: overlayPoint, onEraseImagePixels });
+        magicEraseAt(e, { annotations, toPagePoint: overlayPoint, onMagicClick });
         return;
       }
       if (tool === "eraser") {
@@ -4637,7 +5025,7 @@
         onMouseMove: softErasing ? (e) => setBrushPos(overlayPoint(e)) : void 0,
         onMouseLeave: softErasing ? () => setBrushPos(null) : void 0
       },
-      annotations.filter((a) => !a.hidden).map((a) => /* @__PURE__ */ React.createElement(
+      (magicPreview ? annotations.map((a) => a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a) : annotations).filter((a) => !a.hidden).map((a) => /* @__PURE__ */ React.createElement(
         AnnotationItem,
         {
           key: a.id,
@@ -4706,11 +5094,11 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
-  var { useState: useState15 } = React;
+  var { useState: useState16 } = React;
   function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
-    const [presetKey, setPresetKey] = useState15("a5");
-    const [orientation, setOrientation] = useState15("portrait");
-    const [pageCountText, setPageCountText] = useState15("1");
+    const [presetKey, setPresetKey] = useState16("a5");
+    const [orientation, setOrientation] = useState16("portrait");
+    const [pageCountText, setPageCountText] = useState16("1");
     if (!open) return null;
     const preset = NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
     const landscape = orientation === "landscape";
@@ -4758,7 +5146,8 @@
         ["Ctrl + Shift + S", "Save the project to a new file"],
         ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
         ["Double-click text", "Edit it (Move tool)"],
-        ["Esc", "Finish editing and keep the text selected"]
+        ["Esc", "Finish editing and keep the text selected"],
+        ["Enter / Esc", "Magic eraser preview: apply it / cancel it (Ctrl + Z also cancels)"]
       ]
     },
     {
@@ -4779,9 +5168,9 @@
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect9 } = React;
+  var { useEffect: useEffect10 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect9(() => {
+    useEffect10(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -4794,9 +5183,9 @@
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState16 } = React;
+  var { useState: useState17 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState16(null);
+    const [draft, setDraft] = useState17(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -4849,18 +5238,18 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState17, useRef: useRef13, useEffect: useEffect10 } = React;
+  var { useState: useState18, useRef: useRef14, useEffect: useEffect11 } = React;
   var sectionOpenMemory = {};
   function PanelSection({ id, title, checked, onToggle, disabled, defaultOpen = false, group, hint, summary, onReset, children }) {
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState17(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState18(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
-    const wasChecked = useRef13(checked);
-    useEffect10(() => {
+    const wasChecked = useRef14(checked);
+    useEffect11(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -5087,9 +5476,9 @@
   }
 
   // apps/ZEditor/src/ui/panels/LetterColors.jsx
-  var { useState: useState18 } = React;
+  var { useState: useState19 } = React;
   function LetterColors({ ann, patch }) {
-    const [message, setMessage] = useState18(null);
+    const [message, setMessage] = useState19(null);
     const keepFocus = (e) => e.preventDefault();
     function applyColor(color) {
       const text = ann.text || "";
@@ -5110,25 +5499,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState19, useRef: useRef14, useEffect: useEffect11, useMemo: useMemo2 } = React;
+  var { useState: useState20, useRef: useRef15, useEffect: useEffect12, useMemo: useMemo2 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState19(value || "");
-    const [typed, setTyped] = useState19(false);
-    const [open, setOpen] = useState19(false);
-    const [highlight, setHighlight] = useState19(-1);
-    const previewFromRef = useRef14(null);
-    const listRef = useRef14(null);
-    const [status, setStatus] = useState19(null);
-    const [loadingFonts, setLoadingFonts] = useState19(false);
-    const containerRef = useRef14(null);
-    const uploadInputRef = useRef14(null);
-    useEffect11(() => {
+    const [query, setQuery] = useState20(value || "");
+    const [typed, setTyped] = useState20(false);
+    const [open, setOpen] = useState20(false);
+    const [highlight, setHighlight] = useState20(-1);
+    const previewFromRef = useRef15(null);
+    const listRef = useRef15(null);
+    const [status, setStatus] = useState20(null);
+    const [loadingFonts, setLoadingFonts] = useState20(false);
+    const containerRef = useRef15(null);
+    const uploadInputRef = useRef15(null);
+    useEffect12(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect11(() => {
+    useEffect12(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -5142,7 +5531,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect11(() => {
+    useEffect12(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -5297,10 +5686,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState20, useRef: useRef15 } = React;
+  var { useState: useState21, useRef: useRef16 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef15(null);
-    const [error, setError] = useState20(null);
+    const inputRef = useRef16(null);
+    const [error, setError] = useState21(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -5331,10 +5720,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState21 } = React;
+  var { useState: useState22 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle }) {
-    const [name, setName] = useState21("");
-    const [message, setMessage] = useState21(null);
+    const [name, setName] = useState22("");
+    const [message, setMessage] = useState22(null);
     function save() {
       const clean = name.trim();
       if (!clean) {
@@ -5435,10 +5824,12 @@
       }
     )));
   }
-  function EraserToolPanel({ toolDefaults }) {
+  function EraserToolPanel({ toolDefaults, magicErase }) {
     const { eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser } = toolDefaults;
+    const refine = magicEraser.clickMode === "refine";
     const onChangeMagic = (patch) => setMagicEraser((cur) => ({ ...cur, ...patch }));
     const onChangeSoftEraser = (patch) => setSoftEraser((cur) => ({ ...cur, ...patch }));
+    const magicSlider = (prop, label, min, max, hint) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label), /* @__PURE__ */ React.createElement(SliderNumberInput, { min, max, value: magicEraser[prop], onChange: (v) => onChangeMagic({ [prop]: v }) }), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
     const slider = (prop, label, min, max, unit) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label, " (", softEraser[prop], unit, ")"), /* @__PURE__ */ React.createElement(
       "input",
       {
@@ -5451,7 +5842,61 @@
         onChange: (e) => onChangeSoftEraser({ [prop]: Number(e.target.value) })
       }
     ));
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Eraser" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.mode", title: "Mode", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : ""), onClick: () => setEraserMode("stroke") }, "Strokes"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : ""), onClick: () => setEraserMode("soft") }, "Soft (images)"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "magic" ? " active" : ""), onClick: () => setEraserMode("magic") }, "Magic")), eraserMode === "stroke" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Removes any pen or highlighter stroke you drag across.")), eraserMode === "magic" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.magic", title: "Magic eraser", defaultOpen: true, hint: "Click an image: the colour you click, and every colour within the Tolerance of it, becomes transparent. Each click is its own Ctrl+Z step. To use it on text or a shape, Rasterize to Image first." }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Tolerance (0 = exact colour, ", MAGIC_TOLERANCE_MAX, " = everything)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: MAGIC_TOLERANCE_MAX, value: magicEraser.tolerance, onChange: (tolerance) => onChangeMagic({ tolerance }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Erase"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: true }) }, "Connected only"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: false }) }, "Whole image")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, magicEraser.contiguous ? "Only matching pixels touching the one you click (like Photoshop's Contiguous)." : "Every matching pixel in the image, connected or not."))), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Eraser" }, eraserMode === "magic" && magicErase && magicErase.active && /* @__PURE__ */ React.createElement("div", { className: "ze-magic-bar" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preview: change any setting until it looks right"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", title: "Apply (Enter)", onClick: magicErase.commit }, "Apply"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Cancel (Esc)", onClick: magicErase.cancel }, "Cancel")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Enter applies, Esc cancels. Clicking another spot on the image applies this one and starts the next.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.mode", title: "Mode", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : ""), onClick: () => setEraserMode("stroke") }, "Strokes"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : ""), onClick: () => setEraserMode("soft") }, "Soft (images)"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (eraserMode === "magic" ? " active" : ""), onClick: () => setEraserMode("magic") }, "Magic")), eraserMode === "stroke" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Removes any pen or highlighter stroke you drag across.")), eraserMode === "magic" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.magic", title: "Magic eraser", defaultOpen: true, hint: "Click an image to open a preview, then change any setting until it looks right. Nothing is changed until you Apply (the button, or Enter), and Apply is one Ctrl+Z step. It reads the image's original pixels (before filters). To use it on text or a shape, Rasterize to Image first." }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Click does"), /* @__PURE__ */ React.createElement("div", { className: "ze-seg-tabs", role: "tablist" }, /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": !refine, className: "ze-seg-tab" + (!refine ? " active" : ""), onClick: () => onChangeMagic({ clickMode: "match" }) }, "Erase a colour"), /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": refine, className: "ze-seg-tab" + (refine ? " active" : ""), onClick: () => onChangeMagic({ clickMode: "refine" }) }, "Refine edge")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, refine ? "Finds every edge between transparent and coloured pixels by itself and refines them all at once. It needs an image that already has transparent areas (for example after erasing a background, or an imported cut-out). Press Refine edges, or click anywhere on an image (not on its edge) to pick that one." : "Erases the colour you click, and every colour close enough to it."), refine && magicErase && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", style: { marginTop: 8 }, onClick: magicErase.startRefine }, "Refine edges"), refine && magicErase && magicErase.notice && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, magicErase.notice)), !refine && magicSlider(
+      "tolerance",
+      `Brightness tolerance (0 = same brightness, ${MAGIC_TOLERANCE_MAX} = any)`,
+      0,
+      MAGIC_TOLERANCE_MAX,
+      "Raise it to catch shadows and lighter or darker patches of the same surface."
+    ), !refine && magicSlider(
+      "colorTolerance",
+      `Colour tolerance (0 = same colour, ${MAGIC_TOLERANCE_MAX} = any)`,
+      0,
+      MAGIC_TOLERANCE_MAX,
+      "Raise it if the background has colour variation; lower it if the erase spills onto a similar-brightness subject."
+    ), !refine && magicSlider(
+      "smoothing",
+      `Smoothing (${magicEraser.smoothing}px, 0 = off)`,
+      0,
+      MAGIC_SMOOTHING_MAX,
+      "Averages nearby pixels before comparing, so grainy backgrounds (carpet, paper, noise) erase cleanly. Turn it down for thin lines or fine detail."
+    ), !refine && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Erase"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: true }) }, "Connected only"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!magicEraser.contiguous ? " active" : ""), onClick: () => onChangeMagic({ contiguous: false }) }, "Whole image")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, magicEraser.contiguous ? "Only matching pixels touching the one you click (like Photoshop's Contiguous)." : "Every matching pixel in the image, connected or not.")), !refine && magicEraser.contiguous && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Connect through corners"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!magicEraser.diagonal ? " active" : ""), onClick: () => onChangeMagic({ diagonal: false }) }, "Edges only"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (magicEraser.diagonal ? " active" : ""), onClick: () => onChangeMagic({ diagonal: true }) }, "Corners too")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, '"Corners too" spreads through 1px diagonal gaps, which can leak past thin outlines.')), !refine && magicSlider(
+      "softness",
+      `Edge softness (${magicEraser.softness}%)`,
+      0,
+      100,
+      "Pixels just past the tolerance are erased partly instead of all-or-nothing, so the edge fades where the colour is borderline. 0 = hard cut-off."
+    ), !refine && magicSlider(
+      "opacity",
+      `Opacity (${magicEraser.opacity}%)`,
+      1,
+      100,
+      "How completely matching pixels are erased. Below 100 fades the background instead of removing it."
+    ), !refine && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { marginTop: 0, marginBottom: 16 } }, "To clean up the edge afterwards (feather, shift, specks, defringe), apply this erase and switch to the Refine edge tab."), refine && magicSlider(
+      "feather",
+      `Feather (${magicEraser.feather}px)`,
+      0,
+      MAGIC_FEATHER_MAX,
+      "Blurs the edge so it fades instead of cutting off. The fade reaches about this many pixels either side."
+    ), refine && magicSlider(
+      "edgeShift",
+      `Edge shift (${magicEraser.edgeShift > 0 ? "+" : ""}${magicEraser.edgeShift}px)`,
+      -MAGIC_SHIFT_MAX,
+      MAGIC_SHIFT_MAX,
+      "Moves the edge. Positive trims the image inward (removes a halo of old background); negative keeps more, but can't bring back pixels that are already transparent."
+    ), refine && magicSlider(
+      "specks",
+      `Remove specks (${magicEraser.specks ? magicEraser.specks + "px" : "off"})`,
+      0,
+      MAGIC_SPECKS_MAX,
+      "Removes stray bits of image up to this many pixels that are left floating in the transparent area. 0 = off."
+    ), refine && magicSlider(
+      "defringe",
+      `Defringe (${magicEraser.defringe}%)`,
+      0,
+      100,
+      "Pulls the colour of half-erased edge pixels toward the colour next to them, removing the leftover tint of the old background."
+    ), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setMagicEraser(MAGIC_ERASER_DEFAULTS) }, "Reset to defaults")), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
   }
 
   // apps/ZEditor/src/ui/panels/FormatPanel.jsx
@@ -5464,7 +5909,8 @@
     onFlattenImage,
     onRasterizeRect,
     onRasterizeText,
-    toolDefaults
+    toolDefaults,
+    magicErase
   }) {
     const ann = selectedAnn;
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults });
@@ -5474,12 +5920,12 @@
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
     if (tool === "text") return /* @__PURE__ */ React.createElement(TextToolPanel, { toolDefaults });
     if (tool === "pen" || tool === "highlighter") return /* @__PURE__ */ React.createElement(StrokeToolPanel, { tool, toolDefaults });
-    if (tool === "eraser") return /* @__PURE__ */ React.createElement(EraserToolPanel, { toolDefaults });
+    if (tool === "eraser") return /* @__PURE__ */ React.createElement(EraserToolPanel, { toolDefaults, magicErase });
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add."));
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState22, useRef: useRef16, useEffect: useEffect12 } = React;
+  var { useState: useState23, useRef: useRef17, useEffect: useEffect13 } = React;
   function layerName(ann) {
     if (ann.name) return ann.name;
     if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
@@ -5495,12 +5941,12 @@
     return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color), strokeWidth: "3", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 16c4-9 6-9 8-4s4 5 10-5" })));
   }
   function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onToggleFlag, onRename, onReorder }) {
-    const [renamingId, setRenamingId] = useState22(null);
-    const [dropInfo, setDropInfo] = useState22(null);
-    const dragIdRef = useRef16(null);
-    const listRef = useRef16(null);
-    const panelRef = useRef16(null);
-    const headRef = useRef16(null);
+    const [renamingId, setRenamingId] = useState23(null);
+    const [dropInfo, setDropInfo] = useState23(null);
+    const dragIdRef = useRef17(null);
+    const listRef = useRef17(null);
+    const panelRef = useRef17(null);
+    const headRef = useRef17(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     function inView(x, y) {
@@ -5509,7 +5955,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect12(() => {
+    useEffect13(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -5525,7 +5971,7 @@
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
     }
-    useEffect12(() => {
+    useEffect13(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -5698,15 +6144,15 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState23, useRef: useRef17, useEffect: useEffect13 } = React;
+  var { useState: useState24, useRef: useRef18, useEffect: useEffect14 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef17(null);
-    const bodyRef = useRef17(null);
-    const scrollDirRef = useRef17(0);
-    const rafRef = useRef17(null);
-    const [dragOverInfo, setDragOverInfo] = useState23(null);
+    const dragIndexRef = useRef18(null);
+    const bodyRef = useRef18(null);
+    const scrollDirRef = useRef18(0);
+    const rafRef = useRef18(null);
+    const [dragOverInfo, setDragOverInfo] = useState24(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -5725,7 +6171,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect13(() => stopAutoScroll, []);
+    useEffect14(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -5898,9 +6344,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState24 } = React;
+  var { useState: useState25 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState24(null);
+    const [customizing, setCustomizing] = useState25(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -5909,11 +6355,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState25, useRef: useRef18, useEffect: useEffect14, useLayoutEffect: useLayoutEffect3 } = React;
+  var { useState: useState26, useRef: useRef19, useEffect: useEffect15, useLayoutEffect: useLayoutEffect3 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState25(false);
-    const containerRef = useRef18(null);
-    useEffect14(() => {
+    const [open, setOpen] = useState26(false);
+    const containerRef = useRef19(null);
+    useEffect15(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -5928,7 +6374,7 @@
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef18(null);
+    const menuRef = useRef19(null);
     useLayoutEffect3(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
@@ -6136,6 +6582,12 @@
     const toolDefaults = useToolDefaults();
     const selection = useSelection(doc);
     const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
+    const magic = useMagicErase({ doc, selection, edits, toolDefaults });
+    const uiHistory = { ...history, handleUndo: () => {
+      if (!magic.cancel()) history.handleUndo();
+    }, handleRedo: () => {
+      if (!magic.cancel()) history.handleRedo();
+    } };
     const pageOps = usePageOps({ doc, history, selection });
     const project = useProject({ doc, history, status, view, toolDefaults });
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
@@ -6144,11 +6596,11 @@
     const zoom = useZoom();
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
     const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
-    useKeyboardShortcuts({ doc, history, selection, edits, pageOps, project, modalOpen });
+    useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, modalOpen });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
     const t = toolDefaults;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), /* @__PURE__ */ React.createElement("div", { className: "ze-body" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), /* @__PURE__ */ React.createElement("div", { className: "ze-body" }, /* @__PURE__ */ React.createElement(
       Sidebar,
       {
         pages,
@@ -6206,8 +6658,9 @@
         onToggleCrop: selection.handleToggleCrop,
         eraserMode: t.eraserMode,
         softEraser: t.softEraser,
-        magicEraser: t.magicEraser,
-        onEraseImagePixels: edits.handleEraseImagePixels
+        onEraseImagePixels: edits.handleEraseImagePixels,
+        magicPreview: magic.preview,
+        onMagicClick: magic.start
       }
     )))), selectedPage && /* @__PURE__ */ React.createElement(
       FormatPanel,
@@ -6221,7 +6674,8 @@
         onFlattenImage: edits.handleFlattenImage,
         onRasterizeRect: edits.handleRasterizeRect,
         onRasterizeText: edits.handleRasterizeText,
-        toolDefaults
+        toolDefaults,
+        magicErase: magic
       }
     )), selectedPage && view.layersOpen && /* @__PURE__ */ React.createElement(
       LayersPanel,

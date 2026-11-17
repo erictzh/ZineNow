@@ -20,7 +20,7 @@ export function ComposeCanvas({
   annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit,
-  eraserMode, softEraser, magicEraser, onEraseImagePixels,
+  eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   zoom,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
@@ -48,7 +48,7 @@ export function ComposeCanvas({
       return;
     }
     if (magicErasing) {
-      magicEraseAt(e, { annotations, magicEraser, toPagePoint: overlayPoint, onEraseImagePixels });
+      magicEraseAt(e, { annotations, toPagePoint: overlayPoint, onMagicClick });
       return;
     }
     if (tool === "eraser") {
@@ -216,7 +216,9 @@ export function ComposeCanvas({
         onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : undefined}
         onMouseLeave={softErasing ? () => setBrushPos(null) : undefined}
       >
-        {annotations.filter((a) => !a.hidden).map((a) => (
+        {/* While the magic eraser has a preview open, that image is drawn from it
+            instead of from the document, which stays untouched until Apply. */}
+        {(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations).filter((a) => !a.hidden).map((a) => (
           <AnnotationItem
             key={a.id}
             ann={a}
