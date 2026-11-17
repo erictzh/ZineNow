@@ -1,0 +1,57 @@
+/* Buttons: hollow by default; .btn-solid is the one primary call-to-action
+   per screen (same gradient as the topbar logo). .log-btn is the small toolbar button. */
+
+button {
+    background-color: var(--ui-bg-card);
+    color: var(--ui-fg-muted);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+button:hover {
+    background-color: var(--ui-bg);
+    color: var(--ui-fg);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+button.btn-solid {
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    color: #fff;
+    border: 1px solid var(--ui-accent);
+    border-radius: 6px;
+    padding: 6px 16px;
+    min-width: 85px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+button.btn-solid:hover {
+    background-color: var(--ui-accent-hover);
+    border-color: var(--ui-accent-hover);
+}
+
+.log-btn {
+    margin: 0 0 0 6px;
+    padding: 4px 10px;
+    min-width: unset;
+    font-size: 11px;
+    font-weight: 500;
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    color: var(--ui-fg-muted);
+}
+
+.log-btn:hover {
+    color: var(--ui-fg);
+    background-color: var(--ui-bg);
+    border-color: var(--ui-border);
+}

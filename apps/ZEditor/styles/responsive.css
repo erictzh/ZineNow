@@ -1,0 +1,6 @@
+/* Narrow-window adjustments. */
+
+/* ---- Responsive ------------------------------------------------------------- */
+@media (max-width: 640px) {
+    :root { --ze-sidebar-width: 180px; --ze-format-panel-width: 180px; }
+}

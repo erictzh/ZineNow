@@ -7,6 +7,9 @@ desktop.ini
 .claude/settings.local.json
 .claude/launch.json
 
+# Build tooling (dist/app.js files ARE committed, so the apps run without a build)
+node_modules/
+
 # Temp test files
 test-temp.pdf
 *.tmp

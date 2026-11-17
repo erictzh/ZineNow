@@ -1,0 +1,81 @@
+/* Modal dialogs and the keyboard shortcuts window. */
+
+/* ---- Modal dialog (Insert PDF) ---------------------------------------------- */
+.ze-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+.ze-modal {
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    background-color: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+}
+.ze-modal-head {
+    padding: 16px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-modal-body { padding: 20px; }
+.ze-modal-body p { font-size: 12px; line-height: 1.5; }
+.ze-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--ui-border);
+}
+
+/* ---- Keyboard shortcuts pop-up ---------------------------------------------- */
+.ze-tool-icon-btn--round { border-radius: 50%; }
+.ze-modal--shortcuts {
+    width: 460px;
+    max-height: min(560px, calc(100vh - 48px));
+    display: flex;
+    flex-direction: column;
+}
+.ze-modal-head--with-close {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.ze-shortcuts-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 20px 16px;
+}
+.ze-shortcuts-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ze-shortcuts-table th {
+    padding: 14px 0 6px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ui-fg-muted);
+    border-bottom: 1px solid var(--ui-border);
+}
+.ze-shortcuts-table td {
+    padding: 7px 0;
+    line-height: 1.4;
+    vertical-align: top;
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 50%, transparent);
+}
+.ze-shortcuts-table td:first-child { width: 42%; padding-right: 12px; }
+.ze-shortcuts-table kbd {
+    font-family: var(--ui-font);
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    background-color: var(--ui-bg);
+}
+

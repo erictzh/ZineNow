@@ -7,7 +7,7 @@
 
    Why this ".md" file isn't plain Markdown text: this app runs by
    opening index.html directly from disk, no local web server (see the
-   note at the top of App.jsx) — and Chrome blocks fetch()/XHR reads of
+   note in index.html) — and Chrome blocks fetch()/XHR reads of
    local sibling files under file://, the exact bug that caused a blank
    screen earlier in this app's build. A normal <script src="..."> tag
    (like this file is loaded with, in index.html) doesn't have that

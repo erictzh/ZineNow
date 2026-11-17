@@ -1,0 +1,103 @@
+// The .znow project file: writing a project out, and reading one back in.
+
+import { legacyLayerOrder } from "../model/annotations.js";
+import { makeBlankThumb, renderPdfThumb } from "../render/pageRender.js";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64.js";
+import { customFontStore, registerCustomFont } from "./customFonts.js";
+
+// Saves everything needed to reopen and keep editing: every loaded
+// source PDF's original bytes (base64, so the file is fully
+// self-contained — no need to also keep track of and re-attach the
+// original PDF(s) by hand), every page's annotations and own filter,
+// and the document-wide Guides/Onion Skin settings. Thumbnails are
+// regenerated on load instead of saved, same reasoning as the undo
+// snapshots — they're the one part that's both heavy and fully
+// derivable from everything else here.
+//
+// Plain JSON under the hood — .znow is just a distinct extension
+// so a saved project doesn't get mistaken for a generic .json
+// file (or opened by something else that happens to claim it).
+export function serializeProject({ title, pdfDocs, pages, textStyles, settings }) {
+  const docs = {};
+  for (const docId of Object.keys(pdfDocs)) {
+    docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
+  }
+  // Only the uploaded fonts some text actually uses are stored.
+  const usedFamilies = new Set();
+  pages.forEach((p) => (p.annotations || []).forEach((a) => { if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily); }));
+  const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
+  const project = {
+    version: 2, // 2: the annotation list is the stacking order
+    title,
+    docs,
+    fonts,
+    textStyles,
+    pages: pages.map(({ dataUrl, ...rest }) => rest),
+    settings,
+  };
+  return JSON.stringify(project);
+}
+
+// Reads a .znow file: re-opens its PDFs, registers its fonts (before
+// anything is drawn, so text lays out in them rather than in a fallback)
+// and rebuilds every page with a fresh thumbnail. `nextPageKey()` hands
+// out page keys. Returns everything the editor needs to switch to it.
+export async function readProjectFile(file, nextPageKey) {
+  const text = await file.text();
+  const project = JSON.parse(text);
+  if (!project || !Array.isArray(project.pages)) throw new Error("That doesn't look like a ZEditor project file.");
+
+  const docs = {};
+  for (const docId of Object.keys(project.docs || {})) {
+    const bytes = base64ToArrayBuffer(project.docs[docId]);
+    const doc = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+    docs[docId] = { doc, bytes };
+  }
+
+  const loadedFamilies = [];
+  for (const font of project.fonts || []) {
+    if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) { loadedFamilies.push(font.family); continue; }
+    try {
+      await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
+      customFontStore.push({ family: font.family, data: font.data });
+      loadedFamilies.push(font.family);
+    } catch (err) { /* a damaged font falls back to the default; the text is still there */ }
+  }
+  const textStyles = Array.isArray(project.textStyles) ? project.textStyles.filter((s) => s && s.name && s.props) : [];
+
+  const pages = await Promise.all(project.pages.map(async (p) => {
+    const dataUrl = p.isBlank
+      ? makeBlankThumb(p.width, p.height, p.rotation)
+      : await renderPdfThumb(docs[p.docId].doc, p.pageNumber, p.rotation);
+    const annotations = project.version >= 2 ? p.annotations : legacyLayerOrder(p.annotations || []);
+    return { ...p, annotations, key: nextPageKey(), dataUrl };
+  }));
+
+  // The highest ids in use, so new pages, annotations, or an Insert PDF
+  // afterward never collide with ids that came from this project file.
+  let maxDocNum = 0;
+  Object.keys(docs).forEach((id) => {
+    const m = /^doc(\d+)$/.exec(id);
+    if (m) maxDocNum = Math.max(maxDocNum, Number(m[1]));
+  });
+  let maxAnnId = 0;
+  pages.forEach((p) => (p.annotations || []).forEach((a) => { maxAnnId = Math.max(maxAnnId, a.id || 0); }));
+
+  // Size for blank pages added later: the first real page's, else the first page's.
+  let pageSize = null;
+  const firstReal = pages.find((p) => !p.isBlank);
+  if (firstReal) {
+    const p1 = await docs[firstReal.docId].doc.getPage(firstReal.pageNumber);
+    const vp1 = p1.getViewport({ scale: 1, rotation: 0 });
+    pageSize = { width: vp1.width, height: vp1.height };
+  } else if (pages.length > 0) {
+    pageSize = { width: pages[0].width, height: pages[0].height };
+  }
+
+  return {
+    docs, pages, loadedFamilies, textStyles, maxDocNum, maxAnnId, pageSize,
+    // Projects saved before titles existed take their file's name (see the caller).
+    title: typeof project.title === "string" && project.title ? project.title : null,
+    settings: project.settings || {},
+  };
+}

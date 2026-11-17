@@ -4,7 +4,7 @@
    This file styles the AUTHORING APP (editor, sidebar, preview chrome).
    The generated eBook document itself (headings, paragraphs, tables, code
    blocks, page dimensions, etc.) is styled separately, inline, by
-   pdfGenerator.js — so it can be embedded verbatim into the exported PDF
+   src/document/styleBlock.js — so it can be embedded verbatim into the exported PDF
    and into the live preview <iframe srcDoc>. This keeps "what you see" and
    "what you export" byte-for-byte identical.
 
@@ -200,8 +200,8 @@ button {
 
 .md2ebook-page-shadow {
   /* No background/shadow of its own: the content is now one or more
-     Paged.js page boxes (see App.jsx's PreviewCanvas and the comment on
-     renderHtmlDocument in pdfGenerator.js), each already a separate
+     Paged.js page boxes (see src/ui/PreviewCanvas.jsx and the comment on
+     renderHtmlDocument in src/document/previewDocument.js), each already a separate
      white box with its own visual framing — this wrapper just supplies
      the scale transform and sizing math around however many of them
      stack up, and the preview-pane's own backdrop shows through as the
@@ -220,7 +220,7 @@ button {
      instead of the iframe itself painting them white. */
   background: transparent;
   /* Intentionally interactive (no pointer-events:none): the iframe's own
-     height is kept in sync with its actual content height (see App.jsx's
+     height is kept in sync with its actual content height (see src/ui/PreviewCanvas.jsx's
      PreviewCanvas), so it never needs an internal scrollbar of its own —
      but disabling pointer events here previously also blocked normal
      mouse-wheel scrolling from reaching this element, which was mistaken
@@ -273,7 +273,7 @@ button {
 }
 
 /* Tabs now use component-kit.css's .tabbar/.tab/.tab.active directly
-   (see Sidebar in App.jsx) — no app-specific tab rule needed here
+   (see src/ui/Sidebar.jsx) — no app-specific tab rule needed here
    anymore. */
 
 /* --------------------------------------------------------------------
@@ -296,7 +296,7 @@ button {
 /* --------------------------------------------------------------------
    Page-break rules for the exported document
    --------------------------------------------------------------------
-   These mirror the rules pdfGenerator.js injects inline into the
+   These mirror the rules src/document/styleBlock.js injects inline into the
    generated document's own <style> block. They are duplicated here so
    that if this stylesheet is ever loaded directly inside the generated
    document (or the document is printed straight from the browser via
@@ -326,7 +326,7 @@ button {
 }
 
 /* Manual page break marker — see applyPageBreakMarkers() in
-   pdfGenerator.js, which turns a standalone `\pagebreak` line into
+   src/document/markers.js, which turns a standalone `\pagebreak` line into
    exactly this element. */
 .md2ebook-pagebreak {
   height: 0;

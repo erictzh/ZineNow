@@ -1,0 +1,54 @@
+/* Topbar parts: brand (logo mark, title, subtitle) and right-aligned actions.
+   Each app styles the .topbar bar itself (height and alignment differ). */
+
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* the logo mark — a small gradient badge with a 1-2 letter mark */
+.topbar-logo {
+    flex: 0 0 auto;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
+    background: linear-gradient(347deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 75%, #000000) 50%, var(--ui-accent) 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.topbar-brand-text {
+    min-width: 0;
+}
+
+.topbar-title {
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.topbar-subtitle {
+    font-size: 11px;
+    line-height: 1.25;
+    color: var(--ui-fg-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
