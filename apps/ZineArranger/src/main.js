@@ -6,6 +6,7 @@ import { warnBeforeLeaving } from "../../../shared/js/leaveWarning.js";
 import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
 import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
+import { setUpPanelResize } from "./panelResize.js";
 import { getPreviewTargetWidth } from "./sheetSizes.js";
 import { state } from "./state.js";
 import { triggerPrint } from "./print.js";
@@ -26,6 +27,7 @@ window.addEventListener("resize", function() {
         
 
 document.getElementById("selector").addEventListener("change", refreshSpecs, false);
+setUpPanelResize(); // before the first layout, so a saved panel width is already in place
 refreshSpecs();
 
 // ---- ZEditor handoff --------------------------------------------------

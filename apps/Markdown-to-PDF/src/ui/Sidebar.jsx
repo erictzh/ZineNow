@@ -11,7 +11,7 @@ import { TypefaceSection } from "./typography/TypefaceSection.jsx";
 
 const { useState } = React;
 
-export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions }) {
+export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
   // Kept here rather than in the tabs, so status messages, the typed
   // settings-file name and the blank-space height survive switching tabs.
   const [docStatus, setDocStatus] = useState(null); // { type: 'success'|'error', message }
@@ -22,6 +22,7 @@ export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config
 
   return (
     <aside className="md2ebook-sidebar">
+      {resizer}
       <div className="tabbar">
         <button type="button" onClick={() => setActiveTab("editor")} className={"tab" + (activeTab === "editor" ? " active" : "")}>
           Editor

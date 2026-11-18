@@ -8,7 +8,7 @@ import { StrokeShape } from "./StrokeShape.jsx";
 
 export function AnnotationItem({
   ann: a, tool, zoom, pageSize, pageFilter,
-  isSelected, showHandles, isEditing, isCropping,
+  isSelected, showHandles, isEditing, isCropping, isEraseTarget,
   onPress, onUpdate, onToggleCrop, onStartTextEdit, onFinishTextEdit, onLinkNextFrame,
 }) {
   if (a.type === "image") {
@@ -19,6 +19,7 @@ export function AnnotationItem({
         isSelected={isSelected}
         showHandles={showHandles}
         isCropping={isCropping}
+        isEraseTarget={isEraseTarget}
         onPress={onPress}
         onUpdate={onUpdate}
         onToggleCrop={onToggleCrop}

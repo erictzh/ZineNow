@@ -23,7 +23,7 @@ const { useRef, useEffect } = React;
 // scales width/height together, keeping the image's aspect ratio
 // rather than letting it stretch. Cropping isn't built yet — this is
 // add/move/resize/select/delete only, deliberately scoped that way.
-export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
+export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
   const halftoneCanvasRef = useRef(null);
   const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
   // Crop is a sub-rect of the source image, in ITS OWN natural pixel
@@ -174,7 +174,7 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
   return (
     <div
       data-ann-id={ann.id}
-      className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : "")}
+      className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : "")}
       style={boxOuterStyle(ann)}
       onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
     >

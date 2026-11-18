@@ -7,6 +7,7 @@ import { renderRasterizationDocument } from "../export/rasterDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
 import { BOOLEAN_CONFIG_KEYS, DEFAULT_FONT_OPTIONS, INITIAL_CONFIG, SAMPLE_MARKDOWN } from "../settings/initialConfig.js";
 import { Header } from "./Header.jsx";
+import { PanelResizer } from "./PanelResizer.jsx";
 import { PreviewCanvas } from "./PreviewCanvas.jsx";
 import { Sidebar } from "./Sidebar.jsx";
 const { useEffect, useState, useRef, useCallback } = React;
@@ -22,6 +23,7 @@ export function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
   const [isSendingToArranger, setIsSendingToArranger] = useState(false);
+  const bodyRef = useRef(null); // the panel and the preview side by side (for the draggable line between them)
   // Refreshing or closing the tab asks first once the text is your own (not the sample, not empty).
   const markdownRef = useRef(markdown);
   markdownRef.current = markdown;
@@ -225,7 +227,7 @@ export function App() {
           </button>
         </div>
       ) : null}
-      <div className="md2ebook-body">
+      <div className="md2ebook-body" ref={bodyRef}>
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -236,6 +238,7 @@ export function App() {
           applyConfig={applyConfig}
           fontOptions={fontOptions}
           setFontOptions={setFontOptions}
+          resizer={<PanelResizer bodyRef={bodyRef} />}
         />
         <PreviewCanvas markdown={markdown} config={config} onTocPages={handleTocPages} />
       </div>

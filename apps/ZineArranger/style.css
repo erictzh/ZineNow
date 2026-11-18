@@ -630,8 +630,27 @@ input {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        border-right: 1px solid var(--md2ebook-border);
+        /* The settings sit on the right of the preview (as in ZEditor): order moves the panel to the end. */
+        order: 1;
+        position: relative; /* for the drag handle on its left edge */
+        border-left: 1px solid var(--md2ebook-border);
         background: var(--ui-bg-alt);
+    }
+
+    /* The draggable line between the preview and the settings (src/panelResize.js). */
+    .workspace-resizer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 6px;
+        z-index: 6;
+        cursor: col-resize;
+        touch-action: none;
+    }
+    .workspace-resizer:hover, .workspace-resizer:focus-visible, .workspace-resizer.is-dragging {
+        background: color-mix(in srgb, var(--ui-accent) 55%, transparent);
+        outline: none;
     }
 
     .md2ebook-sidebar-content {
@@ -1113,8 +1132,13 @@ input {
             flex: 0 0 auto;
             max-width: none;
             width: 100%;
-            border-right: none;
+            order: 0; /* stacked on a narrow screen: settings first, then the preview */
+            border-left: none;
             border-bottom: 1px solid var(--ui-border);
+        }
+
+        .workspace-resizer {
+            display: none; /* the panel is stacked above the preview here, so there's no line to drag */
         }
 
         .workspace-panel-content, .md2ebook-sidebar-content {

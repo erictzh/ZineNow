@@ -14,7 +14,7 @@ import { ThreadLinks } from "./ThreadLinks.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
 import { magicEraseAt } from "./magicEraseGesture.js";
-import { startSoftEraseGesture } from "./softEraseGesture.js";
+import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 
 const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
@@ -48,6 +48,11 @@ export function ComposeCanvas({
   // A measurement belongs to the page and tool it was made on.
   const pageKey = page && page.key;
   useEffect(() => setMeasure(null), [measuring, pageKey]);
+  // Soft eraser: Shift+click an image to aim the brush at it alone (until Shift+click again on it,
+  // or on anything else, or the tool, mode or page changes).
+  const [eraseTargetId, setEraseTargetId] = useState(null);
+  useEffect(() => setEraseTargetId(null), [softErasing, pageKey]);
+  const eraseTarget = eraseTargetId !== null && annotations.some((a) => a.id === eraseTargetId && a.type === "image" && !a.hidden && !a.locked) ? eraseTargetId : null;
 
   function overlayPoint(e) {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -122,8 +127,14 @@ export function ComposeCanvas({
       startDrawing(e);
       return;
     }
+    if (softErasing && e.shiftKey) { // choose (or let go of) the image the brush is aimed at; no erasing
+      e.preventDefault();
+      const hit = topImageAt(annotations, overlayPoint(e));
+      setEraseTargetId(hit && hit.id !== eraseTarget ? hit.id : null);
+      return;
+    }
     if (softErasing) {
-      startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels });
+      startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels, onlyId: eraseTarget });
       return;
     }
     if (magicErasing) {
@@ -333,6 +344,7 @@ export function ComposeCanvas({
             showHandles={showHandlesFor(a)}
             isEditing={a.id === editingAnnId}
             isCropping={a.id === croppingAnnId}
+            isEraseTarget={a.id === eraseTarget}
             onPress={pressAnnotation}
             onUpdate={onUpdateAnnotation}
             onToggleCrop={onToggleCrop}

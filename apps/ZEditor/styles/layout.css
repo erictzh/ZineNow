@@ -2,7 +2,17 @@
 
 /* ---- Shell layout --------------------------------------------------------- */
 .ze-shell { display: flex; flex-direction: column; height: 100%; }
-.ze-body { flex: 1 1 auto; display: flex; min-height: 0; }
+.ze-body { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
+
+/* The draggable lines between the canvas and each side panel (src/ui/PanelResizer.jsx). They follow the
+   panels' width variables, and sit on the canvas side of the left panel and the panel side of the right
+   one, so neither covers a scrollbar. */
+.ze-panel-resizer { position: absolute; top: 0; bottom: 0; width: 6px; z-index: 7; cursor: col-resize; touch-action: none; }
+.ze-panel-resizer-left { left: calc(var(--ze-sidebar-width) - 1px); }
+.ze-panel-resizer-right { right: calc(var(--ze-format-panel-width) - 5px); }
+.ze-panel-resizer:hover,
+.ze-panel-resizer:focus-visible,
+.ze-panel-resizer.is-dragging { background: color-mix(in srgb, var(--ui-accent) 55%, transparent); outline: none; }
 
 /* ---- Sidebar (Organize) ---------------------------------------------------- */
 .ze-sidebar {

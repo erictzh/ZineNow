@@ -28,6 +28,7 @@ import { ShortcutsDialog } from "./dialogs/ShortcutsDialog.jsx";
 import { WelcomeDialog } from "./dialogs/WelcomeDialog.jsx";
 import { FormatPanel } from "./panels/FormatPanel.jsx";
 import { LayersPanel } from "./panels/LayersPanel.jsx";
+import { PanelResizer } from "./PanelResizer.jsx";
 import { Sidebar } from "./sidebar/Sidebar.jsx";
 import { ToolBar } from "./toolbar/ToolBar.jsx";
 import { Topbar } from "./topbar/Topbar.jsx";
@@ -36,6 +37,7 @@ export function App() {
   // Order matters only in that each hook gets the ones it builds on.
   const status = useStatus();
   const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
+  const bodyRef = React.useRef(null); // the Pages panel, canvas and Format panel in a row (for the draggable lines between them)
   const doc = useDocumentState();
   const history = useHistory(doc);
   const view = useViewSettings();
@@ -71,7 +73,17 @@ export function App() {
         </div>
       )}
 
-      <div className="ze-body">
+      <div className="ze-body" ref={bodyRef}>
+        <PanelResizer
+          bodyRef={bodyRef} side="left" cssVar="--ze-sidebar-width" otherVar="--ze-format-panel-width"
+          storageKey="zeditor.sidebarWidth" min={170} max={480} label="Resize the Pages panel"
+        />
+        {selectedPage && (
+          <PanelResizer
+            bodyRef={bodyRef} side="right" cssVar="--ze-format-panel-width" otherVar="--ze-sidebar-width"
+            storageKey="zeditor.formatPanelWidth" min={220} max={520} label="Resize the Format panel"
+          />
+        )}
         <Sidebar
           pages={pages}
           selectedIdx={selectedIdx}

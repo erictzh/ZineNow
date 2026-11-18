@@ -4696,6 +4696,102 @@
     selectFile();
   }
 
+  // apps/ZineArranger/src/panelResize.js
+  var STORAGE_KEY = "zinearranger.settingsPanelWidth";
+  var MIN_PANEL = 280;
+  var MIN_PREVIEW = 320;
+  var KEY_STEP = 16;
+  function setUpPanelResize() {
+    var handle = document.getElementById("workspace-resizer");
+    var body = document.querySelector(".workspace");
+    var panel = document.getElementById("workspace-panel");
+    if (!handle || !body || !panel) return;
+    var root = document.documentElement;
+    var current = null;
+    function clamp(px) {
+      var most = Math.max(MIN_PANEL, body.getBoundingClientRect().width - MIN_PREVIEW);
+      return Math.round(Math.min(most, Math.max(MIN_PANEL, px)));
+    }
+    function refitPreview() {
+      window.dispatchEvent(new Event("resize"));
+    }
+    function apply(px, save) {
+      if (px == null) {
+        current = null;
+        root.style.removeProperty("--md2ebook-sidebar-width");
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+        }
+      } else {
+        current = clamp(px);
+        root.style.setProperty("--md2ebook-sidebar-width", current + "px");
+        if (save) {
+          try {
+            localStorage.setItem(STORAGE_KEY, String(current));
+          } catch (e) {
+          }
+        }
+      }
+      refitPreview();
+    }
+    function panelWidth() {
+      return panel.getBoundingClientRect().width;
+    }
+    handle.addEventListener("pointerdown", function(e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add("is-dragging");
+      document.body.style.userSelect = "none";
+    });
+    handle.addEventListener("pointermove", function(e) {
+      if (!handle.hasPointerCapture(e.pointerId)) return;
+      apply(body.getBoundingClientRect().right - e.clientX, false);
+    });
+    function endDrag(e) {
+      if (!handle.hasPointerCapture(e.pointerId)) return;
+      handle.releasePointerCapture(e.pointerId);
+      handle.classList.remove("is-dragging");
+      document.body.style.userSelect = "";
+      if (current != null) {
+        try {
+          localStorage.setItem(STORAGE_KEY, String(current));
+        } catch (err) {
+        }
+      }
+    }
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+    handle.addEventListener("dblclick", function() {
+      apply(null);
+    });
+    handle.addEventListener("keydown", function(e) {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        apply(panelWidth() + KEY_STEP, true);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        apply(panelWidth() - KEY_STEP, true);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        apply(null);
+      }
+    });
+    var saved = null;
+    try {
+      saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+    } catch (e) {
+    }
+    if (saved > 0) apply(saved, false);
+    window.addEventListener("resize", function() {
+      if (current != null && clamp(current) !== current) {
+        current = clamp(current);
+        root.style.setProperty("--md2ebook-sidebar-width", current + "px");
+      }
+    });
+  }
+
   // apps/ZineArranger/src/main.js
   logSys("Zine Arranger ready. Select a PDF to begin.");
   warnBeforeLeaving(() => state.pageCount > 0);
@@ -4706,6 +4802,7 @@
     }, 100);
   });
   document.getElementById("selector").addEventListener("change", refreshSpecs, false);
+  setUpPanelResize();
   refreshSpecs();
   (function setUpZEditorHandoff() {
     function receivePdf(file) {
