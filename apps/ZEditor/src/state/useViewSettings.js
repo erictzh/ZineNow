@@ -1,7 +1,8 @@
-// Document-wide view settings: guides, center guide, page numbers, onion skin, and the Layers panel.
+// Document-wide view settings: rulers and ruler guides, guides, center guide, page numbers, onion skin, and the Layers panel.
 
 import { DEFAULT_GUIDE_BLEED_IN, DEFAULT_GUIDE_MARGIN_IN } from "../model/guides.js";
 import { DEFAULT_PAGE_NUMBERS } from "../model/pageNumbers.js";
+import { DEFAULT_RULER_UNIT } from "../model/rulers.js";
 
 const { useState } = React;
 
@@ -15,6 +16,11 @@ export function useViewSettings() {
   const [onionSkinOn, setOnionSkinOn] = useState(false);
   const [onionSkinOpacity, setOnionSkinOpacity] = useState(0.3);
   const [layersOpen, setLayersOpen] = useState(true);
+  // Rulers along the canvas, and the guides dragged out of them (model/rulers.js).
+  const [rulersOn, setRulersOn] = useState(true);
+  const [rulerUnit, setRulerUnit] = useState(DEFAULT_RULER_UNIT);
+  const [rulerGuides, setRulerGuides] = useState([]);
+  const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
   const [layersPosition, setLayersPosition] = useState(null);
 
   // The part of these settings a saved project carries.
@@ -22,6 +28,7 @@ export function useViewSettings() {
     return {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
+      rulersOn, rulerUnit, rulerGuides, snapToGuidesOn,
     };
   }
 
@@ -35,6 +42,10 @@ export function useViewSettings() {
     if (s.onionSkinOn !== undefined) setOnionSkinOn(s.onionSkinOn);
     if (s.onionSkinOpacity !== undefined) setOnionSkinOpacity(s.onionSkinOpacity);
     setPageNumbers({ ...DEFAULT_PAGE_NUMBERS, ...(s.pageNumbers || {}) });
+    if (s.rulersOn !== undefined) setRulersOn(s.rulersOn);
+    if (s.rulerUnit !== undefined) setRulerUnit(s.rulerUnit);
+    if (s.snapToGuidesOn !== undefined) setSnapToGuidesOn(s.snapToGuidesOn);
+    setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
   }
 
   return {
@@ -42,6 +53,7 @@ export function useViewSettings() {
     guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition,
+    rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn,
     settingsForSave, applySavedSettings,
   };
 }

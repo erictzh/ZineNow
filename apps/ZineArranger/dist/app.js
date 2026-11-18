@@ -1,5 +1,20 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/leaveWarning.js
+  var hasWork = () => false;
+  var bypassOnce = false;
+  var installed = false;
+  function warnBeforeLeaving(check) {
+    hasWork = check;
+    if (installed) return;
+    installed = true;
+    window.addEventListener("beforeunload", (e) => {
+      if (bypassOnce || !hasWork()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
+  }
+
   // shared/js/zineArrangerHandoff.js
   var ARRANGER_READY_MESSAGE = "zinearranger-ready";
   var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
@@ -4683,6 +4698,7 @@
 
   // apps/ZineArranger/src/main.js
   logSys("Zine Arranger ready. Select a PDF to begin.");
+  warnBeforeLeaving(() => state.pageCount > 0);
   window.addEventListener("resize", function() {
     clearTimeout(state.previewResizeTimer);
     state.previewResizeTimer = setTimeout(function() {

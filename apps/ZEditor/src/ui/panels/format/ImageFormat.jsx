@@ -22,11 +22,6 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
   const filtersSummary = [adjustedCount > 0 && adjustedCount + " adjusted", filterType !== "match" && filterOption && filterOption.label].filter(Boolean).join(" · ") || undefined;
   return (
     <FormatPanelShell title="Format — Image">
-      <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely." onReset={() => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]))}>
-        <SizeReadout ann={ann} />
-        <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
-      </PanelSection>
-      <TextWrapSection ann={ann} patch={patch} />
       <PanelSection
         id="image.crop"
         title="Crop"
@@ -44,9 +39,14 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
           {isCroppingThis ? "Done Cropping" : "Edit Crop"}
         </button>
       </PanelSection>
+      <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely." onReset={() => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]))}>
+        <SizeReadout ann={ann} />
+        <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+      </PanelSection>
+      <TextWrapSection ann={ann} patch={patch} />
       <PanelSection
         id="image.filters"
-        title="Filters"
+        title="Photo Adjustments"
         group
         summary={filtersSummary}
         hint="Adjust the photo's light, color and levels. Adjustments are applied before the Style filter, so a filter works on the adjusted photo."

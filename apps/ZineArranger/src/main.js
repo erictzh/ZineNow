@@ -2,6 +2,7 @@
 // onclick/onchange attributes call. The code lives in the files next to this one —
 // see docs/ARCHITECTURE.md for what goes where.
 
+import { warnBeforeLeaving } from "../../../shared/js/leaveWarning.js";
 import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
 import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
@@ -10,6 +11,9 @@ import { state } from "./state.js";
 import { triggerPrint } from "./print.js";
 
 logSys("Zine Arranger ready. Select a PDF to begin.");
+
+// Refreshing or closing the tab asks first once a PDF is laid out (shared/js/leaveWarning.js).
+warnBeforeLeaving(() => state.pageCount > 0);
 
 // Keep the preview filling its column as the window is resized (refreshSpecs()
 // only reruns on option changes, not on resize).

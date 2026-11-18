@@ -1,5 +1,20 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/leaveWarning.js
+  var hasWork = () => false;
+  var bypassOnce = false;
+  var installed = false;
+  function warnBeforeLeaving(check) {
+    hasWork = check;
+    if (installed) return;
+    installed = true;
+    window.addEventListener("beforeunload", (e) => {
+      if (bypassOnce || !hasWork()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
+  }
+
   // shared/js/zineArrangerHandoff.js
   var ARRANGER_READY_MESSAGE = "zinearranger-ready";
   var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
@@ -1868,7 +1883,7 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useState: useState4, useRef: useRef5, useCallback } = React;
+  var { useEffect: useEffect3, useState: useState4, useRef: useRef5, useCallback } = React;
   function App() {
     const [markdown, setMarkdown] = useState4(SAMPLE_MARKDOWN);
     const [config, setConfig] = useState4(INITIAL_CONFIG);
@@ -1877,6 +1892,11 @@
     const [isExporting, setIsExporting] = useState4(false);
     const [exportError, setExportError] = useState4(null);
     const [isSendingToArranger, setIsSendingToArranger] = useState4(false);
+    const markdownRef = useRef5(markdown);
+    markdownRef.current = markdown;
+    useEffect3(() => {
+      warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
+    }, []);
     const tocPagesRef = useRef5(null);
     const handleTocPages = useCallback((map) => {
       tocPagesRef.current = map;

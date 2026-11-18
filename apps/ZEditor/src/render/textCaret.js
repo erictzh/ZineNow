@@ -33,7 +33,7 @@ function xOnLine(layout, tl, index) {
     const p = pieces[k];
     if (index >= p.start && index <= p.end) {
       const raw = p.hyphen ? p.text.slice(0, -1) : p.text;
-      return lineX + p.x + layout.measure(raw.slice(0, index - p.start));
+      return lineX + p.x + layout.measure(raw.slice(0, index - p.start), p.start);
     }
     const next = pieces[k + 1];
     if (next && index > p.end && index < next.start) {
@@ -50,7 +50,7 @@ function xOnLine(layout, tl, index) {
 export function caretRect(layout, index) {
   const line = lineIndexAt(layout, index);
   const tl = layout.typesetLines[line];
-  return { x: xOnLine(layout, tl, index), y: layout.padY + tl.top, height: layout.lineHeight, line };
+  return { x: xOnLine(layout, tl, index), y: layout.padY + tl.top, height: tl.height || layout.lineHeight, line };
 }
 
 // The text index at x on line `lineIndex` (the closest gap between letters).
@@ -69,7 +69,7 @@ export function indexAtX(layout, lineIndex, x) {
       const raw = p.hyphen ? p.text.slice(0, -1) : p.text;
       let best = p.start, bestDist = Infinity;
       for (let n = 0; n <= raw.length; n++) {
-        const dist = Math.abs(left + layout.measure(raw.slice(0, n)) - x);
+        const dist = Math.abs(left + layout.measure(raw.slice(0, n), p.start) - x);
         if (dist < bestDist) { bestDist = dist; best = p.start + n; }
       }
       return Math.min(best, p.end);
@@ -94,7 +94,7 @@ export function indexAtPoint(layout, x, y) {
   const consider = (onlyColumn) => lines.forEach((tl, i) => {
     if (tl.hidden) return;
     if (onlyColumn !== null && (tl.col || 0) !== onlyColumn) return;
-    const top = layout.padY + tl.top, bottom = top + layout.lineHeight;
+    const top = layout.padY + tl.top, bottom = top + (tl.height || layout.lineHeight);
     const dist = y < top ? top - y : y > bottom ? y - bottom : 0;
     if (dist < bestDist) { bestDist = dist; best = i; }
   });
@@ -135,7 +135,7 @@ export function selectionRects(layout, start, end) {
     const runsOn = end > (tl.last ? tl.end : tl.visibleEnd);
     if (runsOn) x1 += layout.fontSize * 0.35;
     if (x1 - x0 < 1 && !runsOn) return;
-    rects.push({ x: x0, y: layout.padY + tl.top, width: Math.max(1, x1 - x0), height: layout.lineHeight });
+    rects.push({ x: x0, y: layout.padY + tl.top, width: Math.max(1, x1 - x0), height: tl.height || layout.lineHeight });
   });
   return rects;
 }

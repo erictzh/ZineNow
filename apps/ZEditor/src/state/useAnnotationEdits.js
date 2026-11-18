@@ -28,7 +28,7 @@ function patchedAnnotations(anns, id, patch, merge) {
   });
 }
 
-const { useRef } = React;
+const { useEffect, useRef } = React;
 
 export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
@@ -66,19 +66,34 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => moved.get(a.id) || a), "move:" + [...moved.keys()].join());
   }
 
-  // Finishing a text edit returns to Move, and a box left empty is
-  // discarded rather than staying behind as an invisible item.
+  // Finishing a text edit returns to Move. The box stays selected, so its panel, handles and
+  // a drag still work on it; an empty box is only thrown away once it's deselected (below).
   function finishTextEdit() {
     if (editingAnnId === null) return;
-    const edited = selectedIdx === null ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === editingAnnId);
     setEditingAnnId(null);
     selection.setTool("select");
-    // (A frame in a thread stays: it's part of the story's layout even while empty.)
-    if (edited && !(edited.text || "").trim() && !isThreaded(pages[selectedIdx].annotations || [], edited.id)) {
-      updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== edited.id), "ann:" + edited.id);
-      setSelectedAnnId((id) => (id === edited.id ? null : id));
-    }
   }
+
+  // A text box left empty is discarded when it stops being selected (clicking the empty page,
+  // another item, or another page), rather than staying behind as an invisible item. Using the
+  // side panel, resizing or moving it keeps it selected, so it stays.
+  // (A frame in a thread stays: it's part of the story's layout even while empty.)
+  const lastSelectionRef = useRef({ pageIdx: null, ids: [] });
+  useEffect(() => {
+    const now = [selectedAnnId, ...selectedAnnIds, editingAnnId].filter((id) => id != null);
+    const prev = lastSelectionRef.current;
+    lastSelectionRef.current = { pageIdx: selectedIdx, ids: now };
+    if (prev.pageIdx == null || !pages[prev.pageIdx]) return;
+    const anns = pages[prev.pageIdx].annotations || [];
+    const samePage = prev.pageIdx === selectedIdx;
+    const empty = prev.ids.filter((id) => {
+      if (samePage && now.includes(id)) return false;
+      const a = anns.find((x) => x.id === id);
+      return a && a.type === "text" && !(a.text || "").trim() && !isThreaded(anns, id);
+    });
+    if (!empty.length) return;
+    updateAnnotationsFor(prev.pageIdx, (list) => list.filter((a) => !empty.includes(a.id)), "ann:" + empty.join());
+  }, [selectedAnnId, selectedAnnIds, editingAnnId, selectedIdx]);
 
   // Group: the selected items become one group, stacked together at the
   // top-most member's place (their own order kept). Ungroup releases the
@@ -86,7 +101,10 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   function handleGroupSelection() {
     const ids = selectedAnnotationIds();
     if (selectedIdx === null || ids.length < 2) return;
-    const groupId = "g" + nextAnnIdRef.current++;
+    // A group id no page uses yet (a safety net: the counter could lag behind ids from an older file).
+    const used = new Set(pages.flatMap((p) => (p.annotations || []).map((a) => a.groupId).filter(Boolean)));
+    let groupId = "g" + nextAnnIdRef.current++;
+    while (used.has(groupId)) groupId = "g" + nextAnnIdRef.current++;
     updateAnnotationsFor(selectedIdx, (anns) => {
       const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
       const topIndex = Math.max(...anns.map((a, i) => (ids.includes(a.id) ? i : -1)));
@@ -101,7 +119,25 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     if (selectedIdx === null) return;
     const groups = new Set(currentAnnotations().filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
     if (groups.size === 0) return;
-    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined } : a)));
+    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined, groupName: undefined } : a)));
+  }
+
+  // A group's name lives on each of its members (`groupName`), so it travels with them in saved projects.
+  function handleRenameGroup(groupId, name) {
+    if (selectedIdx === null) return;
+    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.groupId === groupId ? { ...a, groupName: name || undefined } : a)));
+  }
+
+  // Locks / hides (or unlocks / shows) every layer of a group at once. Locked or hidden layers
+  // can't stay selected, so the selection lets go of them.
+  function handleSetGroupFlag(groupId, flag, on) {
+    if (selectedIdx === null) return;
+    const members = currentAnnotations().filter((a) => a.groupId === groupId).map((a) => a.id);
+    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.groupId === groupId ? { ...a, [flag]: on || undefined } : a)));
+    if (on && [selectedAnnId, ...selectedAnnIds].some((id) => members.includes(id))) {
+      setSelectedAnnId(null);
+      setSelectedAnnIds([]);
+    }
   }
 
   function handleAddText(x, y, width) {
@@ -322,7 +358,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
     handleGroupSelection, handleUngroupSelection,
     handleAddText, handleAddRect, handleAddStroke,
-    handleToggleLayerFlag, handleReorderLayers,
+    handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
     handleUpdateAnnotation, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,

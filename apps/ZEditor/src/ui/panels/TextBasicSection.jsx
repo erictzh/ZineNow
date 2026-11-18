@@ -9,9 +9,17 @@ import { PanelSection } from "../controls/PanelSection.jsx";
 
 // Font, size, B/I/U, alignment and colour: one section shared by a text
 // box's own panel and the Text tool's defaults.
-export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, fontSize, bold, italic, underline, align, color, fillAlphaSource, onFillAlpha, onChange }) {
+// `verticalAlign` / `frameHeight` are passed for a text box (not the Text tool's defaults): they add
+// the Vertical Align buttons, which only take effect once the box has a fixed height.
+const VERTICAL_ALIGNS = [
+  { key: "top", label: "Align top", path: "M4 4h16M12 8v12M8 12l4-4 4 4" },
+  { key: "center", label: "Align middle", path: "M4 12h16M12 3v5M9.5 5.5 12 8l2.5-2.5M12 21v-5M9.5 18.5 12 16l2.5 2.5" },
+  { key: "bottom", label: "Align bottom", path: "M4 20h16M12 4v12M8 12l4 4 4-4" },
+];
+
+export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, fontSize, bold, italic, underline, align, verticalAlign, frameHeight, color, fillAlphaSource, onFillAlpha, onChange }) {
   return (
-    <PanelSection id="text.basic" title="Basic" defaultOpen>
+    <PanelSection id="text.basic" title="Text/Character" defaultOpen>
       <div className="ze-format-field">
         <span className="ze-format-label">Font</span>
         <FontCombobox fontOptions={fontOptions} setFontOptions={setFontOptions} value={fontFamily} onChange={(v) => onChange({ fontFamily: v })} />
@@ -31,7 +39,7 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
         </div>
       </div>
       <div className="ze-format-field">
-        <span className="ze-format-label" title="Resize the box (drag its corner while editing) to see centering/right-align take effect.">Align</span>
+        <span className="ze-format-label" title="Resize the box (drag its corner while editing) to see centering/right-align take effect.">Horizontal Align</span>
         <div className="ze-format-row">
           <button type="button" className={"ze-format-toggle" + (align === "left" ? " active" : "")} title="Align left" onClick={() => onChange({ align: "left" })}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
@@ -47,6 +55,23 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
           </button>
         </div>
       </div>
+      {verticalAlign !== undefined && (
+        <div className="ze-format-field">
+          <span className="ze-format-label" title="Where the text sits in a box with a fixed height">Vertical Align</span>
+          <div className="ze-format-row">
+            {VERTICAL_ALIGNS.map((v) => (
+              <button
+                key={v.key} type="button" className={"ze-format-toggle" + ((verticalAlign || "top") === v.key ? " active" : "")}
+                disabled={!(frameHeight > 0)}
+                title={frameHeight > 0 ? v.label : "Give the box a fixed height first (drag its top or bottom handle, or set Frame height under Columns & frame)"}
+                onClick={() => onChange({ verticalAlign: v.key === "top" ? undefined : v.key })}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={v.path} /></svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="ze-format-field">
         <span className="ze-format-label">Color</span>
         <div className="ze-format-row ze-format-swatches">

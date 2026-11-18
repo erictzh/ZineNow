@@ -1,6 +1,6 @@
 // Threaded text frames (model/text/threads.js) and the composer's continuation option.
 import { composeText } from "../apps/ZEditor/src/render/composer.js";
-import { followerView, isThreaded, removeWithThreads, routeFramePatch, standaloneCopy, storyChains, withoutResolvedProps } from "../apps/ZEditor/src/model/text/threads.js";
+import { followerView, isThreaded, threadLinks, removeWithThreads, routeFramePatch, standaloneCopy, storyChains, withoutResolvedProps } from "../apps/ZEditor/src/model/text/threads.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 const measure = (s) => Array.from(s).length * 10;
@@ -62,5 +62,13 @@ ok(plain[0].x === 30 && plain[0].first === true, "first-line indent on a new par
 ok(cont[0].x === 0 && cont[0].first === false, "no first-line indent on a continued paragraph");
 const two = composeText("aa bb\ncc dd", measure, { width: 120, indentFirst: 30, continued: true });
 ok(two.find((l) => l.para === 1).x === 30 && two.find((l) => l.para === 1).first, "...but the next paragraph gets it");
+
+// Dotted thread lines
+const size = () => ({ width: 100, height: 50 });
+const links = threadLinks([{ id: 1, type: "text", x: 0, y: 0, storyNextId: 2, storyHeadId: 1 }, { id: 2, type: "text", x: 200, y: 10, storyHeadId: 1 }], size);
+ok(links.length === 1 && links[0].x1 === 100 && links[0].y1 === 50 && links[0].x2 === 200 && links[0].y2 === 10, "a line runs from the bottom-right of a frame to the top-left of the next");
+const turned = threadLinks([{ id: 1, type: "text", x: 0, y: 0, angle: 180, storyNextId: 2 }, { id: 2, type: "text", x: 200, y: 0 }], size);
+ok(Math.abs(turned[0].x1) < 1e-9 && Math.abs(turned[0].y1) < 1e-9, "the out-port follows the frame's rotation");
+ok(threadLinks([{ id: 1, type: "text", x: 0, y: 0, storyNextId: 5 }], size).length === 0, "no line to a missing frame");
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); } else console.log("all passed");

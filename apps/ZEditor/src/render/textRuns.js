@@ -24,9 +24,18 @@ export function columnRules(layout, ann) {
   return rules;
 }
 
+// A custom span's own underline / strike-through (true or false), where it sets one.
+function spanDecorations(span) {
+  const out = {};
+  if (span && span.underline != null) out.underline = span.underline;
+  if (span && span.strike != null) out.strike = span.strike;
+  return out;
+}
+
 // `layout` is what layoutText returns. Returns:
-//   runs        [{ text, x, baselineY, color }]  one per stretch of one colour (canvas px)
-//   lineExtents [{ line, lineX, lineWidth, baselineY, segments: [{ x0, x1, color }] }]
+//   runs        [{ text, x, baselineY, color, font }]  one per stretch of one span (canvas px);
+//               `font` is set where a custom span has its own font, bold or italic
+//   lineExtents [{ line, lineX, lineWidth, baselineY, segments: [{ x0, x1, color, underline?, strike? }] }]
 export function layoutPlainRuns(layout, ann) {
   const { look, x, y, padX, padY, boxWidth, lines, lineStarts, typesetLines, baselineOffset, lineHeight, measure } = layout;
   const runs = [];
@@ -37,7 +46,7 @@ export function layoutPlainRuns(layout, ann) {
   if (typesetLines) {
     typesetLines.forEach((tl) => {
       if (tl.hidden) return; // past the last column
-      const baselineY = y + padY + tl.top + baselineOffset;
+      const baselineY = y + padY + tl.top + baselineOffset + (tl.baseShift || 0); // a line grown for a bigger span sits lower
       const lineX = x + padX + tl.x;
       const segments = [];
       tl.pieces.forEach((p, k) => {
@@ -51,11 +60,12 @@ export function layoutPlainRuns(layout, ann) {
         const reachX = k + 1 < tl.pieces.length ? lineX + tl.pieces[k + 1].x : lineX + p.x + p.width;
         pieceSegments.forEach((seg, si) => {
           const last = si === pieceSegments.length - 1;
-          const segX = lineX + p.x + (offset ? measure(raw.slice(0, offset)) : 0);
+          const segX = lineX + p.x + (offset ? measure(raw.slice(0, offset), p.start) : 0);
+          const font = layout.fontAt ? layout.fontAt(p.start + offset) : null; // a custom span's own font
           offset += seg.text.length;
-          const segEnd = last ? reachX : lineX + p.x + measure(raw.slice(0, offset));
-          runs.push({ text: last && p.hyphen ? seg.text + "-" : seg.text, x: segX, baselineY, color: seg.color });
-          segments.push({ x0: segX, x1: segEnd, color: seg.color });
+          const segEnd = last ? reachX : lineX + p.x + measure(raw.slice(0, offset), p.start);
+          runs.push({ text: last && p.hyphen ? seg.text + "-" : seg.text, x: segX, baselineY, color: seg.color, font });
+          segments.push({ x0: segX, x1: segEnd, color: seg.color, ...spanDecorations(seg.span) });
         });
       });
       lineExtents.push({ line: tl.pieces.length ? "x" : "", lineX, lineWidth: tl.width, baselineY, segments });
@@ -82,7 +92,7 @@ export function layoutPlainRuns(layout, ann) {
       offset += seg.text.length;
       const segEnd = lineX + measure(line.slice(0, offset));
       runs.push({ text: seg.text, x: segX, baselineY, color: seg.color });
-      segments.push({ x0: segX, x1: segEnd, color: seg.color });
+      segments.push({ x0: segX, x1: segEnd, color: seg.color, ...spanDecorations(seg.span) });
     }
     lineExtents.push({ line, lineX, lineWidth, baselineY, segments });
   });

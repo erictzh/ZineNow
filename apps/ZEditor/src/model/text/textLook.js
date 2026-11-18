@@ -3,6 +3,7 @@
 import { MAIN_SCALE } from "../../constants.js";
 import { controlValues, effectSettings } from "../controls.js";
 import { STROKE_EFFECT, imageShadowOffset } from "../imageEffects.js";
+import { hasLayoutSpans } from "./colorRuns.js";
 import { CASE_CONTROL, CURVE_EFFECT, DISTRESS_EFFECT, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, RANSOM_EFFECT, STRIKE_CONTROL, TEXT_FILL_ALPHA_CONTROL, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, TEXT_PHOTO_CONTROLS, VERTICAL_CONTROL } from "./textControls.js";
 
 // The text as it shows once the box's letter case is applied (canvas
@@ -23,7 +24,7 @@ export function stackText(text) {
 // the optimal line breaker) is laid out by the composer, in the live box as in
 // Export. Ransom, curve and stacked text keep their own layout and ignore it.
 export const usesTypeset = (ann) => !(ann.ransom || ann.curve || ann.vertical === "stacked")
-  && Boolean((ann.wrapObstacles && ann.wrapObstacles.length) || ann.storyHeadId != null || ann.align === "justify" || ann.hyphenate === "english" || ann.columns > 1 || ann.frameHeight > 0 || ann.indentFirst || ann.indentLeft || ann.indentRight || ann.spaceBefore || ann.spaceAfter || ann.composer === "paragraph");
+  && Boolean((ann.wrapObstacles && ann.wrapObstacles.length) || ann.storyHeadId != null || ann.align === "justify" || ann.hyphenate === "english" || ann.columns > 1 || ann.frameHeight > 0 || ann.indentFirst || ann.indentLeft || ann.indentRight || ann.spaceBefore || ann.spaceAfter || ann.composer === "paragraph" || hasLayoutSpans(ann.colorRuns));
 export const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length) || usesTypeset(ann));
 // Point sizes the panel works in become editor px (the page is shown at MAIN_SCALE px per pt).
 export const ptToPx = (pt) => (pt || 0) * MAIN_SCALE;

@@ -5,26 +5,27 @@ import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HY
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
-import { LetterColors } from "../LetterColors.jsx";
 import { TextBasicSection } from "../TextBasicSection.jsx";
 import { TextPhotoFill } from "../TextPhotoFill.jsx";
+import { TextPlaceholder } from "../TextPlaceholder.jsx";
+import { TextSpans } from "../TextSpans.jsx";
 import { TextStyles } from "../TextStyles.jsx";
-import { TextThreadControls } from "../TextThreadControls.jsx";
 import { FormatPanelShell } from "./FormatPanelShell.jsx";
 
 const SPACING_CONTROLS = [LINE_SPACING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, KERNING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
 const ALL_PARAGRAPH_CONTROLS = [COMPOSER_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, ...PARAGRAPH_CONTROLS];
 
-export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, styleActions, frameActions }) {
+export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, styleActions }) {
   const patch = (p) => onUpdate(ann.id, p);
   const { fontOptions, setFontOptions, textStyles, handleSaveTextStyle, handleDeleteTextStyle } = toolDefaults;
   return (
     <FormatPanelShell title="Format — Text">
+      <TextPlaceholder ann={ann} patch={patch} />
       <TextBasicSection
         fontOptions={fontOptions} setFontOptions={setFontOptions}
         fontFamily={ann.fontFamily} fontSize={ann.fontSize || 16}
         bold={ann.bold} italic={ann.italic} underline={ann.underline}
-        align={ann.align} color={ann.color}
+        align={ann.align} verticalAlign={ann.verticalAlign || null} frameHeight={ann.frameHeight} color={ann.color}
         fillAlphaSource={ann} onFillAlpha={patch}
         onChange={patch}
       />
@@ -39,23 +40,24 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, style
         />
       </PanelSection>
       <PanelSection
-        id="text.frame" title="Columns & frame" onReset={() => patch(resetPatch(COLUMN_CONTROLS))}
-        hint="Several columns balance the text. Give the frame a height and the text fills the columns in order; if it doesn't all fit, the rest is hidden and a red + shows in the corner. Set the box's width first (drag its side handle)."
+        id="text.frame" title="Columns & frame" onReset={() => patch({ ...resetPatch(COLUMN_CONTROLS), verticalAlign: undefined })}
+        hint="Several columns balance the text. Give the frame a height and the text fills the columns in order; if it doesn't all fit, the rest is hidden and a red + shows in the corner (click it to continue the text in a new linked box). Set the box's width first (drag its side handle)."
       >
-        <ControlList controls={COLUMN_CONTROLS} source={ann} onPatch={(p) => patch(p.verticalAlign === "top" ? { verticalAlign: undefined } : p.columnRule === "none" ? { columnRule: undefined } : p)} />
-        <TextThreadControls ann={ann} frameActions={frameActions} />
+        <ControlList controls={COLUMN_CONTROLS} source={ann} onPatch={(p) => patch(p.columnRule === "none" ? { columnRule: undefined } : p)} />
       </PanelSection>
-      <PanelSection id="text.styles" title="Styles" defaultOpen>
+      <PanelSection id="text.styles" title="Presets">
         <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={handleSaveTextStyle} onDeleteStyle={handleDeleteTextStyle} styleActions={styleActions} />
       </PanelSection>
       <PanelSection id="text.spacing" title="Spacing & layout" onReset={() => patch(resetPatch(SPACING_CONTROLS))}>
         <ControlList controls={SPACING_CONTROLS} source={ann} onPatch={patch} />
       </PanelSection>
-      <PanelSection id="text.letters" title="Letter color">
-        <LetterColors ann={ann} patch={patch} />
+      <PanelSection
+        id="text.letters" title="Custom Text Style (span)"
+        hint="Changes only the letters you select (font, size, bold, italic, underline, strike-through, color), or the alignment of the paragraphs they're in. Custom fonts, sizes, bold, italic or alignment set the box with the paragraph layout, as Justify does."
+      >
+        <TextSpans ann={ann} patch={patch} fontOptions={fontOptions} setFontOptions={setFontOptions} />
       </PanelSection>
-      <TextPhotoFill ann={ann} patch={patch} />
-      <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} />
+      <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} before={<TextPhotoFill ann={ann} patch={patch} />} beforeLabel={ann.fillSrc ? "Photo fill" : undefined} />
       <PanelSection id="text.transform" title="Rotation & blend" onReset={() => patch(resetPatch([ANGLE_CONTROL, BLEND_CONTROL]))}>
         <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>

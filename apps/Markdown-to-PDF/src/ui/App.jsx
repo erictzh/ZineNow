@@ -1,5 +1,6 @@
 // The app: Markdown text and settings state, export and hand-off, and the page layout.
 
+import { warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
 import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
 import { exportToPdf } from "../export/printExport.js";
 import { renderRasterizationDocument } from "../export/rasterDocument.js";
@@ -8,7 +9,7 @@ import { BOOLEAN_CONFIG_KEYS, DEFAULT_FONT_OPTIONS, INITIAL_CONFIG, SAMPLE_MARKD
 import { Header } from "./Header.jsx";
 import { PreviewCanvas } from "./PreviewCanvas.jsx";
 import { Sidebar } from "./Sidebar.jsx";
-const { useState, useRef, useCallback } = React;
+const { useEffect, useState, useRef, useCallback } = React;
 
 /* ==========================================================================
    Root App component
@@ -21,6 +22,10 @@ export function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
   const [isSendingToArranger, setIsSendingToArranger] = useState(false);
+  // Refreshing or closing the tab asks first once the text is your own (not the sample, not empty).
+  const markdownRef = useRef(markdown);
+  markdownRef.current = markdown;
+  useEffect(() => { warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN); }, []);
   // { headingId: pageNumber } for the contents list, as measured by the
   // preview once it finishes laying out pages; handed to the PDF export.
   const tocPagesRef = useRef(null);

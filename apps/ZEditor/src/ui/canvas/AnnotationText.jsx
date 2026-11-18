@@ -21,6 +21,14 @@ const { useRef, useState, useMemo, useEffect, useLayoutEffect } = React;
 // The text itself always lays out the box. While editing it's hidden
 // and a transparent <textarea> fills that same box, so typing looks
 // exactly like the finished text and the box grows as it would.
+// CSS for one stretch of the editing mirror: a custom span's colour and its own underline / strike-through.
+function spanCss(seg) {
+  const span = seg.span || {};
+  if (!seg.color && span.underline == null && span.strike == null) return undefined;
+  const lines = [span.underline && "underline", span.strike && "line-through"].filter(Boolean);
+  return { color: seg.color || undefined, textDecorationLine: span.underline != null || span.strike != null ? (lines.join(" ") || "none") : undefined };
+}
+
 export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate, onLinkNext }) {
   const boxRef = useRef(null);
   const inputRef = useRef(null);
@@ -44,7 +52,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
   }
 
   function handleMouseDown(e) {
-    if (isEditing) { e.stopPropagation(); return; }
+    if (isEditing) { e.preventDefault(); e.stopPropagation(); return; } // keeps the typing focus
     if (tool !== "select" && tool !== "text") return; // other tools (pen/highlighter/etc.) work straight through text boxes
     const { clientX, clientY } = e;
     onPress(e, ann, () => { if (tool === "text") startEditingAt(clientX, clientY); });
@@ -356,7 +364,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
               under a see-through textarea, which keeps the caret and selection. */}
           <span className={"ze-ann-text-mirror" + (hasLetterColors ? " is-visible" : "")}>
             {hasLetterColors
-              ? colorSegments(ann.text + "​", ann.colorRuns).map((seg, i) => <span key={i} style={seg.color ? { color: seg.color } : undefined}>{seg.text}</span>)
+              ? colorSegments(ann.text + "​", ann.colorRuns).map((seg, i) => <span key={i} style={spanCss(seg)}>{seg.text}</span>)
               : ann.text + "​"}
           </span>
           <textarea
@@ -421,7 +429,13 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
       {storyFrame && ann.storyPrevId != null && isSelected && (
         <span className="ze-text-port ze-text-port-in is-linked" title="Continued from the previous frame">▸</span>
       )}
-      {showHandles && !isEditing && (
+      {isEditing && !ann.locked && (
+        // While typing, the box's edges move it (the text inside keeps the caret and selection).
+        ["n", "e", "s", "w"].map((side) => (
+          <div key={side} className={"ze-text-move-edge ze-text-move-edge-" + side} title="Drag to move" onMouseDown={(e) => onPress(e, ann)} />
+        ))
+      )}
+      {showHandles && (
         <ResizeHandles handles={!ann.ransom && !ann.curve && ann.vertical !== "stacked" ? [...TEXT_RESIZE_HANDLES, "n", "s"] : TEXT_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />
       )}
     </div>

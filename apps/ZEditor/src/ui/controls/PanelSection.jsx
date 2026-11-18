@@ -10,7 +10,17 @@ const { useState, useRef, useEffect } = React;
 // remembered by `id`, so it stays as you left it when you select
 // something else.
 const sectionOpenMemory = {};
-export function PanelSection({ id, title, checked, onToggle, disabled, defaultOpen = false, group, hint, summary, onReset, children }) {
+
+// The essential sections of each panel, the ones a beginner should start with: their title gets an
+// orange star. Listed here by id so every panel is marked in one place (a section can also pass `essential`).
+export const ESSENTIAL_SECTIONS = new Set([
+  "text.basic", "text.styles", "text.letters",                                // text box
+  "image.filters", "image.filter",                                            // image: Photo Adjustments, Style
+  "rect.fill", "rect.transform", "rect.wrap", "ellipse.wrap",                 // rectangle / ellipse (and their tool)
+]);
+
+export function PanelSection({ id, title, checked, onToggle, disabled, defaultOpen = false, group, hint, summary, onReset, essential, children }) {
+  const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
   const hasToggle = typeof onToggle === "function";
   const expandable = children != null && children !== false;
   const [open, setOpenState] = useState(() => (id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen));
@@ -35,6 +45,12 @@ export function PanelSection({ id, title, checked, onToggle, disabled, defaultOp
           <input type="checkbox" className="ze-sec-check" checked={Boolean(checked)} disabled={disabled} aria-label={title} onChange={(e) => onToggle(e.target.checked)} />
         )}
         <button type="button" className="ze-sec-title" aria-expanded={expandable ? isOpen : undefined} onClick={clickTitle}>
+          {isEssential && (
+            <svg className="ze-sec-star" viewBox="0 0 24 24" width="11" height="11" aria-label="Essential" role="img">
+              <title>Essential: start here</title>
+              <path d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z" />
+            </svg>
+          )}
           <span className="ze-sec-name">{title}</span>
           {expandable && (
             <svg className={"ze-sec-caret" + (isOff ? " is-hidden" : "")} viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

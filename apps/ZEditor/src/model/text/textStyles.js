@@ -12,10 +12,15 @@ export const TEXT_STYLE_PROPS = [
   ...TEXT_STYLE_BASICS, "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fillAlpha", ...TEXT_STYLE_PARAGRAPH,
   ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
 ];
+// Built-in presets for an A5 zine, scaled from P (body text, 11 pt): H1 x2, H2 x1.5, H3 x1.2,
+// Quote the body size, Remark x0.8. Sizes are editor px (the page shows 1.1 px per pt).
 export const BUILT_IN_TEXT_STYLES = [
-  { name: "Title", builtIn: true, props: { fontSize: 56, bold: true, align: "center", letterSpacing: 4, lineSpacing: 100, textCase: "upper" } },
-  { name: "Subtitle", builtIn: true, props: { fontSize: 28, italic: true, align: "center", letterSpacing: 1 } },
-  { name: "Remark", builtIn: true, props: { fontSize: 12, italic: true } },
+  { name: "H1", builtIn: true, props: { fontSize: 24.2, bold: true, lineSpacing: 110 } },       // 22 pt
+  { name: "H2", builtIn: true, props: { fontSize: 17.6, bold: true, lineSpacing: 115 } },       // 16 pt
+  { name: "H3", builtIn: true, props: { fontSize: 14.3, bold: true, lineSpacing: 125 } },       // 13 pt
+  { name: "P", builtIn: true, props: { fontSize: 12.1, lineSpacing: 140 } },                    // 11 pt
+  { name: "Quote", builtIn: true, props: { fontSize: 12.1, italic: true, lineSpacing: 140, indentLeft: 12, indentRight: 12 } }, // 11 pt, indented 12 pt each side
+  { name: "Remark", builtIn: true, props: { fontSize: 9.9, italic: true, lineSpacing: 130 } },  // 9 pt
 ];
 export function captureTextStyle(ann) {
   const props = {};

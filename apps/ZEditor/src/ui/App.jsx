@@ -19,6 +19,7 @@ import { useToolDefaults } from "../state/useToolDefaults.js";
 import { useViewSettings } from "../state/useViewSettings.js";
 import { useZoom } from "../state/useZoom.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
+import { Rulers } from "./canvas/Rulers.jsx";
 import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
 import { ConfirmDialog } from "./dialogs/ConfirmDialog.jsx";
 import { InsertPdfDialog } from "./dialogs/InsertPdfDialog.jsx";
@@ -86,6 +87,13 @@ export function App() {
         />
         <div className="ze-compose-area">
           {selectedPage && <ToolBar selection={selection} edits={edits} view={view} zoom={zoom} dialogs={dialogs} />}
+          <div className={"ze-ruler-frame" + (selectedPage && view.rulersOn ? " has-rulers" : "")}>
+          {selectedPage && view.rulersOn && (
+            <Rulers
+              paneRef={zoom.previewPaneRef} zoom={zoom.zoomPercent / 100} unit={view.rulerUnit}
+              guides={view.rulerGuides} setGuides={view.setRulerGuides} pageKey={selectedPage.key}
+            />
+          )}
           <div className="preview-pane" ref={zoom.previewPaneRef}>
             <div className="preview-canvas-wrapper">
               <ComposeCanvas
@@ -115,6 +123,7 @@ export function App() {
                 onStartTextEdit={selection.setEditingAnnId}
                 onFinishTextEdit={edits.finishTextEdit}
                 onLinkNextFrame={edits.frameActions.linkNextFrame}
+                onUnlinkNextFrame={edits.frameActions.unlinkNextFrame}
                 onSelectAnnotations={selection.handleSelectAnnotations}
                 onMoveAnnotations={edits.handleMoveAnnotations}
                 onRotateAnnotations={edits.handleRotateAnnotations}
@@ -131,8 +140,10 @@ export function App() {
                 onEraseImagePixels={edits.handleEraseImagePixels}
                 magicPreview={magic.preview}
                 onMagicClick={magic.start}
+                snapGuides={view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null}
               />
             </div>
+          </div>
           </div>
         </div>
         {selectedPage && (
@@ -140,7 +151,6 @@ export function App() {
             key={selectedAnnId} // so a half-typed field never carries over to the next item
             tool={tool}
             selectedAnn={resolvePageText(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
-            frameActions={edits.frameActions}
             onUpdate={edits.handleUpdateAnnotation}
             croppingAnnId={croppingAnnId}
             onToggleCrop={selection.handleToggleCrop}
@@ -164,6 +174,9 @@ export function App() {
           onSelect={selection.handleSelectLayer}
           onGroup={edits.handleGroupSelection}
           onUngroup={edits.handleUngroupSelection}
+          onDelete={edits.handleDeleteAnnotation}
+          onRenameGroup={edits.handleRenameGroup}
+          onSetGroupFlag={edits.handleSetGroupFlag}
           onToggleFlag={edits.handleToggleLayerFlag}
           onRename={(id, name) => edits.handleUpdateAnnotation(id, { name })}
           onReorder={edits.handleReorderLayers}

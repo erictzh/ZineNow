@@ -42,6 +42,28 @@
 }
 /* Layers that belong to a group share a coloured bar on their left edge. */
 .ze-layer-row.is-grouped { border-left: 3px solid var(--ze-group-color); }
+/* A group's own row (fold caret, folder, name, layer count) and its layers, indented under it. */
+.ze-layer-group-row { padding-left: 2px; }
+.ze-layer-group-row .ze-layer-name { font-weight: 600; }
+.ze-layer-row.is-in-group { margin-left: 16px; }
+.ze-layer-caret {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 22px;
+    min-width: unset;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--ui-fg-muted);
+    cursor: pointer;
+}
+.ze-layer-caret:hover { color: var(--ui-fg); background: none; }
+.ze-layer-caret svg { transition: transform 0.12s; }
+.ze-layer-thumb.ze-layer-thumb-group { background: transparent; border-color: transparent; color: var(--ze-group-color); }
+.ze-layer-count { margin-left: 4px; font-weight: 400; font-size: 11px; color: var(--ui-fg-muted); }
 .ze-layers-head-actions { display: flex; align-items: center; gap: 2px; cursor: default; }
 .ze-layers-head-actions .ze-guides-settings-btn { border: 0; background: none; }
 .ze-layers-head-actions .ze-guides-settings-btn:hover:not(:disabled) { color: var(--ui-fg); }
