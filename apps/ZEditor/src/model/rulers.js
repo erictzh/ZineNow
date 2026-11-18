@@ -32,6 +32,13 @@ export function snapToUnit(pt, unit) {
   return unitToPt(Math.round(ptToUnit(pt, unit) / step) * step, unit);
 }
 
+// How much of the pointer's movement a dragged guide follows, by the pointer's speed (px per ms):
+// 1 (exactly with the pointer) at a normal pace, down to 0.1 when crawling, for fine steps.
+export function dragGain(speedPxPerMs) {
+  const FAST = 0.5, SLOW_GAIN = 0.1;
+  return Math.max(SLOW_GAIN, Math.min(1, speedPxPerMs / FAST));
+}
+
 // The ruler's ticks between `fromPt` and `toPt` (points along the page), at `pxPerPt` screen px
 // per point. Numbered ticks are spaced at least `minLabelPx` apart; each numbered step is split
 // into smaller ticks while they stay at least 4 px apart. Returns [{ pt, value, size }] where size

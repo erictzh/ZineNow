@@ -1,5 +1,5 @@
 // Rulers and ruler guides (model/rulers.js).
-import { formatInUnit, ptToUnit, rulerTicks, snapToGuides, snapToUnit, unitToPt } from "../apps/ZEditor/src/model/rulers.js";
+import { dragGain, formatInUnit, ptToUnit, rulerTicks, snapToGuides, snapToUnit, unitToPt } from "../apps/ZEditor/src/model/rulers.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 const near = (a, b) => Math.abs(a - b) < 1e-6;
@@ -23,5 +23,9 @@ ok(JSON.stringify(snapToGuides({ x0: 97, y0: 10, x1: 140, y1: 20 }, guides, 5)) 
 ok(snapToGuides({ x0: 60, y0: 0, x1: 136, y1: 20 }, guides, 5).dx === 2, "the middle snaps too");
 ok(snapToGuides({ x0: 0, y0: 44, x1: 20, y1: 47 }, guides, 5).dy === 3, "the bottom edge snaps to a horizontal guide");
 ok(snapToGuides({ x0: 0, y0: 0, x1: 20, y1: 20 }, guides, 5).dx === 0, "nothing close, no snap");
+
+// Precision dragging
+ok(dragGain(2) === 1 && dragGain(0.5) === 1, "a normal-speed drag follows the pointer exactly");
+ok(dragGain(0.05) === 0.1 && dragGain(0.25) === 0.5, "slowing down makes the guide move less than the pointer");
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); } else console.log("all passed");
