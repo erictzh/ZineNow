@@ -3,6 +3,8 @@
 import { withGroupMates } from "../../model/annotations.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { strokeHitTest } from "../../model/strokes.js";
+import { resolvePageText } from "../../render/pageText.js";
+import { onWrapShapesChange } from "../../render/wrapShapes.js";
 import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 import { AnnotationItem } from "./AnnotationItem.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
@@ -11,7 +13,7 @@ import { magicEraseAt } from "./magicEraseGesture.js";
 import { startSoftEraseGesture } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 
-const { useState, useRef } = React;
+const { useState, useRef, useEffect } = React;
 
 export function ComposeCanvas({
   pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn, tool,
@@ -19,12 +21,15 @@ export function ComposeCanvas({
   penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
   annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
-  onStartTextEdit, onFinishTextEdit,
+  onStartTextEdit, onFinishTextEdit, onLinkNextFrame,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   zoom,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
+  // An image's wrap shape is read in the background; redraw once it's ready.
+  const [, setWrapTick] = useState(0);
+  useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
   const [dragRect, setDragRect] = useState(null); // the box being dragged out on empty page
   const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
   const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
@@ -218,7 +223,8 @@ export function ComposeCanvas({
       >
         {/* While the magic eraser has a preview open, that image is drawn from it
             instead of from the document, which stays untouched until Apply. */}
-        {(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations).filter((a) => !a.hidden).map((a) => (
+        {/* Text is laid out for the whole page (threaded stories, text wrap: render/pageText.js). */}
+        {resolvePageText(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations).filter((a) => !a.hidden).map((a) => (
           <AnnotationItem
             key={a.id}
             ann={a}
@@ -235,6 +241,7 @@ export function ComposeCanvas({
             onToggleCrop={onToggleCrop}
             onStartTextEdit={onStartTextEdit}
             onFinishTextEdit={onFinishTextEdit}
+            onLinkNextFrame={onLinkNextFrame}
           />
         ))}
         <LiveStroke drawing={drawingRef.current} pageSize={canvasSize} />

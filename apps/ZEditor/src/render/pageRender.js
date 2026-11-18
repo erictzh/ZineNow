@@ -3,6 +3,7 @@
 import { MAIN_SCALE, THUMB_SCALE } from "../constants.js";
 import { drawAnnotationOnCanvas } from "./drawAnnotation.js";
 import { applyPageFilter } from "./filters/applyFilter.js";
+import { resolvePageText } from "./pageText.js";
 
 // Resolves which loaded pdf.js document a page belongs to. Pages can
 // now come from more than one source PDF (the original load, plus any
@@ -66,7 +67,8 @@ export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilt
   const scaleFactor = exportScale / MAIN_SCALE; // annotation coords were recorded in the editor's on-screen canvas space
   applyPageFilter(ctx, canvas, pageFilter, scaleFactor); // background only — drawn before any annotation touches the canvas
   // The annotation list is the stacking order: first is the bottom layer.
-  for (const a of page.annotations || []) {
+  // Threaded stories and text wrap need the whole page (render/pageText.js).
+  for (const a of resolvePageText(page.annotations || [])) {
     if (!a.hidden) await drawAnnotationOnCanvas(ctx, a, scaleFactor, pageFilter);
   }
   if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);

@@ -6,6 +6,7 @@ import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
+import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 
 const TRANSFORM_CONTROLS = [ANGLE_CONTROL, OPACITY_CONTROL, BLEND_CONTROL];
@@ -30,6 +31,7 @@ export function ShapeFormat({ ann, onUpdate, onRasterizeRect }) {
         <ControlList controls={TRANSFORM_CONTROLS} source={ann} onPatch={patch} />
       </PanelSection>
       <EffectControls ann={ann} onPatch={patch} />
+      <TextWrapSection ann={ann} patch={patch} />
       <PanelSection id="rect.rasterize" title="Rasterize" hint="Turns this shape into an image of what it looks like now — gradient, edge shape, stroke and shadow included — so image filters and effects can be applied to it. Undo brings the shape back.">
         <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => onRasterizeRect(ann)}>
           Rasterize to Image

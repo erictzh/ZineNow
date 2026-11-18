@@ -4,9 +4,29 @@ import { MAIN_SCALE } from "../constants.js";
 import { orderAfterMove, translatedAnnotation, withGroupMates } from "../model/annotations.js";
 import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { MIN_RECT_SIZE } from "../model/rect.js";
+import { captureTextStyle, relinkPatch, resolvedStyleProps, styleDiff, textStylePatch, withStyleOverrides } from "../model/text/textStyles.js";
+import { isThreaded, removeWithThreads, routeFramePatch, withoutResolvedProps } from "../model/text/threads.js";
 import { flattenedImagePatch, rasterizedRectPatch, rasterizedTextPatch } from "../render/bake.js";
 import { rotatedAnnotation } from "../render/itemGeometry.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
+import { resolvePageText } from "../render/pageText.js";
+import { makeTextFrameActions } from "./textFrameActions.js";
+
+// Applies `patch` to box `id`. A follower frame of a threaded story only keeps its frame
+// settings; its text, look and style changes land on the story's head (model/text/threads.js).
+// `merge(box, patch)` makes the patched box.
+function patchedAnnotations(anns, id, patch, merge) {
+  const clean = withoutResolvedProps(patch);
+  const view = resolvePageText(anns).find((a) => a.id === id);
+  if (!view || view.storyHeadId == null || view.storyIndex === 0) return anns.map((a) => (a.id === id ? merge(a, clean) : a));
+  const head = anns.find((a) => a.id === view.storyHeadId);
+  const { framePatch, headPatch } = routeFramePatch(head, view.storyOffset || 0, clean);
+  return anns.map((a) => {
+    if (a.id === id && Object.keys(framePatch).length) return { ...a, ...framePatch };
+    if (a.id === head.id && Object.keys(headPatch).length) return merge(a, headPatch);
+    return a;
+  });
+}
 
 const { useRef } = React;
 
@@ -53,7 +73,8 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const edited = selectedIdx === null ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === editingAnnId);
     setEditingAnnId(null);
     selection.setTool("select");
-    if (edited && !edited.text.trim()) {
+    // (A frame in a thread stays: it's part of the story's layout even while empty.)
+    if (edited && !(edited.text || "").trim() && !isThreaded(pages[selectedIdx].annotations || [], edited.id)) {
       updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => a.id !== edited.id), "ann:" + edited.id);
       setSelectedAnnId((id) => (id === edited.id ? null : id));
     }
@@ -193,7 +214,49 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     // Coalesced per-annotation: a drag's mousemoves, a resize, a
     // slider tug, or a burst of keystrokes editing this same
     // annotation all land in one undo step instead of one per event.
-    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, ...patch } : a)), "ann:" + id);
+    // A look setting changed on a box linked to a text style becomes that box's override.
+    updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
+  }
+
+  // ---- Linked text styles (model/text/textStyles.js). Each is its own undo step.
+  // (The style list itself isn't part of undo: undoing a redefine puts the boxes back, not the style.)
+  const patchBox = (id, patch) => updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...p })));
+  // Gives a box a saved style's look and links it to it (a built-in style is applied as a plain copy).
+  function handleApplyTextStyle(ann, style) {
+    if (selectedIdx === null) return;
+    const builtIn = Boolean(style.builtIn);
+    const props = builtIn ? style.props : resolvedStyleProps(toolDefaults.textStyles, style.name);
+    patchBox(ann.id, { ...textStylePatch({ props }), styleName: builtIn ? undefined : style.name, styleOverrides: undefined });
+  }
+  // Makes this box's look the style's new definition and updates every box linked to it
+  // (on every page), except for the settings each of them overrides.
+  function handleRedefineTextStyle(name, source) {
+    const styles = toolDefaults.textStyles;
+    const style = styles.find((s) => s.name === name);
+    if (!style) return;
+    const captured = captureTextStyle(source);
+    const props = style.basedOn ? styleDiff(resolvedStyleProps(styles, style.basedOn), captured) : captured;
+    const next = styles.map((s) => (s.name === name ? { ...s, props } : s));
+    toolDefaults.setTextStyles(next);
+    recordUndoCheckpoint();
+    setPages((prev) => prev.map((p) => ({
+      ...p,
+      annotations: (p.annotations || []).map((a) => {
+        if (a.id === source.id) return { ...a, styleName: name, styleOverrides: undefined };
+        const patch = relinkPatch(a, next);
+        return patch ? { ...a, ...patch } : a;
+      }),
+    })));
+  }
+  // Takes back the box's own changes, so it matches its style again.
+  function handleResetStyleOverrides(ann) {
+    if (selectedIdx === null) return;
+    const patch = relinkPatch({ ...ann, styleOverrides: undefined }, toolDefaults.textStyles);
+    if (patch) patchBox(ann.id, { ...patch, styleOverrides: undefined });
+  }
+  function handleUnlinkTextStyle(ann) {
+    if (selectedIdx === null) return;
+    patchBox(ann.id, { styleName: undefined, styleOverrides: undefined });
   }
 
   // Its own undo step: no coalesce key, so it can't merge with a
@@ -224,7 +287,8 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   function handleDeleteAnnotation() {
     if (selectedIdx === null || selectedAnnId === null) return;
     const idsToDelete = [selectedAnnId, ...selectedAnnIds];
-    updateAnnotationsFor(selectedIdx, (anns) => anns.filter((a) => !idsToDelete.includes(a.id)));
+    // Deleting a frame of a threaded story keeps the story: the frames around it link up.
+    updateAnnotationsFor(selectedIdx, (anns) => removeWithThreads(anns, idsToDelete));
     setSelectedAnnId(null);
     setSelectedAnnIds([]);
   }
@@ -250,7 +314,10 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(idx, (anns) => anns.map((a) => (a.id === id ? { ...a, src } : a)));
   }
 
+  const frameActions = makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds });
+
   return {
+    frameActions,
     updateAnnotationsFor, updatePageFilter,
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
     handleGroupSelection, handleUngroupSelection,
@@ -259,5 +326,6 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
     handleUpdateAnnotation, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
+    styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
   };
 }

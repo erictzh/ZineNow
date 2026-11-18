@@ -114,6 +114,13 @@ above it in this list:
 | Photo adjustments (exposure, contrast, …) | sliders: `model/photoAdjust.js`; pixels: `render/photoAdjust.js` |
 | Image effects (rounded, torn, scissor, stroke, shadow, texture) | definitions: `model/imageEffects.js`, `model/edgeShapes.js`; drawing: `render/boxEffects.js`; live preview: `ui/canvas/BoxEffectOverlays.jsx`, `ui/canvas/boxStyles.js` |
 | How text is laid out or drawn | layout and wrapping: `render/textLayout.js`; drawing: `render/drawText.js`; settings and effects: `model/text/` |
+| Print typography (justify, indents, paragraph spacing, line breaking, hyphenation hook) | the composer: `render/composer.js` (pure; breaks text into lines of positioned words); the box's settings: `model/text/textLook.js` (`usesTypeset`) and the Paragraph section in `ui/panels/format/TextFormat.jsx`; caret, selection and clicking in such a box: `render/textCaret.js` and the `typesetEditing` code in `ui/canvas/AnnotationText.jsx`; hyphenation: `render/hyphenation.js` (English patterns from the `hyphen` package, bundled) |
+| Text styles (linked: a box follows its style; Update style restyles every linked box) | model: `model/text/textStyles.js` (`resolvedStyleProps`, `styleDiff`, `withStyleOverrides`, `relinkPatch`); handlers: `styleActions` in `state/useAnnotationEdits.js` and the style list in `state/useToolDefaults.js`; panel: `ui/panels/TextStyles.jsx` |
+| Columns and fixed-height text frames | layout in `render/textLayout.js` (the `columns` / `frameHeight` block: lines are cut into columns, extra lines are `hidden`), settings `COLUMN_CONTROLS` in `model/text/textControls.js`, red + overflow marker in `ui/canvas/AnnotationText.jsx`, column-aware clicking in `render/textCaret.js`; vertical align and the column rule: the end of `layoutText` and `columnRules` in `render/textRuns.js`; frame-height handle: `startResize` ("s") in `ui/canvas/AnnotationText.jsx` |
+| Threaded frames (text continuing from one box into the next) | model: `model/text/threads.js` (chains, which settings are per frame, routing edits, deleting); layout across frames: `render/pageText.js`; Link/Unlink: `state/textFrameActions.js`; routing in `patchedAnnotations` (`state/useAnnotationEdits.js`); ports: `ui/canvas/AnnotationText.jsx`; panel: `ui/panels/TextThreadControls.jsx` |
+| Text wrap around images and shapes | settings and geometry: `model/text/textWrap.js`; image shapes: `render/wrapShapes.js`; line placement: `flowAroundObstacles` in `render/textLayout.js` (+ the composer's `slotFor`); panel: `ui/panels/TextWrapSection.jsx` |
+| Anything that draws or measures a page's text | go through `resolvePageText` (`render/pageText.js`) first, or threads and wrap will be missing |
+| Real (vector) text in the exported PDF | `io/vectorText.js` (which boxes qualify, why others stay pictures, drawing them with pdf-lib), `io/fontFiles.js` (finding a font's file: uploaded fonts, or system fonts once "Load Local System Fonts" was allowed), wired in `io/pdfExport.js`; the words' positions come from `render/textRuns.js`, shared with the canvas renderer |
 | Rectangles/ellipses, pen/highlighter | `model/rect.js`, `model/strokes.js`, `render/drawShapes.js` |
 | Erasers (stroke, soft, magic) | settings: `model/softEraser.js`, `model/magicEraser.js`; pixels: `render/softErase.js`, `render/magicErase.js`; mouse: `ui/canvas/softEraseGesture.js`, `ui/canvas/magicEraseGesture.js`; magic preview session (Apply/Cancel): `state/useMagicErase.js`; panel: `EraserToolPanel` in `ui/panels/format/ToolPanels.jsx` |
 | What Export PDF produces | `io/pdfExport.js` → `render/pageRender.js` (draws a whole page) |
@@ -320,8 +327,10 @@ broken:
 
 ## 7. Testing and checking your change
 
-There is no automated test suite. Check changes by hand, in the browser, on
-the real feature.
+`npm test` runs the Node tests in `tests/*.test.js` (ZEditor's text composer,
+caret, styles, hyphenation, threaded frames, text wrap, and the page-level text
+layout with a fake canvas). They cover pure logic only, so also check changes
+by hand, in the browser, on the real feature.
 
 - **Before committing:** run `npm run build`, then `npm run check`. Open each
   page you touched and look at the browser console. The three 404s for

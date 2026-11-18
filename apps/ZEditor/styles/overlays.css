@@ -25,6 +25,22 @@
 .ze-sidebar-head-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .ze-sidebar-head-actions .log-btn { margin: 0; }
 
+/* A neutral line of information (for example what Export did with the text). */
+.ze-notice-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 20px;
+    font-size: 12px;
+    color: var(--ui-fg);
+    background-color: color-mix(in srgb, var(--ui-accent) 10%, var(--ui-bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--ui-accent) 30%, var(--ui-border));
+}
+.ze-notice-bar span { flex: 1 1 auto; }
+.ze-notice-close { flex: 0 0 auto; background: none; border: 0; color: var(--ui-fg-muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.ze-notice-close:hover { color: var(--ui-fg); }
+
 .ze-error-bar {
     flex: 0 0 auto;
     padding: 8px 20px;

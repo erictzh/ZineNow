@@ -9,15 +9,17 @@ const { useState } = React;
 
 export function useExport({ doc, status, view, project }) {
   const { pages, pdfDocsRef } = doc;
-  const { setErrorMsg } = status;
+  const { setErrorMsg, setNotice } = status;
   const [exporting, setExporting] = useState(false);
   const [sendingToArranger, setSendingToArranger] = useState(false);
 
-  const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers);
+  // Export tells the user how much of the text went into the PDF as real text.
+  const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice);
 
   async function handleExportPdf() {
     if (pages.length === 0 || exporting) return;
     setErrorMsg(null);
+    setNotice(null);
     setExporting(true);
     try {
       const pdfBytes = await buildBytes();

@@ -4,7 +4,7 @@
 // recoloured stretches as `colorRuns`: [{ start, end, color }] over the
 // text's character positions (end exclusive), sorted and never
 // overlapping. Where a run is absent the box's own colour shows.
-function normalizeRuns(runs) {
+export function normalizeRuns(runs) {
   const sorted = (runs || []).filter((r) => r.end > r.start).sort((a, b) => a.start - b.start);
   const merged = [];
   for (const run of sorted) {

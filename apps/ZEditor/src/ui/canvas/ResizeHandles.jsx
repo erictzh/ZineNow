@@ -4,7 +4,8 @@ import { trackPointerDrag } from "../pointer.js";
 
 // Selection handles, positioned by their compass name.
 export const ALL_RESIZE_HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
-// A text box's height always follows its text, so it has no top/bottom handles.
+// A text box's corners and sides scale or widen it; ordinary text adds the top/bottom middle
+// handles itself (they turn the box into a fixed-height frame), see AnnotationText.
 export const TEXT_RESIZE_HANDLES = ["nw", "ne", "e", "se", "sw", "w"];
 
 export function ResizeHandles({ handles, onStart, onRotate }) {

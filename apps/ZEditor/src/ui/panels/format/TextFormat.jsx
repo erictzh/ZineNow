@@ -1,7 +1,7 @@
 // Format panel for a selected text box.
 
 import { ANGLE_CONTROL, BLEND_CONTROL } from "../../../model/controls.js";
-import { CASE_CONTROL, FIT_HEIGHT_CONTROL, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, STRIKE_CONTROL, TEXT_EFFECTS, VERTICAL_CONTROL } from "../../../model/text/textControls.js";
+import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, KERNING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, PARAGRAPH_CONTROLS, STRIKE_CONTROL, TEXT_EFFECTS, VERTICAL_CONTROL } from "../../../model/text/textControls.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
@@ -9,11 +9,13 @@ import { LetterColors } from "../LetterColors.jsx";
 import { TextBasicSection } from "../TextBasicSection.jsx";
 import { TextPhotoFill } from "../TextPhotoFill.jsx";
 import { TextStyles } from "../TextStyles.jsx";
+import { TextThreadControls } from "../TextThreadControls.jsx";
 import { FormatPanelShell } from "./FormatPanelShell.jsx";
 
-const SPACING_CONTROLS = [LINE_SPACING_CONTROL, LETTER_SPACING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
+const SPACING_CONTROLS = [LINE_SPACING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, KERNING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
+const ALL_PARAGRAPH_CONTROLS = [COMPOSER_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, ...PARAGRAPH_CONTROLS];
 
-export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults }) {
+export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, styleActions, frameActions }) {
   const patch = (p) => onUpdate(ann.id, p);
   const { fontOptions, setFontOptions, textStyles, handleSaveTextStyle, handleDeleteTextStyle } = toolDefaults;
   return (
@@ -26,8 +28,25 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults }) {
         fillAlphaSource={ann} onFillAlpha={patch}
         onChange={patch}
       />
-      <PanelSection id="text.styles" title="Saved styles">
-        <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={handleSaveTextStyle} onDeleteStyle={handleDeleteTextStyle} />
+      <PanelSection
+        id="text.paragraph" title="Paragraph" onReset={() => patch(resetPatch(ALL_PARAGRAPH_CONTROLS))}
+        hint="Justification, indents and paragraph spacing are set by one layout that the editor and Export share (paragraphs are split at each new line). Not used with Ransom, Curve or Stacked text."
+      >
+        <ControlList
+          controls={[COMPOSER_CONTROL, HYPHENATE_CONTROL, ...(ann.align === "justify" ? [JUSTIFY_LAST_CONTROL] : []), ...PARAGRAPH_CONTROLS]}
+          source={ann}
+          onPatch={(p) => patch(p.composer === "auto" ? { composer: undefined } : p)}
+        />
+      </PanelSection>
+      <PanelSection
+        id="text.frame" title="Columns & frame" onReset={() => patch(resetPatch(COLUMN_CONTROLS))}
+        hint="Several columns balance the text. Give the frame a height and the text fills the columns in order; if it doesn't all fit, the rest is hidden and a red + shows in the corner. Set the box's width first (drag its side handle)."
+      >
+        <ControlList controls={COLUMN_CONTROLS} source={ann} onPatch={(p) => patch(p.verticalAlign === "top" ? { verticalAlign: undefined } : p.columnRule === "none" ? { columnRule: undefined } : p)} />
+        <TextThreadControls ann={ann} frameActions={frameActions} />
+      </PanelSection>
+      <PanelSection id="text.styles" title="Styles" defaultOpen>
+        <TextStyles ann={ann} patch={patch} textStyles={textStyles} onSaveStyle={handleSaveTextStyle} onDeleteStyle={handleDeleteTextStyle} styleActions={styleActions} />
       </PanelSection>
       <PanelSection id="text.spacing" title="Spacing & layout" onReset={() => patch(resetPatch(SPACING_CONTROLS))}>
         <ControlList controls={SPACING_CONTROLS} source={ann} onPatch={patch} />
@@ -41,7 +60,7 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults }) {
         <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
       <PanelSection id="text.rasterize" title="Rasterize" hint="Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.">
-        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text} onClick={() => onRasterizeText(ann)}>
+        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text || ann.storyHeadId != null} title={ann.storyHeadId != null ? "Unlink the threaded frames first" : undefined} onClick={() => onRasterizeText(ann)}>
           Rasterize to Image
         </button>
       </PanelSection>

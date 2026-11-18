@@ -10,7 +10,54 @@ export const AUTO_TEXT_MAX_WIDTH = 320; // a text box with no set width wraps he
 // the same effects images have; the rest are text-only.
 export const TEXT_BORDER_PX = 1; // the text box's 1px border takes space like padding does
 export const LINE_SPACING_CONTROL = { kind: "slider", prop: "lineSpacing", label: "Line spacing (%)", min: 80, max: 300, fallback: 130 };
-export const LETTER_SPACING_CONTROL = { kind: "slider", prop: "letterSpacing", label: "Letter spacing (%)", min: -10, max: 100, fallback: 0 };
+export const LETTER_SPACING_CONTROL = { kind: "slider", prop: "letterSpacing", label: "Tracking (% of font size)", min: -10, max: 100, fallback: 0 };
+// ---- Print typography. Sizes here are in points (the editor stores px; see ptToPx).
+// Leading is the baseline-to-baseline distance; 0 keeps the percentage Line spacing.
+export const LEADING_CONTROL = { kind: "slider", prop: "leadingPt", label: "Leading (pt, 0 = use line spacing %)", min: 0, max: 200, fallback: 0 };
+export const KERNING_CONTROL = {
+  kind: "select", prop: "kerning", label: "Kerning", fallback: "auto",
+  options: [{ key: "auto", label: "Font kerning (default)" }, { key: "none", label: "Off" }],
+};
+// How lines are broken. Automatic = the paragraph composer for justified or
+// hyphenated text, single-line otherwise.
+export const COMPOSER_CONTROL = {
+  kind: "select", prop: "composer", label: "Line breaking", fallback: "auto",
+  options: [{ key: "auto", label: "Automatic" }, { key: "single", label: "Single-line (fast)" }, { key: "paragraph", label: "Paragraph (even spacing)" }],
+};
+// Only meaningful when the box is justified.
+export const JUSTIFY_LAST_CONTROL = {
+  kind: "select", prop: "justifyLast", label: "Last line", fallback: "left",
+  options: [{ key: "left", label: "Align left" }, { key: "center", label: "Align centre" }, { key: "right", label: "Align right" }, { key: "all", label: "Justify all lines" }],
+};
+// English patterns only for now; other languages would add options here.
+export const HYPHENATE_CONTROL = {
+  kind: "select", prop: "hyphenate", label: "Hyphenation", fallback: "none",
+  options: [{ key: "none", label: "Off" }, { key: "english", label: "On (English)" }],
+};
+export const PARAGRAPH_CONTROLS = [
+  { kind: "slider", prop: "indentFirst", label: "First-line indent (pt)", min: 0, max: 144, fallback: 0 },
+  { kind: "slider", prop: "indentLeft", label: "Left indent (pt)", min: 0, max: 288, fallback: 0 },
+  { kind: "slider", prop: "indentRight", label: "Right indent (pt)", min: 0, max: 288, fallback: 0 },
+  { kind: "slider", prop: "spaceBefore", label: "Space before paragraph (pt)", min: 0, max: 144, fallback: 0 },
+  { kind: "slider", prop: "spaceAfter", label: "Space after paragraph (pt)", min: 0, max: 144, fallback: 0 },
+];
+// ---- Columns and frame. A text box with a set frame height (or several columns) is a text
+// frame: text fills the columns in order, and anything past the last column is hidden
+// (the box shows a red + marker). With several columns and no frame height, the columns balance.
+export const COLUMN_CONTROLS = [
+  { kind: "slider", prop: "columns", label: "Columns", min: 1, max: 6, fallback: 1 },
+  { kind: "slider", prop: "columnGap", label: "Column gap (pt)", min: 0, max: 72, fallback: 12 },
+  { kind: "slider", prop: "frameHeight", label: "Frame height (pt, 0 = fit the text)", min: 0, max: 1000, fallback: 0 },
+  {
+    kind: "select", prop: "verticalAlign", label: "Vertical align", fallback: "top", showIf: (v) => v.frameHeight > 0,
+    options: [{ key: "top", label: "Top" }, { key: "center", label: "Centre" }, { key: "bottom", label: "Bottom" }],
+  },
+  {
+    kind: "select", prop: "columnRule", label: "Column rule", fallback: "none", showIf: (v) => v.columns > 1,
+    options: [{ key: "none", label: "None" }, { key: "on", label: "Line between columns" }],
+  },
+  { kind: "slider", prop: "columnRuleWidth", label: "Rule weight (pt, x10)", min: 1, max: 40, fallback: 5, showIf: (v) => v.columns > 1 && v.columnRule === "on" },
+];
 export const STRIKE_CONTROL = {
   kind: "select", prop: "strike", label: "Strike-through", fallback: "none",
   options: [{ key: "none", label: "None" }, { key: "line", label: "Line" }, { key: "double", label: "Double" }, { key: "wavy", label: "Wavy" }],
