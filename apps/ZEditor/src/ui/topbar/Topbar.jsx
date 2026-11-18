@@ -200,6 +200,20 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
               />
               <MenuItem
                 close={close}
+                label="Export page as PNG (transparent)"
+                disabled={doc.selectedIdx === null || exporting}
+                onClick={() => exporter.handleExportImage("png")}
+                hint="The page you're on, as a picture with a see-through background"
+              />
+              <MenuItem
+                close={close}
+                label="Export page as JPG"
+                disabled={doc.selectedIdx === null || exporting}
+                onClick={() => exporter.handleExportImage("jpg")}
+                hint="The page you're on, as a picture on white"
+              />
+              <MenuItem
+                close={close}
                 label="Send to ZineArranger"
                 disabled={pages.length === 0 || exporting || sendingToArranger}
                 onClick={exporter.handleSendToZineArranger}

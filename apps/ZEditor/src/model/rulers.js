@@ -25,6 +25,34 @@ export function formatInUnit(pt, unit) {
   return `${Number(v.toFixed(digits))} ${unit}`;
 }
 
+// The gap between the two guides (of `axis`) on either side of `pos` (points), for the readout when
+// hovering a ruler: { from, to, length } in points, or null when `pos` isn't between two guides.
+export function guideGap(guides, axis, pos) {
+  let from = null, to = null;
+  for (const g of guides) {
+    if (g.axis !== axis) continue;
+    if (g.pos <= pos && (from == null || g.pos > from)) from = g.pos;
+    if (g.pos > pos && (to == null || g.pos < to)) to = g.pos;
+  }
+  return from == null || to == null ? null : { from, to, length: to - from };
+}
+
+// The Measure tool: how far apart two points are. Any one unit in, the same unit out
+// ({ dx, dy, length }); `angle` is in degrees counter-clockwise from the right (0..360), as on paper.
+export function measureBetween(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const deg = Math.round(((Math.atan2(-dy, dx) * 180) / Math.PI) * 10) / 10; // -180..180, to a tenth
+  return { dx, dy, length: Math.hypot(dx, dy), angle: (deg + 360) % 360 };
+}
+
+// Shift while measuring: `to` moved onto the nearest 45° line from `from`, keeping its distance.
+export function constrainTo45(from, to) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const step = Math.PI / 4, len = Math.hypot(dx, dy);
+  const a = Math.round(Math.atan2(dy, dx) / step) * step;
+  return { x: from.x + Math.cos(a) * len, y: from.y + Math.sin(a) * len };
+}
+
 // Snaps a position in points to the nearest whole step of the unit (Shift while dragging a guide):
 // 1 mm, 0.1 cm, 1/8 in, 1 pt.
 export function snapToUnit(pt, unit) {

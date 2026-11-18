@@ -7,7 +7,7 @@
 // Editor only: never exported.
 
 import { MAIN_SCALE } from "../../constants.js";
-import { dragGain, formatInUnit, rulerTicks, snapToUnit } from "../../model/rulers.js";
+import { dragGain, formatInUnit, guideGap, rulerTicks, snapToUnit } from "../../model/rulers.js";
 import { trackPointerDrag } from "../pointer.js";
 
 const { useEffect, useLayoutEffect, useRef, useState } = React;
@@ -31,6 +31,15 @@ function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
   if (marks.pageLen > 0) {
     if (horizontal) ctx.fillRect(origin, 0, marks.pageLen * pxPerPt, h);
     else ctx.fillRect(0, origin, w, marks.pageLen * pxPerPt);
+  }
+  // The gap between the two guides around the pointer, lightly tinted.
+  if (marks.span) {
+    ctx.fillStyle = css.getPropertyValue("--ruler-cursor").trim() || "#f97316";
+    ctx.globalAlpha = 0.25;
+    const s0 = origin + marks.span.from * pxPerPt, sLen = (marks.span.to - marks.span.from) * pxPerPt;
+    if (horizontal) ctx.fillRect(s0, 0, sLen, h);
+    else ctx.fillRect(0, s0, w, sLen);
+    ctx.globalAlpha = 1;
   }
   const fg = css.getPropertyValue("--ruler-fg").trim() || "#a99f97";
   ctx.strokeStyle = fg;
@@ -76,7 +85,18 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
   const [geom, setGeom] = useState(null); // { left, top, width, height, pageW, pageH }: the page's 0 and the pane's size (pane px), the page's size (pt)
   const [cursor, setCursor] = useState(null); // { x, y } pointer in pane px, for the ruler marks
   const [drag, setDrag] = useState(null); // { id, axis, pos, isNew, removing, x, y }
+  const [hover, setHover] = useState(null); // { axis, at }: the pointer over a ruler, `at` px along it
   const pxPerPt = MAIN_SCALE * zoom;
+
+  // The gap between the two guides either side of the pointer while it's over a ruler (not mid-drag).
+  // The top ruler measures across, so it looks at the vertical (x) guides; the left ruler at the y ones.
+  const gap = hover && geom && !drag
+    ? guideGap(guides, hover.axis, (hover.at - geom[hover.axis === "x" ? "left" : "top"]) / pxPerPt)
+    : null;
+  const hoverOn = (axis) => (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setHover({ axis, at: axis === "x" ? e.clientX - r.left : e.clientY - r.top });
+  };
 
   // Where the page sits inside the pane: re-measured on scroll, resize, zoom and page change.
   useLayoutEffect(() => {
@@ -120,12 +140,14 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
     drawRuler(topRef.current, true, geom.width, geom.left, pxPerPt, unit, {
       pageLen: geom.pageW,
       cursor: drag && drag.axis === "x" ? dragAt : cursor ? cursor.x : null,
+      span: gap && hover.axis === "x" ? gap : null,
     });
     drawRuler(leftRef.current, false, geom.height, geom.top, pxPerPt, unit, {
       pageLen: geom.pageH,
       cursor: drag && drag.axis === "y" ? dragAt : cursor ? cursor.y : null,
+      span: gap && hover.axis === "y" ? gap : null,
     });
-  }, [geom, pxPerPt, unit, cursor, drag]);
+  }, [geom, pxPerPt, unit, cursor, drag, gap && gap.from, gap && gap.to]);
 
   // Drags a guide (a new one from a ruler, or one already placed). Dropped back on its ruler, or
   // outside the pane, it's removed.
@@ -182,13 +204,13 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
       <div className="ze-ruler-corner" title="Rulers count from the page's top-left corner. Drag from a ruler to add a guide." />
       <canvas
         ref={topRef} className="ze-ruler ze-ruler-top"
-        title="Drag down to add a horizontal guide"
         onMouseDown={(e) => startDrag(e, { axis: "y", isNew: true, pos: 0 })}
+        onMouseMove={hoverOn("x")} onMouseLeave={() => setHover(null)}
       />
       <canvas
         ref={leftRef} className="ze-ruler ze-ruler-left"
-        title="Drag right to add a vertical guide"
         onMouseDown={(e) => startDrag(e, { axis: "x", isNew: true, pos: 0 })}
+        onMouseMove={hoverOn("y")} onMouseLeave={() => setHover(null)}
       />
       {geom && (
         <div className="ze-ruler-guides">
@@ -199,6 +221,14 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
               onMouseDown={(e) => startDrag(e, g)}
             />
           ))}
+          {gap && (
+            <div
+              className="ze-ruler-readout"
+              style={hover.axis === "x" ? { left: hover.at + 12, top: 4 } : { left: 4, top: hover.at + 12 }}
+            >
+              {formatInUnit(gap.length, unit)}
+            </div>
+          )}
           {drag && (
             <React.Fragment>
               <div className={"ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : "")} style={lineStyle(drag.axis, drag.pos)} />

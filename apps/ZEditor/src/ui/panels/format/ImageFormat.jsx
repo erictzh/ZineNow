@@ -27,7 +27,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
         title="Crop"
         checked={isCroppingThis || Boolean(hasCrop)}
         disabled={Boolean(angleOf(ann)) && !isCroppingThis && !hasCrop}
-        hint="While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop. Set the rotation to 0° to crop."
+        hint="While cropping: drag inside the window to reposition the photo, drag a handle to resize the crop (hold Shift to keep its proportions). Set the rotation to 0° to crop."
         onToggle={(on) => {
           if (on) { if (!isCroppingThis) onToggleCrop(ann.id); return; }
           if (isCroppingThis) onToggleCrop(ann.id);

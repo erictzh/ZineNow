@@ -100,6 +100,7 @@ export function App() {
             <div className="preview-canvas-wrapper">
               <ComposeCanvas
                 zoom={zoom.zoomPercent / 100}
+                rulerUnit={view.rulerUnit}
                 pdfDocsRef={doc.pdfDocsRef}
                 page={selectedPage}
                 guidesOn={view.guidesOn}

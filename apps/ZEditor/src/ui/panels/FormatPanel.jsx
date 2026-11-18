@@ -24,6 +24,17 @@ export function FormatPanel({
   if (tool === "pen" || tool === "highlighter") return <StrokeToolPanel tool={tool} toolDefaults={toolDefaults} />;
   if (tool === "eraser") return <EraserToolPanel toolDefaults={toolDefaults} magicErase={magicErase} />;
 
+  if (tool === "measure") {
+    return (
+      <FormatPanelShell title="Measure" sections={false}>
+        <div className="ze-format-empty">
+          Click one point, then another, to see the distance between them in the ruler's unit. A third click clears it. Dragging from one point to the other works too.
+          Once the line is shown, drag either end to adjust. Hold Shift for 45° steps; ends land on ruler guides unless you hold Alt.
+        </div>
+      </FormatPanelShell>
+    );
+  }
+
   return (
     <FormatPanelShell title="Format" sections={false}>
       <div className="ze-format-empty">

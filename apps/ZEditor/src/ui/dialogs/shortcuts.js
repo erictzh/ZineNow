@@ -16,6 +16,8 @@ export const KEYBOARD_SHORTCUTS = [
       ["E", "Ellipse tool"],
       ["D", "Draw tool"],
       ["H", "Highlighter tool"],
+      ["C", "Turn crop on / off for the selected image"],
+      ["M", "Measure tool: click point a, click point b, click again to clear (Shift: 45° steps, Alt: skip guides)"],
     ],
   },
   {
@@ -46,6 +48,7 @@ export const KEYBOARD_SHORTCUTS = [
       ["Shift + click", "Add to or remove from the selection (pages and items)"],
       ["Drag on empty page", "Select the items it touches (Move tool)"],
       ["Shift + drag a handle", "Stretch an image freely, or keep a rectangle's proportions"],
+      ["Shift + drag a crop handle", "Keep the crop window's proportions"],
     ],
   },
 ];

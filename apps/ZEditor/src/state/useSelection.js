@@ -5,7 +5,7 @@ import { withGroupMates } from "../model/annotations.js";
 const { useState, useEffect } = React;
 
 export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
-  const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser'
+  const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser' | 'measure'
   const [selectedAnnId, setSelectedAnnId] = useState(null);
   // Shift+Click multi-select — `selectedAnnId` stays the single
   // "primary" item (the one resize/crop/drag/Ctrl+C/the FormatPanel's
