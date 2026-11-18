@@ -1,17 +1,22 @@
 // The artboard: shows the page at its zoom with its items on top, and routes mouse presses for each tool.
 
+import { MAIN_SCALE } from "../../constants.js";
 import { withGroupMates } from "../../model/annotations.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
+import { snapToGuides } from "../../model/rulers.js";
 import { strokeHitTest } from "../../model/strokes.js";
 import { resolvePageText } from "../../render/pageText.js";
 import { onWrapShapesChange } from "../../render/wrapShapes.js";
 import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 import { AnnotationItem } from "./AnnotationItem.jsx";
+import { ThreadLinks } from "./ThreadLinks.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
 import { magicEraseAt } from "./magicEraseGesture.js";
 import { startSoftEraseGesture } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
+
+const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
 
 const { useState, useRef, useEffect } = React;
 
@@ -21,7 +26,7 @@ export function ComposeCanvas({
   penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
   annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
-  onStartTextEdit, onFinishTextEdit, onLinkNextFrame,
+  onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   zoom,
 }) {
@@ -158,6 +163,20 @@ export function ComposeCanvas({
       .filter((id) => !annotations.find((a) => a.id === id).locked);
   }
 
+  // The on-page box (page px) around the given items, from where they're drawn.
+  function itemsBox(ids) {
+    const layer = layerRef.current.getBoundingClientRect();
+    let box = null;
+    for (const id of ids) {
+      const el = layerRef.current.querySelector(`[data-ann-id="${id}"]`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const b = { x0: (r.left - layer.left) / zoom, y0: (r.top - layer.top) / zoom, x1: (r.right - layer.left) / zoom, y1: (r.bottom - layer.top) / zoom };
+      box = box ? { x0: Math.min(box.x0, b.x0), y0: Math.min(box.y0, b.y0), x1: Math.max(box.x1, b.x1), y1: Math.max(box.y1, b.y1) } : b;
+    }
+    return box;
+  }
+
   // The shared press on any item: select it, then drag to move the
   // whole selection. `onPlainClick` runs if the press never became a drag.
   function pressAnnotation(e, ann, onPlainClick) {
@@ -175,10 +194,20 @@ export function ComposeCanvas({
     const movingIds = single ? [ann.id] : wasSelected ? current : e.shiftKey ? [...current, ...mates] : mates;
     const originals = annotations.filter((a) => movingIds.includes(a.id));
     const dragDelta = dragDeltaFrom(e, zoom);
+    // Ruler guides (ui/canvas/Rulers.jsx): the moved items' edges and middle snap onto them.
+    const guideLines = snapGuides && snapGuides.length ? {
+      x: snapGuides.filter((g) => g.axis === "x").map((g) => g.pos * MAIN_SCALE),
+      y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE),
+    } : null;
+    const startBox = guideLines ? itemsBox(movingIds) : null;
     let moved = false;
     trackPointerDrag((ev) => {
-      const { dx, dy } = dragDelta(ev);
+      let { dx, dy } = dragDelta(ev);
       if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
+      if (moved && startBox && !ev.altKey) { // Alt moves freely
+        const snap = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
+        dx += snap.dx; dy += snap.dy;
+      }
       if (moved) onMoveAnnotations(originals, dx, dy);
     }, () => {
       if (moved) return;
@@ -196,7 +225,9 @@ export function ComposeCanvas({
     );
   }
 
-  const showHandlesFor = (a) => tool === "select" && a.id === selectedAnnId && selectedAnnIds.length === 0;
+  const pageViews = resolvePageText(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations);
+  // A text box being typed in shows its handles too (from the moment it's made), so it can be resized right away.
+  const showHandlesFor = (a) => (tool === "select" || a.id === editingAnnId) && a.id === selectedAnnId && selectedAnnIds.length === 0;
   const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
   const cursorClass =
     tool === "text" ? "ze-tool-text" :
@@ -224,7 +255,7 @@ export function ComposeCanvas({
         {/* While the magic eraser has a preview open, that image is drawn from it
             instead of from the document, which stays untouched until Apply. */}
         {/* Text is laid out for the whole page (threaded stories, text wrap: render/pageText.js). */}
-        {resolvePageText(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations).filter((a) => !a.hidden).map((a) => (
+        {pageViews.filter((a) => !a.hidden).map((a) => (
           <AnnotationItem
             key={a.id}
             ann={a}
@@ -244,6 +275,7 @@ export function ComposeCanvas({
             onLinkNextFrame={onLinkNextFrame}
           />
         ))}
+        <ThreadLinks views={pageViews} pageSize={canvasSize} selectedIds={[selectedAnnId, ...selectedAnnIds]} zoom={zoom} onUnlink={onUnlinkNextFrame} />
         <LiveStroke drawing={drawingRef.current} pageSize={canvasSize} />
         {selectionTurn && (
           <SelectionTurnKnob turn={selectionTurn} zoom={zoom} toPagePoint={overlayPoint} onRotateAnnotations={onRotateAnnotations} />

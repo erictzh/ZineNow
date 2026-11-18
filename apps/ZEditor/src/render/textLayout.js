@@ -150,9 +150,45 @@ export function layoutText(ctx, ann, scaleFactor) {
 
   // Letters placed one by one (ransom) lose kerning, so their widths are
   // the sum of each letter's own advance.
-  const measure = (look.ransom || look.curve)
+  const baseMeasure = (look.ransom || look.curve)
     ? (s) => Array.from(s).reduce((width, ch) => width + ctx.measureText(ch).width, 0)
     : (s) => ctx.measureText(s).width;
+  // Custom text spans with their own font, bold or italic (model/text/colorRuns.js): `fontAt(i)`
+  // is the canvas font of the letter at text index i (null where the box's own font applies),
+  // and `measure(s, at)` measures s starting at index `at` piece by piece in those fonts. Without
+  // `at`, or with no such spans, it measures in the box's font. Only the composer's layout uses spans.
+  const baseFont = ctx.font;
+  const fontRuns = usesTypeset(ann) ? (ann.colorRuns || []).filter((r) => r.fontFamily != null || r.bold != null || r.italic != null || r.fontSize != null) : [];
+  const sizeRuns = fontRuns.filter((r) => r.fontSize != null);
+  const spanFont = (run) => {
+    const it = run.italic != null ? run.italic : ann.italic;
+    const b = run.bold != null ? run.bold : ann.bold;
+    const size = run.fontSize != null ? run.fontSize * scaleFactor : fontSize;
+    return `${it ? "italic" : "normal"} ${variant}${b ? "700" : "400"} ${size}px '${run.fontFamily || family}', sans-serif`;
+  };
+  const runAtIndex = (index) => fontRuns.find((r) => index >= r.start && index < r.end);
+  const fontAt = (index) => { const run = runAtIndex(index); return run ? spanFont(run) : null; };
+  const measure = fontRuns.length
+    ? (s, at) => {
+      if (at == null || !s) return baseMeasure(s);
+      let width = 0, pos = 0;
+      while (pos < s.length) {
+        const index = at + pos;
+        const run = runAtIndex(index);
+        // The piece runs to the next span boundary (or the end of s).
+        let stop = s.length;
+        for (const r of fontRuns) {
+          if (r.start > index) stop = Math.min(stop, r.start - at);
+          if (run === r) stop = Math.min(stop, r.end - at);
+        }
+        const piece = s.slice(pos, stop);
+        if (run) { ctx.font = spanFont(run); width += ctx.measureText(piece).width; ctx.font = baseFont; }
+        else width += baseMeasure(piece);
+        pos = stop;
+      }
+      return width;
+    }
+    : baseMeasure;
 
   const typeset = usesTypeset(ann);
   const para = look.paragraph;
@@ -164,7 +200,8 @@ export function layoutText(ctx, ann, scaleFactor) {
     boxWidth = maxWidthCap; // columns need a width to divide
   } else {
     const indents = typeset ? px(para.indentLeft + Math.max(0, para.indentFirst) + para.indentRight) : 0;
-    const naturalWidth = Math.max(10, ...shownText.split("\n").map((s) => measure(s) + indents));
+    let at = 0;
+    const naturalWidth = Math.max(10, ...shownText.split("\n").map((s) => { const w = measure(s, at) + indents; at += s.length + 1; return w; }));
     boxWidth = Math.min(naturalWidth + padX * 2, maxWidthCap);
   }
   const innerWidth = Math.max(4, boxWidth - padX * 2);
@@ -179,7 +216,9 @@ export function layoutText(ctx, ann, scaleFactor) {
   const lineStarts = [];
   let cursor = 0;
   const composeOpts = {
-    width: columnWidth, align: ann.align || "left", lastLine: para.lastLine, composer: para.composer,
+    width: columnWidth, align: ann.align || "left",
+    alignAt: (ann.colorRuns || []).some((r) => r.align) ? (offset) => { const r = (ann.colorRuns || []).find((x) => x.align && offset >= x.start && offset < x.end); return r ? r.align : null; } : undefined,
+    lastLine: para.lastLine, composer: para.composer,
     indentFirst: px(para.indentFirst), indentLeft: px(para.indentLeft), indentRight: px(para.indentRight),
     hyphenate: para.hyphenate ? currentHyphenator() || undefined : undefined,
     continued: Boolean(ann.storyContinues), // a threaded frame that starts mid-paragraph
@@ -239,13 +278,22 @@ export function layoutText(ctx, ann, scaleFactor) {
     const paraGap = px(para.spaceBefore + para.spaceAfter);
     // Where each line would sit in one long column (a paragraph's space before/after goes between paragraphs).
     const gapBefore = typesetLines.map((l, i) => (i > 0 && l.first ? paraGap : 0));
+    // A line holding a custom span bigger than the box's own size grows to fit it: `l.height` is the
+    // line's own height and `l.baseShift` moves its baseline down to match.
+    const lh = typesetLines.map((l) => {
+      let factor = 1;
+      for (const r of sizeRuns) if (r.end > l.start && r.start < Math.max(l.visibleEnd, l.start + 1)) factor = Math.max(factor, r.fontSize / (ann.fontSize || 16));
+      l.height = lineHeight * factor;
+      l.baseShift = baselineOffset * (factor - 1);
+      return l.height;
+    });
     const seqTop = [];
     let y = 0;
-    typesetLines.forEach((l, i) => { if (i > 0) y += lineHeight + gapBefore[i]; seqTop.push(y); });
+    typesetLines.forEach((l, i) => { if (i > 0) y += lh[i - 1] + gapBefore[i]; seqTop.push(y); });
     const frameInner = para.frameHeight > 0 ? Math.max(lineHeight, px(para.frameHeight) - padY * 2) : 0;
     if (columns === 1 && !frameInner) {
       typesetLines.forEach((l, i) => { l.top = seqTop[i]; });
-      textHeight = (typesetLines.length ? y : 0) + lineHeight;
+      textHeight = (typesetLines.length ? y + lh[lh.length - 1] : lineHeight);
     } else {
       // Cut the long column into columns of height H: a line starts a new column when it no longer fits
       // (no paragraph space is kept at the top of a column). Returns each line's column and the column starts.
@@ -254,7 +302,7 @@ export function layoutText(ctx, ann, scaleFactor) {
         const starts = [0];
         typesetLines.forEach((l, i) => {
           const colStart = starts[starts.length - 1];
-          if (i > 0 && seqTop[i] + lineHeight - colStart > H + 0.01) starts.push(seqTop[i] - gapBefore[i]);
+          if (i > 0 && seqTop[i] + lh[i] - colStart > H + 0.01) starts.push(seqTop[i] - gapBefore[i]);
           colOf.push(starts.length - 1);
         });
         return { colOf, starts };
@@ -262,7 +310,7 @@ export function layoutText(ctx, ann, scaleFactor) {
       let H = frameInner;
       if (!H) {
         // Balanced: the shortest column height that still fits every line in the columns available.
-        let lo = lineHeight, hi = Math.max(lineHeight, y + lineHeight);
+        let lo = lineHeight, hi = Math.max(lineHeight, y + (lh.length ? lh[lh.length - 1] : lineHeight));
         for (let k = 0; k < 24 && hi - lo > 0.5; k++) {
           const mid = (lo + hi) / 2;
           if (place(mid).starts.length <= columns) hi = mid; else lo = mid;
@@ -277,7 +325,7 @@ export function layoutText(ctx, ann, scaleFactor) {
         if (c >= columns) { l.hidden = true; overflow = true; l.top = H; l.x += (columns - 1) * (columnWidth + columnGap); return; }
         l.top = seqTop[i] - starts[c];
         l.x += c * (columnWidth + columnGap);
-        tallest = Math.max(tallest, l.top + lineHeight);
+        tallest = Math.max(tallest, l.top + lh[i]);
       });
       textHeight = frameInner ? frameInner : Math.max(lineHeight, tallest);
     }
@@ -291,7 +339,7 @@ export function layoutText(ctx, ann, scaleFactor) {
     const vAlign = ann.verticalAlign === "center" ? 0.5 : ann.verticalAlign === "bottom" ? 1 : 0;
     if (vAlign && frameInnerPx && !wrap) {
       const bottoms = new Map();
-      typesetLines.forEach((l) => { if (!l.hidden) bottoms.set(l.col || 0, Math.max(bottoms.get(l.col || 0) || 0, l.top + lineHeight)); });
+      typesetLines.forEach((l) => { if (!l.hidden) bottoms.set(l.col || 0, Math.max(bottoms.get(l.col || 0) || 0, l.top + (l.height || lineHeight))); });
       typesetLines.forEach((l) => { if (!l.hidden) l.top += Math.max(0, textHeight - bottoms.get(l.col || 0)) * vAlign; });
     }
   }
@@ -305,7 +353,7 @@ export function layoutText(ctx, ann, scaleFactor) {
     curve = { radius, sign: look.curve.curveBend > 0 ? 1 : -1, sag: radius * (1 - Math.cos(widest / 2 / radius)) };
   }
   const boxHeight = textHeight + padY * 2 + (curve ? curve.sag : 0);
-  return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, typesetLines, textHeight, boxHeight, measure, ascent, descent, curve, overflow, columns, columnWidth, columnStride: columnWidth + columnGap };
+  return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, typesetLines, textHeight, boxHeight, measure, fontAt, ascent, descent, curve, overflow, columns, columnWidth, columnStride: columnWidth + columnGap };
 }
 
 // How far a canvas-drawn text box paints past its own edges (editor px):

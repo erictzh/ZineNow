@@ -1,6 +1,6 @@
 // The paragraph composer: breaks text into lines the way a page-layout program does, and places the words on each line.
 //
-// It's pure (no canvas, no DOM): it's handed a `measure(string)` function, so
+// It's pure (no canvas, no DOM): it's handed a `measure(string, start)` function, so
 // the editor, Export and the tests all compose identically. Positions are in
 // whatever unit `measure` returns.
 //
@@ -60,11 +60,11 @@ const RAGGED_STRETCH = 0.5;
 function tokenize(para, offset, measure, spaceWidth, hyphenWidth, opts, maxLineWidth) {
   const items = [];
   const push = (item) => items.push(item);
-  const widthOf = (s) => measure(s);
+  const widthOf = (s, at) => measure(s, at); // `at`: where s starts in the text (styled spans measure in their own font)
   // A word piece: cut into single characters (with a costly break between
   // each) when it alone is wider than any line could be.
   const pushBox = (text, start) => {
-    const width = widthOf(text);
+    const width = widthOf(text, start);
     if (width <= maxLineWidth || Array.from(text).length < 2) {
       push({ type: "box", width, start, end: start + text.length });
       return;
@@ -72,7 +72,7 @@ function tokenize(para, offset, measure, spaceWidth, hyphenWidth, opts, maxLineW
     let at = start;
     const chars = Array.from(text);
     chars.forEach((ch, k) => {
-      push({ type: "box", width: widthOf(ch), start: at, end: at + ch.length });
+      push({ type: "box", width: widthOf(ch, at), start: at, end: at + ch.length });
       at += ch.length;
       if (k < chars.length - 1) push({ type: "penalty", width: 0, penalty: BREAK_ANYWHERE_PENALTY, flagged: false });
     });
@@ -250,6 +250,7 @@ function optimalBreaks(items, lineWidth, justify, hasHyphens) {
 // Composes `text` into lines. `opts`:
 //   width        total line width available (before indents)
 //   align        "left" | "center" | "right" | "justify"
+//   alignAt      (offset) => align or null: a paragraph's own alignment, by its start offset
 //   lastLine     for justify, how a paragraph's last line sits: "left" | "center" | "right" | "all"
 //   indentFirst, indentLeft, indentRight   in the same unit as width
 //   composer     "single" | "paragraph"
@@ -269,13 +270,15 @@ export function composeText(text, measure, opts) {
   const spaceWidth = measure(" ");
   const hyphenWidth = opts.hyphenWidth != null ? opts.hyphenWidth : measure("-");
   const indentLeft = opts.indentLeft || 0, indentRight = opts.indentRight || 0, indentFirst = opts.indentFirst || 0;
-  const justify = opts.align === "justify";
   const lastLine = opts.lastLine || "left";
   const paragraphs = text.split("\n");
   const lines = [];
   let offset = 0;
   paragraphs.forEach((para, paraIndex) => {
     const opensPara = !(opts.continued && paraIndex === 0); // a continued paragraph's first line is not its first
+    // A paragraph may have its own alignment (a custom text span's `align`, read at the paragraph's start).
+    const paraAlign = (opts.alignAt && opts.alignAt(offset)) || opts.align || "left";
+    const justify = paraAlign === "justify";
     const startsAt = (first) => indentLeft + (first ? indentFirst : 0);
     const slot = opts.slotFor ? (lineIndex) => opts.slotFor(paraIndex, lineIndex) : null;
     const availAt = (lineIndex) => Math.max(1, (slot ? slot(lineIndex).width : opts.width) - startsAt(opensPara && lineIndex === 0) - indentRight);
@@ -323,7 +326,7 @@ export function composeText(text, measure, opts) {
       if (hyphenated) natural += hyphenWidth;
       const first = lineIndex === 0 && opensPara;
       const avail = availAt(lineIndex);
-      let align = opts.align === "justify" ? "left" : opts.align || "left";
+      let align = justify ? "left" : paraAlign;
       let stretch = 0;
       if (justify) {
         if (!isLast || lastLine === "all") { if (glueCount) stretch = (avail - natural) / glueCount; }

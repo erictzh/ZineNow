@@ -1,4 +1,4 @@
-// Remembers the text selection so the Letter Colours panel can colour it after the text box loses focus.
+// Remembers the text selection so the Custom Text Style (span) panel can restyle it after the text box loses focus.
 
 // The selection last made inside a text box's editor, kept outside React
 // state: it's read only at the moment a colour is picked, and has to

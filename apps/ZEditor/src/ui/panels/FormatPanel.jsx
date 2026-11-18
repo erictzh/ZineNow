@@ -11,10 +11,10 @@ import { EraserToolPanel, ShapeToolPanel, StrokeToolPanel, TextToolPanel } from 
 // each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js).
 export function FormatPanel({
   tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
-  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, styleActions, frameActions,
+  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, styleActions,
 }) {
   const ann = selectedAnn;
-  if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} styleActions={styleActions} frameActions={frameActions} />;
+  if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} styleActions={styleActions} />;
   if (ann && ann.type === "stroke") return <StrokeFormat key={ann.id} ann={ann} onUpdate={onUpdate} />;
   if (ann && ann.type === "image") return <ImageFormat key={ann.id} ann={ann} onUpdate={onUpdate} croppingAnnId={croppingAnnId} onToggleCrop={onToggleCrop} onFlattenImage={onFlattenImage} />;
   if (ann && ann.type === "rect") return <ShapeFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeRect={onRasterizeRect} />;

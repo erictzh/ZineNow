@@ -236,6 +236,8 @@
 .ze-sec-title:active { transform: none; }
 .ze-sec.is-off .ze-sec-title { color: var(--ui-fg-muted); font-weight: 500; }
 .ze-sec-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The star before an essential section's title (ui/controls/PanelSection.jsx): where a beginner should start. */
+.ze-sec-star { flex: 0 0 auto; fill: var(--ui-accent); margin-right: -2px; }
 .ze-sec-caret { flex: 0 0 auto; color: var(--ui-fg-muted); transition: transform 0.15s ease; }
 .ze-sec.is-open .ze-sec-caret { transform: rotate(180deg); }
 .ze-sec-caret.is-hidden { visibility: hidden; }

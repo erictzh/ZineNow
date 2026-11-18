@@ -81,7 +81,13 @@ export async function readProjectFile(file, nextPageKey) {
     if (m) maxDocNum = Math.max(maxDocNum, Number(m[1]));
   });
   let maxAnnId = 0;
-  pages.forEach((p) => (p.annotations || []).forEach((a) => { maxAnnId = Math.max(maxAnnId, a.id || 0); }));
+  // Group ids ("g12") come from the same counter, so they count too: otherwise a new group could
+  // reuse an existing group's id and the two would act as one.
+  pages.forEach((p) => (p.annotations || []).forEach((a) => {
+    maxAnnId = Math.max(maxAnnId, a.id || 0);
+    const g = /^g(\d+)$/.exec(a.groupId || "");
+    if (g) maxAnnId = Math.max(maxAnnId, Number(g[1]));
+  }));
 
   // Size for blank pages added later: the first real page's, else the first page's.
   let pageSize = null;

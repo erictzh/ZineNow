@@ -3,11 +3,13 @@
 import { stripExtension, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, writeFileHandle } from "../io/fileSave.js";
 import { readProjectFile, serializeProject } from "../io/projectFile.js";
+import { saveReloadSnapshot, takeReloadSnapshot } from "../io/reloadSnapshot.js";
+import { allowNextUnload, warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
 
-const { useState, useRef } = React;
+const { useEffect, useState, useRef } = React;
 
 export function useProject({ doc, history, status, view, toolDefaults }) {
-  const { pages, setPages, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
+  const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
   const { setLoading, setErrorMsg } = status;
   const projectInputRef = useRef(null);
   const [savingProject, setSavingProject] = useState(false);
@@ -96,7 +98,46 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
     if (file) handleLoadProjectFile(file);
   }
 
-  async function handleLoadProjectFile(file, handle = null) {
+  // Reload the app (to pick up changed code) and bring this project back as it was: it's parked in
+  // the browser (io/reloadSnapshot.js) and reopened on start. Undo history isn't kept.
+  const [reloading, setReloading] = useState(false);
+  async function reloadKeepingWork() {
+    if (reloading) return;
+    setReloading(true);
+    try {
+      if (pages.length > 0) {
+        const json = serializeProject({
+          title: docTitle,
+          pdfDocs: pdfDocsRef.current,
+          pages,
+          textStyles: toolDefaults.textStyles,
+          settings: view.settingsForSave(),
+        });
+        await saveReloadSnapshot({ json, selectedIdx, title: docTitle, fileHandle: projectFile ? projectFile.handle : null });
+      }
+      allowNextUnload(); // the work is parked, so the "leave page?" warning isn't needed
+      window.location.reload();
+    } catch (err) {
+      setReloading(false);
+      setErrorMsg("Couldn't keep the work for the reload, so the page wasn't reloaded — " + (err && err.message ? err.message : "unknown error"));
+    }
+  }
+  // Refreshing or closing the tab asks first while there are pages (shared/js/leaveWarning.js).
+  const hasPagesRef = useRef(false);
+  hasPagesRef.current = pages.length > 0;
+  useEffect(() => { warnBeforeLeaving(() => hasPagesRef.current); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    takeReloadSnapshot().then((snapshot) => {
+      if (cancelled || !snapshot) return;
+      const file = { name: (snapshot.title || "Untitled") + ".znow", text: async () => snapshot.json };
+      handleLoadProjectFile(file, snapshot.fileHandle || null, snapshot.selectedIdx);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleLoadProjectFile(file, handle = null, pageIdx = 0) {
     setErrorMsg(null);
     setLoading(true);
     try {
@@ -109,7 +150,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
       if (!pageSizeRef.current && loaded.pageSize) pageSizeRef.current = loaded.pageSize;
 
       setPages(loaded.pages);
-      setSelectedIdx(loaded.pages.length > 0 ? 0 : null);
+      setSelectedIdx(loaded.pages.length > 0 ? Math.min(Math.max(0, pageIdx || 0), loaded.pages.length - 1) : null);
       setSelectedPageIndices([]);
       history.clearHistory();
       setProjectFile(handle ? { handle, name: handle.name } : null);
@@ -124,6 +165,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
 
   return {
     docTitle, setDocTitle, projectFile, justSaved, savingProject, projectInputRef,
+    reloading, reloadKeepingWork,
     startNewDocument, handleSaveProject, openProjectPicker, handleProjectInputChange, handleLoadProjectFile,
   };
 }

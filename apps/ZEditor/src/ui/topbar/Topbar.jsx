@@ -5,6 +5,7 @@ import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
 import { OnionSkinSettings } from "../settings/OnionSkinSettings.jsx";
 import { PageNumbersSettings } from "../settings/PageNumbersSettings.jsx";
+import { RulersSettings } from "../settings/RulersSettings.jsx";
 import { PageMenuBody } from "./PageMenu.jsx";
 import { MenuItem, TopMenu } from "./TopMenu.jsx";
 
@@ -35,6 +36,16 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M15 7l5 5-5 5" />
               <path d="M20 12H9a5 5 0 0 0 0 10h1" />
+            </svg>
+          </button>
+          <button
+            type="button" className="ze-tool-icon-btn" disabled={project.reloading}
+            title="Reload the app (picks up code changes) and keep your work: pages, items, title and the file it saves to come back. Undo history starts fresh."
+            onClick={project.reloadKeepingWork}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+              <path d="M20 4v7h-7" />
             </svg>
           </button>
         </div>
@@ -98,6 +109,23 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                       settings={view.pageNumbers}
                       pageCount={pages.length}
                       onChange={(patch) => view.setPageNumbers((current) => ({ ...current, ...patch }))}
+                    />
+                  ),
+                },
+                {
+                  key: "rulers",
+                  label: "Rulers & Guides",
+                  detail: view.rulerGuides.length ? String(view.rulerGuides.length) : null,
+                  checked: view.rulersOn,
+                  onToggle: view.setRulersOn,
+                  settings: (
+                    <RulersSettings
+                      unit={view.rulerUnit}
+                      onUnitChange={view.setRulerUnit}
+                      guides={view.rulerGuides}
+                      onClearGuides={() => view.setRulerGuides([])}
+                      snap={view.snapToGuidesOn}
+                      onSnapChange={view.setSnapToGuidesOn}
                     />
                   ),
                 },

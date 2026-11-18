@@ -32,6 +32,8 @@ function blockerFor(ann) {
   if (look.label && look.label.labelRadius > 0) return "rounded label";
   if (blendOf(ann) !== "normal") return "blend";
   if (COMPLEX_SCRIPT.test(ann.text)) return "script";
+  // Custom text spans in another font, bold or italic need a second embedded face (not done yet).
+  if ((ann.colorRuns || []).some((r) => r.fontFamily != null || r.fontSize != null || r.bold != null || r.italic != null)) return "mixed fonts";
   return null;
 }
 
@@ -61,6 +63,7 @@ const overlaps = (a, b) => a.x0 < b.x1 + 1 && a.x1 > b.x0 - 1 && a.y0 < b.y1 + 1
 const REASON_TEXT = {
   effect: "an effect (stroke, shadow, gradient, photo fill, ransom, curve, distress or stacked letters)",
   decoration: "a double or wavy line",
+  "mixed fonts": "custom text in another font, size, bold or italic",
   "small caps": "small caps",
   "rounded label": "a rounded label",
   blend: "a blend mode",
@@ -203,11 +206,12 @@ export function createVectorTextExporter(outDoc) {
     const thickness = Math.max(1, fontSize * 0.06) * toPt;
     for (const { line, baselineY, segments } of lineExtents) {
       if (!line) continue;
-      for (const { x0, x1, color } of segments) {
+      for (const { x0, x1, color, underline, strike } of segments) {
         const lineColor = colorOf(color);
         const rule = (dy) => outPage.drawLine({ start: { x: x0 * toPt, y: pdfY(baselineY + dy) }, end: { x: x1 * toPt, y: pdfY(baselineY + dy) }, thickness, color: lineColor, opacity });
-        if (ann.underline) rule(fontSize * 0.12);
-        if (look.strike === "line") rule(-fontSize * 0.3);
+        // A custom span may turn underline / strike-through on or off for its own letters.
+        if (underline != null ? underline : ann.underline) rule(fontSize * 0.12);
+        if (strike != null ? strike : look.strike === "line") rule(-fontSize * 0.3);
       }
     }
     if (angle) outPage.pushOperators(PDF.popGraphicsState());

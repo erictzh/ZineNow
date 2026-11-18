@@ -41,6 +41,11 @@ export const PARAGRAPH_CONTROLS = [
   { kind: "slider", prop: "spaceBefore", label: "Space before paragraph (pt)", min: 0, max: 144, fallback: 0 },
   { kind: "slider", prop: "spaceAfter", label: "Space after paragraph (pt)", min: 0, max: 144, fallback: 0 },
 ];
+// Where the text sits up and down in a fixed-height frame (set as buttons in the Text/Character section).
+export const VERTICAL_ALIGN_CONTROL = {
+  kind: "select", prop: "verticalAlign", label: "Vertical Align", fallback: "top",
+  options: [{ key: "top", label: "Top" }, { key: "center", label: "Centre" }, { key: "bottom", label: "Bottom" }],
+};
 // ---- Columns and frame. A text box with a set frame height (or several columns) is a text
 // frame: text fills the columns in order, and anything past the last column is hidden
 // (the box shows a red + marker). With several columns and no frame height, the columns balance.
@@ -48,10 +53,6 @@ export const COLUMN_CONTROLS = [
   { kind: "slider", prop: "columns", label: "Columns", min: 1, max: 6, fallback: 1 },
   { kind: "slider", prop: "columnGap", label: "Column gap (pt)", min: 0, max: 72, fallback: 12 },
   { kind: "slider", prop: "frameHeight", label: "Frame height (pt, 0 = fit the text)", min: 0, max: 1000, fallback: 0 },
-  {
-    kind: "select", prop: "verticalAlign", label: "Vertical align", fallback: "top", showIf: (v) => v.frameHeight > 0,
-    options: [{ key: "top", label: "Top" }, { key: "center", label: "Centre" }, { key: "bottom", label: "Bottom" }],
-  },
   {
     kind: "select", prop: "columnRule", label: "Column rule", fallback: "none", showIf: (v) => v.columns > 1,
     options: [{ key: "none", label: "None" }, { key: "on", label: "Line between columns" }],

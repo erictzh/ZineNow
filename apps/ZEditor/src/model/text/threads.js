@@ -13,7 +13,7 @@ import { normalizeRuns } from "./colorRuns.js";
 export const FRAME_PROPS = [
   "id", "type", "x", "y", "width", "angle", "frameHeight", "columns", "columnGap",
   "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth",
-  "hidden", "locked", "name", "groupId", "threadFrom",
+  "hidden", "locked", "name", "groupId", "groupName", "threadFrom",
 ];
 const FRAME_SET = new Set(FRAME_PROPS);
 
@@ -130,4 +130,28 @@ export function isThreaded(annotations, id) {
   const ann = annotations.find((a) => a.id === id);
   if (!ann) return false;
   return ann.threadFrom != null || annotations.some((a) => a.type === "text" && a.threadFrom === id);
+}
+
+// The editor's dotted thread lines: for each laid-out frame that flows on (render/pageText.js sets
+// `storyNextId`), a line from its out-port (bottom-right corner) to the next frame's in-port
+// (top-left corner). Corners follow each frame's rotation, which turns about the box's centre as CSS
+// does. `sizeOf(view)` gives a frame's { width, height } in editor px. Returns [{ id, x1, y1, x2, y2 }].
+export function threadLinks(views, sizeOf) {
+  const byId = new Map(views.map((v) => [v.id, v]));
+  const corner = (v, fx, fy) => {
+    const { width, height } = sizeOf(v);
+    const rad = ((Number(v.angle) || 0) * Math.PI) / 180;
+    const dx = (fx - 0.5) * width, dy = (fy - 0.5) * height;
+    return [v.x + width / 2 + dx * Math.cos(rad) - dy * Math.sin(rad), v.y + height / 2 + dx * Math.sin(rad) + dy * Math.cos(rad)];
+  };
+  const links = [];
+  for (const v of views) {
+    if (v.type !== "text" || v.storyNextId == null) continue;
+    const next = byId.get(v.storyNextId);
+    if (!next || v.hidden || next.hidden) continue;
+    const [x1, y1] = corner(v, 1, 1);
+    const [x2, y2] = corner(next, 0, 0);
+    links.push({ id: v.id, nextId: next.id, headId: v.storyHeadId, x1, y1, x2, y2 });
+  }
+  return links;
 }

@@ -8,7 +8,9 @@ import { PanelSection, resetPatch } from "../controls/PanelSection.jsx";
 
 // One section per effect, each with its own on/off checkbox. The edge
 // shapes (Rounded, Ellipse, Torn Edge, Scissor Cut) replace each other.
-export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS }) {
+// `before` (optional) is shown first inside the group, e.g. the text panel's Photo fill;
+// `beforeLabel` names it in the group's summary while it's on.
+export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
   const toggleEffect = (effect, on) => {
     const otherEdgesOff = effect.outline && on
       ? Object.fromEntries(effects.filter((e) => e.outline).map((e) => [e.key, false]))
@@ -18,9 +20,10 @@ export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS }) {
   // An ellipse already has its own outline, so the rectangle edge shapes
   // are left out; a rectangle has the Ellipse tool instead of the Ellipse edge.
   const available = effects.filter((effect) => !(effect.outline && isEllipse(ann)) && !(effect === ELLIPSE_EFFECT && ann.type === "rect"));
-  const active = available.filter((effect) => ann[effect.key]).map((effect) => effect.label);
+  const active = [...(beforeLabel ? [beforeLabel] : []), ...available.filter((effect) => ann[effect.key]).map((effect) => effect.label)];
   return (
-    <PanelSection id="effects" title="Effect" group summary={active.length > 0 ? active.join(", ") : undefined}>
+    <PanelSection id="effects" title="Effect" essential={Boolean(essential)} group summary={active.length > 0 ? active.join(", ") : undefined}>
+      {before}
       {available.map((effect) => {
         const hint = [effect.outline && "Only one edge shape can be on at a time.", effect.hint].filter(Boolean).join(" ");
         return (

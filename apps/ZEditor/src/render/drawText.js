@@ -128,6 +128,7 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
   // `translateY() rotate() scale()` on an inline-block letter.
   const withRun = (c, run, draw) => {
     c.save();
+    if (run.font) c.font = run.font; // a custom span's own font, bold or italic
     if (run.tilt !== undefined) {
       c.translate(run.cx + run.dx, run.cy + run.dy);
       c.rotate(run.tilt);
@@ -215,10 +216,13 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
     // Underline and strike-through take the colour of the letters they cross.
     lineExtents.forEach(({ line, baselineY, segments }) => {
       if (!line || curve) return; // straight lines would cut across an arc
-      segments.forEach(({ x0, x1, color }) => {
+      segments.forEach(({ x0, x1, color, underline, strike }) => {
         const decoColor = color || look.color;
-        if (ann.underline) drawTextDecorationLine(c, decoStyle, x0, x1, baselineY + fontSize * 0.12, fontSize, decoColor);
-        if (look.strike !== "none") drawTextDecorationLine(c, decoStyle, x0, x1, baselineY - fontSize * 0.3, fontSize, decoColor);
+        // A custom span may turn underline / strike-through on or off for its own letters.
+        const underlined = underline != null ? underline : ann.underline;
+        const struck = strike != null ? strike : look.strike !== "none";
+        if (underlined) drawTextDecorationLine(c, decoStyle, x0, x1, baselineY + fontSize * 0.12, fontSize, decoColor);
+        if (struck) drawTextDecorationLine(c, decoStyle, x0, x1, baselineY - fontSize * 0.3, fontSize, decoColor);
       });
     });
   };
