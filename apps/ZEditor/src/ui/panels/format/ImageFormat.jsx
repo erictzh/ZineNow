@@ -8,6 +8,7 @@ import { ControlList } from "../../controls/ControlList.jsx";
 import { SelectInput } from "../../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
+import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 
 export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage }) {
@@ -25,6 +26,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
         <SizeReadout ann={ann} />
         <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
+      <TextWrapSection ann={ann} patch={patch} />
       <PanelSection
         id="image.crop"
         title="Crop"

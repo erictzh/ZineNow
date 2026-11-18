@@ -1,7 +1,60 @@
 // Text layout: line wrapping (incl. CJK rules), shrink-to-fit, measuring a text box.
 
 import { AUTO_TEXT_MAX_WIDTH, TEXT_BORDER_PX } from "../model/text/textControls.js";
-import { caseText, stackText, textLook } from "../model/text/textLook.js";
+import { caseText, stackText, textLook, usesTypeset } from "../model/text/textLook.js";
+import { MIN_SLOT_EMS, freeSlot } from "../model/text/textWrap.js";
+import { composeText, wrapAtoms } from "./composer.js";
+import { currentHyphenator } from "./hyphenation.js";
+
+// Composes typeset text line by line into columns of height H (Infinity = one growing column),
+// with each line set in the widest stretch the wrap obstacles leave free. A line that has no
+// stretch at least `minSlot` wide moves down in quarter-line steps until it fits. Returns the
+// composer's lines with `col`, `top`, `x` (column offset included) and `hidden` set, plus
+// `overflow`, `bottom` (lowest line bottom) and `textHeight`.
+export function flowAroundObstacles(text, measure, composeOpts, { columns, columnWidth, columnGap, lineHeight, paraGap, padX, padY, wrap, scale, minSlot, H }) {
+  const stride = columnWidth + columnGap;
+  const step = Math.max(1, lineHeight / 4);
+  const pos = [];                                // pos[para][k]: where line k of a paragraph goes
+  let after = { col: 0, y: 0, started: false };  // where the next paragraph starts
+  const place = (p, k) => {
+    const arr = pos[p] || (pos[p] = []);
+    while (arr.length <= k) {
+      let col, top;
+      if (arr.length === 0) { col = after.col; top = after.y + (after.started && after.y > 0 ? paraGap : 0); }
+      else { const prev = arr[arr.length - 1]; col = prev.col; top = prev.top + lineHeight; }
+      let slot = null;
+      for (let guard = 0; guard < 4000; guard++) {
+        if (col >= columns) { top = H; break; }
+        if (top > 0 && top + lineHeight > H + 0.01) { col++; top = 0; continue; }
+        const left = padX + col * stride;
+        slot = freeSlot(wrap, left, left + columnWidth, padY + top, padY + top + lineHeight, minSlot, scale);
+        if (slot) break;
+        top += step;
+      }
+      if (!slot) slot = { x: 0, width: columnWidth };
+      arr.push({ col, top, x: slot.x, width: slot.width });
+    }
+    return arr[k];
+  };
+  const lines = composeText(text, measure, {
+    ...composeOpts,
+    slotFor: place,
+    onParagraph: (p, n) => { const last = place(p, n - 1); after = { col: last.col, y: last.top + lineHeight, started: true }; },
+  });
+  const seen = [];
+  let overflow = false, bottom = 0;
+  for (const l of lines) {
+    const k = seen[l.para] = (seen[l.para] == null ? 0 : seen[l.para] + 1);
+    const at = pos[l.para][k];
+    l.col = at.col;
+    l.top = at.top;
+    if (at.col >= columns) { l.hidden = true; overflow = true; l.x += (columns - 1) * stride; continue; }
+    l.x += at.col * stride;
+    bottom = Math.max(bottom, at.top + lineHeight);
+  }
+  const textHeight = Number.isFinite(H) ? H : Math.max(lineHeight, bottom);
+  return { lines, overflow, bottom, textHeight };
+}
 
 // `ann` with its font size reduced just enough to fit its Fit Height.
 function fitText(ann) {
@@ -14,30 +67,6 @@ function fitText(ann) {
     if (measureTextBox({ ...base, fontSize: mid }).height <= ann.fitHeight) lo = mid; else hi = mid;
   }
   return { ...base, fontSize: Math.floor(lo * 4) / 4 };
-}
-
-// Characters a browser may break a line between (each one on its own, no
-// spaces needed): Chinese, Japanese kana, Korean, and full-width forms.
-const WRAP_CJK_RE = /[⺀-〿぀-ヿ㄀-ㄯ㐀-䶿一-鿿가-힯豈-﫿︰-﹏＀-￯\u{20000}-\u{3FFFF}]/u;
-// Closing punctuation never starts a line, so it sticks to the character before it.
-const WRAP_NO_LINE_START = "，。、．：；！？）］｝】〕〉》」』”’…ー";
-
-// Splits one space-free word into pieces a line may break between: each
-// CJK character alone, any other run of characters kept whole.
-function wrapAtoms(word) {
-  const atoms = [];
-  let run = "";
-  for (const ch of Array.from(word)) {
-    if (WRAP_CJK_RE.test(ch)) {
-      if (run) { atoms.push(run); run = ""; }
-      if (atoms.length && WRAP_NO_LINE_START.includes(ch)) atoms[atoms.length - 1] += ch;
-      else atoms.push(ch);
-    } else {
-      run += ch;
-    }
-  }
-  if (run) atoms.push(run);
-  return atoms;
 }
 
 // Word-based wrapping (canvas has no auto-wrap) — also respects
@@ -97,6 +126,7 @@ export function layoutText(ctx, ann, scaleFactor) {
   const variant = look.textCase === "small" ? "small-caps " : "";
   ctx.font = `${styleStr} ${variant}${weight} ${fontSize}px '${family}', sans-serif`;
   if ("letterSpacing" in ctx) ctx.letterSpacing = `${look.letterSpacingPx * scaleFactor}px`;
+  if ("fontKerning" in ctx) ctx.fontKerning = look.kerning;
   ctx.textBaseline = "alphabetic";
 
   // CSS centres a line's font box in its line-height, so the baseline sits
@@ -124,20 +154,71 @@ export function layoutText(ctx, ann, scaleFactor) {
     ? (s) => Array.from(s).reduce((width, ch) => width + ctx.measureText(ch).width, 0)
     : (s) => ctx.measureText(s).width;
 
+  const typeset = usesTypeset(ann);
+  const para = look.paragraph;
+  const px = (v) => v * scaleFactor; // editor px -> canvas px
   let boxWidth;
   if (ann.width) {
     boxWidth = ann.width * scaleFactor;
+  } else if (typeset && para.columns > 1) {
+    boxWidth = maxWidthCap; // columns need a width to divide
   } else {
-    const naturalWidth = Math.max(10, ...shownText.split("\n").map(measure));
+    const indents = typeset ? px(para.indentLeft + Math.max(0, para.indentFirst) + para.indentRight) : 0;
+    const naturalWidth = Math.max(10, ...shownText.split("\n").map((s) => measure(s) + indents));
     boxWidth = Math.min(naturalWidth + padX * 2, maxWidthCap);
   }
   const innerWidth = Math.max(4, boxWidth - padX * 2);
-  const lines = wrapTextLines(ctx, shownText, innerWidth, measure);
-  // Where each wrapped line begins in the text (a wrap or newline swallows
-  // one character), so per-letter colours can be matched to lines.
+  // Columns split the width; the composer sets text one column wide.
+  const columns = typeset ? para.columns : 1;
+  const columnGap = px(para.columnGap);
+  const columnWidth = Math.max(4, (innerWidth - columnGap * (columns - 1)) / columns);
+  // Typeset boxes are broken into lines by the composer (justification, indents,
+  // hyphenation, the paragraph composer); everything else by the plain wrapper.
+  let typesetLines = null;
+  let lines;
   const lineStarts = [];
   let cursor = 0;
-  if (look.stacked) {
+  const composeOpts = {
+    width: columnWidth, align: ann.align || "left", lastLine: para.lastLine, composer: para.composer,
+    indentFirst: px(para.indentFirst), indentLeft: px(para.indentLeft), indentRight: px(para.indentRight),
+    hyphenate: para.hyphenate ? currentHyphenator() || undefined : undefined,
+    continued: Boolean(ann.storyContinues), // a threaded frame that starts mid-paragraph
+  };
+  // Text wrap: images and shapes the frame overlaps (render/pageText.js finds them) shape every line.
+  const wrap = typeset && ann.wrapObstacles && ann.wrapObstacles.length ? ann.wrapObstacles : null;
+  const lineHeightPx = fontSize * look.lineHeight;
+  const frameInnerPx = typeset && para.frameHeight > 0 ? Math.max(lineHeightPx, px(para.frameHeight) - padY * 2) : 0;
+  let flowed = null;
+  if (wrap) {
+    const flowArgs = { columns, columnWidth, columnGap, lineHeight: lineHeightPx, paraGap: px(para.spaceBefore + para.spaceAfter), padX, padY, wrap, scale: scaleFactor, minSlot: fontSize * MIN_SLOT_EMS };
+    if (frameInnerPx || columns === 1) {
+      flowed = flowAroundObstacles(shownText, measure, composeOpts, { ...flowArgs, H: frameInnerPx || Infinity });
+    } else {
+      // Balanced columns: the shortest column height that still fits all the text.
+      const single = flowAroundObstacles(shownText, measure, composeOpts, { ...flowArgs, columns: 1, H: Infinity });
+      let lo = lineHeightPx, hi = Math.max(lineHeightPx, single.bottom);
+      for (let k = 0; k < 12 && hi - lo > 0.5; k++) {
+        const mid = (lo + hi) / 2;
+        if (flowAroundObstacles(shownText, measure, composeOpts, { ...flowArgs, H: mid }).overflow) lo = mid; else hi = mid;
+      }
+      flowed = flowAroundObstacles(shownText, measure, composeOpts, { ...flowArgs, H: hi });
+      flowed.textHeight = hi;
+    }
+    typesetLines = flowed.lines;
+  } else if (typeset) {
+    typesetLines = composeText(shownText, measure, composeOpts);
+  }
+  if (typeset) {
+    lines = typesetLines.map((l) => shownText.slice(l.start, l.visibleEnd));
+    typesetLines.forEach((l) => lineStarts.push(l.start));
+  } else {
+    lines = wrapTextLines(ctx, shownText, innerWidth, measure);
+  }
+  // Where each wrapped line begins in the text (a wrap or newline swallows
+  // one character), so per-letter colours can be matched to lines.
+  if (typeset) {
+    // already known from the composer
+  } else if (look.stacked) {
     // One line per typed character, so line k starts where character k does.
     for (const ch of Array.from(ann.text || "")) { lineStarts.push(cursor); cursor += ch.length; }
   } else {
@@ -148,7 +229,72 @@ export function layoutText(ctx, ann, scaleFactor) {
       if (next === "\n" || next === " ") cursor += 1;
     }
   }
-  const textHeight = lines.length * lineHeight;
+  // Typeset lines carry their own top (paragraphs are separated by their space before/after).
+  let textHeight = lines.length * lineHeight;
+  let overflow = false;
+  if (flowed) {
+    textHeight = flowed.textHeight;
+    overflow = flowed.overflow;
+  } else if (typesetLines) {
+    const paraGap = px(para.spaceBefore + para.spaceAfter);
+    // Where each line would sit in one long column (a paragraph's space before/after goes between paragraphs).
+    const gapBefore = typesetLines.map((l, i) => (i > 0 && l.first ? paraGap : 0));
+    const seqTop = [];
+    let y = 0;
+    typesetLines.forEach((l, i) => { if (i > 0) y += lineHeight + gapBefore[i]; seqTop.push(y); });
+    const frameInner = para.frameHeight > 0 ? Math.max(lineHeight, px(para.frameHeight) - padY * 2) : 0;
+    if (columns === 1 && !frameInner) {
+      typesetLines.forEach((l, i) => { l.top = seqTop[i]; });
+      textHeight = (typesetLines.length ? y : 0) + lineHeight;
+    } else {
+      // Cut the long column into columns of height H: a line starts a new column when it no longer fits
+      // (no paragraph space is kept at the top of a column). Returns each line's column and the column starts.
+      const place = (H) => {
+        const colOf = [];
+        const starts = [0];
+        typesetLines.forEach((l, i) => {
+          const colStart = starts[starts.length - 1];
+          if (i > 0 && seqTop[i] + lineHeight - colStart > H + 0.01) starts.push(seqTop[i] - gapBefore[i]);
+          colOf.push(starts.length - 1);
+        });
+        return { colOf, starts };
+      };
+      let H = frameInner;
+      if (!H) {
+        // Balanced: the shortest column height that still fits every line in the columns available.
+        let lo = lineHeight, hi = Math.max(lineHeight, y + lineHeight);
+        for (let k = 0; k < 24 && hi - lo > 0.5; k++) {
+          const mid = (lo + hi) / 2;
+          if (place(mid).starts.length <= columns) hi = mid; else lo = mid;
+        }
+        H = hi;
+      }
+      const { colOf, starts } = place(H);
+      let tallest = 0;
+      typesetLines.forEach((l, i) => {
+        const c = colOf[i];
+        l.col = c;
+        if (c >= columns) { l.hidden = true; overflow = true; l.top = H; l.x += (columns - 1) * (columnWidth + columnGap); return; }
+        l.top = seqTop[i] - starts[c];
+        l.x += c * (columnWidth + columnGap);
+        tallest = Math.max(tallest, l.top + lineHeight);
+      });
+      textHeight = frameInner ? frameInner : Math.max(lineHeight, tallest);
+    }
+  }
+  if (typesetLines) {
+    // In a thread, the lines after this frame's share of the story belong to the next frame.
+    if (ann.storyLength != null) {
+      typesetLines.forEach((l) => { if (!l.hidden && l.start >= ann.storyLength) { l.hidden = true; overflow = true; } });
+    }
+    // Vertical alignment of a fixed-height frame: each column's lines move down together.
+    const vAlign = ann.verticalAlign === "center" ? 0.5 : ann.verticalAlign === "bottom" ? 1 : 0;
+    if (vAlign && frameInnerPx && !wrap) {
+      const bottoms = new Map();
+      typesetLines.forEach((l) => { if (!l.hidden) bottoms.set(l.col || 0, Math.max(bottoms.get(l.col || 0) || 0, l.top + lineHeight)); });
+      typesetLines.forEach((l) => { if (!l.hidden) l.top += Math.max(0, textHeight - bottoms.get(l.col || 0)) * vAlign; });
+    }
+  }
   // A curved line bows away from its straight position by up to `sag`
   // (a rainbow's ends drop, a smile's ends rise); the box makes room for it.
   // All lines share one circle, sized so the widest line spans the chosen arc.
@@ -159,7 +305,7 @@ export function layoutText(ctx, ann, scaleFactor) {
     curve = { radius, sign: look.curve.curveBend > 0 ? 1 : -1, sag: radius * (1 - Math.cos(widest / 2 / radius)) };
   }
   const boxHeight = textHeight + padY * 2 + (curve ? curve.sag : 0);
-  return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve };
+  return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, typesetLines, textHeight, boxHeight, measure, ascent, descent, curve, overflow, columns, columnWidth, columnStride: columnWidth + columnGap };
 }
 
 // How far a canvas-drawn text box paints past its own edges (editor px):
@@ -178,6 +324,13 @@ export function textCanvasMargin(ann, look) {
 // the text area inside its padding (where a gradient or photo fill sits).
 export function measureTextBox(ann) {
   const ctx = document.createElement("canvas").getContext("2d");
-  const { boxWidth, boxHeight, innerWidth, textHeight } = layoutText(ctx, ann, 1);
-  return { width: boxWidth, height: boxHeight, contentWidth: innerWidth, contentHeight: textHeight };
+  const { boxWidth, boxHeight, innerWidth, textHeight, overflow } = layoutText(ctx, ann, 1);
+  return { width: boxWidth, height: boxHeight, contentWidth: innerWidth, contentHeight: textHeight, overflow };
+}
+
+// The full layout of a text box in editor px (for the caret and hit-testing). The canvas
+// context stays alive inside it, so its `measure` keeps working.
+export function layoutTextBox(ann) {
+  const ctx = document.createElement("canvas").getContext("2d");
+  return layoutText(ctx, ann, 1);
 }

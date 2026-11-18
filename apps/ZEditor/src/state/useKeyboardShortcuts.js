@@ -1,6 +1,8 @@
 // Keyboard shortcuts and pasting images from the clipboard (the list shown to users is ui/dialogs/shortcuts.js).
 
 import { translatedAnnotation } from "../model/annotations.js";
+import { standaloneCopy } from "../model/text/threads.js";
+import { resolvePageText } from "../render/pageText.js";
 
 const { useRef, useEffect } = React;
 
@@ -37,7 +39,9 @@ export function useKeyboardShortcuts(app) {
         if (key === "g") { e.preventDefault(); if (e.shiftKey) edits.handleUngroupSelection(); else edits.handleGroupSelection(); return; }
         if (key === "c") {
           if (selectedIdx !== null && selectedAnnId !== null) {
-            const ann = (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
+            // A frame of a threaded story copies as a box of its own: its look and the words it shows.
+            const view = resolvePageText(pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
+            const ann = view && view.type === "text" ? standaloneCopy(view) : view;
             if (ann) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(ann)); }
           }
           return;

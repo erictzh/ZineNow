@@ -6,7 +6,7 @@ import { MAGIC_ERASER_DEFAULTS } from "../model/magicEraser.js";
 import { SOFT_ERASER_DEFAULTS } from "../model/softEraser.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../model/strokes.js";
 import { DEFAULT_FONT_OPTIONS } from "../model/text/textControls.js";
-import { TEXT_STYLES_STORAGE_KEY, captureTextStyle, readStoredTextStyles } from "../model/text/textStyles.js";
+import { TEXT_STYLES_STORAGE_KEY, captureTextStyle, readStoredTextStyles, resolvedStyleProps, styleDiff } from "../model/text/textStyles.js";
 
 const { useState, useEffect } = React;
 
@@ -18,11 +18,18 @@ export function useToolDefaults() {
   useEffect(() => {
     try { localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles)); } catch (err) { /* storage blocked: styles last for this visit */ }
   }, [textStyles]);
-  function handleSaveTextStyle(name, ann) {
-    setTextStyles((prev) => [...prev.filter((s) => s.name !== name), { name, props: captureTextStyle(ann) }]);
+  // A style "based on" another stores only what differs from it, so changes to the base flow through.
+  function handleSaveTextStyle(name, ann, basedOn) {
+    setTextStyles((prev) => {
+      const captured = captureTextStyle(ann);
+      const base = basedOn && basedOn !== name && prev.some((s) => s.name === basedOn) ? basedOn : null;
+      const style = base ? { name, basedOn: base, props: styleDiff(resolvedStyleProps(prev, base), captured) } : { name, props: captured };
+      return [...prev.filter((s) => s.name !== name), style];
+    });
   }
+  // Styles based on a deleted one keep their look: it's written into them.
   function handleDeleteTextStyle(name) {
-    setTextStyles((prev) => prev.filter((s) => s.name !== name));
+    setTextStyles((prev) => prev.filter((s) => s.name !== name).map((s) => (s.basedOn === name ? { name: s.name, props: resolvedStyleProps(prev, s.name) } : s)));
   }
   // Styles from an opened project join the ones already here (same name: the project's wins).
   function mergeTextStyles(incoming) {
@@ -50,7 +57,7 @@ export function useToolDefaults() {
   // existing one only changes that one annotation, same relationship
   // pen/highlighter defaults already have to their own strokes.
   const [textFontFamily, setTextFontFamily] = useState(DEFAULT_FONT_OPTIONS[0]);
-  const [textFontSize, setTextFontSize] = useState(16);
+  const [textFontSize, setTextFontSize] = useState(13.2); // 12 pt: the page is shown at 1.1 px per pt
   const [textBold, setTextBold] = useState(false);
   const [textItalic, setTextItalic] = useState(false);
   const [textUnderline, setTextUnderline] = useState(false);
@@ -60,7 +67,7 @@ export function useToolDefaults() {
 
   return {
     fontOptions, setFontOptions, addFontFamilies,
-    textStyles, handleSaveTextStyle, handleDeleteTextStyle, mergeTextStyles,
+    textStyles, setTextStyles, handleSaveTextStyle, handleDeleteTextStyle, mergeTextStyles,
     penColor, setPenColor, penWidth, setPenWidth, penTaper, setPenTaper,
     eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser,
     highlighterColor, setHighlighterColor, highlighterWidth, setHighlighterWidth, highlighterTaper, setHighlighterTaper,

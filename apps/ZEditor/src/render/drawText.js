@@ -8,6 +8,7 @@ import { photoPlacement, textGradientView } from "../model/text/textLook.js";
 import { rotateAboutCenter } from "./boxEffects.js";
 import { loadImageElement } from "./drawImage.js";
 import { makeLinearGradient, rectGradientStops } from "./gradients.js";
+import { columnRules, layoutPlainRuns } from "./textRuns.js";
 import { layoutText } from "./textLayout.js";
 
 // An underline or strike-through line at height `y`. "double" and "wavy"
@@ -39,7 +40,8 @@ function drawTextDecorationLine(ctx, style, x0, x1, y, fontSize, color) {
 export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
   const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
   ctx.save();
-  const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve } = layoutText(ctx, ann, scaleFactor);
+  const layout = layoutText(ctx, ann, scaleFactor);
+  const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve } = layout;
 
   rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
 
@@ -48,6 +50,11 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
     ctx.beginPath();
     ctx.roundRect(x, y, boxWidth, boxHeight, look.label.labelRadius * scaleFactor);
     ctx.fill();
+  }
+  // Column rules: a line down the middle of each gap between columns.
+  for (const rule of columnRules(layout, ann)) {
+    ctx.fillStyle = rule.color;
+    ctx.fillRect(rule.x - rule.width / 2, rule.y0, rule.width, rule.y1 - rule.y0);
   }
 
   const fill = look.gradient
@@ -59,76 +66,64 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
     c.font = ctx.font;
     c.textBaseline = "alphabetic";
     if ("letterSpacing" in c) c.letterSpacing = ctx.letterSpacing;
+    if ("fontKerning" in c) c.fontKerning = ctx.fontKerning;
   };
 
   // Everything to draw as text, as "runs": a whole line normally, or a
   // single letter for ransom lettering (with its own tilt/shift/size and
   // maybe a paper tile). Positions are worked out once and shared by
   // every pass below (tiles, stroke, fill, the fill layer).
-  const runs = [];
-  const lineExtents = [];
+  let runs = [];
+  let lineExtents = [];
   let letterIndex = 0;
-  lines.forEach((line, i) => {
-    const lineWidth = measure(line);
-    let lineX = x + padX;
-    if (ann.align === "center" || look.stacked) lineX = x + (boxWidth - lineWidth) / 2;
-    else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
-    // A smile's ends rise, so its lines start lower to keep the arc inside the box.
-    const lineTop = y + padY + (curve && curve.sign < 0 ? curve.sag : 0) + i * lineHeight;
-    const baselineY = lineTop + baselineOffset;
-    const lineStart = lineStarts[i];
-    if (!look.ransom && !curve) {
-      // One run per stretch of a single colour (a whole line when no
-      // letters are recoloured).
-      const lineRuns = (ann.colorRuns || [])
-        .filter((r) => r.end > lineStart && r.start < lineStart + line.length)
-        .map((r) => ({ ...r, start: Math.max(r.start, lineStart) - lineStart, end: Math.min(r.end, lineStart + line.length) - lineStart }));
-      const segments = [];
-      let offset = 0;
-      for (const seg of colorSegments(line, lineRuns)) {
-        const segX = lineX + (offset ? measure(line.slice(0, offset)) : 0);
-        offset += seg.text.length;
-        const segEnd = lineX + measure(line.slice(0, offset));
-        runs.push({ text: seg.text, x: segX, baselineY, color: seg.color });
-        segments.push({ x0: segX, x1: segEnd, color: seg.color });
-      }
-      lineExtents.push({ line, lineX, lineWidth, baselineY, segments });
-      return;
-    }
-    lineExtents.push({ line, lineX, lineWidth, baselineY, segments: [{ x0: lineX, x1: lineX + lineWidth, color: null }] });
-    let cursor = lineX;
-    let charIndex = 0;
-    for (const ch of Array.from(line)) {
-      const advance = ctx.measureText(ch).width;
-      const k = letterIndex++;
-      const run = { text: ch, x: cursor, baselineY, color: colorAtIndex(ann.colorRuns, lineStart + charIndex) };
-      charIndex += ch.length;
-      if (ch !== " ") {
-        run.cx = cursor + advance / 2;
-        run.cy = lineTop + lineHeight / 2;
-        run.advance = advance;
-        run.tilt = 0; run.dx = 0; run.dy = 0; run.scale = 1;
-        if (look.ransom) {
-          const seed = look.ransom.ransomVariation;
-          run.tilt = (seededNoise(k * 4, seed) - 0.5) * 2 * look.ransom.ransomTilt * Math.PI / 180;
-          run.dy = (seededNoise(k * 4 + 1, seed) - 0.5) * 2 * fontSize * look.ransom.ransomShift / 100;
-          run.scale = 1 + (seededNoise(k * 4 + 2, seed) - 0.5) * 2 * look.ransom.ransomSize / 100;
-          if (look.ransom.ransomTiles === "paper") {
-            run.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
+  if (!look.ransom && !curve) {
+    ({ runs, lineExtents } = layoutPlainRuns(layout, ann));
+  } else {
+    // Ransom and curve place every letter on its own.
+    lines.forEach((line, i) => {
+      const lineWidth = measure(line);
+      let lineX = x + padX;
+      if (ann.align === "center" || look.stacked) lineX = x + (boxWidth - lineWidth) / 2;
+      else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
+      // A smile's ends rise, so its lines start lower to keep the arc inside the box.
+      const lineTop = y + padY + (curve && curve.sign < 0 ? curve.sag : 0) + i * lineHeight;
+      const baselineY = lineTop + baselineOffset;
+      const lineStart = lineStarts[i];
+      lineExtents.push({ line, lineX, lineWidth, baselineY, segments: [{ x0: lineX, x1: lineX + lineWidth, color: null }] });
+      let cursor = lineX;
+      let charIndex = 0;
+      for (const ch of Array.from(line)) {
+        const advance = ctx.measureText(ch).width;
+        const k = letterIndex++;
+        const run = { text: ch, x: cursor, baselineY, color: colorAtIndex(ann.colorRuns, lineStart + charIndex) };
+        charIndex += ch.length;
+        if (ch !== " ") {
+          run.cx = cursor + advance / 2;
+          run.cy = lineTop + lineHeight / 2;
+          run.advance = advance;
+          run.tilt = 0; run.dx = 0; run.dy = 0; run.scale = 1;
+          if (look.ransom) {
+            const seed = look.ransom.ransomVariation;
+            run.tilt = (seededNoise(k * 4, seed) - 0.5) * 2 * look.ransom.ransomTilt * Math.PI / 180;
+            run.dy = (seededNoise(k * 4 + 1, seed) - 0.5) * 2 * fontSize * look.ransom.ransomShift / 100;
+            run.scale = 1 + (seededNoise(k * 4 + 2, seed) - 0.5) * 2 * look.ransom.ransomSize / 100;
+            if (look.ransom.ransomTiles === "paper") {
+              run.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
+            }
+          }
+          if (curve) {
+            // The letter's middle sits on the arc, turned to follow it.
+            const phi = (run.cx - (lineX + lineWidth / 2)) / curve.radius;
+            run.tilt += curve.sign * phi;
+            run.dx += curve.radius * Math.sin(phi) - phi * curve.radius;
+            run.dy += curve.sign * curve.radius * (1 - Math.cos(phi));
           }
         }
-        if (curve) {
-          // The letter's middle sits on the arc, turned to follow it.
-          const phi = (run.cx - (lineX + lineWidth / 2)) / curve.radius;
-          run.tilt += curve.sign * phi;
-          run.dx += curve.radius * Math.sin(phi) - phi * curve.radius;
-          run.dy += curve.sign * curve.radius * (1 - Math.cos(phi));
-        }
+        runs.push(run);
+        cursor += advance;
       }
-      runs.push(run);
-      cursor += advance;
-    }
-  });
+    });
+  }
   // Draws one run under its own turn about its centre, like a CSS
   // `translateY() rotate() scale()` on an inline-block letter.
   const withRun = (c, run, draw) => {

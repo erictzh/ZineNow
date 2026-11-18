@@ -305,6 +305,50 @@
 .ze-style-chip-delete { flex: 0 0 auto; }
 .ze-style-row { flex-wrap: nowrap; }
 .ze-format-row .ze-style-name { flex: 1 1 0; min-width: 0; width: auto; text-align: left; }
+/* Red plus at the bottom-right corner of a text frame whose text doesn't all fit. */
+.ze-text-overflow {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 14px;
+    height: 14px;
+    line-height: 13px;
+    text-align: center;
+    font: 700 13px/13px var(--ui-font);
+    color: #fff;
+    background: #d92d20;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 2;
+}
+/* Thread ports. The out-port (bottom-right) is clickable: it makes a new frame the text continues into.
+   Grey = nothing waiting; red = text that doesn't fit; the arrow = already flows on into the next frame. */
+.ze-text-port {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    font: 700 12px/13px var(--ui-font);
+    text-align: center;
+    border-radius: 3px;
+    z-index: 3;
+    box-sizing: border-box;
+    border: 1px solid #8a8f98;
+    background: #fff;
+    color: #5b616b;
+    cursor: pointer;
+}
+.ze-text-port-out { right: -8px; bottom: -8px; }
+.ze-text-port-in { left: -8px; top: -8px; cursor: default; }
+.ze-text-port.is-overflow { background: #d92d20; border-color: #d92d20; color: #fff; }
+.ze-text-port.is-linked { cursor: default; }
+/* A frame in a threaded story shows its edges even when empty (editor only, never exported). */
+.ze-ann-text.is-story-frame:not(.is-selected) { outline: 1px dashed rgba(90, 100, 120, 0.45); outline-offset: -1px; }
+/* Typeset (justified, indented...) text keeps its caret and selection on top of the canvas. */
+.ze-typeset-surface { position: absolute; z-index: 1; cursor: text; touch-action: none; }
+.ze-typeset-selection { position: absolute; background: rgba(59, 130, 246, 0.35); pointer-events: none; }
+.ze-typeset-caret { position: absolute; width: 1.5px; margin-left: -0.75px; pointer-events: none; animation: ze-caret-blink 1.1s steps(1) infinite; }
+@keyframes ze-caret-blink { 0%, 55% { opacity: 1; } 55.01%, 100% { opacity: 0; } }
+.ze-typeset-input { opacity: 0; pointer-events: none; caret-color: transparent; }
 .ze-ann-text-input {
     position: absolute;
     inset: 0;

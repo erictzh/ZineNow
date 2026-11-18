@@ -1,6 +1,7 @@
 // The editor: creates the state hooks (state/) and lays out the screen. No logic of its own.
 
 import { pageNumberSpec } from "../model/pageNumbers.js";
+import { resolvePageText } from "../render/pageText.js";
 import { useAnnotationEdits } from "../state/useAnnotationEdits.js";
 import { useDialogs } from "../state/useDialogs.js";
 import { useDocumentFiles } from "../state/useDocumentFiles.js";
@@ -60,6 +61,12 @@ export function App() {
       <Topbar doc={doc} history={uiHistory} view={view} edits={edits} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
       {status.errorMsg && <div className="ze-error-bar">{status.errorMsg}</div>}
+      {status.notice && (
+        <div className="ze-notice-bar">
+          <span>{status.notice}</span>
+          <button type="button" className="ze-notice-close" aria-label="Dismiss" onClick={() => status.setNotice(null)}>×</button>
+        </div>
+      )}
 
       <div className="ze-body">
         <Sidebar
@@ -107,6 +114,7 @@ export function App() {
                 editingAnnId={editingAnnId}
                 onStartTextEdit={selection.setEditingAnnId}
                 onFinishTextEdit={edits.finishTextEdit}
+                onLinkNextFrame={edits.frameActions.linkNextFrame}
                 onSelectAnnotations={selection.handleSelectAnnotations}
                 onMoveAnnotations={edits.handleMoveAnnotations}
                 onRotateAnnotations={edits.handleRotateAnnotations}
@@ -131,7 +139,8 @@ export function App() {
           <FormatPanel
             key={selectedAnnId} // so a half-typed field never carries over to the next item
             tool={tool}
-            selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+            selectedAnn={resolvePageText(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+            frameActions={edits.frameActions}
             onUpdate={edits.handleUpdateAnnotation}
             croppingAnnId={croppingAnnId}
             onToggleCrop={selection.handleToggleCrop}
@@ -139,6 +148,7 @@ export function App() {
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}
             toolDefaults={toolDefaults}
+            styleActions={edits.styleActions}
             magicErase={magic}
           />
         )}

@@ -1,5 +1,6 @@
 // The resolved look of a text box: case, stacking, spacing, gradient and photo placement.
 
+import { MAIN_SCALE } from "../../constants.js";
 import { controlValues, effectSettings } from "../controls.js";
 import { STROKE_EFFECT, imageShadowOffset } from "../imageEffects.js";
 import { CASE_CONTROL, CURVE_EFFECT, DISTRESS_EFFECT, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, RANSOM_EFFECT, STRIKE_CONTROL, TEXT_FILL_ALPHA_CONTROL, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, TEXT_PHOTO_CONTROLS, VERTICAL_CONTROL } from "./textControls.js";
@@ -18,7 +19,15 @@ export function stackText(text) {
 // These looks are drawn with the export renderer in the live editor too
 // (see AnnotationText), because per-letter jitter and knocked-out marks
 // have no clean CSS equivalent; one renderer means no editor/export drift.
-export const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length));
+// Paragraph typography (justified text, hyphenation, indents, paragraph spacing,
+// the optimal line breaker) is laid out by the composer, in the live box as in
+// Export. Ransom, curve and stacked text keep their own layout and ignore it.
+export const usesTypeset = (ann) => !(ann.ransom || ann.curve || ann.vertical === "stacked")
+  && Boolean((ann.wrapObstacles && ann.wrapObstacles.length) || ann.storyHeadId != null || ann.align === "justify" || ann.hyphenate === "english" || ann.columns > 1 || ann.frameHeight > 0 || ann.indentFirst || ann.indentLeft || ann.indentRight || ann.spaceBefore || ann.spaceAfter || ann.composer === "paragraph");
+export const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length) || usesTypeset(ann));
+// Point sizes the panel works in become editor px (the page is shown at MAIN_SCALE px per pt).
+export const ptToPx = (pt) => (pt || 0) * MAIN_SCALE;
+export const pxToPt = (px) => px / MAIN_SCALE;
 
 // Everything about how a text box looks beyond its font, read once so the
 // live box and Export agree. Sizes here are in editor px; Export scales them.
@@ -36,7 +45,20 @@ export function textLook(ann) {
     ransom: ann.ransom ? effectSettings(ann, RANSOM_EFFECT) : null,
     curve: ann.curve ? effectSettings(ann, CURVE_EFFECT) : null,
     distress: ann.distress ? effectSettings(ann, DISTRESS_EFFECT) : null,
-    lineHeight: controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
+    // Leading set in points wins over the percentage; either way this is the ratio of line height to font size.
+    lineHeight: ann.leadingPt > 0 ? ptToPx(ann.leadingPt) / fontSize : controlValues(ann, [LINE_SPACING_CONTROL]).lineSpacing / 100,
+    kerning: ann.kerning === "none" ? "none" : "auto",
+    paragraph: {
+      indentFirst: ptToPx(ann.indentFirst), indentLeft: ptToPx(ann.indentLeft), indentRight: ptToPx(ann.indentRight),
+      spaceBefore: ptToPx(ann.spaceBefore), spaceAfter: ptToPx(ann.spaceAfter),
+      lastLine: ann.justifyLast || "left",
+      // Justified and hyphenated text defaults to the paragraph composer, as in InDesign.
+      composer: ann.composer === "single" || ann.composer === "paragraph" ? ann.composer : ann.align === "justify" || ann.hyphenate === "english" ? "paragraph" : "single",
+      hyphenate: ann.hyphenate === "english",
+      columns: Math.max(1, Math.min(6, Math.round(ann.columns || 1))),
+      columnGap: ptToPx(ann.columnGap != null ? ann.columnGap : 12),
+      frameHeight: ptToPx(ann.frameHeight),
+    },
     letterSpacingPx: fontSize * spacing / 100,
     strike: controlValues(ann, [STRIKE_CONTROL]).strike,
     textCase: controlValues(ann, [CASE_CONTROL]).textCase,

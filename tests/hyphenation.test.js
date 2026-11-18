@@ -1,0 +1,26 @@
+// English hyphenation (render/hyphenation.js) inside the composer.
+import { composeText } from "../apps/ZEditor/src/render/composer.js";
+import { currentHyphenator, englishHyphenator } from "../apps/ZEditor/src/render/hyphenation.js";
+let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log("FAIL:", m); } else console.log("ok  :", m); };
+const measure = (s) => s.length * 10;
+const h = currentHyphenator();
+ok(typeof h === "function", "English hyphenator is installed by default");
+ok(JSON.stringify(englishHyphenator("typography")) === '["ty","pog","ra","phy"]', "typography -> ty-pog-ra-phy " + JSON.stringify(englishHyphenator("typography")));
+ok(englishHyphenator("cat") === null && englishHyphenator("table") !== null, "short words are left alone");
+ok(englishHyphenator("NASA") === null && englishHyphenator("INTERNATIONAL") === null, "ALL-CAPS words are left alone");
+const text = "Typography is the art and technique of arranging type to make written language legible, readable and appealing when displayed. (Internationalization) is extraordinary, truly.";
+const base = { width: 140, align: "justify", composer: "paragraph" };
+const plain = composeText(text, measure, base);
+const hyph = composeText(text, measure, { ...base, hyphenate: h });
+const looseness = (ls) => ls.slice(0, -1).reduce((worst, l) => { const words = l.pieces.length; if (words < 2) return worst; const gap = (l.width - l.pieces.reduce((s, p) => s + p.width, 0)) / (words - 1); return Math.max(worst, Math.abs(gap - 10)); }, 0);
+ok(hyph.some((l) => l.hyphenated), "hyphenation produces hyphenated line ends: " + hyph.filter((l) => l.hyphenated).map((l) => l.pieces.at(-1).text).join(" "));
+ok(looseness(hyph) <= looseness(plain), `worst word gap is no worse with hyphenation (${looseness(hyph).toFixed(1)} vs ${looseness(plain).toFixed(1)})`);
+ok(hyph.length <= plain.length, `no more lines with hyphenation (${hyph.length} vs ${plain.length})`);
+ok(hyph.every((l) => l.natural <= 140 + 1e-6), "every line fits");
+const rejoined = hyph.map((l) => l.pieces.map((p) => p.text).join(" ")).join(" ").replace(/-\s/g, "");
+ok(rejoined === text, "text rejoins exactly (punctuation preserved)");
+let consecutive = 0; hyph.forEach((l, i) => { if (l.hyphenated && i > 0 && hyph[i - 1].hyphenated) consecutive++; });
+ok(consecutive <= 1, `few consecutive hyphenated lines (${consecutive})`);
+console.log("\nplain:\n  " + plain.map((l) => l.pieces.map((p) => p.text).join(" ")).join("\n  "));
+console.log("hyphenated:\n  " + hyph.map((l) => l.pieces.map((p) => p.text).join(" ")).join("\n  "));
+console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0);
