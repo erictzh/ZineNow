@@ -697,6 +697,111 @@
     )));
   }
 
+  // apps/Markdown-to-PDF/src/ui/PanelResizer.jsx
+  var { useLayoutEffect, useRef } = React;
+  var STORAGE_KEY = "md2pdf.sidebarWidth";
+  var MIN_PANEL = 300;
+  var MIN_PREVIEW = 320;
+  var KEY_STEP = 16;
+  function PanelResizer({ bodyRef }) {
+    const handleRef = useRef(null);
+    const widthRef = useRef(null);
+    const clamp = (px) => {
+      const body = bodyRef.current;
+      const most = Math.max(MIN_PANEL, (body ? body.getBoundingClientRect().width : window.innerWidth) - MIN_PREVIEW);
+      return Math.round(Math.min(most, Math.max(MIN_PANEL, px)));
+    };
+    const apply = (px, save) => {
+      const root2 = document.documentElement;
+      if (px == null) {
+        widthRef.current = null;
+        root2.style.removeProperty("--md2ebook-sidebar-width");
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {
+        }
+      } else {
+        widthRef.current = clamp(px);
+        root2.style.setProperty("--md2ebook-sidebar-width", widthRef.current + "px");
+        if (save) {
+          try {
+            localStorage.setItem(STORAGE_KEY, String(widthRef.current));
+          } catch (e) {
+          }
+        }
+      }
+    };
+    const panelWidth = () => {
+      const aside = handleRef.current && handleRef.current.parentElement;
+      return aside ? aside.getBoundingClientRect().width : MIN_PANEL;
+    };
+    useLayoutEffect(() => {
+      let saved = null;
+      try {
+        saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+      } catch (e) {
+      }
+      if (saved > 0) apply(saved, false);
+      const onResize = () => {
+        if (widthRef.current != null && clamp(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+      };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, []);
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.classList.add("is-dragging");
+      document.body.style.userSelect = "none";
+    };
+    const onPointerMove = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      apply(e.clientX - bodyRef.current.getBoundingClientRect().left, false);
+    };
+    const endDrag = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      e.currentTarget.classList.remove("is-dragging");
+      document.body.style.userSelect = "";
+      if (widthRef.current != null) {
+        try {
+          localStorage.setItem(STORAGE_KEY, String(widthRef.current));
+        } catch (err) {
+        }
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        apply(panelWidth() + KEY_STEP, true);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        apply(panelWidth() - KEY_STEP, true);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        apply(null);
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        ref: handleRef,
+        className: "md2ebook-resizer md2ebook-no-print",
+        role: "separator",
+        "aria-orientation": "vertical",
+        "aria-label": "Resize the editor panel",
+        tabIndex: 0,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: endDrag,
+        onPointerCancel: endDrag,
+        onDoubleClick: () => apply(null),
+        onKeyDown
+      }
+    );
+  }
+
   // apps/Markdown-to-PDF/src/document/previewDocument.js
   function renderHtmlDocument(markdownText, config) {
     var parts = buildDocumentParts(markdownText, config);
@@ -726,12 +831,12 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/PreviewCanvas.jsx
-  var { useState, useEffect, useRef, useMemo } = React;
+  var { useState, useEffect, useRef: useRef2, useMemo } = React;
   function PreviewCanvas({ markdown, config, onTocPages }) {
-    const onTocPagesRef = useRef(onTocPages);
+    const onTocPagesRef = useRef2(onTocPages);
     onTocPagesRef.current = onTocPages;
-    const outerRef = useRef(null);
-    const iframeRef = useRef(null);
+    const outerRef = useRef2(null);
+    const iframeRef = useRef2(null);
     const [scale, setScale] = useState(1);
     const [contentHeightPx, setContentHeightPx] = useState(0);
     const [pageCount, setPageCount] = useState(null);
@@ -1309,11 +1414,11 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/editor/EditorTab.jsx
-  var { useRef: useRef2 } = React;
+  var { useRef: useRef3 } = React;
   var DOCUMENT_PICKER_ID = "md2ebook-document";
   function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spaceLines, setSpaceLines }) {
-    const editorTextareaRef = useRef2(null);
-    const documentFileInputRef = useRef2(null);
+    const editorTextareaRef = useRef3(null);
+    const documentFileInputRef = useRef3(null);
     const errorText = (err) => err && err.message ? err.message : String(err);
     function insertLine(line) {
       const el = editorTextareaRef.current;
@@ -1542,11 +1647,11 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/typography/ConfigFiles.jsx
-  var { useRef: useRef3, useMemo: useMemo2 } = React;
+  var { useRef: useRef4, useMemo: useMemo2 } = React;
   var CONFIG_PICKER_ID = "md2ebook-config";
   var CONFIG_PICKER_TYPES = { description: "JSON config file", accept: { "application/json": [".json"] } };
   function ConfigFiles({ config, applyConfig, configFilename, setConfigFilename, configStatus, setConfigStatus }) {
-    const configFileInputRef = useRef3(null);
+    const configFileInputRef = useRef4(null);
     const appFolderHint = useMemo2(appConfigFolderHint, []);
     async function loadConfigFromFile(file) {
       try {
@@ -1709,13 +1814,13 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/FontCombobox.jsx
-  var { useState: useState2, useEffect: useEffect2, useRef: useRef4, useMemo: useMemo3 } = React;
+  var { useState: useState2, useEffect: useEffect2, useRef: useRef5, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState2(value || "");
     const [open, setOpen] = useState2(false);
     const [status, setStatus] = useState2(null);
     const [loadingFonts, setLoadingFonts] = useState2(false);
-    const containerRef = useRef4(null);
+    const containerRef = useRef5(null);
     useEffect2(() => {
       setQuery(value || "");
     }, [value]);
@@ -1853,13 +1958,13 @@
 
   // apps/Markdown-to-PDF/src/ui/Sidebar.jsx
   var { useState: useState3 } = React;
-  function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions }) {
+  function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
     const [docStatus, setDocStatus] = useState3(null);
     const [spaceLines, setSpaceLines] = useState3("5");
     const [configFilename, setConfigFilename] = useState3("config.json");
     const [configStatus, setConfigStatus] = useState3(null);
     const sectionProps = { config, updateConfig };
-    return /* @__PURE__ */ React.createElement("aside", { className: "md2ebook-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "tabbar" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("editor"), className: "tab" + (activeTab === "editor" ? " active" : "") }, "Editor"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("typography"), className: "tab" + (activeTab === "typography" ? " active" : "") }, "Typography")), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-sidebar-content" }, activeTab === "editor" ? /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("aside", { className: "md2ebook-sidebar" }, resizer, /* @__PURE__ */ React.createElement("div", { className: "tabbar" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("editor"), className: "tab" + (activeTab === "editor" ? " active" : "") }, "Editor"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("typography"), className: "tab" + (activeTab === "typography" ? " active" : "") }, "Typography")), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-sidebar-content" }, activeTab === "editor" ? /* @__PURE__ */ React.createElement(
       EditorTab,
       {
         markdown,
@@ -1883,7 +1988,7 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect3, useState: useState4, useRef: useRef5, useCallback } = React;
+  var { useEffect: useEffect3, useState: useState4, useRef: useRef6, useCallback } = React;
   function App() {
     const [markdown, setMarkdown] = useState4(SAMPLE_MARKDOWN);
     const [config, setConfig] = useState4(INITIAL_CONFIG);
@@ -1892,12 +1997,13 @@
     const [isExporting, setIsExporting] = useState4(false);
     const [exportError, setExportError] = useState4(null);
     const [isSendingToArranger, setIsSendingToArranger] = useState4(false);
-    const markdownRef = useRef5(markdown);
+    const bodyRef = useRef6(null);
+    const markdownRef = useRef6(markdown);
     markdownRef.current = markdown;
     useEffect3(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
-    const tocPagesRef = useRef5(null);
+    const tocPagesRef = useRef6(null);
     const handleTocPages = useCallback((map) => {
       tocPagesRef.current = map;
     }, []);
@@ -2048,7 +2154,7 @@
         className: "text-red-400 hover:text-red-300 font-medium ml-4 bg-transparent border-0 p-0"
       },
       "Dismiss"
-    )) : null, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-body" }, /* @__PURE__ */ React.createElement(
+    )) : null, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
       Sidebar,
       {
         activeTab,
@@ -2059,7 +2165,8 @@
         updateConfig,
         applyConfig,
         fontOptions,
-        setFontOptions
+        setFontOptions,
+        resizer: /* @__PURE__ */ React.createElement(PanelResizer, { bodyRef })
       }
     ), /* @__PURE__ */ React.createElement(PreviewCanvas, { markdown, config, onTocPages: handleTocPages })));
   }

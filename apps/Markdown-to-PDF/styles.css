@@ -102,8 +102,28 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative; /* for the drag handle on its right edge */
   border-right: 1px solid var(--md2ebook-border);
   background: var(--ui-bg-alt);
+}
+
+/* The draggable line between the panel and the preview (src/ui/PanelResizer.jsx). It sits just
+   outside the panel's edge so it never covers the panel's own scrollbar. */
+.md2ebook-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -6px;
+  width: 7px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+}
+.md2ebook-resizer:hover,
+.md2ebook-resizer:focus-visible,
+.md2ebook-resizer.is-dragging {
+  background: color-mix(in srgb, var(--ui-accent) 55%, transparent);
+  outline: none;
 }
 
 .md2ebook-sidebar-content {

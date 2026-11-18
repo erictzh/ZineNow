@@ -10396,7 +10396,7 @@
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
   var { useRef: useRef10, useEffect: useEffect9 } = React;
-  function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
+  function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
     const halftoneCanvasRef = useRef10(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
@@ -10495,7 +10495,7 @@
       "div",
       {
         "data-ann-id": ann.id,
-        className: "ze-ann-image" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : ""),
+        className: "ze-ann-image" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : ""),
         style: boxOuterStyle(ann),
         onMouseDown: (e) => {
           if (tool === "select") onPress(e, ann);
@@ -11120,6 +11120,7 @@
     showHandles,
     isEditing,
     isCropping,
+    isEraseTarget,
     onPress,
     onUpdate,
     onToggleCrop,
@@ -11136,6 +11137,7 @@
           isSelected,
           showHandles,
           isCropping,
+          isEraseTarget,
           onPress,
           onUpdate,
           onToggleCrop,
@@ -11425,17 +11427,22 @@
   }
 
   // apps/ZEditor/src/ui/canvas/softEraseGesture.js
-  function startSoftEraseGesture(e, { annotations, softEraser, layerEl, toPagePoint, onEraseImagePixels }) {
+  function topImageAt(annotations, p) {
+    for (let i = annotations.length - 1; i >= 0; i--) {
+      const a = annotations[i];
+      if (a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside) return a;
+    }
+    return null;
+  }
+  function startSoftEraseGesture(e, { annotations, softEraser, layerEl, toPagePoint, onEraseImagePixels, onlyId = null }) {
     e.preventDefault();
     const { size, softness, strength } = softEraser;
     const dabAlpha = 1 - Math.pow(1 - strength / 100, 1 / SOFT_ERASER_DABS_PER_RADIUS);
     const session = { ann: null, canvas: null, ctx: null, img: null, last: null, pending: [], touched: false, done: false };
     function pickImage(p) {
-      for (let i = annotations.length - 1; i >= 0; i--) {
-        const a = annotations[i];
-        if (a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside) return a;
-      }
-      return null;
+      if (onlyId === null) return topImageAt(annotations, p);
+      const a = annotations.find((x) => x.id === onlyId);
+      return a && a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside ? a : null;
     }
     function dab(p) {
       const hit = imagePixelAt(session.ann, p.x, p.y);
@@ -11634,6 +11641,9 @@
     const measuring = tool === "measure";
     const pageKey = page && page.key;
     useEffect12(() => setMeasure(null), [measuring, pageKey]);
+    const [eraseTargetId, setEraseTargetId] = useState16(null);
+    useEffect12(() => setEraseTargetId(null), [softErasing, pageKey]);
+    const eraseTarget = eraseTargetId !== null && annotations.some((a) => a.id === eraseTargetId && a.type === "image" && !a.hidden && !a.locked) ? eraseTargetId : null;
     function overlayPoint(e) {
       const rect = canvasRef.current.getBoundingClientRect();
       return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
@@ -11695,8 +11705,14 @@
         startDrawing(e);
         return;
       }
+      if (softErasing && e.shiftKey) {
+        e.preventDefault();
+        const hit = topImageAt(annotations, overlayPoint(e));
+        setEraseTargetId(hit && hit.id !== eraseTarget ? hit.id : null);
+        return;
+      }
       if (softErasing) {
-        startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels });
+        startSoftEraseGesture(e, { annotations, softEraser, layerEl: layerRef.current, toPagePoint: overlayPoint, onEraseImagePixels, onlyId: eraseTarget });
         return;
       }
       if (magicErasing) {
@@ -11870,6 +11886,7 @@
           showHandles: showHandlesFor(a),
           isEditing: a.id === editingAnnId,
           isCropping: a.id === croppingAnnId,
+          isEraseTarget: a.id === eraseTarget,
           onPress: pressAnnotation,
           onUpdate: onUpdateAnnotation,
           onToggleCrop,
@@ -13269,7 +13286,7 @@
       0,
       100,
       "Pulls the colour of half-erased edge pixels toward the colour next to them, removing the leftover tint of the old background."
-    ), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setMagicEraser(MAGIC_ERASER_DEFAULTS) }, "Reset to defaults")), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
+    ), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setMagicEraser(MAGIC_ERASER_DEFAULTS) }, "Reset to defaults")), eraserMode === "soft" && /* @__PURE__ */ React.createElement(PanelSection, { id: "eraser.brush", title: "Brush", defaultOpen: true, hint: "Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. Shift+click an image to aim the brush at that image only (Shift+click it again, or anywhere else, to let go). To erase text or a shape, use its Rasterize to Image button first." }, slider("size", "Size", 4, 300, "px"), slider("softness", "Softness", 0, 100, "%"), slider("strength", "Strength", 5, 100, "%")));
   }
 
   // apps/ZEditor/src/ui/panels/FormatPanel.jsx
@@ -13565,6 +13582,106 @@
     );
   }
 
+  // apps/ZEditor/src/ui/PanelResizer.jsx
+  var { useLayoutEffect: useLayoutEffect4, useRef: useRef19 } = React;
+  var MIN_CANVAS = 360;
+  var KEY_STEP = 16;
+  function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
+    const widthRef = useRef19(null);
+    const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+    const clamp2 = (px) => {
+      const body = bodyRef.current;
+      const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
+      return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
+    };
+    const apply = (px, save) => {
+      const root = document.documentElement;
+      if (px == null) {
+        widthRef.current = null;
+        root.style.removeProperty(cssVar);
+        try {
+          localStorage.removeItem(storageKey);
+        } catch (e) {
+        }
+      } else {
+        widthRef.current = clamp2(px);
+        root.style.setProperty(cssVar, widthRef.current + "px");
+        if (save) {
+          try {
+            localStorage.setItem(storageKey, String(widthRef.current));
+          } catch (e) {
+          }
+        }
+      }
+    };
+    useLayoutEffect4(() => {
+      let saved = null;
+      try {
+        saved = parseInt(localStorage.getItem(storageKey), 10);
+      } catch (e) {
+      }
+      if (saved > 0) apply(saved, false);
+      const onResize = () => {
+        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+      };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, []);
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.classList.add("is-dragging");
+      document.body.style.userSelect = "none";
+    };
+    const onPointerMove = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      const box = bodyRef.current.getBoundingClientRect();
+      apply(side === "left" ? e.clientX - box.left : box.right - e.clientX, false);
+    };
+    const endDrag = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      e.currentTarget.classList.remove("is-dragging");
+      document.body.style.userSelect = "";
+      if (widthRef.current != null) {
+        try {
+          localStorage.setItem(storageKey, String(widthRef.current));
+        } catch (err) {
+        }
+      }
+    };
+    const onKeyDown = (e) => {
+      const grow = side === "left" ? "ArrowRight" : "ArrowLeft", shrink = side === "left" ? "ArrowLeft" : "ArrowRight";
+      if (e.key === grow) {
+        e.preventDefault();
+        apply(cssPx(cssVar) + KEY_STEP, true);
+      } else if (e.key === shrink) {
+        e.preventDefault();
+        apply(cssPx(cssVar) - KEY_STEP, true);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        apply(null);
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-panel-resizer ze-panel-resizer-" + side,
+        role: "separator",
+        "aria-orientation": "vertical",
+        "aria-label": label,
+        tabIndex: 0,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: endDrag,
+        onPointerCancel: endDrag,
+        onDoubleClick: () => apply(null),
+        onKeyDown
+      }
+    );
+  }
+
   // apps/ZEditor/src/ui/sidebar/PageGap.jsx
   function PageGap({ onInsert }) {
     return /* @__PURE__ */ React.createElement(
@@ -13627,14 +13744,14 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState28, useRef: useRef19, useEffect: useEffect19 } = React;
+  var { useState: useState28, useRef: useRef20, useEffect: useEffect19 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef19(null);
-    const bodyRef = useRef19(null);
-    const scrollDirRef = useRef19(0);
-    const rafRef = useRef19(null);
+    const dragIndexRef = useRef20(null);
+    const bodyRef = useRef20(null);
+    const scrollDirRef = useRef20(0);
+    const rafRef = useRef20(null);
     const [dragOverInfo, setDragOverInfo] = useState28(null);
     function startAutoScroll() {
       if (rafRef.current) return;
@@ -13844,10 +13961,10 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState30, useRef: useRef20, useEffect: useEffect20, useLayoutEffect: useLayoutEffect4 } = React;
+  var { useState: useState30, useRef: useRef21, useEffect: useEffect20, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
     const [open, setOpen] = useState30(false);
-    const containerRef = useRef20(null);
+    const containerRef = useRef21(null);
     useEffect20(() => {
       if (!open) return;
       function handleClickOutside(e) {
@@ -13863,8 +13980,8 @@
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef20(null);
-    useLayoutEffect4(() => {
+    const menuRef = useRef21(null);
+    useLayoutEffect5(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
       const fit = () => {
@@ -14112,6 +14229,7 @@
   function App() {
     const status = useStatus();
     const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
+    const bodyRef = React.useRef(null);
     const doc = useDocumentState();
     const history = useHistory(doc);
     const view = useViewSettings();
@@ -14136,7 +14254,31 @@
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
     const t = toolDefaults;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
+      PanelResizer,
+      {
+        bodyRef,
+        side: "left",
+        cssVar: "--ze-sidebar-width",
+        otherVar: "--ze-format-panel-width",
+        storageKey: "zeditor.sidebarWidth",
+        min: 170,
+        max: 480,
+        label: "Resize the Pages panel"
+      }
+    ), selectedPage && /* @__PURE__ */ React.createElement(
+      PanelResizer,
+      {
+        bodyRef,
+        side: "right",
+        cssVar: "--ze-format-panel-width",
+        otherVar: "--ze-sidebar-width",
+        storageKey: "zeditor.formatPanelWidth",
+        min: 220,
+        max: 520,
+        label: "Resize the Format panel"
+      }
+    ), /* @__PURE__ */ React.createElement(
       Sidebar,
       {
         pages,

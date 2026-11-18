@@ -5,25 +5,33 @@ import { loadImageElement } from "../../render/drawImage.js";
 import { imagePixelAt, stampSoftErase } from "../../render/softErase.js";
 import { trackPointerDrag } from "../pointer.js";
 
+// The topmost image (not hidden or locked) under a page point, or null.
+export function topImageAt(annotations, p) {
+  for (let i = annotations.length - 1; i >= 0; i--) {
+    const a = annotations[i];
+    if (a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside) return a;
+  }
+  return null;
+}
+
 // A soft-eraser swipe works on one image: the topmost one under the
-// pointer when the swipe first reaches an image. The image is copied
+// pointer when the swipe first reaches an image, or, when `onlyId` is given
+// (Shift+click picked a target), only that image, even beneath another. The image is copied
 // to a canvas, erased there (shown in place of the image while
 // dragging), and saved back as one undo step on release.
 //
 // `toPagePoint(event)` turns a mouse event into page coordinates;
 // `layerEl` is the annotation layer element (to find the image on screen).
-export function startSoftEraseGesture(e, { annotations, softEraser, layerEl, toPagePoint, onEraseImagePixels }) {
+export function startSoftEraseGesture(e, { annotations, softEraser, layerEl, toPagePoint, onEraseImagePixels, onlyId = null }) {
   e.preventDefault();
   const { size, softness, strength } = softEraser;
   const dabAlpha = 1 - Math.pow(1 - strength / 100, 1 / SOFT_ERASER_DABS_PER_RADIUS);
   const session = { ann: null, canvas: null, ctx: null, img: null, last: null, pending: [], touched: false, done: false };
 
   function pickImage(p) {
-    for (let i = annotations.length - 1; i >= 0; i--) {
-      const a = annotations[i];
-      if (a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside) return a;
-    }
-    return null;
+    if (onlyId === null) return topImageAt(annotations, p);
+    const a = annotations.find((x) => x.id === onlyId);
+    return a && a.type === "image" && !a.hidden && !a.locked && imagePixelAt(a, p.x, p.y).inside ? a : null;
   }
 
   function dab(p) {

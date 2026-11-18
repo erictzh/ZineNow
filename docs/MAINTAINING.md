@@ -127,6 +127,7 @@ above it in this list:
 | Erasers (stroke, soft, magic) | settings: `model/softEraser.js`, `model/magicEraser.js`; pixels: `render/softErase.js`, `render/magicErase.js`; mouse: `ui/canvas/softEraseGesture.js`, `ui/canvas/magicEraseGesture.js`; magic preview session (Apply/Cancel): `state/useMagicErase.js`; panel: `EraserToolPanel` in `ui/panels/format/ToolPanels.jsx` |
 | What Export PDF produces | `io/pdfExport.js` → `render/pageRender.js` (draws a whole page) |
 | Export page(s) as JPG / transparent PNG | `io/imageExport.js` (one page at the same 200 DPI), wired in `state/useExport.js` (the menu offers "this page"; `handleExportAllImages` does every page but has no menu item at the moment: the folder picker where the browser has one, else one download per page; file names from `pageImageFileName` in `model/documentTitle.js`); the transparent PNG is `renderPageToCanvas(..., transparent)` in `render/pageRender.js` (no white paper; a blank page skips the page filter, since several filters paint a white sheet) |
+| Resizing the side panels by dragging the line next to them | ZEditor: `ui/PanelResizer.jsx` (the Pages and Format panels' widths are the CSS variables in `styles/base.css`; the lines are in `styles/layout.css`). ZineArranger: `src/panelResize.js`. Md to PDF: `src/ui/PanelResizer.jsx`. Each remembers its width in localStorage and resets on double-click |
 | The `.znow` project format | `io/projectFile.js` |
 | Opening / inserting PDFs | `io/pdfImport.js`, `state/useDocumentFiles.js` |
 | Undo/redo | `state/useHistory.js` |

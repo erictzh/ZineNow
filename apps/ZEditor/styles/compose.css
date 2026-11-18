@@ -144,6 +144,16 @@
     pointer-events: none;
     z-index: 10; /* stays visible when the item sits under another layer */
 }
+/* The image the soft eraser is aimed at (Shift+click): a solid frame, unlike the dashed selection. */
+.ze-ann-image.is-erase-target::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: calc(2px / var(--ze-zoom, 1)) solid var(--ui-accent);
+    box-shadow: inset 0 0 0 calc(1px / var(--ze-zoom, 1)) #fff;
+    pointer-events: none;
+    z-index: 10;
+}
 .ze-ann-rect-fill { width: 100%; height: 100%; }
 .is-locked { pointer-events: none; }
 .ze-ann-image img, .ze-ann-image canvas {

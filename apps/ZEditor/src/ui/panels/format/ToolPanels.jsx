@@ -178,7 +178,7 @@ export function EraserToolPanel({ toolDefaults, magicErase }) {
         </PanelSection>
       )}
       {eraserMode === "soft" && (
-        <PanelSection id="eraser.brush" title="Brush" defaultOpen hint="Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. To erase text or a shape, use its Rasterize to Image button first.">
+        <PanelSection id="eraser.brush" title="Brush" defaultOpen hint="Drag over an image to fade it to transparent with a feathered edge. Each swipe is its own Ctrl+Z step. Shift+click an image to aim the brush at that image only (Shift+click it again, or anywhere else, to let go). To erase text or a shape, use its Rasterize to Image button first.">
           {slider("size", "Size", 4, 300, "px")}
           {slider("softness", "Softness", 0, 100, "%")}
           {slider("strength", "Strength", 5, 100, "%")}
