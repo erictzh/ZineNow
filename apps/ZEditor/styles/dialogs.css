@@ -79,3 +79,58 @@
     background-color: var(--ui-bg);
 }
 
+
+/* ---- Welcome pop-up (ui/dialogs/WelcomeDialog.jsx): shown on landing with nothing open. ---- */
+.ze-modal--welcome {
+    position: relative;
+    width: 540px;
+    padding: 44px 36px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.ze-welcome-title {
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: #fff;
+    letter-spacing: -0.01em;
+    text-align: center;
+}
+.ze-welcome-lead { margin: 0 0 14px; font-size: 13px; color: var(--ui-fg-muted); text-align: center; }
+.ze-welcome-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    min-width: unset;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ui-fg-muted);
+    font-size: 20px;
+    line-height: 1;
+}
+.ze-welcome-close:hover { color: var(--ui-fg); background: none; }
+.ze-welcome-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    width: 100%;
+    padding: 18px 20px;
+    text-align: left;
+    color: var(--ui-fg);
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-sizing: border-box;
+}
+button.ze-welcome-option { cursor: pointer; }
+button.ze-welcome-option:hover { border-color: var(--ui-accent); background: var(--ui-bg); }
+.ze-welcome-option > svg { flex: 0 0 auto; margin-top: 1px; color: var(--ui-accent); }
+.ze-welcome-option-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.ze-welcome-option-text strong { font-size: 14px; font-weight: 700; }
+.ze-welcome-option-text > span { font-size: 12px; color: var(--ui-fg-muted); line-height: 1.4; }
+.ze-welcome-open-row { display: flex; gap: 8px; margin-top: 8px; }
+.ze-welcome-open-row .ze-format-select { flex: 1 1 auto; min-width: 0; }

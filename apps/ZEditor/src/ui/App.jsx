@@ -25,6 +25,7 @@ import { ConfirmDialog } from "./dialogs/ConfirmDialog.jsx";
 import { InsertPdfDialog } from "./dialogs/InsertPdfDialog.jsx";
 import { NewDocumentDialog } from "./dialogs/NewDocumentDialog.jsx";
 import { ShortcutsDialog } from "./dialogs/ShortcutsDialog.jsx";
+import { WelcomeDialog } from "./dialogs/WelcomeDialog.jsx";
 import { FormatPanel } from "./panels/FormatPanel.jsx";
 import { LayersPanel } from "./panels/LayersPanel.jsx";
 import { Sidebar } from "./sidebar/Sidebar.jsx";
@@ -34,6 +35,7 @@ import { Topbar } from "./topbar/Topbar.jsx";
 export function App() {
   // Order matters only in that each hook gets the ones it builds on.
   const status = useStatus();
+  const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
   const doc = useDocumentState();
   const history = useHistory(doc);
   const view = useViewSettings();
@@ -202,6 +204,15 @@ export function App() {
         onCreate={files.handleCreateBlankDocument}
         onOpenPdf={dialogs.newDocFromProject ? files.handleNewDocumentOpenPdf : undefined}
         onCancel={() => dialogs.setNewDocOpen(false)}
+      />
+      {/* Shown on landing while nothing is open; it steps aside for the New Document dialog and
+          comes back if that's cancelled. Closing it leaves the empty editor with its own buttons. */}
+      <WelcomeDialog
+        open={project.startupChecked && pages.length === 0 && !welcomeDismissed && !dialogs.newDocOpen && !status.loading}
+        onNewDocument={() => dialogs.openNewDocDialog(false)}
+        onOpenProject={dialogs.handleLoadProjectClick}
+        onOpenPdf={files.handleLoadClick}
+        onClose={() => setWelcomeDismissed(true)}
       />
       <ShortcutsDialog open={dialogs.shortcutsOpen} onClose={() => dialogs.setShortcutsOpen(false)} />
       <ConfirmDialog

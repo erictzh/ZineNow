@@ -101,6 +101,8 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   // Reload the app (to pick up changed code) and bring this project back as it was: it's parked in
   // the browser (io/reloadSnapshot.js) and reopened on start. Undo history isn't kept.
   const [reloading, setReloading] = useState(false);
+  // True once start-up knows whether a reload brought work back (so the welcome pop-up doesn't flash first).
+  const [startupChecked, setStartupChecked] = useState(false);
   async function reloadKeepingWork() {
     if (reloading) return;
     setReloading(true);
@@ -129,10 +131,13 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
 
   useEffect(() => {
     let cancelled = false;
-    takeReloadSnapshot().then((snapshot) => {
-      if (cancelled || !snapshot) return;
-      const file = { name: (snapshot.title || "Untitled") + ".znow", text: async () => snapshot.json };
-      handleLoadProjectFile(file, snapshot.fileHandle || null, snapshot.selectedIdx);
+    takeReloadSnapshot().then(async (snapshot) => {
+      if (cancelled) return;
+      if (snapshot) {
+        const file = { name: (snapshot.title || "Untitled") + ".znow", text: async () => snapshot.json };
+        await handleLoadProjectFile(file, snapshot.fileHandle || null, snapshot.selectedIdx);
+      }
+      setStartupChecked(true);
     });
     return () => { cancelled = true; };
   }, []);
@@ -165,7 +170,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
 
   return {
     docTitle, setDocTitle, projectFile, justSaved, savingProject, projectInputRef,
-    reloading, reloadKeepingWork,
+    reloading, reloadKeepingWork, startupChecked,
     startNewDocument, handleSaveProject, openProjectPicker, handleProjectInputChange, handleLoadProjectFile,
   };
 }

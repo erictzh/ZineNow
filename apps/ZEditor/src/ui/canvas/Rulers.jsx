@@ -7,7 +7,7 @@
 // Editor only: never exported.
 
 import { MAIN_SCALE } from "../../constants.js";
-import { formatInUnit, rulerTicks, snapToUnit } from "../../model/rulers.js";
+import { dragGain, formatInUnit, rulerTicks, snapToUnit } from "../../model/rulers.js";
 import { trackPointerDrag } from "../pointer.js";
 
 const { useEffect, useLayoutEffect, useRef, useState } = React;
@@ -83,18 +83,17 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
     const pane = paneRef.current;
     if (!pane) return undefined;
     let frame = 0;
-    const measure = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const art = pane.querySelector(".ze-artboard-zoom");
-        const p = pane.getBoundingClientRect();
-        if (!art) { setGeom(null); return; }
-        const a = art.getBoundingClientRect();
-        const k = MAIN_SCALE * zoom;
-        setGeom({ left: a.left - p.left, top: a.top - p.top, width: pane.clientWidth, height: pane.clientHeight, pageW: a.width / k, pageH: a.height / k });
-      });
+    const measureNow = () => {
+      const art = pane.querySelector(".ze-artboard-zoom");
+      const p = pane.getBoundingClientRect();
+      if (!art) { setGeom(null); return; }
+      const a = art.getBoundingClientRect();
+      const k = MAIN_SCALE * zoom;
+      setGeom({ left: a.left - p.left, top: a.top - p.top, width: pane.clientWidth, height: pane.clientHeight, pageW: a.width / k, pageH: a.height / k });
     };
-    measure();
+    // Scrolling and resizing fire often: those re-measure once per frame.
+    const measure = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measureNow); };
+    measureNow();
     pane.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
     const ro = new ResizeObserver(measure);
@@ -134,18 +133,32 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
     e.preventDefault();
     e.stopPropagation();
     const pane = paneRef.current;
-    const posAt = (ev) => {
+    const coord = (ev) => (guide.axis === "x" ? ev.clientX : ev.clientY);
+    const cursorPos = (ev) => {
       const art = pane.querySelector(".ze-artboard-zoom");
       if (!art) return 0;
       const a = art.getBoundingClientRect();
-      const raw = guide.axis === "x" ? (ev.clientX - a.left) / pxPerPt : (ev.clientY - a.top) / pxPerPt;
-      return ev.shiftKey ? snapToUnit(raw, unit) : Math.round(raw * 100) / 100;
+      return (coord(ev) - (guide.axis === "x" ? a.left : a.top)) / pxPerPt;
     };
+    // Precision dragging: the guide moves by the pointer's movement times a gain that drops
+    // when the pointer slows down (model/rulers.js `dragGain`), so fine steps are easy. A new
+    // guide starts under the pointer; an existing one starts where it is.
+    let raw = guide.isNew ? cursorPos(e) : guide.pos;
+    let last = { c: coord(e), t: e.timeStamp };
+    let speed = 0; // px per ms, lightly smoothed (mostly the latest move, so it reacts at once)
+    const follow = (ev) => {
+      const c = coord(ev), dt = Math.max(1, ev.timeStamp - last.t);
+      speed = speed * 0.3 + (Math.abs(c - last.c) / dt) * 0.7;
+      raw += ((c - last.c) * dragGain(speed)) / pxPerPt;
+      last = { c, t: ev.timeStamp };
+    };
+    const posAt = (ev) => (ev.shiftKey ? snapToUnit(raw, unit) : Math.round(raw * 100) / 100);
     const outside = (ev) => {
       const p = pane.getBoundingClientRect();
       return guide.axis === "x" ? ev.clientX < p.left || ev.clientX > p.right : ev.clientY < p.top || ev.clientY > p.bottom;
     };
     const update = (ev) => {
+      if (ev !== e) follow(ev);
       const p = pane.getBoundingClientRect();
       setDrag({ ...guide, pos: posAt(ev), removing: outside(ev), x: ev.clientX - p.left, y: ev.clientY - p.top });
     };

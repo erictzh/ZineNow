@@ -9629,6 +9629,7 @@
       if (file) handleLoadProjectFile(file);
     }
     const [reloading, setReloading] = useState8(false);
+    const [startupChecked, setStartupChecked] = useState8(false);
     async function reloadKeepingWork() {
       if (reloading) return;
       setReloading(true);
@@ -9657,10 +9658,13 @@
     }, []);
     useEffect5(() => {
       let cancelled = false;
-      takeReloadSnapshot().then((snapshot) => {
-        if (cancelled || !snapshot) return;
-        const file = { name: (snapshot.title || "Untitled") + ".znow", text: async () => snapshot.json };
-        handleLoadProjectFile(file, snapshot.fileHandle || null, snapshot.selectedIdx);
+      takeReloadSnapshot().then(async (snapshot) => {
+        if (cancelled) return;
+        if (snapshot) {
+          const file = { name: (snapshot.title || "Untitled") + ".znow", text: async () => snapshot.json };
+          await handleLoadProjectFile(file, snapshot.fileHandle || null, snapshot.selectedIdx);
+        }
+        setStartupChecked(true);
       });
       return () => {
         cancelled = true;
@@ -9699,6 +9703,7 @@
       projectInputRef,
       reloading,
       reloadKeepingWork,
+      startupChecked,
       startNewDocument,
       handleSaveProject,
       openProjectPicker,
@@ -9944,15 +9949,17 @@
   }
 
   // apps/ZEditor/src/model/guides.js
+  var mmText = (inches) => String(Math.round(inches * 254) / 10);
+  var sized = (key, name, widthIn, heightIn) => ({ key, label: `${name} (${mmText(widthIn)}mm × ${mmText(heightIn)}mm)`, widthIn, heightIn });
   var GUIDE_FORMAT_PRESETS = [
     { key: "match", label: "Match Page Size" },
-    { key: "half-letter", label: "Half Letter (5.5 × 8.5 in)", widthIn: 5.5, heightIn: 8.5 },
-    { key: "digest", label: "Digest (5.5 × 8.25 in)", widthIn: 5.5, heightIn: 8.25 },
-    { key: "a5", label: "A5 (5.83 × 8.27 in)", widthIn: 5.83, heightIn: 8.27 },
-    { key: "a6", label: "A6 (4.13 × 5.83 in)", widthIn: 4.13, heightIn: 5.83 },
-    { key: "quarter-letter", label: "Quarter Letter (4.25 × 5.5 in)", widthIn: 4.25, heightIn: 5.5 },
-    { key: "letter", label: "US Letter (8.5 × 11 in)", widthIn: 8.5, heightIn: 11 },
-    { key: "a4", label: "A4 (8.27 × 11.69 in)", widthIn: 8.27, heightIn: 11.69 }
+    sized("half-letter", "Half Letter", 5.5, 8.5),
+    sized("digest", "Digest", 5.5, 8.25),
+    sized("a5", "A5", 148 / 25.4, 210 / 25.4),
+    sized("a6", "A6", 105 / 25.4, 148 / 25.4),
+    sized("quarter-letter", "Quarter Letter", 4.25, 5.5),
+    sized("letter", "US Letter", 8.5, 11),
+    sized("a4", "A4", 210 / 25.4, 297 / 25.4)
   ];
   var DEFAULT_GUIDE_MARGIN_IN = 0.25;
   var DEFAULT_GUIDE_BLEED_IN = 0.125;
@@ -9976,6 +9983,10 @@
   function snapToUnit(pt, unit) {
     const step = unit === "in" ? 1 / 8 : unit === "cm" ? 0.1 : 1;
     return unitToPt(Math.round(ptToUnit(pt, unit) / step) * step, unit);
+  }
+  function dragGain(speedPxPerMs) {
+    const FAST = 0.5, SLOW_GAIN = 0.1;
+    return Math.max(SLOW_GAIN, Math.min(1, speedPxPerMs / FAST));
   }
   function rulerTicks(fromPt, toPt, pxPerPt, unit, minLabelPx = 48) {
     const perPt = unitInfo(unit).perPt;
@@ -11767,21 +11778,22 @@
       const pane = paneRef.current;
       if (!pane) return void 0;
       let frame = 0;
+      const measureNow = () => {
+        const art2 = pane.querySelector(".ze-artboard-zoom");
+        const p = pane.getBoundingClientRect();
+        if (!art2) {
+          setGeom(null);
+          return;
+        }
+        const a = art2.getBoundingClientRect();
+        const k = MAIN_SCALE * zoom;
+        setGeom({ left: a.left - p.left, top: a.top - p.top, width: pane.clientWidth, height: pane.clientHeight, pageW: a.width / k, pageH: a.height / k });
+      };
       const measure = () => {
         cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => {
-          const art2 = pane.querySelector(".ze-artboard-zoom");
-          const p = pane.getBoundingClientRect();
-          if (!art2) {
-            setGeom(null);
-            return;
-          }
-          const a = art2.getBoundingClientRect();
-          const k = MAIN_SCALE * zoom;
-          setGeom({ left: a.left - p.left, top: a.top - p.top, width: pane.clientWidth, height: pane.clientHeight, pageW: a.width / k, pageH: a.height / k });
-        });
+        frame = requestAnimationFrame(measureNow);
       };
-      measure();
+      measureNow();
       pane.addEventListener("scroll", measure, { passive: true });
       window.addEventListener("resize", measure);
       const ro = new ResizeObserver(measure);
@@ -11820,18 +11832,29 @@
       e.preventDefault();
       e.stopPropagation();
       const pane = paneRef.current;
-      const posAt = (ev) => {
+      const coord = (ev) => guide.axis === "x" ? ev.clientX : ev.clientY;
+      const cursorPos = (ev) => {
         const art = pane.querySelector(".ze-artboard-zoom");
         if (!art) return 0;
         const a = art.getBoundingClientRect();
-        const raw = guide.axis === "x" ? (ev.clientX - a.left) / pxPerPt : (ev.clientY - a.top) / pxPerPt;
-        return ev.shiftKey ? snapToUnit(raw, unit) : Math.round(raw * 100) / 100;
+        return (coord(ev) - (guide.axis === "x" ? a.left : a.top)) / pxPerPt;
       };
+      let raw = guide.isNew ? cursorPos(e) : guide.pos;
+      let last = { c: coord(e), t: e.timeStamp };
+      let speed = 0;
+      const follow = (ev) => {
+        const c = coord(ev), dt = Math.max(1, ev.timeStamp - last.t);
+        speed = speed * 0.3 + Math.abs(c - last.c) / dt * 0.7;
+        raw += (c - last.c) * dragGain(speed) / pxPerPt;
+        last = { c, t: ev.timeStamp };
+      };
+      const posAt = (ev) => ev.shiftKey ? snapToUnit(raw, unit) : Math.round(raw * 100) / 100;
       const outside = (ev) => {
         const p = pane.getBoundingClientRect();
         return guide.axis === "x" ? ev.clientX < p.left || ev.clientX > p.right : ev.clientY < p.top || ev.clientY > p.bottom;
       };
       const update = (ev) => {
+        if (ev !== e) follow(ev);
         const p = pane.getBoundingClientRect();
         setDrag({ ...guide, pos: posAt(ev), removing: outside(ev), x: ev.clientX - p.left, y: ev.clientY - p.top });
       };
@@ -11909,19 +11932,61 @@
 
   // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
   var { useState: useState18 } = React;
+  var MM_PER_INCH = 25.4;
+  var ptToMm = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
+  var mmToPt = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
+  var formatMm = (pts) => String(Math.round(ptToMm(pts) * 10) / 10);
+  var presetLabel = (p) => `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`;
+  var CUSTOM_MIN_MM = 20;
+  var CUSTOM_MAX_MM = 1200;
+  var clampMm = (text, fallback) => {
+    const v = Number(text);
+    return Number.isFinite(v) && v > 0 ? Math.max(CUSTOM_MIN_MM, Math.min(CUSTOM_MAX_MM, v)) : fallback;
+  };
   function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
     const [presetKey, setPresetKey] = useState18("a5");
     const [orientation, setOrientation] = useState18("portrait");
     const [pageCountText, setPageCountText] = useState18("1");
+    const [customWText, setCustomWText] = useState18("148");
+    const [customHText, setCustomHText] = useState18("210");
     if (!open) return null;
-    const preset = NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
+    const custom = presetKey === "custom";
+    const customW = clampMm(customWText, 148), customH = clampMm(customHText, 210);
+    const preset = custom ? { width: mmToPt(customW), height: mmToPt(customH) } : NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
     const landscape = orientation === "landscape";
     const width = landscape ? preset.height : preset.width;
     const height = landscape ? preset.width : preset.height;
     const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
-    const mm = (pts) => Math.round(pts / POINTS_PER_INCH * 25.4);
     const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => setPresetKey(e.target.value) }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Orientation"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : ""), onClick: () => setOrientation("portrait") }, "Portrait"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : ""), onClick: () => setOrientation("landscape") }, "Landscape"))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Pages"), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => setPresetKey(e.target.value) }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, presetLabel(p))), /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)…"))), custom && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Custom size (mm)"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "number",
+        className: "ze-format-number",
+        min: CUSTOM_MIN_MM,
+        max: CUSTOM_MAX_MM,
+        step: "0.5",
+        "aria-label": "Width (mm)",
+        title: "Width (mm)",
+        value: customWText,
+        onChange: (e) => setCustomWText(e.target.value),
+        onBlur: () => setCustomWText(String(customW))
+      }
+    ), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "×"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "number",
+        className: "ze-format-number",
+        min: CUSTOM_MIN_MM,
+        max: CUSTOM_MAX_MM,
+        step: "0.5",
+        "aria-label": "Height (mm)",
+        title: "Height (mm)",
+        value: customHText,
+        onChange: (e) => setCustomHText(e.target.value),
+        onBlur: () => setCustomHText(String(customH))
+      }
+    ), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "mm"))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Orientation"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : ""), onClick: () => setOrientation("portrait") }, "Portrait"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : ""), onClick: () => setOrientation("landscape") }, "Landscape"))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Pages"), /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "number",
@@ -11932,7 +11997,7 @@
         onChange: (e) => setPageCountText(e.target.value),
         onBlur: () => setPageCountText(String(pageCount))
       }
-    )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, mm(width), " × ", mm(height), " mm (", inches(width), " × ", inches(height), " in). You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width, height, pageCount }) }, "Create"))));
+    )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, formatMm(width), " × ", formatMm(height), " mm (", inches(width), " × ", inches(height), " in).", custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : "", " You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width, height, pageCount }) }, "Create"))));
   }
 
   // apps/ZEditor/src/ui/dialogs/shortcuts.js
@@ -11996,10 +12061,31 @@
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onClose }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-modal--shortcuts", role: "dialog", "aria-label": "Keyboard shortcuts", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head ze-modal-head--with-close" }, "Keyboard Shortcuts", /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn ze-tool-icon-btn--round", title: "Close (Esc)", "aria-label": "Close", onClick: onClose }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 6l12 12M18 6L6 18" })))), /* @__PURE__ */ React.createElement("div", { className: "ze-shortcuts-scroll" }, /* @__PURE__ */ React.createElement("table", { className: "ze-shortcuts-table" }, KEYBOARD_SHORTCUTS.map(({ group, rows }) => /* @__PURE__ */ React.createElement("tbody", { key: group }, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("th", { colSpan: "2" }, group)), rows.map(([keys, action]) => /* @__PURE__ */ React.createElement("tr", { key: keys }, /* @__PURE__ */ React.createElement("td", null, /* @__PURE__ */ React.createElement("kbd", null, keys)), /* @__PURE__ */ React.createElement("td", null, action)))))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "On a Mac, use Cmd instead of Ctrl. Shortcuts pause while you're typing in a text box or field."))));
   }
 
+  // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
+  var { useEffect: useEffect15, useState: useState19 } = React;
+  var OPEN_KINDS = [
+    { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
+    { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
+  ];
+  function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
+    const [kind, setKind] = useState19("project");
+    useEffect15(() => {
+      if (!open) return void 0;
+      const onKey = (e) => {
+        if (e.key === "Escape") onClose();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [open]);
+    if (!open) return null;
+    const chosen = OPEN_KINDS.find((k) => k.key === kind);
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop" }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-modal--welcome", role: "dialog", "aria-labelledby": "ze-welcome-title" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-welcome-close", "aria-label": "Close", title: "Close (Esc)", onClick: onClose }, "×"), /* @__PURE__ */ React.createElement("div", { className: "ze-welcome-title", id: "ze-welcome-title" }, "Let's make a Zine!"), /* @__PURE__ */ React.createElement("p", { className: "ze-welcome-lead" }, "Start something new, or open what you have."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-welcome-option", onClick: onNewDocument }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "22", height: "22", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 3h8l4 4v14H6z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v4h4" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" })), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-option-text" }, /* @__PURE__ */ React.createElement("strong", null, "New document"), /* @__PURE__ */ React.createElement("span", null, "Blank pages in A5, A4, Digest… or your own size."))), /* @__PURE__ */ React.createElement("div", { className: "ze-welcome-option ze-welcome-open" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "22", height: "22", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" }), /* @__PURE__ */ React.createElement("path", { d: "M3 7v11a2 2 0 0 0 2 2h13l3-9H7l-3 9" })), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-option-text" }, /* @__PURE__ */ React.createElement("strong", null, "Open existing"), /* @__PURE__ */ React.createElement("span", null, chosen.hint), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-open-row" }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "What to open", value: kind, onChange: (e) => setKind(e.target.value) }, OPEN_KINDS.map((k) => /* @__PURE__ */ React.createElement("option", { key: k.key, value: k.key }, k.label))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: kind === "pdf" ? onOpenPdf : onOpenProject }, "Open…"))))));
+  }
+
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState19 } = React;
+  var { useState: useState20 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState19(null);
+    const [draft, setDraft] = useState20(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -12052,7 +12138,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState20, useRef: useRef15, useEffect: useEffect15 } = React;
+  var { useState: useState21, useRef: useRef15, useEffect: useEffect16 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -12072,13 +12158,13 @@
     const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState20(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState21(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
     const wasChecked = useRef15(checked);
-    useEffect15(() => {
+    useEffect16(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -12320,25 +12406,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState21, useRef: useRef16, useEffect: useEffect16, useMemo: useMemo3 } = React;
+  var { useState: useState22, useRef: useRef16, useEffect: useEffect17, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState21(value || "");
-    const [typed, setTyped] = useState21(false);
-    const [open, setOpen] = useState21(false);
-    const [highlight, setHighlight] = useState21(-1);
+    const [query, setQuery] = useState22(value || "");
+    const [typed, setTyped] = useState22(false);
+    const [open, setOpen] = useState22(false);
+    const [highlight, setHighlight] = useState22(-1);
     const previewFromRef = useRef16(null);
     const listRef = useRef16(null);
-    const [status, setStatus] = useState21(null);
-    const [loadingFonts, setLoadingFonts] = useState21(false);
+    const [status, setStatus] = useState22(null);
+    const [loadingFonts, setLoadingFonts] = useState22(false);
     const containerRef = useRef16(null);
     const uploadInputRef = useRef16(null);
-    useEffect16(() => {
+    useEffect17(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect16(() => {
+    useEffect17(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -12352,7 +12438,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect16(() => {
+    useEffect17(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -12528,10 +12614,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState22, useRef: useRef17 } = React;
+  var { useState: useState23, useRef: useRef17 } = React;
   function TextPhotoFill({ ann, patch }) {
     const inputRef = useRef17(null);
-    const [error, setError] = useState22(null);
+    const [error, setError] = useState23(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -12620,10 +12706,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState23 } = React;
+  var { useState: useState24 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState23("latin");
-    const [count, setCount] = useState23(3);
+    const [kind, setKind] = useState24("latin");
+    const [count, setCount] = useState24(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -12654,7 +12740,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState24 } = React;
+  var { useState: useState25 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -12662,7 +12748,7 @@
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState24(null);
+    const [message, setMessage] = useState25(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -12699,7 +12785,7 @@
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState24(null);
+    const [sizeDraft, setSizeDraft] = useState25(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -12734,11 +12820,11 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState25 } = React;
+  var { useState: useState26 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState25("");
-    const [basedOn, setBasedOn] = useState25("");
-    const [message, setMessage] = useState25(null);
+    const [name, setName] = useState26("");
+    const [basedOn, setBasedOn] = useState26("");
+    const [message, setMessage] = useState26(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -12988,7 +13074,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState26, useRef: useRef18, useEffect: useEffect17 } = React;
+  var { useState: useState27, useRef: useRef18, useEffect: useEffect18 } = React;
   function layerName(ann) {
     if (ann.name) return ann.name;
     if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
@@ -13034,9 +13120,9 @@
     );
   }
   function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag }) {
-    const [renamingId, setRenamingId] = useState26(null);
-    const [dropInfo, setDropInfo] = useState26(null);
-    const [, setCollapseTick] = useState26(0);
+    const [renamingId, setRenamingId] = useState27(null);
+    const [dropInfo, setDropInfo] = useState27(null);
+    const [, setCollapseTick] = useState27(0);
     const dragIdRef = useRef18(null);
     const listRef = useRef18(null);
     const panelRef = useRef18(null);
@@ -13054,7 +13140,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect17(() => {
+    useEffect18(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -13070,7 +13156,7 @@
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
     }
-    useEffect17(() => {
+    useEffect18(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -13313,7 +13399,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState27, useRef: useRef19, useEffect: useEffect18 } = React;
+  var { useState: useState28, useRef: useRef19, useEffect: useEffect19 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
@@ -13321,7 +13407,7 @@
     const bodyRef = useRef19(null);
     const scrollDirRef = useRef19(0);
     const rafRef = useRef19(null);
-    const [dragOverInfo, setDragOverInfo] = useState27(null);
+    const [dragOverInfo, setDragOverInfo] = useState28(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -13340,7 +13426,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect18(() => stopAutoScroll, []);
+    useEffect19(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -13519,9 +13605,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState28 } = React;
+  var { useState: useState29 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState28(null);
+    const [customizing, setCustomizing] = useState29(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -13530,11 +13616,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState29, useRef: useRef20, useEffect: useEffect19, useLayoutEffect: useLayoutEffect4 } = React;
+  var { useState: useState30, useRef: useRef20, useEffect: useEffect20, useLayoutEffect: useLayoutEffect4 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState29(false);
+    const [open, setOpen] = useState30(false);
     const containerRef = useRef20(null);
-    useEffect19(() => {
+    useEffect20(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -13779,6 +13865,7 @@
   // apps/ZEditor/src/ui/App.jsx
   function App() {
     const status = useStatus();
+    const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
     const doc = useDocumentState();
     const history = useHistory(doc);
     const view = useViewSettings();
@@ -13929,6 +14016,15 @@
         onCreate: files.handleCreateBlankDocument,
         onOpenPdf: dialogs.newDocFromProject ? files.handleNewDocumentOpenPdf : void 0,
         onCancel: () => dialogs.setNewDocOpen(false)
+      }
+    ), /* @__PURE__ */ React.createElement(
+      WelcomeDialog,
+      {
+        open: project.startupChecked && pages.length === 0 && !welcomeDismissed && !dialogs.newDocOpen && !status.loading,
+        onNewDocument: () => dialogs.openNewDocDialog(false),
+        onOpenProject: dialogs.handleLoadProjectClick,
+        onOpenPdf: files.handleLoadClick,
+        onClose: () => setWelcomeDismissed(true)
       }
     ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(
       ConfirmDialog,

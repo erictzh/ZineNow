@@ -1,14 +1,17 @@
 // Trim-guide paper formats and default margin/bleed.
 
+// Labels show the size in mm, e.g. "A5 (148mm × 210mm)".
+const mmText = (inches) => String(Math.round(inches * 254) / 10);
+const sized = (key, name, widthIn, heightIn) => ({ key, label: `${name} (${mmText(widthIn)}mm × ${mmText(heightIn)}mm)`, widthIn, heightIn });
 export const GUIDE_FORMAT_PRESETS = [
   { key: "match", label: "Match Page Size" },
-  { key: "half-letter", label: "Half Letter (5.5 × 8.5 in)", widthIn: 5.5, heightIn: 8.5 },
-  { key: "digest", label: "Digest (5.5 × 8.25 in)", widthIn: 5.5, heightIn: 8.25 },
-  { key: "a5", label: "A5 (5.83 × 8.27 in)", widthIn: 5.83, heightIn: 8.27 },
-  { key: "a6", label: "A6 (4.13 × 5.83 in)", widthIn: 4.13, heightIn: 5.83 },
-  { key: "quarter-letter", label: "Quarter Letter (4.25 × 5.5 in)", widthIn: 4.25, heightIn: 5.5 },
-  { key: "letter", label: "US Letter (8.5 × 11 in)", widthIn: 8.5, heightIn: 11 },
-  { key: "a4", label: "A4 (8.27 × 11.69 in)", widthIn: 8.27, heightIn: 11.69 },
+  sized("half-letter", "Half Letter", 5.5, 8.5),
+  sized("digest", "Digest", 5.5, 8.25),
+  sized("a5", "A5", 148 / 25.4, 210 / 25.4),
+  sized("a6", "A6", 105 / 25.4, 148 / 25.4),
+  sized("quarter-letter", "Quarter Letter", 4.25, 5.5),
+  sized("letter", "US Letter", 8.5, 11),
+  sized("a4", "A4", 210 / 25.4, 297 / 25.4),
 ];
 export const DEFAULT_GUIDE_MARGIN_IN = 0.25;
 export const DEFAULT_GUIDE_BLEED_IN = 0.125;
