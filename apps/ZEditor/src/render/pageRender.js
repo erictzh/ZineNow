@@ -45,7 +45,10 @@ function drawPageNumber(ctx, spec, width, height, pxPerPt) {
   ctx.restore();
 }
 
-export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter, numberSpec) {
+// `transparent` leaves the paper see-through (for a PNG with a transparent background): a blank page
+// isn't painted white, and a PDF page is drawn without its white backing. Everything on the page is
+// drawn as usual.
+export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter, numberSpec, transparent = false) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   let w, h;
@@ -54,18 +57,22 @@ export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilt
     w = Math.round((swapped ? page.height : page.width) * exportScale);
     h = Math.round((swapped ? page.width : page.height) * exportScale);
     canvas.width = w; canvas.height = h;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, w, h);
+    if (!transparent) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+    }
   } else {
     const pdfPage = await docFor(pdfDocsRef, page).getPage(page.pageNumber);
     const viewport = pdfPage.getViewport({ scale: exportScale, rotation: page.rotation });
     w = viewport.width; h = viewport.height;
     canvas.width = w; canvas.height = h;
-    await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+    await pdfPage.render(transparent ? { canvasContext: ctx, viewport, background: "rgba(0,0,0,0)" } : { canvasContext: ctx, viewport }).promise;
   }
 
   const scaleFactor = exportScale / MAIN_SCALE; // annotation coords were recorded in the editor's on-screen canvas space
-  applyPageFilter(ctx, canvas, pageFilter, scaleFactor); // background only — drawn before any annotation touches the canvas
+  // The page filter treats the paper only (drawn before any annotation touches the canvas). Several
+  // filters paint a white sheet, so a see-through blank page, which has no paper, skips it.
+  if (!(transparent && page.isBlank)) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
   // The annotation list is the stacking order: first is the bottom layer.
   // Threaded stories and text wrap need the whole page (render/pageText.js).
   for (const a of resolvePageText(page.annotations || [])) {

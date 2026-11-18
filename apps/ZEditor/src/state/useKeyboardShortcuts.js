@@ -1,6 +1,7 @@
 // Keyboard shortcuts and pasting images from the clipboard (the list shown to users is ui/dialogs/shortcuts.js).
 
 import { translatedAnnotation } from "../model/annotations.js";
+import { angleOf } from "../model/controls.js";
 import { standaloneCopy } from "../model/text/threads.js";
 import { resolvePageText } from "../render/pageText.js";
 
@@ -87,6 +88,14 @@ export function useKeyboardShortcuts(app) {
       if (key === "r") { selectTool("rect"); return; }
       if (key === "e") { selectTool("ellipse"); return; }
       if (key === "h") { selectTool("highlighter"); return; }
+      if (key === "m") { selectTool("measure"); return; }
+      if (key === "c") {
+        // Crop on/off for the selected image: the same as the Format panel's Crop switch, which is
+        // unavailable on a rotated image (unless it is already cropping).
+        const img = selectedIdx === null || selectedAnnIds.length > 0 ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId && a.type === "image");
+        if (img && (selection.croppingAnnId === img.id || !angleOf(img))) selection.handleToggleCrop(img.id);
+        return;
+      }
       if (key === "d") { selectTool("pen"); return; } // "Draw" in the UI — see the tool bar
       if (key === "arrowup") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.max(0, cur - 1))); return; }
       if (key === "arrowdown") { e.preventDefault(); setSelectedPageIndices([]); setSelectedIdx((cur) => (cur === null ? cur : Math.min(pages.length - 1, cur + 1))); return; }

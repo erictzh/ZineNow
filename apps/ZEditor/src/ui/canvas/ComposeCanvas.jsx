@@ -3,12 +3,13 @@
 import { MAIN_SCALE } from "../../constants.js";
 import { withGroupMates } from "../../model/annotations.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
-import { snapToGuides } from "../../model/rulers.js";
+import { constrainTo45, snapToGuides } from "../../model/rulers.js";
 import { strokeHitTest } from "../../model/strokes.js";
 import { resolvePageText } from "../../render/pageText.js";
 import { onWrapShapesChange } from "../../render/wrapShapes.js";
 import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 import { AnnotationItem } from "./AnnotationItem.jsx";
+import { MeasureOverlay } from "./MeasureOverlay.jsx";
 import { ThreadLinks } from "./ThreadLinks.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
@@ -28,7 +29,7 @@ export function ComposeCanvas({
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
-  zoom,
+  zoom, rulerUnit,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
@@ -41,14 +42,82 @@ export function ComposeCanvas({
   const softErasing = tool === "eraser" && eraserMode === "soft";
   const magicErasing = tool === "eraser" && eraserMode === "magic";
   const [, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
+  const [measure, setMeasure] = useState(null); // Measure tool: { a, b, pending } in page px; `pending` = waiting for the second click
+  const measureGesture = useRef(null); // the press now being tracked (a stale release must not act)
+  const measuring = tool === "measure";
+  // A measurement belongs to the page and tool it was made on.
+  const pageKey = page && page.key;
+  useEffect(() => setMeasure(null), [measuring, pageKey]);
 
   function overlayPoint(e) {
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
   }
 
+  // Ruler guides (ui/canvas/Rulers.jsx), as page px, for snapping onto.
+  function guideLinesPx() {
+    return snapGuides && snapGuides.length ? {
+      x: snapGuides.filter((g) => g.axis === "x").map((g) => g.pos * MAIN_SCALE),
+      y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE),
+    } : null;
+  }
+
+  // The point a measurement lands on: under the pointer, pulled onto a close ruler guide (Alt
+  // for none), or with Shift onto the nearest 45° line from `from`.
+  function measurePoint(ev, from) {
+    let p = overlayPoint(ev);
+    const lines = guideLinesPx();
+    if (lines && !ev.altKey) {
+      const snap = snapToGuides({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }, lines, SNAP_PX / zoom);
+      p = { x: p.x + snap.dx, y: p.y + snap.dy };
+    }
+    return ev.shiftKey && from ? constrainTo45(from, p) : p;
+  }
+
+  // Measure tool, one click at a time: the 1st click sets point a, the 2nd sets point b (the line
+  // and distance appear), the 3rd clears it all, the 4th sets a again, and so on. Pressing and
+  // dragging from a to b works too. Once a line is shown, either end can be dragged to adjust.
+  function startMeasure(e) {
+    e.preventDefault();
+    measureGesture.current = null; // so an earlier click's release can't act on this one
+    if (measure && measure.pending) { // the 2nd click
+      setMeasure({ ...measure, b: measurePoint(e, measure.a), pending: false });
+      return;
+    }
+    if (measure) { // the 3rd click
+      setMeasure(null);
+      return;
+    }
+    const a = measurePoint(e, null);
+    const gesture = (measureGesture.current = {});
+    let moved = false;
+    setMeasure({ a, b: a, pending: false });
+    trackPointerDrag((ev) => {
+      if (measureGesture.current !== gesture) return;
+      if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) <= DRAG_THRESHOLD) return;
+      moved = true;
+      setMeasure({ a, b: measurePoint(ev, a), pending: false });
+    }, () => {
+      // A plain click (no drag) fixes point a; the next click fixes point b.
+      if (!moved && measureGesture.current === gesture) setMeasure({ a, b: a, pending: true });
+    });
+  }
+
+  function dragMeasureEnd(e, which) {
+    e.preventDefault();
+    e.stopPropagation();
+    const other = which === "a" ? "b" : "a";
+    trackPointerDrag((ev) => {
+      setMeasure((m) => (m ? { ...m, pending: false, [which]: measurePoint(ev, m[other]) } : m));
+    });
+  }
+
   function handleOverlayMouseDown(e) {
     if (!page) return;
+    if (measuring) {
+      startMeasure(e);
+      return;
+    }
     if (tool === "pen" || tool === "highlighter") {
       startDrawing(e);
       return;
@@ -195,10 +264,7 @@ export function ComposeCanvas({
     const originals = annotations.filter((a) => movingIds.includes(a.id));
     const dragDelta = dragDeltaFrom(e, zoom);
     // Ruler guides (ui/canvas/Rulers.jsx): the moved items' edges and middle snap onto them.
-    const guideLines = snapGuides && snapGuides.length ? {
-      x: snapGuides.filter((g) => g.axis === "x").map((g) => g.pos * MAIN_SCALE),
-      y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE),
-    } : null;
+    const guideLines = guideLinesPx();
     const startBox = guideLines ? itemsBox(movingIds) : null;
     let moved = false;
     trackPointerDrag((ev) => {
@@ -231,7 +297,7 @@ export function ComposeCanvas({
   const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
   const cursorClass =
     tool === "text" ? "ze-tool-text" :
-    (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse") ? "ze-tool-draw" :
+    (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || measuring) ? "ze-tool-draw" :
     softErasing || magicErasing ? "ze-tool-soft-erase" : // both work on image pixels: crosshair over everything
     tool === "eraser" ? "ze-tool-erase" : "";
 
@@ -280,6 +346,7 @@ export function ComposeCanvas({
         {selectionTurn && (
           <SelectionTurnKnob turn={selectionTurn} zoom={zoom} toPagePoint={overlayPoint} onRotateAnnotations={onRotateAnnotations} />
         )}
+        {measuring && measure && <MeasureOverlay measure={measure} pageSize={canvasSize} zoom={zoom} unit={rulerUnit} onHandleDown={dragMeasureEnd} />}
         {softErasing && brushPos && <BrushCursor pos={brushPos} softEraser={softEraser} />}
         {dragRect && (
           <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />

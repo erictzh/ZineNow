@@ -7555,7 +7555,7 @@
     ctx.fillText(spec.text, x, spec.vertical === "top" ? margin : height - margin);
     ctx.restore();
   }
-  async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter, numberSpec) {
+  async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilter, numberSpec, transparent = false) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     let w, h;
@@ -7565,8 +7565,10 @@
       h = Math.round((swapped ? page.width : page.height) * exportScale);
       canvas.width = w;
       canvas.height = h;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
+      if (!transparent) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+      }
     } else {
       const pdfPage = await docFor(pdfDocsRef, page).getPage(page.pageNumber);
       const viewport = pdfPage.getViewport({ scale: exportScale, rotation: page.rotation });
@@ -7574,10 +7576,10 @@
       h = viewport.height;
       canvas.width = w;
       canvas.height = h;
-      await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+      await pdfPage.render(transparent ? { canvasContext: ctx, viewport, background: "rgba(0,0,0,0)" } : { canvasContext: ctx, viewport }).promise;
     }
     const scaleFactor = exportScale / MAIN_SCALE;
-    applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
+    if (!(transparent && page.isBlank)) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
     for (const a of resolvePageText(page.annotations || [])) {
       if (!a.hidden) await drawAnnotationOnCanvas(ctx, a, scaleFactor, pageFilter);
     }
@@ -8034,6 +8036,11 @@
     const safe = String(title || "").replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/, "").trim();
     return (safe || "zine") + extension;
   }
+  function pageImageFileName(title, pageIndex, pageCount, extension) {
+    const digits = String(pageCount).length;
+    const suffix = pageCount > 1 ? `-page-${String(pageIndex + 1).padStart(digits, "0")}` : "";
+    return titleToFileName(title, suffix + extension);
+  }
 
   // apps/ZEditor/src/io/pdfImport.js
   async function importPdfFile(file, ids) {
@@ -8254,6 +8261,28 @@
   }
   async function savePdfBytes(bytes, filename) {
     return saveFile(bytes, filename, "application/pdf", "PDF file", [".pdf"]);
+  }
+
+  // apps/ZEditor/src/io/imageExport.js
+  var IMAGE_FORMATS = {
+    jpg: { mime: "image/jpeg", ext: ".jpg", description: "JPEG image", transparent: false, quality: 0.95 },
+    png: { mime: "image/png", ext: ".png", description: "PNG image (transparent background)", transparent: true }
+  };
+  async function renderPageImageBlob(pages, pageIdx, pdfDocsRef, pageNumbers, format) {
+    const fmt = IMAGE_FORMATS[format];
+    const page = pages[pageIdx];
+    await prepareWrapShapes([page]);
+    const canvas = await renderPageToCanvas(
+      page,
+      pdfDocsRef,
+      EXPORT_SCALE,
+      page.filter || DEFAULT_PAGE_FILTER,
+      pageNumberSpec(pageNumbers, pageIdx, pages.length),
+      fmt.transparent
+    );
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Couldn't encode the page image.")), fmt.mime, fmt.quality);
+    });
   }
 
   // apps/ZEditor/src/io/base64.js
@@ -8643,6 +8672,56 @@
         setExporting(false);
       }
     }
+    async function handleExportImage(format) {
+      const idx = doc.selectedIdx;
+      if (idx === null || !pages[idx] || exporting) return;
+      const fmt = IMAGE_FORMATS[format];
+      setErrorMsg(null);
+      setNotice(null);
+      setExporting(true);
+      try {
+        const blob = await renderPageImageBlob(pages, idx, pdfDocsRef, view.pageNumbers, format);
+        await saveFile(blob, pageImageFileName(project.docTitle, idx, pages.length, fmt.ext), fmt.mime, fmt.description, [fmt.ext]);
+      } catch (err) {
+        setErrorMsg(`Couldn't export ${fmt.ext.slice(1).toUpperCase()} — ` + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setExporting(false);
+      }
+    }
+    async function handleExportAllImages(format) {
+      if (pages.length === 0 || exporting) return;
+      const fmt = IMAGE_FORMATS[format];
+      const label = fmt.ext.slice(1).toUpperCase();
+      setErrorMsg(null);
+      setNotice(null);
+      setExporting(true);
+      try {
+        let folder = null;
+        if (typeof window.showDirectoryPicker === "function") {
+          try {
+            folder = await window.showDirectoryPicker({ mode: "readwrite" });
+          } catch (err) {
+            if (err && err.name === "AbortError") return;
+          }
+        }
+        for (let i = 0; i < pages.length; i++) {
+          setNotice(`Exporting ${label}: page ${i + 1} of ${pages.length}…`);
+          const blob = await renderPageImageBlob(pages, i, pdfDocsRef, view.pageNumbers, format);
+          const name = pageImageFileName(project.docTitle, i, pages.length, fmt.ext);
+          if (folder) await writeFileHandle(await folder.getFileHandle(name, { create: true }), blob);
+          else {
+            downloadBlob(blob, name);
+            await new Promise((r) => setTimeout(r, 300));
+          }
+        }
+        setNotice(`Exported ${pages.length} page${pages.length === 1 ? "" : "s"} as ${label}${folder ? ` to "${folder.name}"` : ""}.`);
+      } catch (err) {
+        setNotice(null);
+        setErrorMsg(`Couldn't export ${label} — ` + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setExporting(false);
+      }
+    }
     async function handleSendToZineArranger() {
       if (pages.length === 0 || exporting || sendingToArranger) return;
       setErrorMsg(null);
@@ -8655,7 +8734,7 @@
         setSendingToArranger(false);
       }
     }
-    return { exporting, sendingToArranger, handleExportPdf, handleSendToZineArranger };
+    return { exporting, sendingToArranger, handleExportPdf, handleExportImage, handleExportAllImages, handleSendToZineArranger };
   }
 
   // apps/ZEditor/src/model/history.js
@@ -8826,6 +8905,15 @@
         }
         if (key === "h") {
           selectTool("highlighter");
+          return;
+        }
+        if (key === "m") {
+          selectTool("measure");
+          return;
+        }
+        if (key === "c") {
+          const img = selectedIdx === null || selectedAnnIds.length > 0 ? null : (pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId && a.type === "image");
+          if (img && (selection.croppingAnnId === img.id || !angleOf(img))) selection.handleToggleCrop(img.id);
           return;
         }
         if (key === "d") {
@@ -9980,6 +10068,26 @@
     const digits = unit === "pt" || unit === "mm" ? 1 : 2;
     return `${Number(v.toFixed(digits))} ${unit}`;
   }
+  function guideGap(guides, axis, pos) {
+    let from = null, to = null;
+    for (const g of guides) {
+      if (g.axis !== axis) continue;
+      if (g.pos <= pos && (from == null || g.pos > from)) from = g.pos;
+      if (g.pos > pos && (to == null || g.pos < to)) to = g.pos;
+    }
+    return from == null || to == null ? null : { from, to, length: to - from };
+  }
+  function measureBetween(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const deg = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI * 10) / 10;
+    return { dx, dy, length: Math.hypot(dx, dy), angle: (deg + 360) % 360 };
+  }
+  function constrainTo45(from, to) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const step = Math.PI / 4, len = Math.hypot(dx, dy);
+    const a = Math.round(Math.atan2(dy, dx) / step) * step;
+    return { x: from.x + Math.cos(a) * len, y: from.y + Math.sin(a) * len };
+  }
   function snapToUnit(pt, unit) {
     const step = unit === "in" ? 1 / 8 : unit === "cm" ? 0.1 : 1;
     return unitToPt(Math.round(ptToUnit(pt, unit) / step) * step, unit);
@@ -10174,6 +10282,36 @@
     return node && node.nodeType === Node.TEXT_NODE && element.contains(node) ? offset : textLength;
   }
 
+  // apps/ZEditor/src/model/crop.js
+  var MIN_CROP_SIZE = 20;
+  var clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  function resizedCrop(crop, natW, natH, handle, dx, dy, keepRatio, min = MIN_CROP_SIZE) {
+    const sx = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
+    const sy = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
+    const { x, y, w, h } = crop;
+    if (!keepRatio) {
+      let left = x, right = x + w, top = y, bottom = y + h;
+      if (sx > 0) right = clamp(right + dx, left + min, natW);
+      else if (sx < 0) left = clamp(left + dx, 0, right - min);
+      if (sy > 0) bottom = clamp(bottom + dy, top + min, natH);
+      else if (sy < 0) top = clamp(top + dy, 0, bottom - min);
+      return { x: left, y: top, w: right - left, h: bottom - top };
+    }
+    const wantW = w + sx * dx, wantH = h + sy * dy;
+    let scale = sx && sy ? Math.max(wantW / w, wantH / h) : sx ? wantW / w : wantH / h;
+    const cx = x + w / 2, cy = y + h / 2;
+    const roomW = sx > 0 ? natW - x : sx < 0 ? x + w : 2 * Math.min(cx, natW - cx);
+    const roomH = sy > 0 ? natH - y : sy < 0 ? y + h : 2 * Math.min(cy, natH - cy);
+    scale = Math.max(Math.min(scale, roomW / w, roomH / h), min / Math.min(w, h));
+    const nw = w * scale, nh = h * scale;
+    return {
+      x: sx > 0 ? x : sx < 0 ? x + w - nw : cx - nw / 2,
+      y: sy > 0 ? y : sy < 0 ? y + h - nh : cy - nh / 2,
+      w: nw,
+      h: nh
+    };
+  }
+
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
   var { useRef: useRef9, useEffect: useEffect8 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
@@ -10258,7 +10396,6 @@
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
   var { useRef: useRef10, useEffect: useEffect9 } = React;
-  var MIN_CROP_SIZE = 20;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
     const halftoneCanvasRef = useRef10(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
@@ -10287,50 +10424,25 @@
         onUpdate(ann.id, { cropX: newCropX, cropY: newCropY });
       });
     }
-    function startCropCornerResize(corner, e) {
+    function startCropResize(handle, e) {
       e.preventDefault();
       e.stopPropagation();
       const imageOriginX = ann.x - cropX * displayScaleX;
       const imageOriginY = ann.y - cropY * displayScaleY;
       const dragDelta = dragDeltaFrom(e, zoom);
-      const orig = { cropX, cropY, cropW, cropH };
+      const orig = { x: cropX, y: cropY, w: cropW, h: cropH };
       trackPointerDrag((ev) => {
         const { dx, dy } = dragDelta(ev);
-        const dxNat = dx / displayScaleX;
-        const dyNat = dy / displayScaleY;
-        let cx = orig.cropX, cy = orig.cropY, cw = orig.cropW, ch = orig.cropH;
-        if (corner === "se") {
-          cw = orig.cropW + dxNat;
-          ch = orig.cropH + dyNat;
-        } else if (corner === "ne") {
-          cy = orig.cropY + dyNat;
-          cw = orig.cropW + dxNat;
-          ch = orig.cropH - dyNat;
-        } else if (corner === "sw") {
-          cx = orig.cropX + dxNat;
-          cw = orig.cropW - dxNat;
-          ch = orig.cropH + dyNat;
-        } else {
-          cx = orig.cropX + dxNat;
-          cy = orig.cropY + dyNat;
-          cw = orig.cropW - dxNat;
-          ch = orig.cropH - dyNat;
-        }
-        cw = Math.max(MIN_CROP_SIZE, cw);
-        ch = Math.max(MIN_CROP_SIZE, ch);
-        cx = Math.min(Math.max(0, cx), orig.cropX + orig.cropW - MIN_CROP_SIZE);
-        cy = Math.min(Math.max(0, cy), orig.cropY + orig.cropH - MIN_CROP_SIZE);
-        cw = Math.min(cw, naturalW - cx);
-        ch = Math.min(ch, naturalH - cy);
+        const c = resizedCrop(orig, naturalW, naturalH, handle, dx / displayScaleX, dy / displayScaleY, ev.shiftKey);
         onUpdate(ann.id, {
-          cropX: cx,
-          cropY: cy,
-          cropW: cw,
-          cropH: ch,
-          x: imageOriginX + cx * displayScaleX,
-          y: imageOriginY + cy * displayScaleY,
-          width: cw * displayScaleX,
-          height: ch * displayScaleY
+          cropX: c.x,
+          cropY: c.y,
+          cropW: c.w,
+          cropH: c.h,
+          x: imageOriginX + c.x * displayScaleX,
+          y: imageOriginY + c.y * displayScaleY,
+          width: c.w * displayScaleX,
+          height: c.h * displayScaleY
         });
       });
     }
@@ -10365,7 +10477,7 @@
       const imageOriginY = ann.y - cropY * displayScaleY;
       const fullW = naturalW * displayScaleX, fullH = naturalH * displayScaleY;
       const winX = cropX * displayScaleX, winY = cropY * displayScaleY, winW = cropW * displayScaleX, winH = cropH * displayScaleY;
-      return /* @__PURE__ */ React.createElement("div", { className: "ze-ann-image ze-ann-image--cropping", style: { left: imageOriginX, top: imageOriginY, width: fullW, height: fullH } }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false", className: "ze-crop-full-img" }), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-window", style: { left: winX, top: winY, width: winW, height: winH }, onMouseDown: startCropPan }, /* @__PURE__ */ React.createElement("div", { className: "ze-crop-window-clip" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false", style: { position: "absolute", left: -winX, top: -winY, width: fullW, height: fullH } })), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-handle ze-crop-handle-nw", onMouseDown: (e) => startCropCornerResize("nw", e) }), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-handle ze-crop-handle-ne", onMouseDown: (e) => startCropCornerResize("ne", e) }), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-handle ze-crop-handle-sw", onMouseDown: (e) => startCropCornerResize("sw", e) }), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-handle ze-crop-handle-se", onMouseDown: (e) => startCropCornerResize("se", e) })));
+      return /* @__PURE__ */ React.createElement("div", { className: "ze-ann-image ze-ann-image--cropping", style: { left: imageOriginX, top: imageOriginY, width: fullW, height: fullH } }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false", className: "ze-crop-full-img" }), /* @__PURE__ */ React.createElement("div", { className: "ze-crop-window", style: { left: winX, top: winY, width: winW, height: winH }, onMouseDown: startCropPan }, /* @__PURE__ */ React.createElement("div", { className: "ze-crop-window-clip" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false", style: { position: "absolute", left: -winX, top: -winY, width: fullW, height: fullH } })), ALL_RESIZE_HANDLES.map((handle) => /* @__PURE__ */ React.createElement("div", { key: handle, className: "ze-crop-handle ze-crop-handle-" + handle, onMouseDown: (e) => startCropResize(handle, e) }))));
     }
     const hasOwnDuotone = ann.filter && ann.filter.type === "duotone";
     const duotoneFilterId = hasOwnDuotone ? "ze-filter-duotone-img-" + ann.id : "ze-filter-duotone";
@@ -11067,6 +11179,36 @@
     return /* @__PURE__ */ React.createElement("svg", { className: "ze-stroke-svg", width: pageSize.width, height: pageSize.height, style: blendOf(a) !== "normal" ? { mixBlendMode: blendOf(a) } : void 0 }, /* @__PURE__ */ React.createElement(StrokeShape, { ann: a, tool, isSelected, onPress }));
   }
 
+  // apps/ZEditor/src/ui/canvas/MeasureOverlay.jsx
+  function MeasureOverlay({ measure, pageSize, zoom, unit, onHandleDown }) {
+    const { a, b } = measure;
+    const pt = measureBetween({ x: a.x / MAIN_SCALE, y: a.y / MAIN_SCALE }, { x: b.x / MAIN_SCALE, y: b.y / MAIN_SCALE });
+    const back = `scale(${1 / zoom})`;
+    const handle = (which, p) => /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        key: which,
+        className: "ze-measure-handle" + (measure.pending ? " is-waiting" : ""),
+        style: { left: p.x, top: p.y, transform: `translate(-50%, -50%) ${back}` },
+        onMouseDown: measure.pending ? void 0 : (e) => onHandleDown(e, which)
+      }
+    );
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, !measure.pending && /* @__PURE__ */ React.createElement("svg", { className: "ze-measure-svg", width: pageSize.width, height: pageSize.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, className: "ze-measure-halo", vectorEffect: "non-scaling-stroke" }), /* @__PURE__ */ React.createElement("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, className: "ze-measure-line", vectorEffect: "non-scaling-stroke" })), handle("a", a), !measure.pending && handle("b", b), !measure.pending && pt.length > 0 && // Beside the far end, flipped to its other side near the page's right or bottom edge so it stays in view.
+    /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-measure-readout",
+        style: {
+          left: b.x,
+          top: b.y,
+          transform: `${back} translate(${b.x > pageSize.width * 0.6 ? "calc(-100% - 12px)" : "12px"}, ${b.y > pageSize.height * 0.9 ? "calc(-100% - 12px)" : "12px"})`
+        }
+      },
+      /* @__PURE__ */ React.createElement("strong", null, formatInUnit(pt.length, unit)),
+      /* @__PURE__ */ React.createElement("span", null, "Δx ", formatInUnit(Math.abs(pt.dx), unit), " · Δy ", formatInUnit(Math.abs(pt.dy), unit), " · ", pt.angle, "°")
+    ));
+  }
+
   // apps/ZEditor/src/ui/canvas/ThreadLinks.jsx
   var frameSize = (v) => measureTextBox(v);
   var stop = (e) => {
@@ -11474,7 +11616,8 @@
     onEraseImagePixels,
     magicPreview,
     onMagicClick,
-    zoom
+    zoom,
+    rulerUnit
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
     const layerRef = useRef13(null);
@@ -11486,12 +11629,68 @@
     const softErasing = tool === "eraser" && eraserMode === "soft";
     const magicErasing = tool === "eraser" && eraserMode === "magic";
     const [, setDrawTick] = useState16(0);
+    const [measure, setMeasure] = useState16(null);
+    const measureGesture = useRef13(null);
+    const measuring = tool === "measure";
+    const pageKey = page && page.key;
+    useEffect12(() => setMeasure(null), [measuring, pageKey]);
     function overlayPoint(e) {
       const rect = canvasRef.current.getBoundingClientRect();
       return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
     }
+    function guideLinesPx() {
+      return snapGuides && snapGuides.length ? {
+        x: snapGuides.filter((g) => g.axis === "x").map((g) => g.pos * MAIN_SCALE),
+        y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE)
+      } : null;
+    }
+    function measurePoint(ev, from) {
+      let p = overlayPoint(ev);
+      const lines = guideLinesPx();
+      if (lines && !ev.altKey) {
+        const snap = snapToGuides({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }, lines, SNAP_PX / zoom);
+        p = { x: p.x + snap.dx, y: p.y + snap.dy };
+      }
+      return ev.shiftKey && from ? constrainTo45(from, p) : p;
+    }
+    function startMeasure(e) {
+      e.preventDefault();
+      measureGesture.current = null;
+      if (measure && measure.pending) {
+        setMeasure({ ...measure, b: measurePoint(e, measure.a), pending: false });
+        return;
+      }
+      if (measure) {
+        setMeasure(null);
+        return;
+      }
+      const a = measurePoint(e, null);
+      const gesture = measureGesture.current = {};
+      let moved = false;
+      setMeasure({ a, b: a, pending: false });
+      trackPointerDrag((ev) => {
+        if (measureGesture.current !== gesture) return;
+        if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) <= DRAG_THRESHOLD) return;
+        moved = true;
+        setMeasure({ a, b: measurePoint(ev, a), pending: false });
+      }, () => {
+        if (!moved && measureGesture.current === gesture) setMeasure({ a, b: a, pending: true });
+      });
+    }
+    function dragMeasureEnd(e, which) {
+      e.preventDefault();
+      e.stopPropagation();
+      const other = which === "a" ? "b" : "a";
+      trackPointerDrag((ev) => {
+        setMeasure((m) => m ? { ...m, pending: false, [which]: measurePoint(ev, m[other]) } : m);
+      });
+    }
     function handleOverlayMouseDown(e) {
       if (!page) return;
+      if (measuring) {
+        startMeasure(e);
+        return;
+      }
       if (tool === "pen" || tool === "highlighter") {
         startDrawing(e);
         return;
@@ -11620,10 +11819,7 @@
       const movingIds = single ? [ann.id] : wasSelected ? current : e.shiftKey ? [...current, ...mates] : mates;
       const originals = annotations.filter((a) => movingIds.includes(a.id));
       const dragDelta = dragDeltaFrom(e, zoom);
-      const guideLines = snapGuides && snapGuides.length ? {
-        x: snapGuides.filter((g) => g.axis === "x").map((g) => g.pos * MAIN_SCALE),
-        y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE)
-      } : null;
+      const guideLines = guideLinesPx();
       const startBox = guideLines ? itemsBox(movingIds) : null;
       let moved = false;
       trackPointerDrag((ev) => {
@@ -11647,7 +11843,7 @@
     const pageViews = resolvePageText(magicPreview ? annotations.map((a) => a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a) : annotations);
     const showHandlesFor = (a) => (tool === "select" || a.id === editingAnnId) && a.id === selectedAnnId && selectedAnnIds.length === 0;
     const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
-    const cursorClass = tool === "text" ? "ze-tool-text" : tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" ? "ze-tool-draw" : softErasing || magicErasing ? "ze-tool-soft-erase" : (
+    const cursorClass = tool === "text" ? "ze-tool-text" : tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || measuring ? "ze-tool-draw" : softErasing || magicErasing ? "ze-tool-soft-erase" : (
       // both work on image pixels: crosshair over everything
       tool === "eraser" ? "ze-tool-erase" : ""
     );
@@ -11685,6 +11881,7 @@
       /* @__PURE__ */ React.createElement(ThreadLinks, { views: pageViews, pageSize: canvasSize, selectedIds: [selectedAnnId, ...selectedAnnIds], zoom, onUnlink: onUnlinkNextFrame }),
       /* @__PURE__ */ React.createElement(LiveStroke, { drawing: drawingRef.current, pageSize: canvasSize }),
       selectionTurn && /* @__PURE__ */ React.createElement(SelectionTurnKnob, { turn: selectionTurn, zoom, toPagePoint: overlayPoint, onRotateAnnotations }),
+      measuring && measure && /* @__PURE__ */ React.createElement(MeasureOverlay, { measure, pageSize: canvasSize, zoom, unit: rulerUnit, onHandleDown: dragMeasureEnd }),
       softErasing && brushPos && /* @__PURE__ */ React.createElement(BrushCursor, { pos: brushPos, softEraser }),
       dragRect && /* @__PURE__ */ React.createElement("div", { className: "ze-drag-rect", style: { left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : void 0 } })
     ), /* @__PURE__ */ React.createElement(
@@ -11720,6 +11917,14 @@
     if (marks.pageLen > 0) {
       if (horizontal) ctx.fillRect(origin, 0, marks.pageLen * pxPerPt, h);
       else ctx.fillRect(0, origin, w, marks.pageLen * pxPerPt);
+    }
+    if (marks.span) {
+      ctx.fillStyle = css.getPropertyValue("--ruler-cursor").trim() || "#f97316";
+      ctx.globalAlpha = 0.25;
+      const s0 = origin + marks.span.from * pxPerPt, sLen = (marks.span.to - marks.span.from) * pxPerPt;
+      if (horizontal) ctx.fillRect(s0, 0, sLen, h);
+      else ctx.fillRect(0, s0, w, sLen);
+      ctx.globalAlpha = 1;
     }
     const fg = css.getPropertyValue("--ruler-fg").trim() || "#a99f97";
     ctx.strokeStyle = fg;
@@ -11773,7 +11978,13 @@
     const [geom, setGeom] = useState17(null);
     const [cursor, setCursor] = useState17(null);
     const [drag, setDrag] = useState17(null);
+    const [hover, setHover] = useState17(null);
     const pxPerPt = MAIN_SCALE * zoom;
+    const gap = hover && geom && !drag ? guideGap(guides, hover.axis, (hover.at - geom[hover.axis === "x" ? "left" : "top"]) / pxPerPt) : null;
+    const hoverOn = (axis) => (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      setHover({ axis, at: axis === "x" ? e.clientX - r.left : e.clientY - r.top });
+    };
     useLayoutEffect3(() => {
       const pane = paneRef.current;
       if (!pane) return void 0;
@@ -11821,13 +12032,15 @@
       const dragAt = drag ? geom[drag.axis === "x" ? "left" : "top"] + drag.pos * pxPerPt : null;
       drawRuler(topRef.current, true, geom.width, geom.left, pxPerPt, unit, {
         pageLen: geom.pageW,
-        cursor: drag && drag.axis === "x" ? dragAt : cursor ? cursor.x : null
+        cursor: drag && drag.axis === "x" ? dragAt : cursor ? cursor.x : null,
+        span: gap && hover.axis === "x" ? gap : null
       });
       drawRuler(leftRef.current, false, geom.height, geom.top, pxPerPt, unit, {
         pageLen: geom.pageH,
-        cursor: drag && drag.axis === "y" ? dragAt : cursor ? cursor.y : null
+        cursor: drag && drag.axis === "y" ? dragAt : cursor ? cursor.y : null,
+        span: gap && hover.axis === "y" ? gap : null
       });
-    }, [geom, pxPerPt, unit, cursor, drag]);
+    }, [geom, pxPerPt, unit, cursor, drag, gap && gap.from, gap && gap.to]);
     function startDrag(e, guide) {
       e.preventDefault();
       e.stopPropagation();
@@ -11877,16 +12090,18 @@
       {
         ref: topRef,
         className: "ze-ruler ze-ruler-top",
-        title: "Drag down to add a horizontal guide",
-        onMouseDown: (e) => startDrag(e, { axis: "y", isNew: true, pos: 0 })
+        onMouseDown: (e) => startDrag(e, { axis: "y", isNew: true, pos: 0 }),
+        onMouseMove: hoverOn("x"),
+        onMouseLeave: () => setHover(null)
       }
     ), /* @__PURE__ */ React.createElement(
       "canvas",
       {
         ref: leftRef,
         className: "ze-ruler ze-ruler-left",
-        title: "Drag right to add a vertical guide",
-        onMouseDown: (e) => startDrag(e, { axis: "x", isNew: true, pos: 0 })
+        onMouseDown: (e) => startDrag(e, { axis: "x", isNew: true, pos: 0 }),
+        onMouseMove: hoverOn("y"),
+        onMouseLeave: () => setHover(null)
       }
     ), geom && /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-guides" }, shown.map((g) => /* @__PURE__ */ React.createElement(
       "div",
@@ -11897,7 +12112,14 @@
         title: `${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`,
         onMouseDown: (e) => startDrag(e, g)
       }
-    )), drag && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : ""), style: lineStyle(drag.axis, drag.pos) }), /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-readout", style: { left: drag.x + 12, top: drag.y + 12 } }, drag.removing ? "Remove guide" : formatInUnit(drag.pos, unit)))));
+    )), gap && /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-ruler-readout",
+        style: hover.axis === "x" ? { left: hover.at + 12, top: 4 } : { left: 4, top: hover.at + 12 }
+      },
+      formatInUnit(gap.length, unit)
+    ), drag && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : ""), style: lineStyle(drag.axis, drag.pos) }), /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-readout", style: { left: drag.x + 12, top: drag.y + 12 } }, drag.removing ? "Remove guide" : formatInUnit(drag.pos, unit)))));
   }
 
   // apps/ZEditor/src/ui/canvas/LiveFilterDefs.jsx
@@ -12011,7 +12233,9 @@
         ["R", "Rectangle tool"],
         ["E", "Ellipse tool"],
         ["D", "Draw tool"],
-        ["H", "Highlighter tool"]
+        ["H", "Highlighter tool"],
+        ["C", "Turn crop on / off for the selected image"],
+        ["M", "Measure tool: click point a, click point b, click again to clear (Shift: 45° steps, Alt: skip guides)"]
       ]
     },
     {
@@ -12041,7 +12265,8 @@
         ["Alt + click", "Pick one item out of a group"],
         ["Shift + click", "Add to or remove from the selection (pages and items)"],
         ["Drag on empty page", "Select the items it touches (Move tool)"],
-        ["Shift + drag a handle", "Stretch an image freely, or keep a rectangle's proportions"]
+        ["Shift + drag a handle", "Stretch an image freely, or keep a rectangle's proportions"],
+        ["Shift + drag a crop handle", "Keep the crop window's proportions"]
       ]
     }
   ];
@@ -12246,7 +12471,7 @@
         title: "Crop",
         checked: isCroppingThis || Boolean(hasCrop),
         disabled: Boolean(angleOf(ann)) && !isCroppingThis && !hasCrop,
-        hint: "While cropping: drag inside the window to reposition the photo, drag a corner to resize the crop. Set the rotation to 0° to crop.",
+        hint: "While cropping: drag inside the window to reposition the photo, drag a handle to resize the crop (hold Shift to keep its proportions). Set the rotation to 0° to crop.",
         onToggle: (on) => {
           if (on) {
             if (!isCroppingThis) onToggleCrop(ann.id);
@@ -13070,6 +13295,9 @@
     if (tool === "text") return /* @__PURE__ */ React.createElement(TextToolPanel, { toolDefaults });
     if (tool === "pen" || tool === "highlighter") return /* @__PURE__ */ React.createElement(StrokeToolPanel, { tool, toolDefaults });
     if (tool === "eraser") return /* @__PURE__ */ React.createElement(EraserToolPanel, { toolDefaults, magicErase });
+    if (tool === "measure") {
+      return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Measure", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Click one point, then another, to see the distance between them in the ruler's unit. A third click clears it. Dragging from one point to the other works too. Once the line is shown, drag either end to adjust. Hold Shift for 45° steps; ends land on ruler guides unless you hold Alt."));
+    }
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add."));
   }
 
@@ -13490,7 +13718,7 @@
   function ToolBar({ selection, edits, view, zoom, dialogs }) {
     const { tool, selectTool, selectedAnnId } = selection;
     const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (M): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -13854,6 +14082,24 @@
       MenuItem,
       {
         close,
+        label: "Export page as PNG (transparent)",
+        disabled: doc.selectedIdx === null || exporting,
+        onClick: () => exporter.handleExportImage("png"),
+        hint: "The page you're on, as a picture with a see-through background"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
+        label: "Export page as JPG",
+        disabled: doc.selectedIdx === null || exporting,
+        onClick: () => exporter.handleExportImage("jpg"),
+        hint: "The page you're on, as a picture on white"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
         label: "Send to ZineArranger",
         disabled: pages.length === 0 || exporting || sendingToArranger,
         onClick: exporter.handleSendToZineArranger,
@@ -13921,6 +14167,7 @@
       ComposeCanvas,
       {
         zoom: zoom.zoomPercent / 100,
+        rulerUnit: view.rulerUnit,
         pdfDocsRef: doc.pdfDocsRef,
         page: selectedPage,
         guidesOn: view.guidesOn,

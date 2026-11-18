@@ -2,6 +2,7 @@
 
 import { hexToRgb } from "../../model/color.js";
 import { angleOf, controlValues } from "../../model/controls.js";
+import { resizedCrop } from "../../model/crop.js";
 import { MIN_RESIZE_SIZE, resizedBox } from "../../model/geometry.js";
 import { imageEdgeOutline } from "../../model/imageEffects.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, effectiveImageFilter } from "../../model/pageFilters.js";
@@ -22,8 +23,6 @@ const { useRef, useEffect } = React;
 // scales width/height together, keeping the image's aspect ratio
 // rather than letting it stretch. Cropping isn't built yet — this is
 // add/move/resize/select/delete only, deliberately scoped that way.
-const MIN_CROP_SIZE = 20; // natural px — keeps a crop drag from collapsing to nothing
-
 export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
   const halftoneCanvasRef = useRef(null);
   const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
@@ -67,32 +66,21 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
     });
   }
 
-  function startCropCornerResize(corner, e) {
+  // Any of the crop window's eight handles (model/crop.js); Shift keeps the window's proportions.
+  function startCropResize(handle, e) {
     e.preventDefault();
     e.stopPropagation();
     const imageOriginX = ann.x - cropX * displayScaleX;
     const imageOriginY = ann.y - cropY * displayScaleY;
     const dragDelta = dragDeltaFrom(e, zoom);
-    const orig = { cropX, cropY, cropW, cropH };
+    const orig = { x: cropX, y: cropY, w: cropW, h: cropH };
     trackPointerDrag((ev) => {
       const { dx, dy } = dragDelta(ev);
-      const dxNat = dx / displayScaleX;
-      const dyNat = dy / displayScaleY;
-      let cx = orig.cropX, cy = orig.cropY, cw = orig.cropW, ch = orig.cropH;
-      if (corner === "se") { cw = orig.cropW + dxNat; ch = orig.cropH + dyNat; }
-      else if (corner === "ne") { cy = orig.cropY + dyNat; cw = orig.cropW + dxNat; ch = orig.cropH - dyNat; }
-      else if (corner === "sw") { cx = orig.cropX + dxNat; cw = orig.cropW - dxNat; ch = orig.cropH + dyNat; }
-      else { cx = orig.cropX + dxNat; cy = orig.cropY + dyNat; cw = orig.cropW - dxNat; ch = orig.cropH - dyNat; } // nw
-      cw = Math.max(MIN_CROP_SIZE, cw);
-      ch = Math.max(MIN_CROP_SIZE, ch);
-      cx = Math.min(Math.max(0, cx), orig.cropX + orig.cropW - MIN_CROP_SIZE);
-      cy = Math.min(Math.max(0, cy), orig.cropY + orig.cropH - MIN_CROP_SIZE);
-      cw = Math.min(cw, naturalW - cx);
-      ch = Math.min(ch, naturalH - cy);
+      const c = resizedCrop(orig, naturalW, naturalH, handle, dx / displayScaleX, dy / displayScaleY, ev.shiftKey);
       onUpdate(ann.id, {
-        cropX: cx, cropY: cy, cropW: cw, cropH: ch,
-        x: imageOriginX + cx * displayScaleX, y: imageOriginY + cy * displayScaleY,
-        width: cw * displayScaleX, height: ch * displayScaleY,
+        cropX: c.x, cropY: c.y, cropW: c.w, cropH: c.h,
+        x: imageOriginX + c.x * displayScaleX, y: imageOriginY + c.y * displayScaleY,
+        width: c.w * displayScaleX, height: c.h * displayScaleY,
       });
     });
   }
@@ -158,10 +146,9 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
           <div className="ze-crop-window-clip">
             <img src={ann.src} alt="" draggable="false" style={{ position: "absolute", left: -winX, top: -winY, width: fullW, height: fullH }} />
           </div>
-          <div className="ze-crop-handle ze-crop-handle-nw" onMouseDown={(e) => startCropCornerResize("nw", e)} />
-          <div className="ze-crop-handle ze-crop-handle-ne" onMouseDown={(e) => startCropCornerResize("ne", e)} />
-          <div className="ze-crop-handle ze-crop-handle-sw" onMouseDown={(e) => startCropCornerResize("sw", e)} />
-          <div className="ze-crop-handle ze-crop-handle-se" onMouseDown={(e) => startCropCornerResize("se", e)} />
+          {ALL_RESIZE_HANDLES.map((handle) => (
+            <div key={handle} className={"ze-crop-handle ze-crop-handle-" + handle} onMouseDown={(e) => startCropResize(handle, e)} />
+          ))}
         </div>
       </div>
     );

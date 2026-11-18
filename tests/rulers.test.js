@@ -1,5 +1,5 @@
 // Rulers and ruler guides (model/rulers.js).
-import { dragGain, formatInUnit, ptToUnit, rulerTicks, snapToGuides, snapToUnit, unitToPt } from "../apps/ZEditor/src/model/rulers.js";
+import { dragGain, constrainTo45, formatInUnit, guideGap, measureBetween, ptToUnit, rulerTicks, snapToGuides, snapToUnit, unitToPt } from "../apps/ZEditor/src/model/rulers.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 const near = (a, b) => Math.abs(a - b) < 1e-6;
@@ -23,6 +23,22 @@ ok(JSON.stringify(snapToGuides({ x0: 97, y0: 10, x1: 140, y1: 20 }, guides, 5)) 
 ok(snapToGuides({ x0: 60, y0: 0, x1: 136, y1: 20 }, guides, 5).dx === 2, "the middle snaps too");
 ok(snapToGuides({ x0: 0, y0: 44, x1: 20, y1: 47 }, guides, 5).dy === 3, "the bottom edge snaps to a horizontal guide");
 ok(snapToGuides({ x0: 0, y0: 0, x1: 20, y1: 20 }, guides, 5).dx === 0, "nothing close, no snap");
+
+// The gap between the two guides around the pointer
+const gs = [{ axis: "x", pos: 20 }, { axis: "x", pos: 100 }, { axis: "x", pos: 300 }, { axis: "y", pos: 50 }];
+const gap = guideGap(gs, "x", 150);
+ok(gap && gap.from === 100 && gap.to === 300 && gap.length === 200, "hovering between two guides gives the gap to the nearest on each side");
+ok(guideGap(gs, "x", 10) === null && guideGap(gs, "x", 400) === null, "no gap outside the outermost guides");
+ok(guideGap(gs, "y", 60) === null, "a single guide on an axis has no gap");
+
+// The Measure tool
+const m = measureBetween({ x: 10, y: 10 }, { x: 13, y: 6 });
+ok(near(m.length, 5) && m.dx === 3 && m.dy === -4, "measuring gives the distance and the two legs");
+ok(measureBetween({ x: 0, y: 0 }, { x: 1, y: 0 }).angle === 0 && measureBetween({ x: 0, y: 0 }, { x: 0, y: -1 }).angle === 90 && measureBetween({ x: 0, y: 0 }, { x: 0, y: 1 }).angle === 270, "the angle counts counter-clockwise, up being 90°");
+const c = constrainTo45({ x: 0, y: 0 }, { x: 10, y: 1 });
+ok(near(c.y, 0) && near(c.x, Math.hypot(10, 1)), "Shift snaps a near-horizontal line to horizontal, keeping its length");
+const d = constrainTo45({ x: 5, y: 5 }, { x: 15, y: 17 });
+ok(near(d.x - 5, d.y - 5), "...and a near-diagonal one to 45°");
 
 // Precision dragging
 ok(dragGain(2) === 1 && dragGain(0.5) === 1, "a normal-speed drag follows the pointer exactly");

@@ -17,3 +17,11 @@ export function titleToFileName(title, extension) {
   const safe = String(title || "").replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").replace(/[. ]+$/, "").trim();
   return (safe || "zine") + extension;
 }
+
+// The file name for one page exported as a picture. A zine of several pages gets the page number
+// (zero-padded, so the files sort in order) and a one-page zine doesn't: "Issue 3-page-02.png".
+export function pageImageFileName(title, pageIndex, pageCount, extension) {
+  const digits = String(pageCount).length;
+  const suffix = pageCount > 1 ? `-page-${String(pageIndex + 1).padStart(digits, "0")}` : "";
+  return titleToFileName(title, suffix + extension);
+}

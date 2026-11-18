@@ -62,6 +62,8 @@
     border-bottom: 1px solid var(--ui-border);
 }
 .ze-tool-bar-group { display: flex; align-items: center; gap: 4px; }
+/* A thin vertical line between sets of tools. */
+.ze-tool-bar-divider { flex: 0 0 1px; align-self: center; width: 1px; height: 20px; margin: 0 4px; background: var(--ui-border); }
 .ze-zoom-control {
     flex: 0 1 240px;
     min-width: 170px;
@@ -278,9 +280,13 @@
     border-radius: 2px;
 }
 .ze-crop-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.ze-crop-handle-n { left: calc(50% - 6px); top: -6px; cursor: ns-resize; }
 .ze-crop-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
-.ze-crop-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ze-crop-handle-e { right: -6px; top: calc(50% - 6px); cursor: ew-resize; }
 .ze-crop-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.ze-crop-handle-s { left: calc(50% - 6px); bottom: -6px; cursor: ns-resize; }
+.ze-crop-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ze-crop-handle-w { left: -6px; top: calc(50% - 6px); cursor: ew-resize; }
 
 .ze-stroke-svg {
     position: absolute;
@@ -435,3 +441,36 @@
     word-break: inherit;
 }
 
+
+/* Measure tool: a line between two points with draggable ends and a readout (editor only). */
+.ze-measure-svg { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.ze-measure-halo { stroke: rgba(0, 0, 0, 0.55); stroke-width: 3px; }
+.ze-measure-line { stroke: #fff; stroke-width: 1px; stroke-dasharray: 5 3; }
+.ze-measure-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--ui-accent);
+    cursor: move;
+}
+.ze-measure-readout {
+    position: absolute;
+    transform-origin: 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 7px;
+    font: 500 11px/1.35 var(--ui-font);
+    color: #fff;
+    background: rgba(20, 16, 15, 0.9);
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.ze-measure-readout strong { font-weight: 700; font-size: 12px; }
+.ze-measure-readout span { color: #cfc9c5; }
+.ze-measure-handle.is-waiting { pointer-events: none; }
