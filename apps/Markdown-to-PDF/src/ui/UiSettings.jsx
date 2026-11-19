@@ -1,6 +1,6 @@
 // The gear button at the bottom left and its pop-up: the editor's text size, the size of the
-// app's own controls ("Interface size") and which parts of the window show (top bar, preview,
-// editor panel). These are preferences of this browser, not of the
+// app's own controls ("Interface size"), which parts of the window show (top bar, preview,
+// editor panel) and dark paper in the preview. These are preferences of this browser, not of the
 // document, so they live in localStorage rather than in the settings JSON.
 //
 // How they apply: two CSS variables on <html>. --md2ebook-editor-font-size sets the Markdown
@@ -9,7 +9,8 @@
 // out on purpose: it has its own zoom in the status bar. The Show checkboxes add
 // md2ebook-hide-header / -preview / -sidebar classes to <html> (styles.css). The gear stays on
 // screen whatever is hidden, so everything can be brought back, and the two columns can't both be
-// hidden.
+// hidden. Dark paper adds md2ebook-dark-paper to <html>; PreviewCanvas passes it on to the
+// preview frame (it only changes the preview, never the PDF).
 
 const { useState, useEffect, useRef } = React;
 
@@ -19,7 +20,7 @@ export const UI_SCALE = { min: 75, max: 175, step: 5, initial: 100 }; // percent
 
 // Parts of the window the Show checkboxes can hide: pref key -> class on <html>.
 const HIDEABLE = { hideHeader: "md2ebook-hide-header", hidePreview: "md2ebook-hide-preview", hideSidebar: "md2ebook-hide-sidebar" };
-const DEFAULT_PREFS = { editorFontSize: EDITOR_FONT.initial, uiScale: UI_SCALE.initial, hideHeader: false, hidePreview: false, hideSidebar: false };
+const DEFAULT_PREFS = { editorFontSize: EDITOR_FONT.initial, uiScale: UI_SCALE.initial, hideHeader: false, hidePreview: false, hideSidebar: false, darkPaper: false };
 
 const clamp = (v, { min, max, initial }) => (Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : initial);
 
@@ -33,6 +34,7 @@ function loadPrefs() {
     hideHeader: saved.hideHeader === true,
     hidePreview,
     hideSidebar: saved.hideSidebar === true && !hidePreview, // never both columns
+    darkPaper: saved.darkPaper === true,
   };
 }
 
@@ -41,6 +43,8 @@ function applyPrefs(prefs) {
   root.style.setProperty("--md2ebook-editor-font-size", prefs.editorFontSize + "px");
   root.style.setProperty("--md2ebook-ui-zoom", String(prefs.uiScale / 100));
   for (const [key, cls] of Object.entries(HIDEABLE)) root.classList.toggle(cls, prefs[key]);
+  root.classList.toggle("md2ebook-dark-paper", prefs.darkPaper);
+  window.dispatchEvent(new Event("md2ebook-uiprefs")); // PreviewCanvas forwards dark paper
 }
 
 // Applied once as soon as the bundle runs, so the app doesn't first draw at the default size.
@@ -116,6 +120,13 @@ export function UiSettings() {
           <div className="md2ebook-uiprefs-title">Display</div>
           <PrefSlider label="Editor text size" value={prefs.editorFontSize} range={EDITOR_FONT} unit="px" onChange={update("editorFontSize")} />
           <PrefSlider label="Interface size" value={prefs.uiScale} range={UI_SCALE} unit="%" onChange={update("uiScale")} />
+          <div className="md2ebook-uiprefs-subtitle">Preview</div>
+          <div className="md2ebook-uiprefs-checks">
+            <label className="md2ebook-uiprefs-check" title="Shows the pages dark while you work. Only the preview: the PDF stays white.">
+              <input type="checkbox" checked={prefs.darkPaper} onChange={(e) => update("darkPaper")(e.target.checked)} />
+              <span>Dark paper</span>
+            </label>
+          </div>
           <div className="md2ebook-uiprefs-subtitle">Show</div>
           <div className="md2ebook-uiprefs-checks">
             <ShowCheckbox label="Top bar" hidden={prefs.hideHeader} onChange={update("hideHeader")} hint="The title, File menu and export buttons" />
