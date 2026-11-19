@@ -6,7 +6,13 @@
       targets. Visually they grow a little; the hit area grows a lot, through an invisible
       ::after around each one. With a mouse nothing here applies. */
 
+/* On everything inside the canvas area, not just the area itself: the browser decides whether a
+   finger scrolls from the touched element and its parents only up to the box that scrolls (the
+   pane, .preview-pane, which is inside .ze-ruler-frame), so a rule on .ze-ruler-frame alone never
+   reached the page, and one finger scrolled instead of moving things. (The Layers panel, which
+   scrolls its own list, is rendered outside this area.) */
 .ze-ruler-frame,
+.ze-ruler-frame *,
 .ze-layers-head {
     touch-action: none;
     -webkit-touch-callout: none; /* no "Save image" bubble on a long press */
