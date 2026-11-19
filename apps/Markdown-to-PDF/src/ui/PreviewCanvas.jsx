@@ -185,11 +185,26 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
   // escape the iframe and manipulate this app directly. postMessage
   // keeps the iframe's contents fully confined to their own opaque
   // origin regardless of what's inside them.
+  // Dark paper (gear pop-up, UiSettings.jsx) is a class on this page's <html>; the preview frame
+  // is sandboxed, so it's passed on by postMessage: when the frame reports in, and when the
+  // setting changes.
+  function sendDarkPaper() {
+    const win = iframeRef.current && iframeRef.current.contentWindow;
+    if (!win) return;
+    const on = document.documentElement.classList.contains("md2ebook-dark-paper");
+    try { win.postMessage({ source: "md2ebook-app", type: "darkPaper", on }, "*"); } catch (e) { /* frame gone */ }
+  }
+  useEffect(() => {
+    window.addEventListener("md2ebook-uiprefs", sendDarkPaper);
+    return () => window.removeEventListener("md2ebook-uiprefs", sendDarkPaper);
+  }, []);
   useEffect(() => {
     function handleMessage(event) {
       const data = event.data;
       if (!data || data.source !== "md2ebook-pagedjs") return;
       if (iframeRef.current && event.source !== iframeRef.current.contentWindow) return;
+      // The frame is up (and maybe freshly re-rendered): tell it whether the paper is dark.
+      sendDarkPaper();
       const measuredHeight = Number(data.height);
       if (Number.isFinite(measuredHeight) && measuredHeight > 0) {
         setContentHeightPx(measuredHeight);

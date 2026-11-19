@@ -897,3 +897,59 @@ select.md2ebook-statusbar-select option {
 [data-input="touch"] .md2ebook-uiprefs-control input[type="range"] {
   height: 28px;
 }
+
+/* Show checkboxes in the gear pop-up: hide the top bar or one of the two columns. */
+.md2ebook-hide-header .md2ebook-header,
+.md2ebook-hide-preview .md2ebook-preview-pane,
+.md2ebook-hide-sidebar .md2ebook-sidebar {
+  display: none;
+}
+/* With the preview hidden the editor panel takes the whole width; no divider to drag. */
+.md2ebook-hide-preview .md2ebook-sidebar {
+  flex: 1 1 auto;
+  max-width: none;
+  border-left: 0;
+}
+.md2ebook-hide-preview .md2ebook-resizer {
+  display: none;
+}
+/* No status bar to float above. */
+.md2ebook-hide-preview .md2ebook-uiprefs {
+  bottom: 12px;
+}
+.md2ebook-uiprefs-subtitle {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  color: var(--ui-fg-muted);
+}
+.md2ebook-uiprefs-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.md2ebook-uiprefs-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+.md2ebook-uiprefs-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ui-accent);
+  cursor: inherit;
+}
+.md2ebook-uiprefs-check.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+[data-input="touch"] .md2ebook-uiprefs-checks {
+  gap: 10px;
+}
+[data-input="touch"] .md2ebook-uiprefs-check input {
+  width: 22px;
+  height: 22px;
+}

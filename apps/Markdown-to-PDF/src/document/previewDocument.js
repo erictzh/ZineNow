@@ -56,6 +56,14 @@ export function renderHtmlDocument(markdownText, config) {
     '  function __contentHeight() {\n' +
     '    return Math.ceil(document.body.getBoundingClientRect().height);\n' +
     '  }\n' +
+    // Dark paper (the gear pop-up, ui/UiSettings.jsx): the app says on or off by postMessage,
+    // and this frame flips a class on <html> (CSS below), so toggling it doesn't re-paginate.
+    // Only messages from the app's own window count.
+    "  window.addEventListener('message', function (e) {\n" +
+    "    var d = e.data;\n" +
+    "    if (e.source !== window.parent || !d || d.source !== 'md2ebook-app' || d.type !== 'darkPaper') return;\n" +
+    "    document.documentElement.classList.toggle('md2ebook-dark-paper', !!d.on);\n" +
+    '  });\n' +
     '  window.PagedConfig = {\n' +
     '    after: function (flow) {\n' +
     // Page numbers: Paged.js's own handling of `counter-reset: page N`
@@ -124,6 +132,10 @@ export function renderHtmlDocument(markdownText, config) {
     parts.styleText +
     buildPageBoxRule(parts) +
     '\n    .md2ebook-space { outline: 1px dashed #cbd5e1; outline-offset: -1px; position: relative; }\n' +
+    // Dark paper, preview only: the page's colours are inverted (white paper turns near-black,
+    // black text near-white) and pictures are inverted a second time so they look as they are.
+    '    html.md2ebook-dark-paper .pagedjs_page, html.md2ebook-dark-paper body > .page { filter: invert(0.92) hue-rotate(180deg); }\n' +
+    '    html.md2ebook-dark-paper img, html.md2ebook-dark-paper svg, html.md2ebook-dark-paper video, html.md2ebook-dark-paper picture { filter: invert(1) hue-rotate(180deg); }\n' +
     "    .md2ebook-space::after { content: 'blank space \\00b7  ' attr(data-lines) ' lines'; position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; font: 11px ui-sans-serif, system-ui, sans-serif; color: #94a3b8; }\n" +
     '  </style>\n' +
     '  ' +
