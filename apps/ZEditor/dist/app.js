@@ -13355,568 +13355,6 @@
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add."));
   }
 
-  // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState27, useRef: useRef18, useEffect: useEffect19 } = React;
-  function layerName(ann) {
-    if (ann.name) return ann.name;
-    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
-    return "Image";
-  }
-  function LayerThumb({ ann }) {
-    if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
-    if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
-    if (ann.type === "text") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-text" }, "T");
-    const isHi = ann.tool === "highlighter";
-    return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color), strokeWidth: "3", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 16c4-9 6-9 8-4s4 5 10-5" })));
-  }
-  var LockIcon = ({ locked }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "5", y: "11", width: "14", height: "10", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: locked ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2" }));
-  var EyeIcon = ({ hidden }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" }), hidden ? /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }) : /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
-  function layerBlocks(topFirst) {
-    const blocks = [];
-    topFirst.forEach((ann, row) => {
-      const last = blocks[blocks.length - 1];
-      if (ann.groupId && last && last.groupId === ann.groupId) last.items.push({ ann, row });
-      else blocks.push({ groupId: ann.groupId || null, items: [{ ann, row }] });
-    });
-    return blocks;
-  }
-  var collapsedGroups = /* @__PURE__ */ new Set();
-  function RenameInput({ current, onDone }) {
-    return /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        className: "ze-layer-name-input",
-        defaultValue: current,
-        autoFocus: true,
-        spellCheck: "false",
-        onFocus: (e) => e.target.select(),
-        onClick: (e) => e.stopPropagation(),
-        onBlur: (e) => onDone(e.target.value),
-        onKeyDown: (e) => {
-          if (e.key === "Escape") e.target.value = current;
-          if (e.key === "Enter" || e.key === "Escape") e.target.blur();
-        }
-      }
-    );
-  }
-  function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag }) {
-    const [renamingId, setRenamingId] = useState27(null);
-    const [dropInfo, setDropInfo] = useState27(null);
-    const [, setCollapseTick] = useState27(0);
-    const dragIdRef = useRef18(null);
-    const listRef = useRef18(null);
-    const panelRef = useRef18(null);
-    const headRef = useRef18(null);
-    const topFirst = annotations.slice().reverse();
-    const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
-    function toggleCollapsed(groupId) {
-      if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
-      else collapsedGroups.add(groupId);
-      setCollapseTick((n) => n + 1);
-    }
-    function inView(x, y) {
-      return {
-        x: Math.max(0, Math.min(x, window.innerWidth - panelRef.current.offsetWidth)),
-        y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
-      };
-    }
-    useEffect19(() => {
-      if (!position) return;
-      const keepInView = () => {
-        const next = inView(position.x, position.y);
-        if (next.x !== position.x || next.y !== position.y) onMove(next);
-      };
-      keepInView();
-      window.addEventListener("resize", keepInView);
-      return () => window.removeEventListener("resize", keepInView);
-    }, [position]);
-    function startPanelDrag(e) {
-      e.preventDefault();
-      const start = panelRef.current.getBoundingClientRect();
-      const { clientX, clientY } = e;
-      trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
-    }
-    useEffect19(() => {
-      const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
-      if (row) row.scrollIntoView({ block: "nearest" });
-    }, [selectedIds[0]]);
-    function finishRename(ann, text) {
-      setRenamingId(null);
-      const name = text.trim();
-      if (name && name !== layerName(ann)) onRename(ann.id, name);
-    }
-    function dragHandlersFor(key, dragId, rowBefore, rowAfter) {
-      return {
-        onDragStart: (e) => {
-          dragIdRef.current = dragId;
-          e.dataTransfer.setData("text/plain", "");
-        },
-        onDragOver: (e) => {
-          e.preventDefault();
-          const box = e.currentTarget.getBoundingClientRect();
-          const before = e.clientY < box.top + box.height / 2;
-          setDropInfo({ key, before, row: before ? rowBefore : rowAfter });
-        },
-        onDragEnd: () => {
-          dragIdRef.current = null;
-          setDropInfo(null);
-        },
-        onDrop: (e) => {
-          e.preventDefault();
-          const from = dragIdRef.current;
-          const info = dropInfo;
-          dragIdRef.current = null;
-          setDropInfo(null);
-          if (from === null || !info) return;
-          onReorder(selectedIds.includes(from) ? selectedIds : [from], info.row);
-        }
-      };
-    }
-    const dropLine = (key, before) => dropInfo && dropInfo.key === key && dropInfo.before === before ? /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }) : null;
-    function layerRow(ann, row, inGroup) {
-      const isRenaming = renamingId === ann.id;
-      return /* @__PURE__ */ React.createElement(React.Fragment, { key: ann.id }, dropLine(ann.id, true), /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          className: "ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (inGroup ? " is-grouped is-in-group" : ""),
-          style: inGroup ? { "--ze-group-color": groupColor(ann.groupId) } : void 0,
-          title: inGroup ? "In a group — Alt + click selects just this layer" : void 0,
-          "data-layer-id": ann.id,
-          draggable: !isRenaming,
-          onClick: (e) => {
-            if (!ann.hidden && !ann.locked) onSelect(ann.id, e.shiftKey, e.altKey);
-          },
-          onDoubleClick: () => setRenamingId(ann.id),
-          ...dragHandlersFor(ann.id, ann.id, row, row + 1)
-        },
-        /* @__PURE__ */ React.createElement(LayerThumb, { ann }),
-        isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: layerName(ann), onDone: (text) => finishRename(ann, text) }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, layerName(ann)),
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "ze-layer-icon-btn" + (ann.locked ? " active" : ""),
-            title: ann.locked ? "Unlock layer" : "Lock layer",
-            "aria-pressed": Boolean(ann.locked),
-            onClick: (e) => {
-              e.stopPropagation();
-              onToggleFlag(ann, "locked");
-            },
-            onDoubleClick: (e) => e.stopPropagation()
-          },
-          /* @__PURE__ */ React.createElement(LockIcon, { locked: ann.locked })
-        ),
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "ze-layer-icon-btn" + (ann.hidden ? " active" : ""),
-            title: ann.hidden ? "Show layer" : "Hide layer",
-            "aria-pressed": Boolean(ann.hidden),
-            onClick: (e) => {
-              e.stopPropagation();
-              onToggleFlag(ann, "hidden");
-            },
-            onDoubleClick: (e) => e.stopPropagation()
-          },
-          /* @__PURE__ */ React.createElement(EyeIcon, { hidden: ann.hidden })
-        )
-      ), dropLine(ann.id, false));
-    }
-    function groupBlock(block, number) {
-      const { groupId, items } = block;
-      const first = items[0].ann;
-      const name = first.groupName || "Group " + number;
-      const collapsed = collapsedGroups.has(groupId);
-      const allLocked = items.every((i) => i.ann.locked), allHidden = items.every((i) => i.ann.hidden);
-      const allSelected = items.every((i) => selectedIds.includes(i.ann.id));
-      const key = "g:" + groupId + ":" + first.id;
-      const firstRow = items[0].row, lastRow = items[items.length - 1].row;
-      const isRenaming = renamingId === "g:" + groupId;
-      return /* @__PURE__ */ React.createElement(React.Fragment, { key }, dropLine(key, true), /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          className: "ze-layer-row ze-layer-group-row is-grouped" + (allSelected ? " is-selected" : "") + (allHidden ? " is-hidden" : ""),
-          style: { "--ze-group-color": groupColor(groupId) },
-          title: "Group: click to select it, double-click to rename",
-          draggable: !isRenaming,
-          onClick: (e) => {
-            const pick = items.find((i) => !i.ann.hidden && !i.ann.locked);
-            if (pick) onSelect(pick.ann.id, e.shiftKey, false);
-          },
-          onDoubleClick: () => setRenamingId("g:" + groupId),
-          ...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)
-        },
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "ze-layer-caret",
-            "aria-expanded": !collapsed,
-            title: collapsed ? "Show the group's layers" : "Fold the group away",
-            onClick: (e) => {
-              e.stopPropagation();
-              toggleCollapsed(groupId);
-            },
-            onDoubleClick: (e) => e.stopPropagation()
-          },
-          /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", style: { transform: collapsed ? "rotate(-90deg)" : void 0 } }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
-        ),
-        /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-group", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }))),
-        isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: name, onDone: (text) => {
-          setRenamingId(null);
-          const n = text.trim();
-          if (n && n !== name) onRenameGroup(groupId, n);
-        } }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, name, " ", /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count" }, items.length)),
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "ze-layer-icon-btn" + (allLocked ? " active" : ""),
-            title: allLocked ? "Unlock the group" : "Lock the group",
-            "aria-pressed": allLocked,
-            onClick: (e) => {
-              e.stopPropagation();
-              onSetGroupFlag(groupId, "locked", !allLocked);
-            },
-            onDoubleClick: (e) => e.stopPropagation()
-          },
-          /* @__PURE__ */ React.createElement(LockIcon, { locked: allLocked })
-        ),
-        /* @__PURE__ */ React.createElement(
-          "button",
-          {
-            type: "button",
-            className: "ze-layer-icon-btn" + (allHidden ? " active" : ""),
-            title: allHidden ? "Show the group" : "Hide the group",
-            "aria-pressed": allHidden,
-            onClick: (e) => {
-              e.stopPropagation();
-              onSetGroupFlag(groupId, "hidden", !allHidden);
-            },
-            onDoubleClick: (e) => e.stopPropagation()
-          },
-          /* @__PURE__ */ React.createElement(EyeIcon, { hidden: allHidden })
-        )
-      ), collapsed ? dropLine(key, false) : items.map((i) => layerRow(i.ann, i.row, true)));
-    }
-    const groupNumbers = /* @__PURE__ */ new Map();
-    return /* @__PURE__ */ React.createElement(
-      "section",
-      {
-        className: "ze-layers-panel",
-        ref: panelRef,
-        style: position ? { left: position.x, top: position.y, right: "auto" } : void 0
-      },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startPanelDrag }, /* @__PURE__ */ React.createElement("span", null, "Layers", annotations.length > 0 ? " (" + annotations.length + ")" : ""), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Group the selected layers (Ctrl+G)", "aria-label": "Group selected layers", disabled: selectedIds.length < 2, onClick: onGroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "11", height: "11", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "10", y: "10", width: "11", height: "11", rx: "2" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Ungroup (Ctrl+Shift+G)", "aria-label": "Ungroup selected layers", disabled: !canUngroup, onClick: onUngroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "13", y: "13", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7h4M7 14v4", strokeDasharray: "1 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
-      /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
-        if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
-        if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
-        return groupBlock(block, groupNumbers.get(block.groupId));
-      }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page")))
-    );
-  }
-
-  // apps/ZEditor/src/ui/PanelResizer.jsx
-  var { useLayoutEffect: useLayoutEffect4, useRef: useRef19 } = React;
-  var MIN_CANVAS = 360;
-  var KEY_STEP = 16;
-  function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
-    const widthRef = useRef19(null);
-    const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
-    const clamp2 = (px) => {
-      const body = bodyRef.current;
-      const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
-      return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
-    };
-    const apply = (px, save) => {
-      const root = document.documentElement;
-      if (px == null) {
-        widthRef.current = null;
-        root.style.removeProperty(cssVar);
-        try {
-          localStorage.removeItem(storageKey);
-        } catch (e) {
-        }
-      } else {
-        widthRef.current = clamp2(px);
-        root.style.setProperty(cssVar, widthRef.current + "px");
-        if (save) {
-          try {
-            localStorage.setItem(storageKey, String(widthRef.current));
-          } catch (e) {
-          }
-        }
-      }
-    };
-    useLayoutEffect4(() => {
-      let saved = null;
-      try {
-        saved = parseInt(localStorage.getItem(storageKey), 10);
-      } catch (e) {
-      }
-      if (saved > 0) apply(saved, false);
-      const onResize = () => {
-        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
-      };
-      window.addEventListener("resize", onResize);
-      return () => window.removeEventListener("resize", onResize);
-    }, []);
-    const onPointerDown = (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.currentTarget.classList.add("is-dragging");
-      document.body.style.userSelect = "none";
-    };
-    const onPointerMove = (e) => {
-      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      const box = bodyRef.current.getBoundingClientRect();
-      apply(side === "left" ? e.clientX - box.left : box.right - e.clientX, false);
-    };
-    const endDrag = (e) => {
-      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      e.currentTarget.classList.remove("is-dragging");
-      document.body.style.userSelect = "";
-      if (widthRef.current != null) {
-        try {
-          localStorage.setItem(storageKey, String(widthRef.current));
-        } catch (err) {
-        }
-      }
-    };
-    const onKeyDown = (e) => {
-      const grow = side === "left" ? "ArrowRight" : "ArrowLeft", shrink = side === "left" ? "ArrowLeft" : "ArrowRight";
-      if (e.key === grow) {
-        e.preventDefault();
-        apply(cssPx(cssVar) + KEY_STEP, true);
-      } else if (e.key === shrink) {
-        e.preventDefault();
-        apply(cssPx(cssVar) - KEY_STEP, true);
-      } else if (e.key === "Home") {
-        e.preventDefault();
-        apply(null);
-      }
-    };
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        className: "ze-panel-resizer ze-panel-resizer-" + side,
-        role: "separator",
-        "aria-orientation": "vertical",
-        "aria-label": label,
-        tabIndex: 0,
-        onPointerDown,
-        onPointerMove,
-        onPointerUp: endDrag,
-        onPointerCancel: endDrag,
-        onDoubleClick: () => apply(null),
-        onKeyDown
-      }
-    );
-  }
-
-  // apps/ZEditor/src/ui/sidebar/PageGap.jsx
-  function PageGap({ onInsert }) {
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        className: "ze-page-gap",
-        role: "button",
-        tabIndex: 0,
-        title: "Add blank page",
-        onClick: onInsert,
-        onKeyDown: (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onInsert();
-          }
-        }
-      },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-page-gap-line" }),
-      /* @__PURE__ */ React.createElement("span", { className: "ze-page-gap-btn", "aria-hidden": "true" }, "+")
-    );
-  }
-
-  // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
-  function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
-    return /* @__PURE__ */ React.createElement(
-      "div",
-      {
-        className: "ze-thumb" + (isSelected ? " is-selected" : ""),
-        draggable: "true",
-        onClick: (e) => onSelect(idx, e.shiftKey),
-        ...dragHandlers
-      },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { src: p.dataUrl, alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          type: "button",
-          className: "log-btn",
-          title: "Rotate",
-          onClick: (e) => {
-            e.stopPropagation();
-            onRotate(idx);
-          }
-        },
-        "⟳"
-      ), /* @__PURE__ */ React.createElement(
-        "button",
-        {
-          type: "button",
-          className: "log-btn",
-          title: "Delete",
-          onClick: (e) => {
-            e.stopPropagation();
-            onDelete(idx);
-          }
-        },
-        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
-      )))
-    );
-  }
-
-  // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState28, useRef: useRef20, useEffect: useEffect20 } = React;
-  var EDGE_SCROLL_ZONE = 44;
-  var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef20(null);
-    const bodyRef = useRef20(null);
-    const scrollDirRef = useRef20(0);
-    const rafRef = useRef20(null);
-    const [dragOverInfo, setDragOverInfo] = useState28(null);
-    function startAutoScroll() {
-      if (rafRef.current) return;
-      const step = () => {
-        const el = bodyRef.current;
-        if (el && scrollDirRef.current !== 0) {
-          el.scrollTop += scrollDirRef.current * EDGE_SCROLL_SPEED;
-        }
-        rafRef.current = requestAnimationFrame(step);
-      };
-      rafRef.current = requestAnimationFrame(step);
-    }
-    function stopAutoScroll() {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      scrollDirRef.current = 0;
-    }
-    useEffect20(() => stopAutoScroll, []);
-    function handleContainerDragOver(e) {
-      const el = bodyRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const distFromTop = e.clientY - rect.top;
-      const distFromBottom = rect.bottom - e.clientY;
-      if (distFromTop < EDGE_SCROLL_ZONE) {
-        scrollDirRef.current = -1;
-      } else if (distFromBottom < EDGE_SCROLL_ZONE) {
-        scrollDirRef.current = 1;
-      } else {
-        scrollDirRef.current = 0;
-      }
-    }
-    function dragHandlersFor(idx) {
-      return {
-        onDragStart: () => {
-          dragIndexRef.current = idx;
-          startAutoScroll();
-        },
-        onDragOver: (e) => {
-          e.preventDefault();
-          const rect = e.currentTarget.getBoundingClientRect();
-          const before = e.clientY < rect.top + rect.height / 2;
-          setDragOverInfo({ idx, before });
-        },
-        onDragLeave: () => setDragOverInfo((cur) => cur && cur.idx === idx ? null : cur),
-        onDragEnd: () => {
-          dragIndexRef.current = null;
-          setDragOverInfo(null);
-          stopAutoScroll();
-        },
-        onDrop: (e) => {
-          e.preventDefault();
-          const from = dragIndexRef.current;
-          const info = dragOverInfo;
-          setDragOverInfo(null);
-          dragIndexRef.current = null;
-          stopAutoScroll();
-          if (from === null || !info || from === idx) return;
-          const selection = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : selectedPageIndices;
-          onReorder(selection.includes(from) ? selection : [from], idx + (info.before ? 0 : 1));
-        }
-      };
-    }
-    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
-      Thumbnail,
-      {
-        p,
-        idx,
-        isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
-        onSelect,
-        onRotate,
-        onDelete,
-        dragHandlers: dragHandlersFor(idx)
-      }
-    )), dragOverInfo && dragOverInfo.idx === idx && !dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(idx + 1) }))))));
-  }
-
-  // apps/ZEditor/src/ui/toolbar/ToolBar.jsx
-  function ToolBar({ selection, edits, view, zoom, dialogs }) {
-    const { tool, selectTool, selectedAnnId } = selection;
-    const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (M): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn" + (layersOpen ? " active" : ""),
-        "aria-pressed": layersOpen,
-        "aria-label": "Layers panel",
-        title: layersOpen ? "Minimize the Layers panel" : "Show the Layers panel",
-        onClick: () => setLayersOpen((open) => !open)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 3l9 5-9 5-9-5z" }), /* @__PURE__ */ React.createElement("path", { d: "M3 12.5l9 5 9-5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 17l9 5 9-5" }))
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn" + (centerGuideOn ? " active" : ""),
-        "aria-pressed": centerGuideOn,
-        "aria-label": "Center guide",
-        title: centerGuideOn ? "Hide the center guide" : "Show a guide down the middle of the page (for covers and two-page spreads)",
-        onClick: () => setCenterGuideOn((on) => !on)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "5", width: "18", height: "14", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M12 3v18", strokeDasharray: "2.5 2.5" }))
-    )), /* @__PURE__ */ React.createElement("div", { className: "ze-zoom-control" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Zoom (%)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: ZOOM_PERCENT.min, max: ZOOM_PERCENT.max, value: zoom.zoomPercent, onChange: zoom.handleZoomChange })), /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn",
-        title: "Delete selected (Delete)",
-        disabled: selectedAnnId === null,
-        onClick: edits.handleDeleteAnnotation
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-tool-icon-btn ze-tool-icon-btn--round",
-        title: "Keyboard shortcuts",
-        "aria-label": "Keyboard shortcuts",
-        onClick: () => dialogs.setShortcutsOpen(true)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 11v7" }), /* @__PURE__ */ React.createElement("path", { d: "M12 6.5v.01" }))
-    )));
-  }
-
   // apps/ZEditor/src/ui/touchInput.js
   var DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
   var NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
@@ -13929,6 +13367,10 @@
   var heldKeys = { shift: false, alt: false };
   function setTouchModifier(name, on) {
     heldKeys[name] = Boolean(on);
+  }
+  function withTouchModifier(name, e) {
+    const real = Boolean(e && e[name + "Key"]);
+    return real || heldKeys[name] && document.documentElement.getAttribute("data-ze-input") === "touch";
   }
   function mouseEventFrom(type, e, extra) {
     return new MouseEvent(type, {
@@ -14137,6 +13579,568 @@
       window.removeEventListener("dblclick", onDblClick, true);
       window.removeEventListener("contextmenu", onContextMenu, true);
     };
+  }
+
+  // apps/ZEditor/src/ui/panels/LayersPanel.jsx
+  var { useState: useState27, useRef: useRef18, useEffect: useEffect19 } = React;
+  function layerName(ann) {
+    if (ann.name) return ann.name;
+    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
+    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
+    return "Image";
+  }
+  function LayerThumb({ ann }) {
+    if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
+    if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
+    if (ann.type === "text") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-text" }, "T");
+    const isHi = ann.tool === "highlighter";
+    return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color), strokeWidth: "3", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 16c4-9 6-9 8-4s4 5 10-5" })));
+  }
+  var LockIcon = ({ locked }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "5", y: "11", width: "14", height: "10", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: locked ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2" }));
+  var EyeIcon = ({ hidden }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" }), hidden ? /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }) : /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
+  function layerBlocks(topFirst) {
+    const blocks = [];
+    topFirst.forEach((ann, row) => {
+      const last = blocks[blocks.length - 1];
+      if (ann.groupId && last && last.groupId === ann.groupId) last.items.push({ ann, row });
+      else blocks.push({ groupId: ann.groupId || null, items: [{ ann, row }] });
+    });
+    return blocks;
+  }
+  var collapsedGroups = /* @__PURE__ */ new Set();
+  function RenameInput({ current, onDone }) {
+    return /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        className: "ze-layer-name-input",
+        defaultValue: current,
+        autoFocus: true,
+        spellCheck: "false",
+        onFocus: (e) => e.target.select(),
+        onClick: (e) => e.stopPropagation(),
+        onBlur: (e) => onDone(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Escape") e.target.value = current;
+          if (e.key === "Enter" || e.key === "Escape") e.target.blur();
+        }
+      }
+    );
+  }
+  function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag }) {
+    const [renamingId, setRenamingId] = useState27(null);
+    const [dropInfo, setDropInfo] = useState27(null);
+    const [, setCollapseTick] = useState27(0);
+    const dragIdRef = useRef18(null);
+    const listRef = useRef18(null);
+    const panelRef = useRef18(null);
+    const headRef = useRef18(null);
+    const topFirst = annotations.slice().reverse();
+    const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
+    function toggleCollapsed(groupId) {
+      if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
+      else collapsedGroups.add(groupId);
+      setCollapseTick((n) => n + 1);
+    }
+    function inView(x, y) {
+      return {
+        x: Math.max(0, Math.min(x, window.innerWidth - panelRef.current.offsetWidth)),
+        y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
+      };
+    }
+    useEffect19(() => {
+      if (!position) return;
+      const keepInView = () => {
+        const next = inView(position.x, position.y);
+        if (next.x !== position.x || next.y !== position.y) onMove(next);
+      };
+      keepInView();
+      window.addEventListener("resize", keepInView);
+      return () => window.removeEventListener("resize", keepInView);
+    }, [position]);
+    function startPanelDrag(e) {
+      e.preventDefault();
+      const start = panelRef.current.getBoundingClientRect();
+      const { clientX, clientY } = e;
+      trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+    }
+    useEffect19(() => {
+      const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
+      if (row) row.scrollIntoView({ block: "nearest" });
+    }, [selectedIds[0]]);
+    function finishRename(ann, text) {
+      setRenamingId(null);
+      const name = text.trim();
+      if (name && name !== layerName(ann)) onRename(ann.id, name);
+    }
+    function dragHandlersFor(key, dragId, rowBefore, rowAfter) {
+      return {
+        onDragStart: (e) => {
+          dragIdRef.current = dragId;
+          e.dataTransfer.setData("text/plain", "");
+        },
+        onDragOver: (e) => {
+          e.preventDefault();
+          const box = e.currentTarget.getBoundingClientRect();
+          const before = e.clientY < box.top + box.height / 2;
+          setDropInfo({ key, before, row: before ? rowBefore : rowAfter });
+        },
+        onDragEnd: () => {
+          dragIdRef.current = null;
+          setDropInfo(null);
+        },
+        onDrop: (e) => {
+          e.preventDefault();
+          const from = dragIdRef.current;
+          const info = dropInfo;
+          dragIdRef.current = null;
+          setDropInfo(null);
+          if (from === null || !info) return;
+          onReorder(selectedIds.includes(from) ? selectedIds : [from], info.row);
+        }
+      };
+    }
+    const dropLine = (key, before) => dropInfo && dropInfo.key === key && dropInfo.before === before ? /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }) : null;
+    function layerRow(ann, row, inGroup) {
+      const isRenaming = renamingId === ann.id;
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: ann.id }, dropLine(ann.id, true), /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          className: "ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (inGroup ? " is-grouped is-in-group" : ""),
+          style: inGroup ? { "--ze-group-color": groupColor(ann.groupId) } : void 0,
+          title: inGroup ? "In a group — Alt + click selects just this layer" : void 0,
+          "data-layer-id": ann.id,
+          draggable: !isRenaming,
+          onClick: (e) => {
+            if (!ann.hidden && !ann.locked) onSelect(ann.id, withTouchModifier("shift", e), withTouchModifier("alt", e));
+          },
+          onDoubleClick: () => setRenamingId(ann.id),
+          ...dragHandlersFor(ann.id, ann.id, row, row + 1)
+        },
+        /* @__PURE__ */ React.createElement(LayerThumb, { ann }),
+        isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: layerName(ann), onDone: (text) => finishRename(ann, text) }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, layerName(ann)),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn" + (ann.locked ? " active" : ""),
+            title: ann.locked ? "Unlock layer" : "Lock layer",
+            "aria-pressed": Boolean(ann.locked),
+            onClick: (e) => {
+              e.stopPropagation();
+              onToggleFlag(ann, "locked");
+            },
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(LockIcon, { locked: ann.locked })
+        ),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn" + (ann.hidden ? " active" : ""),
+            title: ann.hidden ? "Show layer" : "Hide layer",
+            "aria-pressed": Boolean(ann.hidden),
+            onClick: (e) => {
+              e.stopPropagation();
+              onToggleFlag(ann, "hidden");
+            },
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(EyeIcon, { hidden: ann.hidden })
+        )
+      ), dropLine(ann.id, false));
+    }
+    function groupBlock(block, number) {
+      const { groupId, items } = block;
+      const first = items[0].ann;
+      const name = first.groupName || "Group " + number;
+      const collapsed = collapsedGroups.has(groupId);
+      const allLocked = items.every((i) => i.ann.locked), allHidden = items.every((i) => i.ann.hidden);
+      const allSelected = items.every((i) => selectedIds.includes(i.ann.id));
+      const key = "g:" + groupId + ":" + first.id;
+      const firstRow = items[0].row, lastRow = items[items.length - 1].row;
+      const isRenaming = renamingId === "g:" + groupId;
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key }, dropLine(key, true), /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          className: "ze-layer-row ze-layer-group-row is-grouped" + (allSelected ? " is-selected" : "") + (allHidden ? " is-hidden" : ""),
+          style: { "--ze-group-color": groupColor(groupId) },
+          title: "Group: click to select it, double-click to rename",
+          draggable: !isRenaming,
+          onClick: (e) => {
+            const pick = items.find((i) => !i.ann.hidden && !i.ann.locked);
+            if (pick) onSelect(pick.ann.id, withTouchModifier("shift", e), false);
+          },
+          onDoubleClick: () => setRenamingId("g:" + groupId),
+          ...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)
+        },
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-caret",
+            "aria-expanded": !collapsed,
+            title: collapsed ? "Show the group's layers" : "Fold the group away",
+            onClick: (e) => {
+              e.stopPropagation();
+              toggleCollapsed(groupId);
+            },
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", style: { transform: collapsed ? "rotate(-90deg)" : void 0 } }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
+        ),
+        /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-group", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinejoin: "round" }, /* @__PURE__ */ React.createElement("path", { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" }))),
+        isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: name, onDone: (text) => {
+          setRenamingId(null);
+          const n = text.trim();
+          if (n && n !== name) onRenameGroup(groupId, n);
+        } }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, name, " ", /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count" }, items.length)),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn" + (allLocked ? " active" : ""),
+            title: allLocked ? "Unlock the group" : "Lock the group",
+            "aria-pressed": allLocked,
+            onClick: (e) => {
+              e.stopPropagation();
+              onSetGroupFlag(groupId, "locked", !allLocked);
+            },
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(LockIcon, { locked: allLocked })
+        ),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn" + (allHidden ? " active" : ""),
+            title: allHidden ? "Show the group" : "Hide the group",
+            "aria-pressed": allHidden,
+            onClick: (e) => {
+              e.stopPropagation();
+              onSetGroupFlag(groupId, "hidden", !allHidden);
+            },
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(EyeIcon, { hidden: allHidden })
+        )
+      ), collapsed ? dropLine(key, false) : items.map((i) => layerRow(i.ann, i.row, true)));
+    }
+    const groupNumbers = /* @__PURE__ */ new Map();
+    return /* @__PURE__ */ React.createElement(
+      "section",
+      {
+        className: "ze-layers-panel",
+        ref: panelRef,
+        style: position ? { left: position.x, top: position.y, right: "auto" } : void 0
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startPanelDrag }, /* @__PURE__ */ React.createElement("span", null, "Layers", annotations.length > 0 ? " (" + annotations.length + ")" : ""), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Group the selected layers (Ctrl+G)", "aria-label": "Group selected layers", disabled: selectedIds.length < 2, onClick: onGroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "11", height: "11", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "10", y: "10", width: "11", height: "11", rx: "2" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Ungroup (Ctrl+Shift+G)", "aria-label": "Ungroup selected layers", disabled: !canUngroup, onClick: onUngroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "13", y: "13", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7h4M7 14v4", strokeDasharray: "1 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
+        if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
+        if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
+        return groupBlock(block, groupNumbers.get(block.groupId));
+      }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page")))
+    );
+  }
+
+  // apps/ZEditor/src/ui/PanelResizer.jsx
+  var { useLayoutEffect: useLayoutEffect4, useRef: useRef19 } = React;
+  var MIN_CANVAS = 360;
+  var KEY_STEP = 16;
+  function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
+    const widthRef = useRef19(null);
+    const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+    const clamp2 = (px) => {
+      const body = bodyRef.current;
+      const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
+      return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
+    };
+    const apply = (px, save) => {
+      const root = document.documentElement;
+      if (px == null) {
+        widthRef.current = null;
+        root.style.removeProperty(cssVar);
+        try {
+          localStorage.removeItem(storageKey);
+        } catch (e) {
+        }
+      } else {
+        widthRef.current = clamp2(px);
+        root.style.setProperty(cssVar, widthRef.current + "px");
+        if (save) {
+          try {
+            localStorage.setItem(storageKey, String(widthRef.current));
+          } catch (e) {
+          }
+        }
+      }
+    };
+    useLayoutEffect4(() => {
+      let saved = null;
+      try {
+        saved = parseInt(localStorage.getItem(storageKey), 10);
+      } catch (e) {
+      }
+      if (saved > 0) apply(saved, false);
+      const onResize = () => {
+        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+      };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, []);
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.classList.add("is-dragging");
+      document.body.style.userSelect = "none";
+    };
+    const onPointerMove = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      const box = bodyRef.current.getBoundingClientRect();
+      apply(side === "left" ? e.clientX - box.left : box.right - e.clientX, false);
+    };
+    const endDrag = (e) => {
+      if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      e.currentTarget.classList.remove("is-dragging");
+      document.body.style.userSelect = "";
+      if (widthRef.current != null) {
+        try {
+          localStorage.setItem(storageKey, String(widthRef.current));
+        } catch (err) {
+        }
+      }
+    };
+    const onKeyDown = (e) => {
+      const grow = side === "left" ? "ArrowRight" : "ArrowLeft", shrink = side === "left" ? "ArrowLeft" : "ArrowRight";
+      if (e.key === grow) {
+        e.preventDefault();
+        apply(cssPx(cssVar) + KEY_STEP, true);
+      } else if (e.key === shrink) {
+        e.preventDefault();
+        apply(cssPx(cssVar) - KEY_STEP, true);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        apply(null);
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-panel-resizer ze-panel-resizer-" + side,
+        role: "separator",
+        "aria-orientation": "vertical",
+        "aria-label": label,
+        tabIndex: 0,
+        onPointerDown,
+        onPointerMove,
+        onPointerUp: endDrag,
+        onPointerCancel: endDrag,
+        onDoubleClick: () => apply(null),
+        onKeyDown
+      }
+    );
+  }
+
+  // apps/ZEditor/src/ui/sidebar/PageGap.jsx
+  function PageGap({ onInsert }) {
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-page-gap",
+        role: "button",
+        tabIndex: 0,
+        title: "Add blank page",
+        onClick: onInsert,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onInsert();
+          }
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-page-gap-line" }),
+      /* @__PURE__ */ React.createElement("span", { className: "ze-page-gap-btn", "aria-hidden": "true" }, "+")
+    );
+  }
+
+  // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
+  function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        className: "ze-thumb" + (isSelected ? " is-selected" : ""),
+        draggable: "true",
+        onClick: (e) => onSelect(idx, withTouchModifier("shift", e)),
+        ...dragHandlers
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { src: p.dataUrl, alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "log-btn",
+          title: "Rotate",
+          onClick: (e) => {
+            e.stopPropagation();
+            onRotate(idx);
+          }
+        },
+        "⟳"
+      ), /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "log-btn",
+          title: "Delete",
+          onClick: (e) => {
+            e.stopPropagation();
+            onDelete(idx);
+          }
+        },
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
+      )))
+    );
+  }
+
+  // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
+  var { useState: useState28, useRef: useRef20, useEffect: useEffect20 } = React;
+  var EDGE_SCROLL_ZONE = 44;
+  var EDGE_SCROLL_SPEED = 4;
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
+    const dragIndexRef = useRef20(null);
+    const bodyRef = useRef20(null);
+    const scrollDirRef = useRef20(0);
+    const rafRef = useRef20(null);
+    const [dragOverInfo, setDragOverInfo] = useState28(null);
+    function startAutoScroll() {
+      if (rafRef.current) return;
+      const step = () => {
+        const el = bodyRef.current;
+        if (el && scrollDirRef.current !== 0) {
+          el.scrollTop += scrollDirRef.current * EDGE_SCROLL_SPEED;
+        }
+        rafRef.current = requestAnimationFrame(step);
+      };
+      rafRef.current = requestAnimationFrame(step);
+    }
+    function stopAutoScroll() {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      scrollDirRef.current = 0;
+    }
+    useEffect20(() => stopAutoScroll, []);
+    function handleContainerDragOver(e) {
+      const el = bodyRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const distFromTop = e.clientY - rect.top;
+      const distFromBottom = rect.bottom - e.clientY;
+      if (distFromTop < EDGE_SCROLL_ZONE) {
+        scrollDirRef.current = -1;
+      } else if (distFromBottom < EDGE_SCROLL_ZONE) {
+        scrollDirRef.current = 1;
+      } else {
+        scrollDirRef.current = 0;
+      }
+    }
+    function dragHandlersFor(idx) {
+      return {
+        onDragStart: () => {
+          dragIndexRef.current = idx;
+          startAutoScroll();
+        },
+        onDragOver: (e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          const before = e.clientY < rect.top + rect.height / 2;
+          setDragOverInfo({ idx, before });
+        },
+        onDragLeave: () => setDragOverInfo((cur) => cur && cur.idx === idx ? null : cur),
+        onDragEnd: () => {
+          dragIndexRef.current = null;
+          setDragOverInfo(null);
+          stopAutoScroll();
+        },
+        onDrop: (e) => {
+          e.preventDefault();
+          const from = dragIndexRef.current;
+          const info = dragOverInfo;
+          setDragOverInfo(null);
+          dragIndexRef.current = null;
+          stopAutoScroll();
+          if (from === null || !info || from === idx) return;
+          const selection = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : selectedPageIndices;
+          onReorder(selection.includes(from) ? selection : [from], idx + (info.before ? 0 : 1));
+        }
+      };
+    }
+    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
+      Thumbnail,
+      {
+        p,
+        idx,
+        isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
+        onSelect,
+        onRotate,
+        onDelete,
+        dragHandlers: dragHandlersFor(idx)
+      }
+    )), dragOverInfo && dragOverInfo.idx === idx && !dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(idx + 1) }))))));
+  }
+
+  // apps/ZEditor/src/ui/toolbar/ToolBar.jsx
+  function ToolBar({ selection, edits, view, zoom, dialogs }) {
+    const { tool, selectTool, selectedAnnId } = selection;
+    const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (M): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn" + (layersOpen ? " active" : ""),
+        "aria-pressed": layersOpen,
+        "aria-label": "Layers panel",
+        title: layersOpen ? "Minimize the Layers panel" : "Show the Layers panel",
+        onClick: () => setLayersOpen((open) => !open)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 3l9 5-9 5-9-5z" }), /* @__PURE__ */ React.createElement("path", { d: "M3 12.5l9 5 9-5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 17l9 5 9-5" }))
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn" + (centerGuideOn ? " active" : ""),
+        "aria-pressed": centerGuideOn,
+        "aria-label": "Center guide",
+        title: centerGuideOn ? "Hide the center guide" : "Show a guide down the middle of the page (for covers and two-page spreads)",
+        onClick: () => setCenterGuideOn((on) => !on)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "5", width: "18", height: "14", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M12 3v18", strokeDasharray: "2.5 2.5" }))
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-zoom-control" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Zoom (%)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: ZOOM_PERCENT.min, max: ZOOM_PERCENT.max, value: zoom.zoomPercent, onChange: zoom.handleZoomChange })), /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn",
+        title: "Delete selected (Delete)",
+        disabled: selectedAnnId === null,
+        onClick: edits.handleDeleteAnnotation
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-tool-icon-btn ze-tool-icon-btn--round",
+        title: "Keyboard shortcuts",
+        "aria-label": "Keyboard shortcuts",
+        onClick: () => dialogs.setShortcutsOpen(true)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12 11v7" }), /* @__PURE__ */ React.createElement("path", { d: "M12 6.5v.01" }))
+    )));
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
@@ -14368,7 +14372,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "683e86c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "7d3da12"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

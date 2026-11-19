@@ -52,6 +52,14 @@ export function setTouchModifier(name, on) {
   heldKeys[name] = Boolean(on);
 }
 
+// For ordinary clicks outside the canvas (the Layers panel, the Pages panel): whether a click
+// counts as Shift/Alt-held, from the real key or, while a finger is being used, the touch bar's
+// toggle. Mouse clicks ignore the toggle, so a Shift left on doesn't linger for the mouse.
+export function withTouchModifier(name, e) {
+  const real = Boolean(e && e[name + "Key"]);
+  return real || (heldKeys[name] && document.documentElement.getAttribute("data-ze-input") === "touch");
+}
+
 function mouseEventFrom(type, e, extra) {
   return new MouseEvent(type, {
     bubbles: type !== "mouseleave",

@@ -5,6 +5,7 @@ import { isEllipse } from "../../model/outlines.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../../model/strokes.js";
 import { rectFillCss } from "../../render/gradients.js";
 import { trackPointerDrag } from "../pointer.js";
+import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
 
 // ---- Layers panel — the page's items, top layer first. ----------------
@@ -169,7 +170,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
           title={inGroup ? "In a group — Alt + click selects just this layer" : undefined}
           data-layer-id={ann.id}
           draggable={!isRenaming}
-          onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, e.shiftKey, e.altKey); }}
+          onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, withTouchModifier("shift", e), withTouchModifier("alt", e)); }}
           onDoubleClick={() => setRenamingId(ann.id)}
           {...dragHandlersFor(ann.id, ann.id, row, row + 1)}
         >
@@ -219,7 +220,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
           style={{ "--ze-group-color": groupColor(groupId) }}
           title="Group: click to select it, double-click to rename"
           draggable={!isRenaming}
-          onClick={(e) => { const pick = items.find((i) => !i.ann.hidden && !i.ann.locked); if (pick) onSelect(pick.ann.id, e.shiftKey, false); }}
+          onClick={(e) => { const pick = items.find((i) => !i.ann.hidden && !i.ann.locked); if (pick) onSelect(pick.ann.id, withTouchModifier("shift", e), false); }}
           onDoubleClick={() => setRenamingId("g:" + groupId)}
           // Below an open group's row is its first layer, so a drop there goes above the group's layers.
           {...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)}
