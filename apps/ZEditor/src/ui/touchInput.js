@@ -11,7 +11,14 @@
 // is sent on as mousedown, the moves as mousemove and the release as mouseup, carrying the same
 // position and Shift/Alt/Ctrl flags. Mouse input never goes through here.
 //
+// On the canvas area one finger edits and two fingers scroll (the browser's own scrolling is
+// off there: styles/touch.css). So a finger press waits a moment (FINGER_HOLD_MS, or until it
+// moves) before it acts: if a second finger lands in that time it's a scroll, and nothing is
+// edited. A pen never waits.
+//
 // It also:
+//  - counts a finger landing just below or beside a ruler as on the ruler (they're thin, and a
+//    finger reports a point a little lower than where it seems to touch),
 //  - turns a double tap into a double-click (editing text starts on double-click),
 //  - stops a long press from opening the browser's own menu over the page,
 //  - marks <html data-ze-input="touch|mouse"> after every press, which the stylesheet uses to
@@ -21,11 +28,15 @@
 // the browser: a real tap is what focuses them and brings up the on-screen keyboard.
 
 // Where a finger or pen press is treated as a mouse press. Keep in step with the touch-action
-// rule in styles/touch.css, which stops these from scrolling the page.
+// rule in styles/touch.css.
 const DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
 // Left to the browser even inside a drag surface.
-const NATIVE_TARGETS = "input, textarea, select, [contenteditable], .ze-typeset-surface";
+const NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
+// Where two fingers scroll the canvas (the pane, the page in it, and the rulers around it).
+const SCROLL_AREA = ".ze-ruler-frame";
 
+const FINGER_HOLD_MS = 120; // how long a finger press waits for a possible second finger
+const RULER_SLOP_PX = 12; // a finger this close below/beside a ruler counts as on it
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 24;
 const TAP_SLOP_PX = 10; // more movement than this and it was a drag, not a tap
@@ -57,31 +68,95 @@ function send(el, type, e, extra) {
   target.dispatchEvent(mouseEventFrom(type, e, extra));
 }
 
+// The ruler a finger at (x, y) is meant for: on it, or just below the top one / just right of
+// the left one.
+function rulerNear(x, y) {
+  for (const ruler of document.querySelectorAll(".ze-ruler")) {
+    const r = ruler.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    const top = ruler.classList.contains("ze-ruler-top");
+    const inside = top
+      ? x >= r.left && x <= r.right && y >= r.top && y <= r.bottom + RULER_SLOP_PX
+      : y >= r.top && y <= r.bottom && x >= r.left && x <= r.right + RULER_SLOP_PX;
+    if (inside) return ruler;
+  }
+  return null;
+}
+
 export function installTouchInput() {
   if (typeof window === "undefined" || !window.PointerEvent) return () => {};
   const root = document.documentElement;
-  let active = null; // { id, target, x, y, moved } for the finger/pen being forwarded
-  let lastTap = null; // { time, x, y, target } for spotting a double tap
+  const fingers = new Map(); // pointerId -> { x, y } for every finger down on the canvas area
+  let pending = null; // a finger press waiting to see if a second finger follows
+  let active = null; // { id, target, x, y, moved } for the press being forwarded as mouse events
+  let pan = null; // { pane, mid } while two fingers scroll the canvas
+  let lastTap = null; // { time, x, y } for spotting a double tap
   let lastTouchTime = 0;
 
   const markInput = (e) => {
     const kind = e.pointerType === "mouse" ? "mouse" : "touch";
     if (root.dataset.zeInput !== kind) root.dataset.zeInput = kind;
   };
+  const midpoint = () => {
+    const [a, b] = [...fingers.values()];
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  };
+
+  // Starts forwarding a press as mouse events (and replays any moves it made while waiting).
+  function begin(press) {
+    active = { id: press.id, target: press.target, x: press.down.clientX, y: press.down.clientY, moved: false };
+    send(press.target, "mousedown", press.down);
+    for (const move of press.moves) forwardMove(move);
+  }
+  function flushPending() {
+    if (!pending) return;
+    const press = pending;
+    clearTimeout(press.timer);
+    pending = null;
+    begin(press);
+  }
+  function forwardMove(e) {
+    if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
+    send(active.target, "mousemove", e);
+  }
 
   function onPointerDown(e) {
     markInput(e);
     if (e.pointerType === "mouse") return;
     lastTouchTime = Date.now();
-    if (active) return; // a second finger: ignored (room for pinch-to-zoom later)
-    const target = e.target instanceof Element ? e.target : null;
-    if (!target || !target.closest(DRAG_SURFACES) || target.closest(NATIVE_TARGETS)) return;
+    const isFinger = e.pointerType === "touch";
+    let target = e.target instanceof Element ? e.target : null;
+    if (!target) return;
+    if (isFinger) {
+      const ruler = rulerNear(e.clientX, e.clientY);
+      if (ruler) target = ruler;
+    }
+    const inScrollArea = Boolean(target.closest(SCROLL_AREA));
+    const surface = target.closest(DRAG_SURFACES) && !target.closest(NATIVE_TARGETS);
+
+    if (isFinger && inScrollArea) {
+      fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (fingers.size === 2 && !active) {
+        // Second finger: it's a scroll. A press still waiting is dropped, unseen by the editor.
+        if (pending) { clearTimeout(pending.timer); pending = null; }
+        pan = { pane: target.closest(SCROLL_AREA).querySelector(".preview-pane"), mid: midpoint() };
+        e.preventDefault();
+        return;
+      }
+      if (fingers.size > 1 || pan) { e.preventDefault(); return; } // a third finger, or one left from a scroll
+    }
+    if (active || pending || !surface) return;
     // None of the browser's own (tap-only) mouse events, which would arrive a second time after
-    // this one; the tap's click still comes through. (Scrolling is stopped by touch-action: none
-    // on these surfaces, in styles/touch.css: by the time this runs, that has been decided.)
+    // ours; the tap's click still comes through. (Scrolling is stopped by touch-action: none in
+    // styles/touch.css: by the time this runs, that has been decided.)
     e.preventDefault();
-    active = { id: e.pointerId, target, x: e.clientX, y: e.clientY, moved: false };
-    send(target, "mousedown", e);
+    const press = { id: e.pointerId, target, down: e, moves: [] };
+    if (isFinger && inScrollArea) {
+      pending = press;
+      press.timer = setTimeout(flushPending, FINGER_HOLD_MS);
+    } else {
+      begin(press);
+    }
   }
 
   function onPointerMove(e) {
@@ -89,12 +164,35 @@ export function installTouchInput() {
       if (root.dataset.zeInput === "touch" && e.buttons === 0) markInput(e); // back on the mouse
       return;
     }
-    if (!active || e.pointerId !== active.id) return;
-    if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
-    send(active.target, "mousemove", e);
+    if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pan) {
+      if (fingers.size < 2) return;
+      const mid = midpoint();
+      if (pan.pane) {
+        pan.pane.scrollLeft -= mid.x - pan.mid.x;
+        pan.pane.scrollTop -= mid.y - pan.mid.y;
+      }
+      pan.mid = mid;
+      return;
+    }
+    if (pending && e.pointerId === pending.id) {
+      pending.moves.push(e);
+      if (Math.hypot(e.clientX - pending.down.clientX, e.clientY - pending.down.clientY) > TAP_SLOP_PX) flushPending();
+      return;
+    }
+    if (active && e.pointerId === active.id) forwardMove(e);
   }
 
   function onPointerEnd(e) {
+    fingers.delete(e.pointerId);
+    if (pan) {
+      if (fingers.size < 2) pan = null; // the finger still down does nothing until it's lifted
+      return;
+    }
+    if (pending && e.pointerId === pending.id) {
+      if (e.type === "pointercancel") { clearTimeout(pending.timer); pending = null; return; }
+      flushPending(); // a quick tap: its press goes out now, then its release below
+    }
     if (!active || e.pointerId !== active.id) return;
     const { target, moved } = active;
     active = null;
@@ -125,11 +223,11 @@ export function installTouchInput() {
 
   // A long press opens the browser's menu (Save image…) over the page: not wanted there.
   function onContextMenu(e) {
-    if (Date.now() - lastTouchTime < 1000 && e.target instanceof Element && e.target.closest(DRAG_SURFACES)) e.preventDefault();
+    if (Date.now() - lastTouchTime < 1000 && e.target instanceof Element && e.target.closest(SCROLL_AREA + ", " + DRAG_SURFACES)) e.preventDefault();
   }
 
   // Capture phase on window: these run before anything on the page, and the pointerdown one has
-  // to be non-passive to be allowed to stop scrolling.
+  // to be non-passive to be allowed to cancel the browser's mouse events.
   window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
   window.addEventListener("pointermove", onPointerMove, true);
   window.addEventListener("pointerup", onPointerEnd, true);
