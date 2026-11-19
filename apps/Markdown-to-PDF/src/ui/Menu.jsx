@@ -33,10 +33,13 @@ export function DropMenu({ trigger, title, align = "left", triggerClassName, kee
     const menu = menuRef.current;
     if (!open || !menu) return;
     menu.style.transform = "";
-    const { left, right } = menu.getBoundingClientRect();
+    const { left, right, width } = menu.getBoundingClientRect();
     const limit = document.documentElement.clientWidth - 8;
-    if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right)}px)`;
-    else if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+    // The rect is in screen pixels, the transform in the menu's own: they differ when the
+    // Interface size setting zooms the menu (UiSettings.jsx).
+    const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
+    if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right) / zoom}px)`;
+    else if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
   }, [open]);
 
   return (
