@@ -1,12 +1,14 @@
 // One page thumbnail with rotate and delete buttons.
 
+import { withTouchModifier } from "../touchInput.js";
+
 // ---- One sidebar thumbnail ------------------------------------------
 export function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
   return (
     <div
       className={"ze-thumb" + (isSelected ? " is-selected" : "")}
       draggable="true"
-      onClick={(e) => onSelect(idx, e.shiftKey)}
+      onClick={(e) => onSelect(idx, withTouchModifier("shift", e))}
       {...dragHandlers}
     >
       <div className="ze-thumb-img-wrap">
