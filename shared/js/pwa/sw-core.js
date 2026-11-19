@@ -5,7 +5,8 @@
 // Strategy (see docs/MAINTAINING.md, "Offline / PWA"):
 //   - Install: precache the app's own files (must all succeed) and, best effort, the
 //     pinned CDN libraries it loads (a failure there doesn't block install).
-//   - Same-origin requests: network first, so a deploy reaches users on their next load;
+//   - Same-origin requests: network first, checked with the server every time (fetchFresh, so the
+//     browser's 10-minute HTTP cache can't hold back a deploy), so a deploy reaches users on their next load;
 //     the cache is only the offline fallback (and the answer if the network takes longer
 //     than NETWORK_TIMEOUT_MS while a cached copy exists).
 //   - CDN requests (CDN_HOSTS): cache first for version-pinned URLs and font files,
@@ -77,10 +78,20 @@ function startZineNowServiceWorker({ app, version, files, cdn = [] }) {
     })());
   });
 
+  // The app's own files, checked with the server every time (cache: "no-cache") rather than taken
+  // from the browser's HTTP cache. GitHub Pages lets browsers reuse a file for 10 minutes
+  // (max-age=600), so without this a device could keep running the old version for that long
+  // after a deploy. An unchanged file costs only a quick "not modified" reply. A page navigation
+  // can't be copied with new options, so that one is re-requested by URL.
+  function fetchFresh(request) {
+    if (request.mode === "navigate") return fetch(request.url, { cache: "no-cache", credentials: "same-origin" });
+    return fetch(new Request(request, { cache: "no-cache" }));
+  }
+
   async function networkFirst(event) {
     const { request } = event;
     const cache = await caches.open(CACHE);
-    const network = fetch(request).then(async (res) => {
+    const network = fetchFresh(request).then(async (res) => {
       if (res.ok && res.type === "basic") await cachePut(cache, request, res.clone());
       return res;
     });

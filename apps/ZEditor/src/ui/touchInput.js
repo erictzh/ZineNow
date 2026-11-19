@@ -136,6 +136,14 @@ export function installTouchInput() {
 
     if (isFinger && inScrollArea) {
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // A second finger that lands a little late, after the first press has started but before it
+      // has moved anywhere: still a scroll. The first press ends where it began, as a tap.
+      if (fingers.size === 2 && active && !active.moved && fingers.has(active.id)) {
+        const first = active;
+        active = null;
+        send(first.target, "mouseup", { clientX: first.x, clientY: first.y, screenX: e.screenX, screenY: e.screenY, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+        lastTap = null;
+      }
       if (fingers.size === 2 && !active) {
         // Second finger: it's a scroll. A press still waiting is dropped, unseen by the editor.
         if (pending) { clearTimeout(pending.timer); pending = null; }

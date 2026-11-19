@@ -12,7 +12,8 @@
 // <script> tags, so the bundle only contains the app's own code.
 
 import * as esbuild from "esbuild";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,8 +34,37 @@ function findApps() {
     .filter(Boolean);
 }
 
+// Every file under `dir` (recursively), as paths relative to the repo root.
+function filesUnder(dir) {
+  if (!existsSync(dir)) return [];
+  if (statSync(dir).isFile()) return [relative(root, dir)];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((d) => filesUnder(join(dir, d.name)));
+}
+
+// The app's build number: a short fingerprint of everything that decides how it looks and behaves
+// (its src/, its stylesheets, its index.html, and shared/). Same files, same number, so `npm run
+// check` stays stable; any change gives a new one. Shown in the app (ZEditor's top bar) so you can
+// tell whether a device is running the version just deployed. Line endings are ignored, as in
+// `check` below.
+function buildNumberFor(app) {
+  const appDir = join(app.entry, "..", "..");
+  const inputs = [join(appDir, "src"), join(appDir, "styles"), join(appDir, "index.html"), join(root, "shared")]
+    .concat(readdirSync(appDir).filter((f) => f.endsWith(".css")).map((f) => join(appDir, f)))
+    .flatMap(filesUnder)
+    .map((p) => p.replace(/\\/g, "/"))
+    .sort();
+  const hash = createHash("sha1");
+  for (const file of inputs) {
+    hash.update(file + "\0");
+    hash.update(readFileSync(join(root, file), "utf8").replace(/\r\n/g, "\n") + "\0");
+  }
+  return hash.digest("hex").slice(0, 7);
+}
+
 function optionsFor(app) {
   return {
+    // `__BUILD__` in an app's code becomes its build number (see buildNumberFor).
+    define: { __BUILD__: JSON.stringify(buildNumberFor(app)) },
     entryPoints: [app.entry],
     outfile: app.outfile,
     bundle: true,
