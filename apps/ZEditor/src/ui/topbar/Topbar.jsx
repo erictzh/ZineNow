@@ -21,7 +21,8 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
         <div className="topbar-logo">ZE</div>
         <div className="topbar-brand-text">
           <div className="topbar-title">ZEditor</div>
-          <div className="topbar-subtitle">Compose zine pages</div>
+          {/* The build number (tools/build.mjs) shows which version is running, e.g. on a tablet after a deploy. */}
+          <div className="topbar-subtitle" title="Build number: changes whenever the app is updated">Compose zine pages · build {__BUILD__}</div>
         </div>
       </div>
       <div className="topbar-actions">
