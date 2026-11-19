@@ -1,11 +1,31 @@
-// The Editor tab: the Markdown textarea and its toolbar (upload, save, copy, insert ToC / page break / blank space).
+// The Editor tab: the Markdown textarea, its file actions (upload, save, copy) and its formatting
+// toolbar (FormatToolbar.jsx) with keyboard shortcuts.
 
+import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertLink, setBlock, toggleInline } from "../../editor/format.js";
 import { DOCUMENT_INPUT_ACCEPT, DOCUMENT_PICKER_TYPES, documentToMarkdown } from "../../editor/importDocument.js";
-import { clampSpaceLines, insertStandaloneLine } from "../../editor/insertLine.js";
 import { copyText, pickFile, saveTextFile } from "../../io/filePickers.js";
 import { StatusLine } from "../fields.jsx";
+import { FormatToolbar } from "./FormatToolbar.jsx";
 
-const { useRef } = React;
+const { useRef, useState } = React;
+
+// Shortcuts that work while typing in the editor. Ctrl (⌘ on a Mac) plus the key; headings use
+// Ctrl+Alt+digit because browsers keep Ctrl+digit for switching tabs.
+function shortcutFor(e) {
+  if (!(e.ctrlKey || e.metaKey) || (e.getModifierState && e.getModifierState("AltGraph"))) return null;
+  const k = e.key.toLowerCase();
+  if (e.altKey && !e.shiftKey) {
+    const level = { Digit0: "p", Digit1: "h1", Digit2: "h2", Digit3: "h3" }[e.code];
+    return level ? ["block", level] : null;
+  }
+  if (e.altKey) return null;
+  if (e.shiftKey) {
+    if (k === "x") return ["inline", "strike"];
+    const block = { Digit7: "ol", Digit8: "ul", Digit9: "quote" }[e.code];
+    return block ? ["block", block] : null;
+  }
+  return { b: ["inline", "bold"], i: ["inline", "italic"], e: ["inline", "code"], k: ["link"] }[k] || null;
+}
 
 // Upload and Save remember their own last-used folder (your documents),
 // separate from the settings-file picker's.
@@ -15,44 +35,67 @@ const DOCUMENT_PICKER_ID = "md2ebook-document";
 export function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spaceLines, setSpaceLines }) {
   const editorTextareaRef = useRef(null);
   const documentFileInputRef = useRef(null);
+  const [blockKind, setBlockKind] = useState("p"); // the caret line's kind, for the toolbar
   const errorText = (err) => (err && err.message ? err.message : String(err));
 
-  // Puts a marker line at the caret (replacing any selection), then puts
-  // the caret after it — see document/markers.js for what each marker does.
-  function insertLine(line) {
+  const refreshBlockKind = () => {
     const el = editorTextareaRef.current;
-    // Remember where the editor (and the page) were scrolled: React
-    // reassigning the textarea's value, and focus(), both jump the
-    // scroll position otherwise.
-    const savedScrollTop = el ? el.scrollTop : 0;
-    const savedWindowY = window.scrollY;
-    const start = el ? el.selectionStart : markdown.length;
-    const end = el ? el.selectionEnd : markdown.length;
-    const { text, caret } = insertStandaloneLine(markdown, start, end, line);
-    // flushSync (not requestAnimationFrame) forces this state update to
-    // commit to the real DOM before the restore call below runs. The
-    // textarea's value is controlled by React state, and browsers reset
-    // a textarea's cursor to the end whenever its value is reassigned —
-    // requestAnimationFrame doesn't reliably run *after* React's commit,
-    // so the restore could fire while the DOM still had the old text,
-    // get clamped short, and then get stomped when React's real commit
-    // landed. flushSync removes the race entirely.
-    ReactDOM.flushSync(() => {
-      setMarkdown(text);
-    });
-    const ta = editorTextareaRef.current;
-    if (ta) {
-      ta.focus({ preventScroll: true });
-      ta.setSelectionRange(caret, caret);
-      ta.scrollTop = savedScrollTop;
+    if (el) setBlockKind(blockAt(el.value, el.selectionStart));
+  };
+
+  // Makes one edit from editor/format.js in the textarea as if it had been typed, so Ctrl+Z undoes
+  // it (setting the value through React would wipe the browser's undo history), then selects what
+  // the edit says to select.
+  function applyToEditor(edit) {
+    const el = editorTextareaRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(edit.from, edit.to);
+    let typed = false;
+    if (edit.from === edit.to && edit.insert === "") typed = true; // nothing to change
+    else {
+      try {
+        typed = edit.insert === "" ? document.execCommand("delete") : document.execCommand("insertText", false, edit.insert);
+      } catch (e) {
+        typed = false;
+      }
     }
-    window.scrollTo(window.scrollX, savedWindowY);
+    if (!typed) {
+      // A browser without execCommand: set the text directly (no undo for this step). flushSync puts the
+      // new text in the textarea before the selection is set, or the browser would clamp it.
+      const savedScrollTop = el.scrollTop;
+      ReactDOM.flushSync(() => setMarkdown(applyEdit(el.value, edit)));
+      el.scrollTop = savedScrollTop;
+    }
+    el.setSelectionRange(edit.selStart, edit.selEnd);
+    refreshBlockKind();
   }
 
-  function handleInsertSpace() {
-    const n = clampSpaceLines(spaceLines);
-    setSpaceLines(String(n));
-    insertLine("\\space{" + n + "}");
+  // Runs one toolbar action (or shortcut) on the editor's current text and selection.
+  function runAction(action, arg) {
+    const el = editorTextareaRef.current;
+    if (!el) return;
+    const text = el.value;
+    const s = el.selectionStart;
+    const e = el.selectionEnd;
+    if (action === "inline") applyToEditor(toggleInline(text, s, e, arg));
+    else if (action === "block") applyToEditor(setBlock(text, s, e, arg));
+    else if (action === "link") applyToEditor(insertLink(text, s, e));
+    // A marker line (\toc, \pagebreak, \space{N}) or a divider, on its own line at the caret — see
+    // document/markers.js for what each marker does.
+    else if (action === "line") applyToEditor(insertBlockLine(text, s, e, arg));
+    else if (action === "space") {
+      const n = clampSpaceLines(spaceLines);
+      setSpaceLines(String(n));
+      applyToEditor(insertBlockLine(text, s, e, "\\space{" + n + "}"));
+    }
+  }
+
+  function handleEditorKeyDown(e) {
+    const shortcut = shortcutFor(e);
+    if (!shortcut) return;
+    e.preventDefault();
+    runAction(shortcut[0], shortcut[1]);
   }
 
   // An import replaces the editor's contents outright, not an insert.
@@ -61,15 +104,13 @@ export function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spac
     const name = (file && file.name) || "document";
     try {
       const converted = await documentToMarkdown(file);
-      // Same flushSync reasoning as insertLine above — forces the new
-      // document to be in the DOM before the textarea is positioned.
-      ReactDOM.flushSync(() => {
+      // As one typed edit, so Ctrl+Z brings back what was there before the import.
+      const el = editorTextareaRef.current;
+      if (el) {
+        applyToEditor({ from: 0, to: el.value.length, insert: converted, selStart: 0, selEnd: 0 });
+        el.scrollTop = 0;
+      } else {
         setMarkdown(converted);
-      });
-      if (editorTextareaRef.current) {
-        editorTextareaRef.current.focus();
-        editorTextareaRef.current.setSelectionRange(0, 0);
-        editorTextareaRef.current.scrollTop = 0;
       }
       setDocStatus({ type: "success", message: `Imported "${name}", replacing the editor's contents.` });
     } catch (err) {
@@ -123,7 +164,7 @@ export function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spac
 
   return (
     <div className="h-full flex flex-col p-3">
-      <div className="flex flex-wrap items-center justify-end gap-2 mb-2">
+      <div className="flex flex-wrap items-center justify-end gap-1 mb-2">
         <button
           type="button"
           onClick={handleImportClick}
@@ -138,43 +179,6 @@ export function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spac
         <button type="button" onClick={handleCopyAll} className="log-btn" title="Copy the Markdown source to the clipboard">
           Copy All
         </button>
-        <button
-          type="button"
-          onClick={() => insertLine("\\toc")}
-          className="log-btn"
-          title={"Insert a table of contents at the cursor (\\toc) — settings are in the Typography tab"}
-        >
-          + ToC
-        </button>
-        <button
-          type="button"
-          onClick={() => insertLine("\\pagebreak")}
-          className="log-btn"
-          title={"Insert a manual page break at the cursor (\\pagebreak)"}
-        >
-          + Page Break
-        </button>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleInsertSpace}
-            className="log-btn"
-            title={"Insert empty space at the cursor, N body lines tall (\\space{N}) — room to paste an image into the PDF later"}
-          >
-            + Blank Space
-          </button>
-          <input
-            type="number"
-            min="1"
-            max="200"
-            value={spaceLines}
-            onChange={(e) => setSpaceLines(e.target.value)}
-            aria-label="Blank space height in lines"
-            title="Height in lines"
-            className="w-14 text-[11px]"
-          />
-          <span className="text-[11px] text-fg-muted">lines</span>
-        </div>
         <input
           ref={documentFileInputRef}
           type="file"
@@ -183,9 +187,12 @@ export function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spac
           className="hidden"
         />
       </div>
+      <FormatToolbar blockKind={blockKind} onAction={runAction} spaceLines={spaceLines} setSpaceLines={setSpaceLines} />
       <StatusLine status={docStatus} className="mb-2" />
       <textarea
         ref={editorTextareaRef}
+        onKeyDown={handleEditorKeyDown}
+        onSelect={refreshBlockKind}
         className={
           "md2ebook-editor-textarea flex-1 w-full min-h-[60vh] rounded-md border border-line\n                         bg-ink p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent"
         }
