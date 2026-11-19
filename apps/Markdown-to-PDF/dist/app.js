@@ -1,5 +1,18 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/inputMode.js
+  function installInputMode() {
+    if (typeof window === "undefined" || !window.PointerEvent) return;
+    const root2 = document.documentElement;
+    const mark = (kind) => {
+      if (root2.dataset.input !== kind) root2.dataset.input = kind;
+    };
+    window.addEventListener("pointerdown", (e) => mark(e.pointerType === "mouse" ? "mouse" : "touch"), true);
+    window.addEventListener("pointermove", (e) => {
+      if (e.pointerType === "mouse" && e.buttons === 0 && root2.dataset.input === "touch") mark("mouse");
+    }, true);
+  }
+
   // shared/js/leaveWarning.js
   var hasWork = () => false;
   var bypassOnce = false;
@@ -1122,7 +1135,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle" }, "Markdown → Publication-ready PDF"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "87fd2d5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1296,7 +1309,7 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/PreviewCanvas.jsx
-  var { useState: useState2, useEffect: useEffect2, useRef: useRef3, useMemo } = React;
+  var { useState: useState2, useEffect: useEffect2, useLayoutEffect: useLayoutEffect3, useRef: useRef3, useMemo } = React;
   var PAGE_SEAM_PX = 3;
   var PAGE_GAP_PX = 24;
   var CANVAS_TOP_PAD_PX = 40;
@@ -1494,29 +1507,84 @@
       el.scrollTop = CANVAS_TOP_PAD_PX + (page - 1) * pageStridePx - 8;
       setCurrentPage(page);
     };
+    const boxRef = useRef3(null);
+    const pointersRef = useRef3(/* @__PURE__ */ new Map());
     const panRef = useRef3(null);
+    const pinchRef = useRef3(null);
+    const twoPoints = () => [...pointersRef.current.values()].slice(0, 2);
+    const startPanFrom = (p) => {
+      panRef.current = { x: p.x, y: p.y, left: outerRef.current.scrollLeft, top: outerRef.current.scrollTop };
+    };
+    const keepPinchSpot = () => {
+      const pinch = pinchRef.current, pane = outerRef.current, box = boxRef.current;
+      if (!pinch || !pane || !box) return;
+      const r = box.getBoundingClientRect();
+      pane.scrollLeft += r.left + pinch.fx * r.width - pinch.mid.x;
+      pane.scrollTop += r.top + pinch.fy * r.height - pinch.mid.y;
+    };
+    useLayoutEffect3(keepPinchSpot, [scale]);
     const startPan = (e) => {
       if (e.button !== 0 || !outerRef.current) return;
       e.preventDefault();
-      e.currentTarget.setPointerCapture(e.pointerId);
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch (err) {
+      }
       e.currentTarget.classList.add("is-panning");
-      panRef.current = { x: e.clientX, y: e.clientY, left: outerRef.current.scrollLeft, top: outerRef.current.scrollTop };
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointersRef.current.size === 1) {
+        startPanFrom({ x: e.clientX, y: e.clientY });
+      } else if (pointersRef.current.size === 2 && boxRef.current) {
+        const [a, b] = twoPoints();
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const r = boxRef.current.getBoundingClientRect();
+        panRef.current = null;
+        pinchRef.current = {
+          spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+          pct0: scale * 100,
+          fx: (mid.x - r.left) / r.width,
+          fy: (mid.y - r.top) / r.height,
+          mid
+        };
+      }
     };
     const movePan = (e) => {
+      if (!pointersRef.current.has(e.pointerId) || !outerRef.current) return;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const pinch = pinchRef.current;
+      if (pinch && pointersRef.current.size >= 2) {
+        const [a, b] = twoPoints();
+        pinch.mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const pct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+        if (pct !== Math.round(scale * 100)) setZoomPct(pct);
+        else keepPinchSpot();
+        return;
+      }
       const start = panRef.current;
-      if (!start || !outerRef.current) return;
+      if (!start) return;
       outerRef.current.scrollLeft = start.left - (e.clientX - start.x);
       outerRef.current.scrollTop = start.top - (e.clientY - start.y);
     };
     const endPan = (e) => {
-      if (!panRef.current) return;
+      if (!pointersRef.current.delete(e.pointerId)) return;
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch (err) {
+      }
+      if (pointersRef.current.size === 1) {
+        pinchRef.current = null;
+        startPanFrom(twoPoints()[0]);
+        return;
+      }
+      if (pointersRef.current.size > 0) return;
+      pinchRef.current = null;
       panRef.current = null;
       e.currentTarget.classList.remove("is-panning");
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     };
     return /* @__PURE__ */ React.createElement("div", { ref: outerRef, className: "md2ebook-preview-pane" }, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-canvas-wrapper" }, /* @__PURE__ */ React.createElement(
       "div",
       {
+        ref: boxRef,
         className: "md2ebook-canvas-scale-box",
         style: {
           width: pageWidthPx * scale,
@@ -2666,6 +2734,7 @@
   }
 
   // apps/Markdown-to-PDF/src/main.jsx
+  installInputMode();
   var rootElement = document.getElementById("root");
   var root = ReactDOM.createRoot(rootElement);
   root.render(/* @__PURE__ */ React.createElement(App, null));

@@ -1,5 +1,6 @@
 // Works out the on-screen sheet and page sizes from the paper size and grid, and sets the CSS variables the preview and print use.
 
+import { applyPreviewScale } from "./previewZoom.js";
 import { state } from "./state.js";
 
 // Labels that depend on pages per sheet.
@@ -63,21 +64,7 @@ export function applySheetSizes() {
     rt.style.setProperty('--sheet-print-height', state.aspectHeight + state.pgunit);
     rt.style.setProperty('--page-width', state.pageWidth + "px");
     rt.style.setProperty('--page-height', state.pageHeight + "px");
-    rt.style.setProperty('--sheet-scale', (getPreviewTargetWidth() / state.sheetWidth));
-}
-
-// How wide (in px) the on-screen sheet preview should render, so it fills the
-// available preview pane instead of always shrinking to a fixed 550px
-// regardless of how much room is actually available.
-export function getPreviewTargetWidth() {
-    var pane = document.getElementById("workspace-preview-scroll");
-    if(pane) {
-        var paneWidth = pane.clientWidth;
-        if(paneWidth > 0) {
-            return Math.min(900, Math.max(200, paneWidth - 48)); // minus the pane's own 24px left/right padding, capped so it doesn't blow up huge on ultra-wide screens
-        }
-    }
-    return 550; // fallback for before the pane has been laid out
+    applyPreviewScale(); // --sheet-scale, from the preview's zoom (previewZoom.js)
 }
 
 

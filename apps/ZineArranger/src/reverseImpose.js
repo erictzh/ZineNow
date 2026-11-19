@@ -1,6 +1,7 @@
 // Reverse Impose: splits an imposed booklet PDF back into pages in reading order.
 
 import { logCmd, logResult } from "./activityLog.js";
+import { setPreviewInfo } from "./previewZoom.js";
 import { setReverseImposePageSize } from "./print.js";
 
 // Renders one full PDF page at high resolution, then crops it into Left and
@@ -132,8 +133,5 @@ export function renderReverseImposeGrid(resultPages, N) {
         grid.appendChild(pageDiv);
     }
     setReverseImposePageSize(commonWidthIn, commonHeightIn);
-    var footerEl = document.getElementById("preview-footer");
-    if(footerEl) {
-        footerEl.textContent = "Reverse Impose \u00b7 " + N + " sequential page(s) reconstructed";
-    }
+    setPreviewInfo("Reverse Impose \u00b7 " + N + " sequential page(s) reconstructed");
 }

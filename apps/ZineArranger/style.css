@@ -652,6 +652,12 @@ input {
         background: color-mix(in srgb, var(--ui-accent) 55%, transparent);
         outline: none;
     }
+    /* While a finger is being used (<html data-input="touch">, shared/js/inputMode.js): 6px → 24px to
+       grab, reaching a little over the preview's edge. With a mouse it stays 6px. */
+    [data-input="touch"] .workspace-resizer {
+        left: -12px;
+        width: 24px;
+    }
 
     .md2ebook-sidebar-content {
         flex: 1 1 auto;
@@ -678,17 +684,17 @@ input {
 
     .md2ebook-canvas-wrapper {
         display: flex;
-        /* NOTE: MD2eBook uses justify-content:center here, but that centers based
-           on the PRE-transform layout size of the scaled child (CSS transform
-           doesn't shrink an element's contribution to its parent's layout, only
-           its paint) — since MD2eBook scales a live iframe with JS-synced real
-           dimensions rather than a CSS transform, it never hits this mismatch.
-           Centering a much-larger-than-visible pre-transform box here caused
-           the sheet to overflow symmetrically past both edges. flex-start avoids
-           it; the scale target already equals the available width (see
-           getPreviewTargetWidth() in the script), so the sheet still fills the
-           pane the same way centering would have shown it. */
-        justify-content: flex-start;
+        /* Centred. This used to be flex-start: the sheets are shrunk with a CSS
+           transform, which doesn't shrink the room the layout gives them, so
+           centring their full-size box pushed them off both edges. #zine is now
+           sized to the scaled sheets (src/previewZoom.js, --zine-box-w/h below),
+           so centring centres what you see. `safe` falls back to the start if
+           they're wider than the pane (zoomed in), so the left edge never gets
+           cut off; the wrapper then grows (max-content) and the pane scrolls. */
+        justify-content: safe center;
+        box-sizing: border-box;
+        width: max-content;
+        min-width: 100%;
         padding: 40px 24px 80px;
         min-height: 100%;
     }
@@ -1073,6 +1079,22 @@ input {
         display: block;
         margin: 0;
         background-color: transparent;
+        /* The scaled sheets' size (src/previewZoom.js): the room they really take on screen. */
+        width: var(--zine-box-w, auto);
+        height: var(--zine-box-h, auto);
+        overflow: hidden;
+    }
+
+    /* Drag to scroll (mouse or one finger) and pinch to zoom (two fingers) over the sheets
+       (src/previewZoom.js); the browser's own scrolling and zooming are off there. */
+    #zine {
+        cursor: grab;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    .md2ebook-canvas-wrapper.is-panning #zine {
+        cursor: grabbing;
     }
 
     .zine-scale {
@@ -1105,7 +1127,41 @@ input {
         padding: 8px 24px;
         color: var(--md2ebook-canvas-fg);
         font-size: 12px;
+        /* "info | zoom", centred (src/previewZoom.js builds it); wraps on a narrow pane. Stays put
+           when a zoomed-in preview scrolls sideways. */
+        position: sticky;
+        left: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 4px 12px;
     }
+    .za-statusbar-divider { opacity: 0.35; }
+    .za-zoom { display: inline-flex; align-items: center; gap: 6px; }
+    .za-zoom-slider { width: 70px; accent-color: var(--ui-accent); cursor: pointer; }
+    .za-zoom .za-zoom-number {
+        width: 56px;
+        padding: 2px 4px 2px 6px;
+        font-size: 12px;
+        text-align: right;
+    }
+    .za-zoom .za-zoom-fit {
+        min-width: unset;
+        padding: 2px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--ui-border);
+        background: transparent;
+        color: var(--md2ebook-canvas-fg);
+    }
+    .za-zoom .za-zoom-fit:hover { color: var(--ui-fg); }
+    .za-zoom .za-zoom-fit.active { color: var(--ui-accent-text); border-color: var(--ui-accent); }
+    /* Bigger to tap while a finger is being used (shared/js/inputMode.js). */
+    [data-input="touch"] .za-zoom-slider { width: 110px; height: 28px; }
+    [data-input="touch"] .za-zoom .za-zoom-number,
+    [data-input="touch"] .za-zoom .za-zoom-fit { min-height: 32px; }
 
     /* ---- Small screens: drop the fixed-viewport app-shell, stack sidebar above preview,
        and let the page scroll normally instead of each pane scrolling internally.

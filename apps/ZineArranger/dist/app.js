@@ -1,5 +1,18 @@
 // Built by tools/build.mjs from this app's src/ folder. Do not edit; edit src/ and run `npm run build`.
 (() => {
+  // shared/js/inputMode.js
+  function installInputMode() {
+    if (typeof window === "undefined" || !window.PointerEvent) return;
+    const root = document.documentElement;
+    const mark = (kind) => {
+      if (root.dataset.input !== kind) root.dataset.input = kind;
+    };
+    window.addEventListener("pointerdown", (e) => mark(e.pointerType === "mouse" ? "mouse" : "touch"), true);
+    window.addEventListener("pointermove", (e) => {
+      if (e.pointerType === "mouse" && e.buttons === 0 && root.dataset.input === "touch") mark("mouse");
+    }, true);
+  }
+
   // shared/js/leaveWarning.js
   var hasWork = () => false;
   var bypassOnce = false;
@@ -4147,6 +4160,207 @@
     return result.length > 0 ? result : null;
   }
 
+  // apps/ZineArranger/src/previewZoom.js
+  var ZOOM_MIN = 15;
+  var ZOOM_MAX = 200;
+  var clampZoom = (n) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(n)));
+  var zoomPct = null;
+  var footerInfo = null;
+  var slider = null;
+  var numberBox = null;
+  var fitButton = null;
+  function paperWidthPx() {
+    var w = parseFloat(state.aspectWidth) || 0;
+    return state.pgunit === "mm" ? w / 25.4 * 96 : w * 96;
+  }
+  function getPreviewTargetWidth() {
+    var pane = document.getElementById("workspace-preview-scroll");
+    if (pane && pane.clientWidth > 0) return Math.max(200, pane.clientWidth - 48);
+    return 550;
+  }
+  function fitPercent() {
+    var paper = paperWidthPx();
+    if (!paper) return 100;
+    return Math.max(ZOOM_MIN, Math.min(100, getPreviewTargetWidth() / paper * 100));
+  }
+  function currentZoomPercent() {
+    return zoomPct == null ? fitPercent() : zoomPct;
+  }
+  function applyPreviewScale() {
+    var root = document.documentElement;
+    var paper = paperWidthPx();
+    var pct = currentZoomPercent();
+    var scale = state.sheetWidth && paper ? pct / 100 * paper / state.sheetWidth : getPreviewTargetWidth() / (state.sheetWidth || 550);
+    root.style.setProperty("--sheet-scale", scale);
+    sizeZineBox(scale);
+    updateControls(pct);
+  }
+  function sizeZineBox(scale) {
+    var zine = document.getElementById("zine");
+    var inner = document.getElementById("zine-scale");
+    if (!zine || !inner) return;
+    zine.style.setProperty("--zine-box-w", Math.ceil(inner.offsetWidth * scale) + "px");
+    zine.style.setProperty("--zine-box-h", Math.ceil(inner.offsetHeight * scale) + "px");
+  }
+  function updateControls(pct) {
+    var shown = Math.round(pct);
+    if (slider) slider.value = String(shown);
+    if (numberBox && document.activeElement !== numberBox) numberBox.value = String(shown);
+    if (fitButton) {
+      fitButton.classList.toggle("active", zoomPct == null);
+      fitButton.setAttribute("aria-pressed", String(zoomPct == null));
+    }
+  }
+  function setPreviewZoom(pct, anchorX, anchorY) {
+    var pane = document.getElementById("workspace-preview-scroll");
+    var box = document.getElementById("zine");
+    var spot = null;
+    if (pane && box && box.offsetWidth) {
+      var pr = pane.getBoundingClientRect();
+      var ax = anchorX == null ? pr.left + pane.clientWidth / 2 : anchorX;
+      var ay = anchorY == null ? pr.top + pane.clientHeight / 2 : anchorY;
+      var r = box.getBoundingClientRect();
+      spot = { fx: (ax - r.left) / r.width, fy: (ay - r.top) / r.height, ax, ay };
+    }
+    zoomPct = pct == null ? null : clampZoom(pct);
+    applyPreviewScale();
+    if (spot) keepSpot(spot);
+  }
+  function keepSpot(spot) {
+    var pane = document.getElementById("workspace-preview-scroll");
+    var box = document.getElementById("zine");
+    if (!pane || !box) return;
+    var r = box.getBoundingClientRect();
+    pane.scrollLeft += r.left + spot.fx * r.width - spot.ax;
+    pane.scrollTop += r.top + spot.fy * r.height - spot.ay;
+  }
+  function setPreviewInfo(text) {
+    if (footerInfo) footerInfo.textContent = text;
+  }
+  function setUpPreviewZoom() {
+    var footer = document.getElementById("preview-footer");
+    var pane = document.getElementById("workspace-preview-scroll");
+    var wrapper = document.getElementById("canvas-wrapper");
+    if (!footer || !pane || !wrapper) return;
+    var initial = footer.textContent;
+    footer.textContent = "";
+    footerInfo = document.createElement("span");
+    footerInfo.className = "za-preview-info";
+    footerInfo.textContent = initial;
+    var divider = document.createElement("span");
+    divider.className = "za-statusbar-divider";
+    divider.setAttribute("aria-hidden", "true");
+    divider.textContent = "|";
+    var zoom = document.createElement("span");
+    zoom.className = "za-zoom";
+    slider = document.createElement("input");
+    slider.type = "range";
+    slider.className = "za-zoom-slider";
+    slider.min = String(ZOOM_MIN);
+    slider.max = String(ZOOM_MAX);
+    slider.step = "1";
+    slider.setAttribute("aria-label", "Preview zoom");
+    slider.addEventListener("input", function() {
+      setPreviewZoom(Number(slider.value));
+    });
+    numberBox = document.createElement("input");
+    numberBox.type = "number";
+    numberBox.className = "za-zoom-number";
+    numberBox.min = String(ZOOM_MIN);
+    numberBox.max = String(ZOOM_MAX);
+    numberBox.step = "5";
+    numberBox.setAttribute("aria-label", "Preview zoom percent");
+    numberBox.title = "100% is the paper's real size";
+    numberBox.addEventListener("input", function(e) {
+      if (!e.inputType) setPreviewZoom(Number(numberBox.value));
+    });
+    numberBox.addEventListener("change", function() {
+      var n = parseFloat(numberBox.value);
+      if (isFinite(n)) setPreviewZoom(n);
+    });
+    numberBox.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") numberBox.blur();
+    });
+    var percentSign = document.createElement("span");
+    percentSign.textContent = "%";
+    fitButton = document.createElement("button");
+    fitButton.type = "button";
+    fitButton.className = "za-zoom-fit";
+    fitButton.textContent = "Fit";
+    fitButton.title = "Fit the sheets to the preview's width (at most real size)";
+    fitButton.addEventListener("click", function() {
+      setPreviewZoom(null);
+    });
+    zoom.append(slider, numberBox, percentSign, fitButton);
+    footer.append(footerInfo, divider, zoom);
+    var inner = document.getElementById("zine-scale");
+    if (inner && window.ResizeObserver) new ResizeObserver(function() {
+      applyPreviewScale();
+    }).observe(inner);
+    var pointers = /* @__PURE__ */ new Map();
+    var pan = null;
+    var pinch = null;
+    var two = function() {
+      return Array.from(pointers.values()).slice(0, 2);
+    };
+    var startPanAt = function(p) {
+      pan = { x: p.x, y: p.y, left: pane.scrollLeft, top: pane.scrollTop };
+    };
+    wrapper.addEventListener("pointerdown", function(e) {
+      if (e.button !== 0 || !e.target.closest("#zine")) return;
+      e.preventDefault();
+      try {
+        wrapper.setPointerCapture(e.pointerId);
+      } catch (err) {
+      }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      wrapper.classList.add("is-panning");
+      if (pointers.size === 1) {
+        startPanAt({ x: e.clientX, y: e.clientY });
+      } else if (pointers.size === 2) {
+        var ab = two(), a = ab[0], b = ab[1];
+        var box = document.getElementById("zine").getBoundingClientRect();
+        var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        pan = null;
+        pinch = { spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), pct0: currentZoomPercent(), fx: (mx - box.left) / box.width, fy: (my - box.top) / box.height };
+      }
+    });
+    wrapper.addEventListener("pointermove", function(e) {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && pointers.size >= 2) {
+        var ab = two(), a = ab[0], b = ab[1];
+        var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        zoomPct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+        applyPreviewScale();
+        keepSpot({ fx: pinch.fx, fy: pinch.fy, ax: mx, ay: my });
+        return;
+      }
+      if (!pan) return;
+      pane.scrollLeft = pan.left - (e.clientX - pan.x);
+      pane.scrollTop = pan.top - (e.clientY - pan.y);
+    });
+    var end = function(e) {
+      if (!pointers.delete(e.pointerId)) return;
+      try {
+        if (wrapper.hasPointerCapture(e.pointerId)) wrapper.releasePointerCapture(e.pointerId);
+      } catch (err) {
+      }
+      if (pointers.size === 1) {
+        pinch = null;
+        startPanAt(two()[0]);
+        return;
+      }
+      if (pointers.size > 0) return;
+      pinch = null;
+      pan = null;
+      wrapper.classList.remove("is-panning");
+    };
+    wrapper.addEventListener("pointerup", end);
+    wrapper.addEventListener("pointercancel", end);
+    applyPreviewScale();
+  }
+
   // apps/ZineArranger/src/reverseImpose.js
   async function splitPdfPageIntoHalves(page) {
     var renderScale = 2;
@@ -4239,10 +4453,7 @@
       grid.appendChild(pageDiv);
     }
     setReverseImposePageSize(commonWidthIn, commonHeightIn);
-    var footerEl = document.getElementById("preview-footer");
-    if (footerEl) {
-      footerEl.textContent = "Reverse Impose · " + N + " sequential page(s) reconstructed";
-    }
+    setPreviewInfo("Reverse Impose · " + N + " sequential page(s) reconstructed");
   }
 
   // apps/ZineArranger/src/loadPdf.js
@@ -4306,16 +4517,13 @@
         state.pageCount = contentPageCount;
         logCmd("arrangeZineSheets()");
         arrangeZineSheets();
+        applyPreviewScale();
         var blankPages = state.pageCount - contentPageCount;
         if (blankPages > 0) {
           logResult("Auto-padding with " + blankPages + " blank page(s) to reach a multiple of " + state.pgmult + (needsMidBump ? ", placed mid-sheet for double-sided folding." : "."));
         }
         logResult("Total zine layout: " + state.pageCount + " page slot(s) across " + state.pageCount / state.pgmult + " sheet(s).");
-        var footerEl = document.getElementById("preview-footer");
-        if (footerEl) {
-          var scalePct = Math.round(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--sheet-scale")) * 100);
-          footerEl.textContent = state.aspectWidth + state.pgunit + " × " + state.aspectHeight + state.pgunit + " · " + scalePct + "% preview scale · " + state.pageCount / state.pgmult + " sheet(s), " + state.pageCount + " pages";
-        }
+        setPreviewInfo(state.aspectWidth + state.pgunit + " × " + state.aspectHeight + state.pgunit + " · " + state.pageCount / state.pgmult + " sheet(s), " + state.pageCount + " pages");
         for (var selIdx = 0; selIdx < selectedPages.length; selIdx++) {
           var i = selectedPages[selIdx];
           const page = await pdf.getPage(i);
@@ -4520,17 +4728,7 @@
     rt.style.setProperty("--sheet-print-height", state.aspectHeight + state.pgunit);
     rt.style.setProperty("--page-width", state.pageWidth + "px");
     rt.style.setProperty("--page-height", state.pageHeight + "px");
-    rt.style.setProperty("--sheet-scale", getPreviewTargetWidth() / state.sheetWidth);
-  }
-  function getPreviewTargetWidth() {
-    var pane = document.getElementById("workspace-preview-scroll");
-    if (pane) {
-      var paneWidth = pane.clientWidth;
-      if (paneWidth > 0) {
-        return Math.min(900, Math.max(200, paneWidth - 48));
-      }
-    }
-    return 550;
+    applyPreviewScale();
   }
 
   // apps/ZineArranger/src/optionsPanel.js
@@ -4793,16 +4991,22 @@
   }
 
   // apps/ZineArranger/src/main.js
+  installInputMode();
+  (function showBuildNumber() {
+    var subtitle = document.querySelector(".topbar-subtitle");
+    if (!subtitle) return;
+    subtitle.textContent += " · build b4a524b";
+    subtitle.title = "Build number: changes whenever the app is updated";
+  })();
   logSys("Zine Arranger ready. Select a PDF to begin.");
   warnBeforeLeaving(() => state.pageCount > 0);
   window.addEventListener("resize", function() {
     clearTimeout(state.previewResizeTimer);
-    state.previewResizeTimer = setTimeout(function() {
-      document.querySelector(":root").style.setProperty("--sheet-scale", getPreviewTargetWidth() / state.sheetWidth);
-    }, 100);
+    state.previewResizeTimer = setTimeout(applyPreviewScale, 100);
   });
   document.getElementById("selector").addEventListener("change", refreshSpecs, false);
   setUpPanelResize();
+  setUpPreviewZoom();
   refreshSpecs();
   (function setUpZEditorHandoff() {
     function receivePdf(file) {

@@ -3,6 +3,7 @@
 import { logCmd, logResult, logSys } from "./activityLog.js";
 import { arrangeZineSheets } from "./imposition/arrangeZineSheets.js";
 import { parsePageRange } from "./pageRange.js";
+import { applyPreviewScale, setPreviewInfo } from "./previewZoom.js";
 import { renderReverseImposeGrid, reverseImposePdf } from "./reverseImpose.js";
 import { SIZE_QUARTER } from "./sizes.js";
 import { state } from "./state.js";
@@ -84,16 +85,14 @@ export function selectFile() {
             state.pageCount = contentPageCount;
             logCmd("arrangeZineSheets()");
             arrangeZineSheets(); // this will increase pageCount to a multiple of pgmult
+            applyPreviewScale(); // size the box around the new sheets (previewZoom.js)
             var blankPages = state.pageCount - contentPageCount; // additional auto-padding blanks tacked on beyond any manual ones
             if(blankPages > 0) {
                 logResult("Auto-padding with " + blankPages + " blank page(s) to reach a multiple of " + state.pgmult + (needsMidBump ? ", placed mid-sheet for double-sided folding." : "."));
             }
             logResult("Total zine layout: " + state.pageCount + " page slot(s) across " + (state.pageCount / state.pgmult) + " sheet(s).");
-            var footerEl = document.getElementById("preview-footer");
-            if(footerEl) {
-                var scalePct = Math.round(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-scale')) * 100);
-                footerEl.textContent = state.aspectWidth + state.pgunit + " \u00d7 " + state.aspectHeight + state.pgunit + " \u00b7 " + scalePct + "% preview scale \u00b7 " + (state.pageCount / state.pgmult) + " sheet(s), " + state.pageCount + " pages";
-            }
+            // The zoom is shown by the footer's own controls (previewZoom.js), next to this.
+            setPreviewInfo(state.aspectWidth + state.pgunit + " \u00d7 " + state.aspectHeight + state.pgunit + " \u00b7 " + (state.pageCount / state.pgmult) + " sheet(s), " + state.pageCount + " pages");
             //
             // Fetch the first page
             //
