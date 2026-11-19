@@ -36,8 +36,10 @@ export function TopMenu({ label, solid, children }) {
     if (!open || !menu) return;
     const fit = () => {
       menu.style.transform = "";
-      const { left } = menu.getBoundingClientRect();
-      if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+      const { left, width } = menu.getBoundingClientRect();
+      // Screen pixels vs the menu's own: they differ when Interface size zooms the top bar.
+      const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
+      if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
     };
     fit();
     const observer = new ResizeObserver(fit);

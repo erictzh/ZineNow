@@ -1,0 +1,33 @@
+// The gear at the bottom left (shared/js/displaySettings.js) with this app's settings:
+//   - Editor text size: --md2ebook-editor-font-size on the Markdown textarea (styles.css).
+//   - Interface size: --zn-ui-zoom, a CSS zoom on the top bar, side panel contents and status bar.
+//   - Dark paper: md2ebook-dark-paper on <html>; PreviewCanvas.jsx passes it on to the sandboxed
+//     preview frame. Preview only, the PDF stays white.
+//   - Show: md2ebook-hide-header / -preview / -sidebar on <html> (styles.css); the two columns
+//     can't both be hidden.
+// The storage key and setting names are the ones the app used before the gear became shared, so
+// settings saved then still apply.
+
+import { installDisplaySettings } from "../../../../shared/js/displaySettings.js";
+
+export function installMd2pdfDisplaySettings() {
+  return installDisplaySettings({
+    storageKey: "md2ebook-ui-prefs",
+    sliders: [
+      { key: "editorFontSize", label: "Editor text size", min: 10, max: 28, step: 0.5, initial: 13.5, unit: "px", cssVar: "--md2ebook-editor-font-size", cssValue: (v) => v + "px" },
+      { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
+    ],
+    groups: [
+      { title: "Preview", checks: [
+        { key: "darkPaper", label: "Dark paper", htmlClass: "md2ebook-dark-paper", hint: "Shows the pages dark while you work. Only the preview: the PDF stays white." },
+      ] },
+      { title: "Show", checks: [
+        { key: "hideHeader", label: "Top bar", showMeans: true, htmlClass: "md2ebook-hide-header", hint: "The title, File menu and export buttons" },
+        { key: "hidePreview", label: "Preview (left)", showMeans: true, htmlClass: "md2ebook-hide-preview", hint: "The page preview and its status bar" },
+        { key: "hideSidebar", label: "Editor panel (right)", showMeans: true, htmlClass: "md2ebook-hide-sidebar", hint: "The Editor and Typography tabs" },
+      ] },
+    ],
+    notBoth: [["hidePreview", "hideSidebar"]],
+    notBothHint: "Keep at least one of the preview and the editor panel",
+  });
+}
