@@ -14426,6 +14426,109 @@
     ), /* @__PURE__ */ React.createElement(LiveFilterDefs, { pageFilter }));
   }
 
+  // apps/ZEditor/src/ui/touchInput.js
+  var DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
+  var NATIVE_TARGETS = "input, textarea, select, [contenteditable], .ze-typeset-surface";
+  var DOUBLE_TAP_MS = 350;
+  var DOUBLE_TAP_PX = 24;
+  var TAP_SLOP_PX = 10;
+  function mouseEventFrom(type, e, extra) {
+    return new MouseEvent(type, {
+      bubbles: type !== "mouseleave",
+      cancelable: true,
+      view: window,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      button: 0,
+      buttons: type === "mouseup" || type === "dblclick" ? 0 : 1,
+      detail: type === "dblclick" ? 2 : 1,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      ...extra
+    });
+  }
+  function send(el, type, e, extra) {
+    const target = el && el.isConnected ? el : document;
+    target.dispatchEvent(mouseEventFrom(type, e, extra));
+  }
+  function installTouchInput() {
+    if (typeof window === "undefined" || !window.PointerEvent) return () => {
+    };
+    const root = document.documentElement;
+    let active = null;
+    let lastTap = null;
+    let lastTouchTime = 0;
+    const markInput = (e) => {
+      const kind = e.pointerType === "mouse" ? "mouse" : "touch";
+      if (root.dataset.zeInput !== kind) root.dataset.zeInput = kind;
+    };
+    function onPointerDown(e) {
+      markInput(e);
+      if (e.pointerType === "mouse") return;
+      lastTouchTime = Date.now();
+      if (active) return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (!target || !target.closest(DRAG_SURFACES) || target.closest(NATIVE_TARGETS)) return;
+      e.preventDefault();
+      active = { id: e.pointerId, target, x: e.clientX, y: e.clientY, moved: false };
+      send(target, "mousedown", e);
+    }
+    function onPointerMove(e) {
+      if (e.pointerType === "mouse") {
+        if (root.dataset.zeInput === "touch" && e.buttons === 0) markInput(e);
+        return;
+      }
+      if (!active || e.pointerId !== active.id) return;
+      if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
+      send(active.target, "mousemove", e);
+    }
+    function onPointerEnd(e) {
+      if (!active || e.pointerId !== active.id) return;
+      const { target, moved } = active;
+      active = null;
+      send(target, "mouseup", e);
+      send(target, "mouseout", e, { relatedTarget: null });
+      const pane = target.isConnected && target.closest(".preview-pane");
+      if (pane) pane.dispatchEvent(mouseEventFrom("mouseleave", e));
+      if (e.type === "pointercancel" || moved) {
+        lastTap = null;
+        return;
+      }
+      const now = Date.now();
+      if (lastTap && now - lastTap.time < DOUBLE_TAP_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_PX) {
+        lastTap = null;
+        setTimeout(() => send(target, "dblclick", e), 0);
+      } else {
+        lastTap = { time: now, x: e.clientX, y: e.clientY };
+      }
+    }
+    function onDblClick(e) {
+      if (e.isTrusted && Date.now() - lastTouchTime < 1e3) e.stopPropagation();
+    }
+    function onContextMenu(e) {
+      if (Date.now() - lastTouchTime < 1e3 && e.target instanceof Element && e.target.closest(DRAG_SURFACES)) e.preventDefault();
+    }
+    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerEnd, true);
+    window.addEventListener("pointercancel", onPointerEnd, true);
+    window.addEventListener("dblclick", onDblClick, true);
+    window.addEventListener("contextmenu", onContextMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+      window.removeEventListener("dblclick", onDblClick, true);
+      window.removeEventListener("contextmenu", onContextMenu, true);
+    };
+  }
+
   // apps/ZEditor/src/main.jsx
+  installTouchInput();
   ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
 })();

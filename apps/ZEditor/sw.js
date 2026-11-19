@@ -5,7 +5,7 @@
 // HTML/JS/CSS are served network-first, so ordinary deploys reach users without touching
 // this file. Bump CACHE_VERSION when FILES or CDN change (a file added, renamed or
 // removed), so the old cache is dropped and the new list is precached.
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 // Must all exist: install fails if any of these 404s.
 const FILES = [
@@ -22,6 +22,7 @@ const FILES = [
   "styles/font-combobox.css",
   "styles/dialogs.css",
   "styles/responsive.css",
+  "styles/touch.css",
   "manifest.webmanifest",
   "icons/icon-192.png",
   "icons/icon-512.png",

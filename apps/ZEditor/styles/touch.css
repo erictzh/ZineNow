@@ -1,0 +1,87 @@
+/* Touch and pen (src/ui/touchInput.js).
+   1. The drag surfaces don't scroll the page under a finger, so a drag moves the item instead.
+      Keep this list in step with DRAG_SURFACES in touchInput.js. The grey area around the page
+      still scrolls normally.
+   2. While the last press was a finger (<html data-ze-input="touch">), handles get bigger
+      targets. Visually they grow a little; the hit area grows a lot, through an invisible
+      ::after around each one. With a mouse nothing here applies. */
+
+.ze-page,
+.ze-ruler,
+.ze-ruler-guide,
+.ze-layers-head {
+    touch-action: none;
+    -webkit-touch-callout: none; /* no "Save image" bubble on a long press */
+}
+
+/* ---- Bigger targets while using a finger ------------------------------------------------- */
+
+[data-ze-input="touch"] .ze-page {
+    -webkit-user-select: none;
+    user-select: none; /* no text highlight from a stray long press; text boxes being typed in still select */
+}
+[data-ze-input="touch"] .ze-ann-text-input,
+[data-ze-input="touch"] .ze-typeset-input {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* Resize and turn handles: 11px → 16px to see, about 40px to touch. They are already kept the same
+   size on screen at any zoom (scale(1 / zoom)), so the hit area is too. */
+[data-ze-input="touch"] .ze-resize-handle,
+[data-ze-input="touch"] .ze-rotate-handle {
+    width: 16px;
+    height: 16px;
+}
+[data-ze-input="touch"] .ze-rotate-handle {
+    top: calc(-34px / var(--ze-zoom, 1)); /* further out, so a finger on it doesn't cover the item */
+}
+[data-ze-input="touch"] .ze-rotate-handle::before {
+    height: 22px;
+}
+[data-ze-input="touch"] .ze-resize-handle::after,
+[data-ze-input="touch"] .ze-rotate-handle::after,
+[data-ze-input="touch"] .ze-measure-handle::after,
+[data-ze-input="touch"] .ze-crop-handle::after,
+[data-ze-input="touch"] .ze-text-port::after {
+    content: "";
+    position: absolute;
+    inset: -12px;
+}
+[data-ze-input="touch"] .ze-measure-handle {
+    width: 16px;
+    height: 16px; /* still centred on its point: it's placed with translate(-50%, -50%) */
+}
+
+/* Crop handles: 12px → 20px, offsets keep them centred on the crop window's edges and corners. */
+[data-ze-input="touch"] .ze-crop-handle { width: 20px; height: 20px; }
+[data-ze-input="touch"] .ze-crop-handle-nw { left: -10px; top: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-n { left: calc(50% - 10px); top: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-ne { right: -10px; top: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-e { right: -10px; top: calc(50% - 10px); }
+[data-ze-input="touch"] .ze-crop-handle-se { right: -10px; bottom: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-s { left: calc(50% - 10px); bottom: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-sw { left: -10px; bottom: -10px; }
+[data-ze-input="touch"] .ze-crop-handle-w { left: -10px; top: calc(50% - 10px); }
+
+/* A text box's move edges: 7px → 22px wide strips just outside its border. */
+[data-ze-input="touch"] .ze-text-move-edge-n { top: -16px; height: 22px; }
+[data-ze-input="touch"] .ze-text-move-edge-s { bottom: -16px; height: 22px; }
+[data-ze-input="touch"] .ze-text-move-edge-w { left: -16px; width: 22px; }
+[data-ze-input="touch"] .ze-text-move-edge-e { right: -16px; width: 22px; }
+
+/* The "+" that continues text into a new frame: 14px → 22px. */
+[data-ze-input="touch"] .ze-text-port {
+    width: 22px;
+    height: 22px;
+    font-size: 16px;
+    line-height: 20px;
+}
+[data-ze-input="touch"] .ze-text-port-out { right: -12px; bottom: -12px; }
+[data-ze-input="touch"] .ze-text-port-in { left: -12px; top: -12px; }
+
+/* Ruler guides: a 7px strip → 28px to grab, the line itself stays 1px in the middle. */
+[data-ze-input="touch"] .ze-ruler-guide-x { width: 28px; margin-left: -14px; }
+[data-ze-input="touch"] .ze-ruler-guide-x::after { left: 14px; }
+[data-ze-input="touch"] .ze-ruler-guide-y { height: 28px; margin-top: -14px; }
+[data-ze-input="touch"] .ze-ruler-guide-y::after { top: 14px; }
