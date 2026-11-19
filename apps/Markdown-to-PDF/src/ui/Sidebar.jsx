@@ -1,4 +1,4 @@
-// The left sidebar: the Editor / Typography tabs.
+// The right-hand sidebar: the Editor / Typography tabs.
 
 import { EditorTab } from "./editor/EditorTab.jsx";
 import { BodyTextSection } from "./typography/BodyTextSection.jsx";

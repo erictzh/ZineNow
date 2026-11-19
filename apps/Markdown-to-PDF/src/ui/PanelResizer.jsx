@@ -1,4 +1,4 @@
-// The draggable line between the left panel (Editor / Typography) and the preview: drag it to make the
+// The draggable line between the right-hand panel (Editor / Typography) and the preview: drag it to make the
 // panel wider or narrower, double-click it (or press Home) to go back to the default width. The width is
 // remembered for next time. The panel's width is the CSS variable --md2ebook-sidebar-width (styles.css,
 // component-kit.css); the preview refits itself when its own width changes (PreviewCanvas).
@@ -50,7 +50,7 @@ export function PanelResizer({ bodyRef }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Dragging: the panel sits at the left, so its width is the distance from the body's left edge to the pointer.
+  // Dragging: the panel sits at the right, so its width is the distance from the pointer to the body's right edge.
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -60,7 +60,7 @@ export function PanelResizer({ bodyRef }) {
   };
   const onPointerMove = (e) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-    apply(e.clientX - bodyRef.current.getBoundingClientRect().left, false);
+    apply(bodyRef.current.getBoundingClientRect().right - e.clientX, false);
   };
   const endDrag = (e) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
@@ -71,8 +71,8 @@ export function PanelResizer({ bodyRef }) {
   };
   // From the keyboard: the arrows nudge it, Home resets it.
   const onKeyDown = (e) => {
-    if (e.key === "ArrowRight") { e.preventDefault(); apply(panelWidth() + KEY_STEP, true); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); apply(panelWidth() - KEY_STEP, true); }
+    if (e.key === "ArrowLeft") { e.preventDefault(); apply(panelWidth() + KEY_STEP, true); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); apply(panelWidth() - KEY_STEP, true); }
     else if (e.key === "Home") { e.preventDefault(); apply(null); }
   };
 

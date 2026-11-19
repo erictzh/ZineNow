@@ -228,6 +228,7 @@ export function App() {
         </div>
       ) : null}
       <div className="md2ebook-body" ref={bodyRef}>
+        <PreviewCanvas markdown={markdown} config={config} onTocPages={handleTocPages} />
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -240,7 +241,6 @@ export function App() {
           setFontOptions={setFontOptions}
           resizer={<PanelResizer bodyRef={bodyRef} />}
         />
-        <PreviewCanvas markdown={markdown} config={config} onTocPages={handleTocPages} />
       </div>
     </div>
   );
