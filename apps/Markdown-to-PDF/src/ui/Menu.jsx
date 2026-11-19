@@ -36,7 +36,7 @@ export function DropMenu({ trigger, title, align = "left", triggerClassName, kee
     const { left, right, width } = menu.getBoundingClientRect();
     const limit = document.documentElement.clientWidth - 8;
     // The rect is in screen pixels, the transform in the menu's own: they differ when the
-    // Interface size setting zooms the menu (UiSettings.jsx).
+    // Interface size setting zooms the menu (ui/displaySettings.js).
     const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
     if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right) / zoom}px)`;
     else if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;

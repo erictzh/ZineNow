@@ -7624,14 +7624,14 @@
       const width = src.width || Math.round(size.width);
       const frameHeight = src.frameHeight > 0 ? src.frameHeight : Math.max(12, Math.round(pxToPt(size.height)));
       const heightPx = ptToPx(frameHeight);
-      const display = await getPageDisplaySize(page, pdfDocsRef, MAIN_SCALE);
+      const display2 = await getPageDisplaySize(page, pdfDocsRef, MAIN_SCALE);
       let x = src.x + width + FRAME_GAP, y = src.y;
-      if (x + width > display.width) {
+      if (x + width > display2.width) {
         x = src.x;
         y = src.y + heightPx + FRAME_GAP;
       }
-      x = Math.max(0, Math.min(x, display.width - width));
-      y = Math.max(0, Math.min(y, display.height - heightPx));
+      x = Math.max(0, Math.min(x, display2.width - width));
+      y = Math.max(0, Math.min(y, display2.height - heightPx));
       const id = nextAnnIdRef.current++;
       updateAnnotationsFor(pageIdx, (anns) => [
         ...anns.map((a) => a.id === src.id ? { ...a, width, frameHeight } : a),
@@ -7837,9 +7837,9 @@
           const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
           const width = img.naturalWidth * scale;
           const height = img.naturalHeight * scale;
-          const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
-          const x = Math.max(0, (display.width - width) / 2);
-          const y = Math.max(0, (display.height - height) / 2);
+          const display2 = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
+          const x = Math.max(0, (display2.width - width) / 2);
+          const y = Math.max(0, (display2.height - height) / 2);
           const id = nextAnnIdRef.current++;
           updateAnnotationsFor(pageIdx, (anns) => [...anns, {
             id,
@@ -11695,8 +11695,8 @@
       let p = overlayPoint(ev);
       const lines = guideLinesPx();
       if (lines && !ev.altKey) {
-        const snap = snapToGuides({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }, lines, SNAP_PX / zoom);
-        p = { x: p.x + snap.dx, y: p.y + snap.dy };
+        const snap2 = snapToGuides({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }, lines, SNAP_PX / zoom);
+        p = { x: p.x + snap2.dx, y: p.y + snap2.dy };
       }
       return ev.shiftKey && from ? constrainTo45(from, p) : p;
     }
@@ -11879,9 +11879,9 @@
         let { dx, dy } = dragDelta(ev);
         if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
         if (moved && startBox && !ev.altKey) {
-          const snap = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
-          dx += snap.dx;
-          dy += snap.dy;
+          const snap2 = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
+          dx += snap2.dx;
+          dy += snap2.dy;
         }
         if (moved) onMoveAnnotations(originals, dx, dy);
       }, () => {
@@ -14275,9 +14275,9 @@
   }
 
   // apps/ZEditor/src/ui/settings/RulersSettings.jsx
-  function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap, onSnapChange }) {
+  function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap: snap2, onSnapChange }) {
     const sorted = [...guides].sort((a, b) => a.axis === b.axis ? a.pos - b.pos : a.axis === "x" ? -1 : 1);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Snap items to guides when moving them")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap2, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Snap items to guides when moving them")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
@@ -14317,8 +14317,9 @@
       if (!open || !menu) return;
       const fit = () => {
         menu.style.transform = "";
-        const { left } = menu.getBoundingClientRect();
-        if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+        const { left, width } = menu.getBoundingClientRect();
+        const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
+        if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
       };
       fit();
       const observer = new ResizeObserver(fit);
@@ -14367,7 +14368,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f9e166f"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "683e86c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -14556,6 +14557,182 @@
     )))));
   }
 
+  // shared/js/displaySettings.js
+  var EVENT = "zn-display-prefs";
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
+  var tidy = (v) => Math.round(v * 1e3) / 1e3;
+  function installDisplaySettings(options) {
+    const { storageKey, sliders = [], groups = [], notBoth = [], notBothHint = "", title = "Display" } = options;
+    const checks = groups.flatMap((g) => g.checks);
+    const defaults = {};
+    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const c of checks) defaults[c.key] = false;
+    function load2() {
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(storageKey)) || {};
+      } catch (e) {
+      }
+      const prefs2 = {};
+      for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
+      for (const c of checks) prefs2[c.key] = saved[c.key] === true;
+      for (const [a, b] of notBoth) if (prefs2[a] && prefs2[b]) prefs2[b] = false;
+      return prefs2;
+    }
+    function apply() {
+      const root = document.documentElement;
+      for (const s of sliders) root.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
+      for (const c of checks) if (c.htmlClass) root.classList.toggle(c.htmlClass, prefs[c.key]);
+      window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
+    }
+    function set(changes) {
+      prefs = { ...prefs, ...changes };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(prefs));
+      } catch (e) {
+      }
+      apply();
+      refresh();
+    }
+    let prefs = load2();
+    apply();
+    const el = (tag, cls, attrs = {}) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const floating = options.mount === void 0 || options.mount === null;
+    const wrap = el("div", "zn-display" + (floating ? " zn-display-floating" : ""));
+    const panel = el("div", "zn-display-panel", { role: "dialog", "aria-label": title + " settings" });
+    panel.hidden = true;
+    const head = el("div", "zn-display-title");
+    head.textContent = title;
+    panel.appendChild(head);
+    const sliderViews = sliders.map((s) => {
+      const row = el("div", "zn-display-row");
+      const label = el("div", "zn-display-label");
+      const name = el("span");
+      name.textContent = s.label;
+      const value = el("span", "zn-display-value");
+      label.append(name, value);
+      const control = el("div", "zn-display-control");
+      const minus = el("button", "zn-display-step", { type: "button", "aria-label": "Smaller " + s.label.toLowerCase() });
+      minus.textContent = "−";
+      const range = el("input", "", { type: "range", min: s.min, max: s.max, step: s.step, "aria-label": s.label });
+      const plus = el("button", "zn-display-step", { type: "button", "aria-label": "Larger " + s.label.toLowerCase() });
+      plus.textContent = "+";
+      control.append(minus, range, plus);
+      row.append(label, control);
+      panel.appendChild(row);
+      minus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] - s.step, s)) }));
+      plus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] + s.step, s)) }));
+      range.addEventListener("input", () => set({ [s.key]: tidy(snap(Number(range.value), s)) }));
+      return { s, value, minus, range, plus };
+    });
+    const checkViews = [];
+    for (const g of groups) {
+      if (g.title) {
+        const sub = el("div", "zn-display-subtitle");
+        sub.textContent = g.title;
+        panel.appendChild(sub);
+      }
+      const list = el("div", "zn-display-checks");
+      for (const c of g.checks) {
+        const label = el("label", "zn-display-check");
+        const box = el("input", "", { type: "checkbox" });
+        const text = el("span");
+        text.textContent = c.label;
+        label.append(box, text);
+        list.appendChild(label);
+        box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
+        checkViews.push({ c, label, box });
+      }
+      panel.appendChild(list);
+    }
+    const foot = el("div", "zn-display-foot");
+    const note = el("span", "zn-display-note");
+    note.textContent = "Saved in this browser";
+    const reset = el("button", "zn-display-reset", { type: "button" });
+    reset.textContent = "Reset";
+    reset.addEventListener("click", () => set(defaults));
+    foot.append(note, reset);
+    panel.appendChild(foot);
+    const gear = el("button", "zn-display-gear", {
+      type: "button",
+      title: title + " settings",
+      "aria-label": title + " settings",
+      "aria-expanded": "false"
+    });
+    gear.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    wrap.append(panel, gear);
+    if (floating) document.body.appendChild(wrap);
+    else if (options.mount) options.mount.appendChild(wrap);
+    function refresh() {
+      for (const v of sliderViews) {
+        const n = prefs[v.s.key];
+        v.value.textContent = n + (v.s.unit || "");
+        v.range.value = String(n);
+        v.minus.disabled = n <= v.s.min;
+        v.plus.disabled = n >= v.s.max;
+      }
+      for (const v of checkViews) {
+        const on = prefs[v.c.key];
+        v.box.checked = v.c.showMeans ? !on : on;
+        const pair = notBoth.find((p) => p.includes(v.c.key));
+        const blocked = !on && pair && prefs[pair[0] === v.c.key ? pair[1] : pair[0]];
+        v.box.disabled = !!blocked;
+        v.label.classList.toggle("disabled", !!blocked);
+        v.label.title = blocked && notBothHint ? notBothHint : v.c.hint || "";
+      }
+      reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
+    }
+    refresh();
+    function setOpen(open) {
+      panel.hidden = !open;
+      gear.classList.toggle("open", open);
+      gear.setAttribute("aria-expanded", String(open));
+    }
+    gear.addEventListener("click", () => setOpen(panel.hidden));
+    document.addEventListener("pointerdown", (e) => {
+      if (!panel.hidden && !wrap.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) setOpen(false);
+    });
+    wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
+    wrap.addEventListener("mousedown", (e) => e.stopPropagation());
+    return { get prefs() {
+      return { ...prefs };
+    }, set, element: wrap };
+  }
+
+  // apps/ZEditor/src/ui/displaySettings.js
+  var display = null;
+  function installZeditorDisplaySettings() {
+    display = installDisplaySettings({
+      storageKey: "zeditor.displayPrefs",
+      mount: false,
+      // App.jsx places it next to the touch bar once that's rendered
+      sliders: [
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
+        { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) }
+      ],
+      groups: [
+        { title: "Show", checks: [
+          { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
+          { key: "hidePages", label: "Pages panel (left)", showMeans: true, htmlClass: "ze-hide-pages", hint: "The page thumbnails" },
+          { key: "hideFormat", label: "Format panel (right)", showMeans: true, htmlClass: "ze-hide-format", hint: "The selected item's or tool's settings" }
+        ] }
+      ]
+    });
+    return display;
+  }
+  function attachDisplayGear(slot) {
+    if (slot && display && display.element.parentNode !== slot) slot.appendChild(display.element);
+  }
+
   // apps/ZEditor/src/ui/App.jsx
   function App() {
     const status = useStatus();
@@ -14685,7 +14862,7 @@
         onMagicClick: magic.start,
         snapGuides: view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null
       }
-    ))), selectedPage && /* @__PURE__ */ React.createElement(
+    ))), /* @__PURE__ */ React.createElement("div", { className: "ze-bottom-left" }, /* @__PURE__ */ React.createElement("div", { className: "ze-display-slot", ref: attachDisplayGear }), selectedPage && /* @__PURE__ */ React.createElement(
       TouchBar,
       {
         selectedAnn: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null,
@@ -14693,7 +14870,7 @@
         isCropping: croppingAnnId !== null && croppingAnnId === selectedAnnId,
         onEditText: selection.setEditingAnnId
       }
-    ))), selectedPage && /* @__PURE__ */ React.createElement(
+    )))), selectedPage && /* @__PURE__ */ React.createElement(
       FormatPanel,
       {
         key: selectedAnnId,
@@ -14767,5 +14944,6 @@
 
   // apps/ZEditor/src/main.jsx
   installTouchInput();
+  installZeditorDisplaySettings();
   ReactDOM.createRoot(document.getElementById("root")).render(/* @__PURE__ */ React.createElement(App, null));
 })();

@@ -1,0 +1,191 @@
+/* The gear button and its Display pop-up (shared/js/displaySettings.js). Where the gear sits and
+   what the settings change is each app's own CSS; this file is only the gear and the pop-up.
+   --zn-ui-zoom (the Interface size slider) is applied by each app to its own controls; the
+   floating gear applies it to itself. */
+
+.zn-display {
+  position: relative;
+}
+/* The apps' own global button/input rules (margins, padding, sizes) mustn't leak in here. */
+.zn-display button,
+.zn-display input {
+  margin: 0;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+}
+.zn-display-floating {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 40;
+  zoom: var(--zn-ui-zoom, 1);
+}
+
+.zn-display-gear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--ui-border);
+  background-color: #201918; /* opaque, like the menus */
+  color: var(--ui-fg-muted);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: color 0.15s, transform 0.25s;
+}
+.zn-display-gear:hover,
+.zn-display-gear.open {
+  color: var(--ui-fg);
+}
+.zn-display-gear.open {
+  transform: rotate(45deg);
+}
+
+.zn-display-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 260px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background-color: #201918;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: var(--ui-fg);
+  font-family: var(--ui-font, inherit);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: default;
+}
+.zn-display-panel[hidden] {
+  display: none;
+}
+.zn-display-title {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ui-fg-muted);
+  margin-bottom: 10px;
+}
+.zn-display-row + .zn-display-row {
+  margin-top: 12px;
+}
+.zn-display-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.zn-display-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-fg-muted);
+}
+.zn-display-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zn-display-control input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--ui-accent);
+  cursor: pointer;
+}
+.zn-display-step,
+.zn-display-reset {
+  border: 1px solid var(--ui-border);
+  background-color: transparent;
+  color: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.zn-display-step {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+.zn-display-step:disabled,
+.zn-display-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.zn-display-subtitle {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  color: var(--ui-fg-muted);
+}
+.zn-display-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zn-display-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ui-fg);
+  cursor: pointer;
+}
+.zn-display-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ui-accent);
+  cursor: inherit;
+}
+.zn-display-check.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.zn-display-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.zn-display-note {
+  font-size: 11px;
+  color: var(--ui-fg-muted);
+}
+.zn-display-reset {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+/* Bigger targets while a finger is used (data-input: shared/js/inputMode.js; data-ze-input: ZEditor). */
+[data-input="touch"] .zn-display-gear,
+[data-ze-input="touch"] .zn-display-gear {
+  width: 48px;
+  height: 48px;
+}
+[data-input="touch"] .zn-display-step,
+[data-ze-input="touch"] .zn-display-step {
+  width: 34px;
+  height: 34px;
+}
+[data-input="touch"] .zn-display-control input[type="range"],
+[data-ze-input="touch"] .zn-display-control input[type="range"] {
+  height: 28px;
+}
+[data-input="touch"] .zn-display-checks,
+[data-ze-input="touch"] .zn-display-checks {
+  gap: 10px;
+}
+[data-input="touch"] .zn-display-check input,
+[data-ze-input="touch"] .zn-display-check input {
+  width: 22px;
+  height: 22px;
+}

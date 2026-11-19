@@ -56,7 +56,7 @@ export function renderHtmlDocument(markdownText, config) {
     '  function __contentHeight() {\n' +
     '    return Math.ceil(document.body.getBoundingClientRect().height);\n' +
     '  }\n' +
-    // Dark paper (the gear pop-up, ui/UiSettings.jsx): the app says on or off by postMessage,
+    // Dark paper (the gear pop-up, ui/displaySettings.js): the app says on or off by postMessage,
     // and this frame flips a class on <html> (CSS below), so toggling it doesn't re-paginate.
     // Only messages from the app's own window count.
     "  window.addEventListener('message', function (e) {\n" +
