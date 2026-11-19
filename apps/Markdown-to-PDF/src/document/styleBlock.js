@@ -322,6 +322,17 @@ export function buildPageBoxRule(parts) {
     '  padding: 0;\n' +
     '  box-shadow: none;\n' +
     '}\n' +
+    // Paged.js lays pages out as if printing, so it applies the shared
+    // stylesheet's @media print rules on screen too — including the
+    // white html/body background meant for the real print. That turned
+    // the gap below each page (the margin-bottom further down) white
+    // instead of letting the preview's dark backdrop show through,
+    // most visibly as a white strip under the last page. Kept
+    // transparent here, for the preview only; each page paints its own
+    // white sheet instead (.pagedjs_page below), margins included.
+    'html, body {\n' +
+    '  background: transparent !important;\n' +
+    '}\n' +
     // Paged.js wraps each physical page in a .pagedjs_page box and
     // ships its own internal stylesheet for sizing/positioning them —
     // that stylesheet is injected into the document *after* this one
@@ -333,6 +344,7 @@ export function buildPageBoxRule(parts) {
     // pages read as distinct sheets even if one of the two properties
     // ever gets overridden the same way.
     '.pagedjs_page {\n' +
+    '  background: #ffffff !important;\n' +
     '  margin-bottom: 24px !important;\n' +
     '  border-bottom: 3px solid #4b4b4b !important;\n' +
     '}\n' +

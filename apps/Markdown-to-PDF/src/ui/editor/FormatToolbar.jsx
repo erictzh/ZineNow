@@ -1,11 +1,10 @@
-// The Editor tab's formatting toolbar: block style, inline styles, lists/quote/divider, and the
-// \toc / \pagebreak / \space{N} markers. It only reports which button was pressed; EditorTab.jsx makes
-// the edit (see editor/format.js for what each one does to the text).
+// The Editor tab's formatting toolbar: block style, inline styles, lists/quote, an Insert menu (the
+// \toc / \pagebreak / \space{N} markers and a divider), and Copy all / Clear on the right. It only
+// reports which button was pressed; EditorTab.jsx acts on it (see editor/format.js for what each
+// formatting action does to the text).
 
-const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-const MOD = IS_MAC ? "⌘" : "Ctrl+";
-const ALT = IS_MAC ? "⌥" : "Alt+";
-const SHIFT = IS_MAC ? "⇧" : "Shift+";
+import { DropMenu, MenuItem } from "../Menu.jsx";
+import { ALT, MOD, SHIFT } from "../shortcutKeys.js";
 
 // The block-style dropdown's choices, and what it shows when the caret's line is something else.
 const BLOCK_OPTIONS = [
@@ -58,36 +57,40 @@ const ICONS = {
       <path d="M2.5 9.2C2.5 6.6 3.8 4.7 6.3 4l.5 1c-1.3.5-2 1.3-2.1 2.4H6.6V12H2.5V9.2Zm7 0c0-2.6 1.3-4.5 3.8-5.2l.5 1c-1.3.5-2 1.3-2.1 2.4h1.9V12H9.5V9.2Z" />
     </Svg>
   ),
-  divider: (
+  save: (
     <Svg>
-      <path d="M2 8h12" />
-      <path d="M4 4.5h8M4 11.5h8" strokeOpacity="0.4" />
+      <path d="M3 2.5h8l2.5 2.5v8a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z" />
+      <path d="M5.5 2.5v3h4.5v-3M5 13.5V9.5h6v4" />
     </Svg>
   ),
-  toc: (
+  // A floppy disk with a pencil over its corner: save under a new name.
+  saveAs: (
     <Svg>
-      <path d="M2.5 3.5h11M2.5 8h7M2.5 12.5h9" />
-      <path d="M12 8h1.5" strokeDasharray="0.1 1.6" />
+      <path d="M8.5 13.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5h8l2.5 2.5v2" />
+      <path d="M5.5 2.5v3h4.5v-3M5 13.5V9.5h3" />
+      <path d="M13.6 8.9l1 1-4 4H9.6v-1Z" />
     </Svg>
   ),
-  pagebreak: (
+  copy: (
     <Svg>
-      <path d="M3.5 6V2.5h9V6M3.5 10v3.5h9V10" />
-      <path d="M1.5 8h13" strokeDasharray="1.6 1.6" />
+      <rect x="5.5" y="5.5" width="8" height="8.5" rx="1.5" />
+      <path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H4A1.5 1.5 0 0 0 2.5 3.5V10A1.5 1.5 0 0 0 4 11.5h1.5" />
     </Svg>
   ),
-  space: (
+  clear: (
     <Svg>
-      <rect x="2.5" y="3" width="11" height="10" rx="1" strokeDasharray="2 1.6" />
+      <path d="M2.5 4.5h11M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" />
+      <path d="M6.8 7v4.5M9.2 7v4.5" />
     </Svg>
   ),
 };
 
-function ToolButton({ icon, title, onPress, active }) {
+function ToolButton({ icon, title, onPress, active, marked, disabled }) {
   return (
     <button
       type="button"
-      className={"md2ebook-fmt-btn" + (active ? " active" : "")}
+      disabled={disabled}
+      className={"md2ebook-fmt-btn" + (active ? " active" : "") + (marked ? " marked" : "")}
       title={title}
       aria-label={title}
       aria-pressed={active == null ? undefined : active}
@@ -103,7 +106,7 @@ function ToolButton({ icon, title, onPress, active }) {
 const Divider = () => <span className="md2ebook-fmt-divider" aria-hidden="true" />;
 
 // `blockKind` is the caret line's kind (editor/format.js lineKind); `onAction(name, arg)` runs an edit.
-export function FormatToolbar({ blockKind, onAction, spaceLines, setSpaceLines }) {
+export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines }) {
   const isOther = !BLOCK_OPTIONS.some((o) => o.value === blockKind);
   return (
     <div className="md2ebook-fmt-bar" role="toolbar" aria-label="Formatting">
@@ -129,22 +132,61 @@ export function FormatToolbar({ blockKind, onAction, spaceLines, setSpaceLines }
       <ToolButton icon="ul" title={`Bulleted list (${MOD}${SHIFT}8)`} active={blockKind === "ul"} onPress={() => onAction("block", "ul")} />
       <ToolButton icon="ol" title={`Numbered list (${MOD}${SHIFT}7)`} active={blockKind === "ol"} onPress={() => onAction("block", "ol")} />
       <ToolButton icon="quote" title={`Quote (${MOD}${SHIFT}9)`} active={blockKind === "quote"} onPress={() => onAction("block", "quote")} />
-      <ToolButton icon="divider" title="Divider line (---)" onPress={() => onAction("line", "---")} />
       <Divider />
-      <ToolButton icon="toc" title={"Table of contents at the cursor (\\toc) — its settings are in the Typography tab"} onPress={() => onAction("line", "\\toc")} />
-      <ToolButton icon="pagebreak" title={"Page break at the cursor (\\pagebreak)"} onPress={() => onAction("line", "\\pagebreak")} />
-      <span className="md2ebook-fmt-space">
-        <ToolButton icon="space" title={"Blank space at the cursor, this many body lines tall (\\space{N}) — room to paste an image into the PDF later"} onPress={() => onAction("space")} />
-        <input
-          type="number"
-          min="1"
-          max="200"
-          value={spaceLines}
-          onChange={(e) => setSpaceLines(e.target.value)}
-          aria-label="Blank space height in lines"
-          title="Blank space height, in lines"
-        />
-      </span>
+      {/* Things put on their own line at the cursor: the \toc, \pagebreak and \space{N} markers
+          (see document/markers.js) and a divider line. */}
+      <DropMenu trigger="Insert" title="Insert at the cursor" triggerClassName="md2ebook-fmt-menu-trigger" keepEditorFocus>
+        {({ close, keepEditorFocus }) => (
+          <>
+            <MenuItem label="Table of contents" hint={"Inserts \\toc — its look is set in the Typography tab"} onClick={() => onAction("line", "\\toc")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Page break" hint={"Inserts \\pagebreak — what follows starts on a new page"} onClick={() => onAction("line", "\\pagebreak")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Divider line" hint="Inserts --- (a horizontal rule)" onClick={() => onAction("line", "---")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem
+              label="Blank space"
+              hint={"Inserts \\space{N}: empty space N body lines tall — room to paste an image into the PDF later"}
+              onClick={() => onAction("space")}
+              close={close}
+              keepEditorFocus={keepEditorFocus}
+            >
+              <span className="md2ebook-menu-space">
+                <input
+                  type="number"
+                  min="1"
+                  max="200"
+                  value={spaceLines}
+                  onChange={(e) => setSpaceLines(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); close(); onAction("space"); }
+                  }}
+                  aria-label="Blank space height in lines"
+                />
+                lines
+              </span>
+            </MenuItem>
+          </>
+        )}
+      </DropMenu>
+      <span className="md2ebook-fmt-spacer" />
+      {/* Save writes back to the .md file Save As picked, in one click (greyed out until then);
+          its dot shows there are changes not saved to that file yet. */}
+      <ToolButton
+        icon="save"
+        disabled={!fileSave.name}
+        marked={fileSave.unsaved}
+        title={
+          fileSave.name
+            ? `Save to "${fileSave.name}" (${MOD}S)` + (fileSave.unsaved ? " — has unsaved changes" : " — no unsaved changes")
+            : "Save — use Save As first to pick a .md file, then this saves back to it in one click"
+        }
+        onPress={() => onAction("save")}
+      />
+      <ToolButton
+        icon="saveAs"
+        title={`Save As… — save as a new .md file (${fileSave.name ? MOD + SHIFT + "S" : MOD + "S"})`}
+        onPress={() => onAction("saveAs")}
+      />
+      <ToolButton icon="copy" title="Copy all the Markdown to the clipboard" onPress={() => onAction("copy")} />
+      <ToolButton icon="clear" title={`Clear the editor (${MOD}Z brings the text back)`} onPress={() => onAction("clear")} />
     </div>
   );
 }

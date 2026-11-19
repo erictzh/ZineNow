@@ -149,7 +149,7 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  width: 24px;
   height: 26px;
   padding: 0;
   margin: 0;
@@ -167,6 +167,26 @@ button {
   color: var(--ui-accent-text);
   background: var(--ui-bg);
 }
+/* A small accent dot in the corner: the save button when there are unsaved changes. */
+.md2ebook-fmt-btn.marked {
+  position: relative;
+  color: var(--ui-fg);
+}
+.md2ebook-fmt-btn.marked::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+.md2ebook-fmt-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
 .md2ebook-fmt-btn:focus-visible {
   outline: 2px solid var(--ui-accent-text);
   outline-offset: -2px;
@@ -181,6 +201,23 @@ button {
   margin: 0 3px;
   background: var(--ui-border);
 }
+/* Pushes Copy all / Clear to the right end of the toolbar (onto the right of a wrapped row too). */
+.md2ebook-fmt-spacer {
+  flex: 1 1 0;
+  min-width: 4px;
+}
+button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger {
+  height: 26px;
+  gap: 3px;
+  padding: 0 4px 0 6px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger:hover,
+button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger.open {
+  background: var(--ui-bg);
+}
 .md2ebook-fmt-select.md2ebook-fmt-select {
   width: auto;
   height: 26px;
@@ -193,16 +230,112 @@ button {
 .md2ebook-fmt-select:hover {
   background-color: var(--ui-bg);
 }
-.md2ebook-fmt-space {
+/* Dropdown menus (src/ui/Menu.jsx): the top bar's File menu and the toolbar's Insert menu. Same look
+   as ZEditor's top-bar menus. */
+.md2ebook-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+button.md2ebook-menu-trigger {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+  min-width: unset;
+}
+.md2ebook-menu-trigger svg {
+  transition: transform 0.15s ease;
+}
+.md2ebook-menu-trigger.open svg {
+  transform: rotate(180deg);
+}
+.md2ebook-menu-trigger.open {
+  background-color: var(--ui-bg);
+  color: var(--ui-fg);
+}
+/* The top bar's File and Send to ZineArranger buttons: outlined, but the same size as the solid
+   Download PDF button beside them (12px text, 6px/16px padding, 32px tall). */
+button.md2ebook-topbar-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  line-height: 18px;
+}
+button.md2ebook-menu-trigger.md2ebook-file-menu {
+  padding: 6px 12px 6px 16px;
+}
+.md2ebook-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  padding: 4px;
+  background-color: #201918; /* opaque --ui-bg-card, so the page doesn't show through */
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  z-index: 30;
+}
+.md2ebook-menu-left {
+  left: 0;
+}
+.md2ebook-menu-right {
+  right: 0;
+}
+.md2ebook-menu-row {
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+}
+.md2ebook-menu-row:hover {
+  background-color: var(--ui-bg);
+}
+button.md2ebook-menu-item {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: var(--ui-fg);
+  white-space: nowrap;
+}
+button.md2ebook-menu-item:hover {
+  background: none;
+  color: var(--ui-fg);
+}
+button.md2ebook-menu-item:active {
+  transform: none;
+}
+.md2ebook-menu-item-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
 }
-.md2ebook-fmt-space input[type="number"] {
-  width: 40px;
-  height: 24px;
-  padding: 2px 4px;
+.md2ebook-menu-item-detail,
+.md2ebook-menu-item-shortcut {
   font-size: 11px;
+  color: var(--ui-fg-muted);
+}
+.md2ebook-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--ui-border);
+}
+/* The Insert menu's "Blank space [N] lines" row. */
+.md2ebook-menu-space {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  font-size: 11px;
+  color: var(--ui-fg-muted);
+}
+.md2ebook-menu-space input[type="number"] {
+  width: 52px;
+  padding: 2px 4px;
+  font-size: 12px;
 }
 
 .md2ebook-editor-textarea {
@@ -271,6 +404,40 @@ button {
   background-color: var(--preview-bar);
   color: var(--md2ebook-canvas-fg);
   font-size: 12px;
+}
+
+/* The paper size in the status bar: reads as plain text, opens a dropdown when clicked. */
+select.md2ebook-statusbar-select {
+  width: auto;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--md2ebook-canvas-fg);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+select.md2ebook-statusbar-select:hover,
+select.md2ebook-statusbar-select:focus-visible {
+  color: var(--ui-fg);
+  border-color: var(--ui-border);
+}
+select.md2ebook-statusbar-select option {
+  background-color: #201918;
+  color: var(--ui-fg);
+}
+
+/* "Page [n] of N" (PreviewCanvas.jsx's PageJump). */
+.md2ebook-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.md2ebook-page-jump input[type="number"] {
+  width: 48px;
+  padding: 2px 4px 2px 6px;
+  font-size: 12px;
+  text-align: right;
 }
 
 /* Zoom controls (PreviewCanvas.jsx's ZoomControl): slider, percent box, Fit. */
