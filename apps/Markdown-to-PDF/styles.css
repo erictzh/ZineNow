@@ -717,3 +717,47 @@ select.md2ebook-statusbar-select option {
     transform: none !important;
   }
 }
+
+/* --------------------------------------------------------------------
+   Touch: bigger targets while a finger is being used
+   (<html data-input="touch">, set by shared/js/inputMode.js). With a
+   mouse none of this applies. On the paper, one finger scrolls and two
+   pinch-zoom (PreviewCanvas.jsx).
+   -------------------------------------------------------------------- */
+
+/* The draggable line between the preview and the panel: 7px → 24px to grab (it stays a thin line
+   until touched). */
+[data-input="touch"] .md2ebook-resizer {
+  left: -12px;
+  width: 24px;
+}
+
+/* Editor toolbar buttons and menus: about 36px to tap. The toolbar may wrap onto a second row. */
+[data-input="touch"] .md2ebook-fmt-btn {
+  width: 34px;
+  height: 36px;
+}
+[data-input="touch"] .md2ebook-fmt-select.md2ebook-fmt-select,
+[data-input="touch"] button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger {
+  height: 36px;
+}
+[data-input="touch"] button.md2ebook-menu-item {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+/* Status bar: paper size, page box, zoom slider and Fit. */
+[data-input="touch"] .md2ebook-preview-statusbar {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+[data-input="touch"] select.md2ebook-statusbar-select,
+[data-input="touch"] .md2ebook-page-jump input[type="number"],
+[data-input="touch"] .md2ebook-zoom-number input[type="number"],
+[data-input="touch"] .md2ebook-zoom-fit {
+  min-height: 32px;
+}
+[data-input="touch"] .md2ebook-zoom-slider {
+  width: 110px;
+  height: 28px;
+}

@@ -3,7 +3,7 @@
 import { renderHtmlDocument } from "../document/previewDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
 import { PAPER_SIZE_OPTIONS } from "../settings/initialConfig.js";
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 
 // Preview geometry, in unscaled px: the seam (border-bottom) and gap (margin-bottom) under every page
 // — the .pagedjs_page rule in document/styleBlock.js — and the canvas wrapper's top padding
@@ -249,31 +249,87 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
     el.scrollTop = CANVAS_TOP_PAD_PX + (page - 1) * pageStridePx - 8;
     setCurrentPage(page);
   };
-  // Drag-to-scroll ("hand" scrolling) over the paper: the pane follows the pointer in both directions.
-  const panRef = useRef(null); // { x, y, left, top } at the start of a drag
+  // Over the paper: one pointer (mouse or finger) drags to scroll ("hand" scrolling); two fingers
+  // pinch to zoom, keeping the spot between them under them.
+  const boxRef = useRef(null); // the scale box (the paper as drawn)
+  const pointersRef = useRef(new Map()); // pointerId -> { x, y } for each pointer down on the paper
+  const panRef = useRef(null); // { x, y, left, top } at the start of a one-pointer drag
+  const pinchRef = useRef(null); // { spread0, pct0, fx, fy, mid } during a two-finger pinch
+  const twoPoints = () => [...pointersRef.current.values()].slice(0, 2);
+  const startPanFrom = (p) => {
+    panRef.current = { x: p.x, y: p.y, left: outerRef.current.scrollLeft, top: outerRef.current.scrollTop };
+  };
+  // Scrolls so the paper spot pinchRef.fx/fy (as fractions of the paper's width/height) sits under
+  // the fingers' midpoint — after each zoom step, or on its own when the zoom didn't change.
+  const keepPinchSpot = () => {
+    const pinch = pinchRef.current, pane = outerRef.current, box = boxRef.current;
+    if (!pinch || !pane || !box) return;
+    const r = box.getBoundingClientRect();
+    pane.scrollLeft += r.left + pinch.fx * r.width - pinch.mid.x;
+    pane.scrollTop += r.top + pinch.fy * r.height - pinch.mid.y;
+  };
+  useLayoutEffect(keepPinchSpot, [scale]);
   const startPan = (e) => {
     if (e.button !== 0 || !outerRef.current) return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Keeps the moves coming if the pointer leaves the paper. Can throw for a pointer the browser
+    // no longer tracks; the drag still works without it.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
     e.currentTarget.classList.add("is-panning");
-    panRef.current = { x: e.clientX, y: e.clientY, left: outerRef.current.scrollLeft, top: outerRef.current.scrollTop };
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 1) {
+      startPanFrom({ x: e.clientX, y: e.clientY });
+    } else if (pointersRef.current.size === 2 && boxRef.current) {
+      // A second finger: from here on it's a pinch.
+      const [a, b] = twoPoints();
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const r = boxRef.current.getBoundingClientRect();
+      panRef.current = null;
+      pinchRef.current = {
+        spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        pct0: scale * 100,
+        fx: (mid.x - r.left) / r.width,
+        fy: (mid.y - r.top) / r.height,
+        mid,
+      };
+    }
   };
   const movePan = (e) => {
+    if (!pointersRef.current.has(e.pointerId) || !outerRef.current) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pinch = pinchRef.current;
+    if (pinch && pointersRef.current.size >= 2) {
+      const [a, b] = twoPoints();
+      pinch.mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const pct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+      if (pct !== Math.round(scale * 100)) setZoomPct(pct); // the layout effect above keeps the spot
+      else keepPinchSpot();
+      return;
+    }
     const start = panRef.current;
-    if (!start || !outerRef.current) return;
+    if (!start) return;
     outerRef.current.scrollLeft = start.left - (e.clientX - start.x);
     outerRef.current.scrollTop = start.top - (e.clientY - start.y);
   };
   const endPan = (e) => {
-    if (!panRef.current) return;
+    if (!pointersRef.current.delete(e.pointerId)) return;
+    try { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+    if (pointersRef.current.size === 1) {
+      // One finger lifted from a pinch: carry on scrolling with the other, from where it is now.
+      pinchRef.current = null;
+      startPanFrom(twoPoints()[0]);
+      return;
+    }
+    if (pointersRef.current.size > 0) return;
+    pinchRef.current = null;
     panRef.current = null;
     e.currentTarget.classList.remove("is-panning");
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
   return (
     <div ref={outerRef} className="md2ebook-preview-pane">
       <div className="md2ebook-canvas-wrapper">
         <div
+          ref={boxRef}
           className="md2ebook-canvas-scale-box"
           style={{
             width: pageWidthPx * scale,

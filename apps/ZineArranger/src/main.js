@@ -2,32 +2,43 @@
 // onclick/onchange attributes call. The code lives in the files next to this one —
 // see docs/ARCHITECTURE.md for what goes where.
 
+import { installInputMode } from "../../../shared/js/inputMode.js";
 import { warnBeforeLeaving } from "../../../shared/js/leaveWarning.js";
 import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
 import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
 import { setUpPanelResize } from "./panelResize.js";
-import { getPreviewTargetWidth } from "./sheetSizes.js";
+import { applyPreviewScale, setUpPreviewZoom } from "./previewZoom.js";
 import { state } from "./state.js";
 import { triggerPrint } from "./print.js";
+
+// <html data-input="touch|mouse">: bigger targets while a finger is used (style.css).
+installInputMode();
+
+// The build number (tools/build.mjs), so you can tell which version is running, e.g. on a tablet
+// after a deploy.
+(function showBuildNumber() {
+    var subtitle = document.querySelector(".topbar-subtitle");
+    if (!subtitle) return;
+    subtitle.textContent += " · build " + __BUILD__;
+    subtitle.title = "Build number: changes whenever the app is updated";
+})();
 
 logSys("Zine Arranger ready. Select a PDF to begin.");
 
 // Refreshing or closing the tab asks first once a PDF is laid out (shared/js/leaveWarning.js).
 warnBeforeLeaving(() => state.pageCount > 0);
 
-// Keep the preview filling its column as the window is resized (refreshSpecs()
+// At Fit, keep the preview filling its column as the window is resized (refreshSpecs()
 // only reruns on option changes, not on resize).
 window.addEventListener("resize", function() {
     clearTimeout(state.previewResizeTimer);
-    state.previewResizeTimer = setTimeout(function() {
-        document.querySelector(':root').style.setProperty('--sheet-scale', (getPreviewTargetWidth() / state.sheetWidth));
-    }, 100);
+    state.previewResizeTimer = setTimeout(applyPreviewScale, 100);
 });
-        
 
 document.getElementById("selector").addEventListener("change", refreshSpecs, false);
 setUpPanelResize(); // before the first layout, so a saved panel width is already in place
+setUpPreviewZoom(); // the footer's zoom controls, before anything writes the footer's text
 refreshSpecs();
 
 // ---- ZEditor handoff --------------------------------------------------
