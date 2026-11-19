@@ -268,8 +268,11 @@ export function ComposeCanvas({
     // Alt + click takes one member out of its group.
     const single = e.altKey && !e.shiftKey && Boolean(ann.groupId);
     if (single) onSelectAnnotation(ann.id, false, true);
-    else if (e.shiftKey || !wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
-    if (e.shiftKey && wasSelected) return; // that press just took it out of the selection
+    else if (!wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
+    // Shift on an item that's already selected: a drag moves the selection (the touch bar's Shift
+    // stays on, so a finger couldn't move a selection otherwise); only a tap without dragging takes
+    // it out of the selection, at the end of the press below.
+    const shiftDeselect = e.shiftKey && wasSelected && !single;
     const mates = withGroupMates(annotations, [ann.id]);
     const movingIds = single ? [ann.id] : wasSelected ? current : e.shiftKey ? [...current, ...mates] : mates;
     const originals = annotations.filter((a) => movingIds.includes(a.id));
@@ -288,6 +291,7 @@ export function ComposeCanvas({
       if (moved) onMoveAnnotations(originals, dx, dy);
     }, () => {
       if (moved) return;
+      if (shiftDeselect) { onSelectAnnotation(ann.id, true); return; } // Shift + tap: out of the selection
       // Clicking one member of a group, without dragging, narrows to it.
       if (wasSelected && !e.shiftKey && !single && current.length > 1) onSelectAnnotation(ann.id, false);
       if (onPlainClick) onPlainClick();
