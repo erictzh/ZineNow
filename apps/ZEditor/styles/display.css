@@ -1,0 +1,52 @@
+/* Display settings (the gear: shared/js/displaySettings.js, set up in src/ui/displaySettings.js;
+   the gear and pop-up styles are in shared/styles/displaySettings.css). */
+
+/* Interface size: the app's controls, not the canvas or rulers (own zoom, screen-pixel maths) and
+   not the floating Layers panel (dragged by screen position). The side panels' own boxes keep
+   their widths, so the draggable lines stay put; only what's inside grows. */
+.ze-shell > .topbar,
+.ze-tool-bar,
+.ze-sidebar-head,
+.ze-sidebar-body,
+.ze-format-panel-head,
+.ze-format-panel-body,
+.ze-bottom-left {
+    zoom: var(--zn-ui-zoom, 1);
+}
+
+/* Thumbnail size: shrinks the page pictures from their usual size. */
+.ze-thumb-img-wrap img {
+    zoom: var(--ze-thumb-zoom, 1);
+}
+
+/* The gear and the touch bar, side by side at the bottom left of the canvas (gear first). */
+.ze-bottom-left {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none; /* only the gear and the bar take presses, not the gap between them */
+}
+.ze-bottom-left > * {
+    pointer-events: auto;
+}
+.ze-ruler-frame.has-rulers .ze-bottom-left { left: 30px; } /* clear of the left ruler */
+.ze-display-slot { display: flex; }
+
+/* Show checkboxes. */
+.ze-hide-topbar .ze-shell > .topbar,
+.ze-hide-pages .ze-sidebar,
+.ze-hide-pages .ze-panel-resizer-left,
+.ze-hide-format .ze-format-panel,
+.ze-hide-format .ze-panel-resizer-right {
+    display: none;
+}
+/* The Layers panel normally keeps clear of the Format panel. */
+.ze-hide-format .ze-layers-panel { right: 16px; }
+
+@media print {
+    .ze-bottom-left { display: none !important; }
+}

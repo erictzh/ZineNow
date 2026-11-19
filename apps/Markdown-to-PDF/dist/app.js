@@ -1136,7 +1136,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "117709f"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "cdf6998"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1185,7 +1185,7 @@
   function PanelResizer({ bodyRef }) {
     const handleRef = useRef2(null);
     const widthRef = useRef2(null);
-    const clamp2 = (px) => {
+    const clamp = (px) => {
       const body = bodyRef.current;
       const most = Math.max(MIN_PANEL, (body ? body.getBoundingClientRect().width : window.innerWidth) - MIN_PREVIEW);
       return Math.round(Math.min(most, Math.max(MIN_PANEL, px)));
@@ -1200,7 +1200,7 @@
         } catch (e) {
         }
       } else {
-        widthRef.current = clamp2(px);
+        widthRef.current = clamp(px);
         root2.style.setProperty("--md2ebook-sidebar-width", widthRef.current + "px");
         if (save) {
           try {
@@ -1222,7 +1222,7 @@
       }
       if (saved > 0) apply(saved, false);
       const onResize = () => {
-        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+        if (widthRef.current != null && clamp(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
       };
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
@@ -1461,8 +1461,8 @@
       }
     }
     useEffect2(() => {
-      window.addEventListener("md2ebook-uiprefs", sendDarkPaper);
-      return () => window.removeEventListener("md2ebook-uiprefs", sendDarkPaper);
+      window.addEventListener("zn-display-prefs", sendDarkPaper);
+      return () => window.removeEventListener("zn-display-prefs", sendDarkPaper);
     }, []);
     useEffect2(() => {
       function handleMessage(event) {
@@ -2465,119 +2465,24 @@
     ), /* @__PURE__ */ React.createElement(TypefaceSection, { ...sectionProps, fontOptions, setFontOptions }), /* @__PURE__ */ React.createElement(PageSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(BodyTextSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(HeadingsSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(TocSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(PageNumbersSection, { ...sectionProps }))));
   }
 
-  // apps/Markdown-to-PDF/src/ui/UiSettings.jsx
-  var { useState: useState6, useEffect: useEffect4, useRef: useRef6 } = React;
-  var STORAGE_KEY2 = "md2ebook-ui-prefs";
-  var EDITOR_FONT = { min: 10, max: 28, step: 0.5, initial: 13.5 };
-  var UI_SCALE = { min: 75, max: 175, step: 5, initial: 100 };
-  var HIDEABLE = { hideHeader: "md2ebook-hide-header", hidePreview: "md2ebook-hide-preview", hideSidebar: "md2ebook-hide-sidebar" };
-  var DEFAULT_PREFS = { editorFontSize: EDITOR_FONT.initial, uiScale: UI_SCALE.initial, hideHeader: false, hidePreview: false, hideSidebar: false, darkPaper: false };
-  var clamp = (v, { min, max, initial }) => Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : initial;
-  function loadPrefs() {
-    let saved = {};
-    try {
-      saved = JSON.parse(localStorage.getItem(STORAGE_KEY2)) || {};
-    } catch (e) {
-    }
-    const hidePreview = saved.hidePreview === true;
-    return {
-      editorFontSize: clamp(Number(saved.editorFontSize), EDITOR_FONT),
-      uiScale: clamp(Number(saved.uiScale), UI_SCALE),
-      hideHeader: saved.hideHeader === true,
-      hidePreview,
-      hideSidebar: saved.hideSidebar === true && !hidePreview,
-      // never both columns
-      darkPaper: saved.darkPaper === true
-    };
-  }
-  function applyPrefs(prefs) {
-    const root2 = document.documentElement;
-    root2.style.setProperty("--md2ebook-editor-font-size", prefs.editorFontSize + "px");
-    root2.style.setProperty("--md2ebook-ui-zoom", String(prefs.uiScale / 100));
-    for (const [key, cls] of Object.entries(HIDEABLE)) root2.classList.toggle(cls, prefs[key]);
-    root2.classList.toggle("md2ebook-dark-paper", prefs.darkPaper);
-    window.dispatchEvent(new Event("md2ebook-uiprefs"));
-  }
-  applyPrefs(loadPrefs());
-  function PrefSlider({ label, value, range, unit, onChange }) {
-    const set = (v) => onChange(clamp(Math.round(v / range.step) * range.step, range));
-    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-row" }, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-label" }, /* @__PURE__ */ React.createElement("span", null, label), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-uiprefs-value" }, value, unit)), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-control" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-step", "aria-label": "Smaller " + label.toLowerCase(), onClick: () => set(value - range.step), disabled: value <= range.min }, "−"), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        type: "range",
-        min: range.min,
-        max: range.max,
-        step: range.step,
-        value,
-        "aria-label": label,
-        onChange: (e) => set(Number(e.target.value))
-      }
-    ), /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-step", "aria-label": "Larger " + label.toLowerCase(), onClick: () => set(value + range.step), disabled: value >= range.max }, "+")));
-  }
-  function ShowCheckbox({ label, hidden, disabled, hint, onChange }) {
-    return /* @__PURE__ */ React.createElement("label", { className: "md2ebook-uiprefs-check" + (disabled ? " disabled" : ""), title: hint }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !hidden, disabled, onChange: (e) => onChange(!e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, label));
-  }
-  function UiSettings() {
-    const [prefs, setPrefs] = useState6(loadPrefs);
-    const [open, setOpen] = useState6(false);
-    const wrapRef = useRef6(null);
-    useEffect4(() => {
-      applyPrefs(prefs);
-      try {
-        localStorage.setItem(STORAGE_KEY2, JSON.stringify(prefs));
-      } catch (e) {
-      }
-    }, [prefs]);
-    useEffect4(() => {
-      if (!open) return void 0;
-      const onDown = (e) => {
-        if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
-      };
-      const onKey = (e) => {
-        if (e.key === "Escape") setOpen(false);
-      };
-      document.addEventListener("pointerdown", onDown);
-      document.addEventListener("keydown", onKey);
-      return () => {
-        document.removeEventListener("pointerdown", onDown);
-        document.removeEventListener("keydown", onKey);
-      };
-    }, [open]);
-    const update = (key) => (value) => setPrefs((p) => ({ ...p, [key]: value }));
-    const isDefault = Object.keys(DEFAULT_PREFS).every((k) => prefs[k] === DEFAULT_PREFS[k]);
-    const lastColumn = "Keep at least one of the preview and the editor panel";
-    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs md2ebook-no-print", ref: wrapRef }, open ? /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-panel", role: "dialog", "aria-label": "Display settings" }, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-title" }, "Display"), /* @__PURE__ */ React.createElement(PrefSlider, { label: "Editor text size", value: prefs.editorFontSize, range: EDITOR_FONT, unit: "px", onChange: update("editorFontSize") }), /* @__PURE__ */ React.createElement(PrefSlider, { label: "Interface size", value: prefs.uiScale, range: UI_SCALE, unit: "%", onChange: update("uiScale") }), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-subtitle" }, "Preview"), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-checks" }, /* @__PURE__ */ React.createElement("label", { className: "md2ebook-uiprefs-check", title: "Shows the pages dark while you work. Only the preview: the PDF stays white." }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: prefs.darkPaper, onChange: (e) => update("darkPaper")(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Dark paper"))), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-subtitle" }, "Show"), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-checks" }, /* @__PURE__ */ React.createElement(ShowCheckbox, { label: "Top bar", hidden: prefs.hideHeader, onChange: update("hideHeader"), hint: "The title, File menu and export buttons" }), /* @__PURE__ */ React.createElement(ShowCheckbox, { label: "Preview (left)", hidden: prefs.hidePreview, disabled: prefs.hideSidebar, hint: prefs.hideSidebar ? lastColumn : "The page preview and its status bar", onChange: update("hidePreview") }), /* @__PURE__ */ React.createElement(ShowCheckbox, { label: "Editor panel (right)", hidden: prefs.hideSidebar, disabled: prefs.hidePreview, hint: prefs.hidePreview ? lastColumn : "The Editor and Typography tabs", onChange: update("hideSidebar") })), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-foot" }, /* @__PURE__ */ React.createElement("span", { className: "md2ebook-uiprefs-note" }, "Saved in this browser"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-reset", disabled: isDefault, onClick: () => setPrefs(DEFAULT_PREFS) }, "Reset"))) : null, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "md2ebook-uiprefs-gear" + (open ? " open" : ""),
-        title: "Display settings: editor text size and interface size",
-        "aria-label": "Display settings",
-        "aria-expanded": open,
-        onClick: () => setOpen((o) => !o)
-      },
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }), /* @__PURE__ */ React.createElement("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" }))
-    ));
-  }
-
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect5, useState: useState7, useRef: useRef7, useCallback } = React;
+  var { useEffect: useEffect4, useState: useState6, useRef: useRef6, useCallback } = React;
   var DOCUMENT_PICKER_ID = "md2ebook-document";
   function App() {
-    const [markdown, setMarkdown] = useState7(SAMPLE_MARKDOWN);
-    const [config, setConfig] = useState7(INITIAL_CONFIG);
-    const [activeTab, setActiveTab] = useState7("editor");
-    const [fontOptions, setFontOptions] = useState7(DEFAULT_FONT_OPTIONS);
-    const [isExporting, setIsExporting] = useState7(false);
-    const [exportError, setExportError] = useState7(null);
-    const [isSendingToArranger, setIsSendingToArranger] = useState7(false);
-    const bodyRef = useRef7(null);
-    const markdownRef = useRef7(markdown);
+    const [markdown, setMarkdown] = useState6(SAMPLE_MARKDOWN);
+    const [config, setConfig] = useState6(INITIAL_CONFIG);
+    const [activeTab, setActiveTab] = useState6("editor");
+    const [fontOptions, setFontOptions] = useState6(DEFAULT_FONT_OPTIONS);
+    const [isExporting, setIsExporting] = useState6(false);
+    const [exportError, setExportError] = useState6(null);
+    const [isSendingToArranger, setIsSendingToArranger] = useState6(false);
+    const bodyRef = useRef6(null);
+    const markdownRef = useRef6(markdown);
     markdownRef.current = markdown;
-    useEffect5(() => {
+    useEffect4(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
-    const tocPagesRef = useRef7(null);
+    const tocPagesRef = useRef6(null);
     const handleTocPages = useCallback((map) => {
       tocPagesRef.current = map;
     }, []);
@@ -2612,9 +2517,9 @@
         return next;
       });
     }, []);
-    const [docStatus, setDocStatus] = useState7(null);
-    const editorRef = useRef7(null);
-    const documentFileInputRef = useRef7(null);
+    const [docStatus, setDocStatus] = useState6(null);
+    const editorRef = useRef6(null);
+    const documentFileInputRef = useRef6(null);
     const errorText = (err) => err && err.message ? err.message : String(err);
     function replaceAllText(text) {
       if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
@@ -2626,7 +2531,7 @@
       applyToTextarea(el, replaceAllEdit(el, text), setMarkdown);
       el.scrollTop = 0;
     }
-    const [savedFile, setSavedFile] = useState7(null);
+    const [savedFile, setSavedFile] = useState6(null);
     function handleLoadSample() {
       setDocStatus(null);
       setSavedFile(null);
@@ -2691,9 +2596,9 @@
         setDocStatus({ type: "error", message: `Could not save "${savedFile.name}": ${errorText(err)} Use File → Save as Markdown… to pick the file again.` });
       }
     }
-    const fileShortcutsRef = useRef7(null);
+    const fileShortcutsRef = useRef6(null);
     fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
-    useEffect5(() => {
+    useEffect4(() => {
       function onKeyDown(e) {
         if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
         const action = fileShortcutsRef.current[(e.shiftKey ? "shift+" : "") + e.key.toLowerCase()];
@@ -2840,11 +2745,186 @@
         setFontOptions,
         resizer: /* @__PURE__ */ React.createElement(PanelResizer, { bodyRef })
       }
-    )), /* @__PURE__ */ React.createElement(UiSettings, null), /* @__PURE__ */ React.createElement("input", { ref: documentFileInputRef, type: "file", accept: DOCUMENT_INPUT_ACCEPT, onChange: handleDocumentFileSelected, className: "hidden" }));
+    )), /* @__PURE__ */ React.createElement("input", { ref: documentFileInputRef, type: "file", accept: DOCUMENT_INPUT_ACCEPT, onChange: handleDocumentFileSelected, className: "hidden" }));
+  }
+
+  // shared/js/displaySettings.js
+  var EVENT = "zn-display-prefs";
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
+  var tidy = (v) => Math.round(v * 1e3) / 1e3;
+  function installDisplaySettings(options) {
+    const { storageKey, sliders = [], groups = [], notBoth = [], notBothHint = "", title = "Display" } = options;
+    const checks = groups.flatMap((g) => g.checks);
+    const defaults = {};
+    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const c of checks) defaults[c.key] = false;
+    function load() {
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(storageKey)) || {};
+      } catch (e) {
+      }
+      const prefs2 = {};
+      for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
+      for (const c of checks) prefs2[c.key] = saved[c.key] === true;
+      for (const [a, b] of notBoth) if (prefs2[a] && prefs2[b]) prefs2[b] = false;
+      return prefs2;
+    }
+    function apply() {
+      const root2 = document.documentElement;
+      for (const s of sliders) root2.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
+      for (const c of checks) if (c.htmlClass) root2.classList.toggle(c.htmlClass, prefs[c.key]);
+      window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
+    }
+    function set(changes) {
+      prefs = { ...prefs, ...changes };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(prefs));
+      } catch (e) {
+      }
+      apply();
+      refresh();
+    }
+    let prefs = load();
+    apply();
+    const el = (tag, cls, attrs = {}) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const floating = options.mount === void 0 || options.mount === null;
+    const wrap = el("div", "zn-display" + (floating ? " zn-display-floating" : ""));
+    const panel = el("div", "zn-display-panel", { role: "dialog", "aria-label": title + " settings" });
+    panel.hidden = true;
+    const head = el("div", "zn-display-title");
+    head.textContent = title;
+    panel.appendChild(head);
+    const sliderViews = sliders.map((s) => {
+      const row = el("div", "zn-display-row");
+      const label = el("div", "zn-display-label");
+      const name = el("span");
+      name.textContent = s.label;
+      const value = el("span", "zn-display-value");
+      label.append(name, value);
+      const control = el("div", "zn-display-control");
+      const minus = el("button", "zn-display-step", { type: "button", "aria-label": "Smaller " + s.label.toLowerCase() });
+      minus.textContent = "−";
+      const range = el("input", "", { type: "range", min: s.min, max: s.max, step: s.step, "aria-label": s.label });
+      const plus = el("button", "zn-display-step", { type: "button", "aria-label": "Larger " + s.label.toLowerCase() });
+      plus.textContent = "+";
+      control.append(minus, range, plus);
+      row.append(label, control);
+      panel.appendChild(row);
+      minus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] - s.step, s)) }));
+      plus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] + s.step, s)) }));
+      range.addEventListener("input", () => set({ [s.key]: tidy(snap(Number(range.value), s)) }));
+      return { s, value, minus, range, plus };
+    });
+    const checkViews = [];
+    for (const g of groups) {
+      if (g.title) {
+        const sub = el("div", "zn-display-subtitle");
+        sub.textContent = g.title;
+        panel.appendChild(sub);
+      }
+      const list = el("div", "zn-display-checks");
+      for (const c of g.checks) {
+        const label = el("label", "zn-display-check");
+        const box = el("input", "", { type: "checkbox" });
+        const text = el("span");
+        text.textContent = c.label;
+        label.append(box, text);
+        list.appendChild(label);
+        box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
+        checkViews.push({ c, label, box });
+      }
+      panel.appendChild(list);
+    }
+    const foot = el("div", "zn-display-foot");
+    const note = el("span", "zn-display-note");
+    note.textContent = "Saved in this browser";
+    const reset = el("button", "zn-display-reset", { type: "button" });
+    reset.textContent = "Reset";
+    reset.addEventListener("click", () => set(defaults));
+    foot.append(note, reset);
+    panel.appendChild(foot);
+    const gear = el("button", "zn-display-gear", {
+      type: "button",
+      title: title + " settings",
+      "aria-label": title + " settings",
+      "aria-expanded": "false"
+    });
+    gear.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    wrap.append(panel, gear);
+    if (floating) document.body.appendChild(wrap);
+    else if (options.mount) options.mount.appendChild(wrap);
+    function refresh() {
+      for (const v of sliderViews) {
+        const n = prefs[v.s.key];
+        v.value.textContent = n + (v.s.unit || "");
+        v.range.value = String(n);
+        v.minus.disabled = n <= v.s.min;
+        v.plus.disabled = n >= v.s.max;
+      }
+      for (const v of checkViews) {
+        const on = prefs[v.c.key];
+        v.box.checked = v.c.showMeans ? !on : on;
+        const pair = notBoth.find((p) => p.includes(v.c.key));
+        const blocked = !on && pair && prefs[pair[0] === v.c.key ? pair[1] : pair[0]];
+        v.box.disabled = !!blocked;
+        v.label.classList.toggle("disabled", !!blocked);
+        v.label.title = blocked && notBothHint ? notBothHint : v.c.hint || "";
+      }
+      reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
+    }
+    refresh();
+    function setOpen(open) {
+      panel.hidden = !open;
+      gear.classList.toggle("open", open);
+      gear.setAttribute("aria-expanded", String(open));
+    }
+    gear.addEventListener("click", () => setOpen(panel.hidden));
+    document.addEventListener("pointerdown", (e) => {
+      if (!panel.hidden && !wrap.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) setOpen(false);
+    });
+    wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
+    wrap.addEventListener("mousedown", (e) => e.stopPropagation());
+    return { get prefs() {
+      return { ...prefs };
+    }, set, element: wrap };
+  }
+
+  // apps/Markdown-to-PDF/src/ui/displaySettings.js
+  function installMd2pdfDisplaySettings() {
+    return installDisplaySettings({
+      storageKey: "md2ebook-ui-prefs",
+      sliders: [
+        { key: "editorFontSize", label: "Editor text size", min: 10, max: 28, step: 0.5, initial: 13.5, unit: "px", cssVar: "--md2ebook-editor-font-size", cssValue: (v) => v + "px" },
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) }
+      ],
+      groups: [
+        { title: "Preview", checks: [
+          { key: "darkPaper", label: "Dark paper", htmlClass: "md2ebook-dark-paper", hint: "Shows the pages dark while you work. Only the preview: the PDF stays white." }
+        ] },
+        { title: "Show", checks: [
+          { key: "hideHeader", label: "Top bar", showMeans: true, htmlClass: "md2ebook-hide-header", hint: "The title, File menu and export buttons" },
+          { key: "hidePreview", label: "Preview (left)", showMeans: true, htmlClass: "md2ebook-hide-preview", hint: "The page preview and its status bar" },
+          { key: "hideSidebar", label: "Editor panel (right)", showMeans: true, htmlClass: "md2ebook-hide-sidebar", hint: "The Editor and Typography tabs" }
+        ] }
+      ],
+      notBoth: [["hidePreview", "hideSidebar"]],
+      notBothHint: "Keep at least one of the preview and the editor panel"
+    });
   }
 
   // apps/Markdown-to-PDF/src/main.jsx
   installInputMode();
+  installMd2pdfDisplaySettings();
   var rootElement = document.getElementById("root");
   var root = ReactDOM.createRoot(rootElement);
   root.render(/* @__PURE__ */ React.createElement(App, null));

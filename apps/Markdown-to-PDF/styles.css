@@ -340,7 +340,7 @@ button.md2ebook-menu-item:active {
 
 .md2ebook-editor-textarea {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--md2ebook-editor-font-size, 13.5px); /* gear pop-up, UiSettings.jsx */
+  font-size: var(--md2ebook-editor-font-size, 13.5px); /* gear pop-up, ui/displaySettings.js */
   line-height: 1.65;
   tab-size: 2;
   /* pre-wrap (not pre): still preserves whitespace/indentation exactly
@@ -763,142 +763,33 @@ select.md2ebook-statusbar-select option {
 }
 
 /* ==========================================================================
-   Interface size and the gear pop-up (UiSettings.jsx)
-   --md2ebook-ui-zoom scales the app's controls. The paper preview is left out
-   (it has its own zoom), and so is the side panel's own box, so its width and
-   the divider stay where they are; only what's inside it grows.
+   Display settings (gear pop-up: shared/js/displaySettings.js, set up in
+   src/ui/displaySettings.js; the gear and pop-up styles are in
+   shared/styles/displaySettings.css)
+   --zn-ui-zoom (Interface size) scales the app's controls. The paper preview
+   is left out (it has its own zoom), and so is the side panel's own box, so
+   its width and the divider stay where they are; only what's inside grows.
    ========================================================================== */
 .md2ebook-header,
 .md2ebook-sidebar > .tabbar,
 .md2ebook-sidebar-content,
-.md2ebook-preview-statusbar,
-.md2ebook-uiprefs {
-  zoom: var(--md2ebook-ui-zoom, 1);
+.md2ebook-preview-statusbar {
+  zoom: var(--zn-ui-zoom, 1);
 }
 
-.md2ebook-uiprefs {
-  position: fixed;
-  left: 12px;
-  /* Floats just above the preview's status bar. */
+/* The gear floats at the bottom left, just above the preview's status bar. */
+.zn-display-floating {
   bottom: 52px;
-  z-index: 40;
 }
-[data-input="touch"] .md2ebook-uiprefs {
+[data-input="touch"] .zn-display-floating {
   bottom: 62px;
 }
-.md2ebook-uiprefs-gear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--ui-border);
-  background-color: #201918;
-  color: var(--ui-fg-muted);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  cursor: pointer;
-  transition: color 0.15s, transform 0.25s;
-}
-.md2ebook-uiprefs-gear:hover,
-.md2ebook-uiprefs-gear.open {
-  color: var(--ui-fg);
-}
-.md2ebook-uiprefs-gear.open {
-  transform: rotate(45deg);
-}
-[data-input="touch"] .md2ebook-uiprefs-gear {
-  width: 48px;
-  height: 48px;
-}
-.md2ebook-uiprefs-panel {
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 8px);
-  width: 260px;
-  padding: 12px 14px;
-  background-color: #201918;
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  color: var(--ui-fg);
-  font-size: 13px;
-}
-.md2ebook-uiprefs-title {
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ui-fg-muted);
-  margin-bottom: 10px;
-}
-.md2ebook-uiprefs-row + .md2ebook-uiprefs-row {
-  margin-top: 12px;
-}
-.md2ebook-uiprefs-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.md2ebook-uiprefs-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--ui-fg-muted);
-}
-.md2ebook-uiprefs-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.md2ebook-uiprefs-control input[type="range"] {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--ui-accent);
-  cursor: pointer;
-}
-.md2ebook-uiprefs-step,
-.md2ebook-uiprefs-reset {
-  border: 1px solid var(--ui-border);
-  background-color: transparent;
-  color: inherit;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.md2ebook-uiprefs-step {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  font-size: 15px;
-  line-height: 1;
-}
-.md2ebook-uiprefs-step:disabled,
-.md2ebook-uiprefs-reset:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.md2ebook-uiprefs-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 14px;
-}
-.md2ebook-uiprefs-note {
-  font-size: 11px;
-  color: var(--ui-fg-muted);
-}
-.md2ebook-uiprefs-reset {
-  padding: 4px 12px;
-  font-size: 12px;
-}
-[data-input="touch"] .md2ebook-uiprefs-step {
-  width: 34px;
-  height: 34px;
-}
-[data-input="touch"] .md2ebook-uiprefs-control input[type="range"] {
-  height: 28px;
+/* No status bar to float above. */
+.md2ebook-hide-preview .zn-display-floating {
+  bottom: 12px;
 }
 
-/* Show checkboxes in the gear pop-up: hide the top bar or one of the two columns. */
+/* Show checkboxes: hide the top bar or one of the two columns. */
 .md2ebook-hide-header .md2ebook-header,
 .md2ebook-hide-preview .md2ebook-preview-pane,
 .md2ebook-hide-sidebar .md2ebook-sidebar {
@@ -913,43 +804,9 @@ select.md2ebook-statusbar-select option {
 .md2ebook-hide-preview .md2ebook-resizer {
   display: none;
 }
-/* No status bar to float above. */
-.md2ebook-hide-preview .md2ebook-uiprefs {
-  bottom: 12px;
-}
-.md2ebook-uiprefs-subtitle {
-  margin: 14px 0 6px;
-  font-size: 12px;
-  color: var(--ui-fg-muted);
-}
-.md2ebook-uiprefs-checks {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.md2ebook-uiprefs-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--ui-fg);
-  cursor: pointer;
-}
-.md2ebook-uiprefs-check input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--ui-accent);
-  cursor: inherit;
-}
-.md2ebook-uiprefs-check.disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-[data-input="touch"] .md2ebook-uiprefs-checks {
-  gap: 10px;
-}
-[data-input="touch"] .md2ebook-uiprefs-check input {
-  width: 22px;
-  height: 22px;
+
+@media print {
+  .zn-display {
+    display: none !important;
+  }
 }

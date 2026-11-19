@@ -1537,3 +1537,32 @@ input[type="file"]::file-selector-button:hover {
     border-color: var(--ui-accent);
 }
 
+/* ==========================================================================
+   Display settings (the gear: shared/js/displaySettings.js, set up in
+   src/displaySettings.js; gear and pop-up styles in shared/styles/displaySettings.css)
+   ========================================================================== */
+/* Interface size: the controls, not the sheet preview (it has its own zoom). The settings
+   panel's own box keeps its width, so the draggable line stays put. */
+.topbar,
+.workspace-panel > .tabbar,
+.workspace-panel-content,
+.workspace-preview-footer {
+    zoom: var(--zn-ui-zoom, 1);
+}
+/* The gear floats at the bottom left, just above the preview footer. */
+.zn-display-floating {
+    bottom: 52px;
+}
+[data-input="touch"] .zn-display-floating {
+    bottom: 62px;
+}
+/* Show checkboxes. */
+.za-hide-topbar .topbar,
+.za-hide-panel #workspace-panel {
+    display: none;
+}
+@media print {
+    .zn-display {
+        display: none !important;
+    }
+}
