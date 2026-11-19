@@ -14,7 +14,6 @@ import { PanelResizer } from "./PanelResizer.jsx";
 import { PreviewCanvas } from "./PreviewCanvas.jsx";
 import { MOD } from "./shortcutKeys.js";
 import { Sidebar } from "./Sidebar.jsx";
-import { UiSettings } from "./UiSettings.jsx";
 const { useEffect, useState, useRef, useCallback } = React;
 
 // Open and Save remember their own last-used folder (your documents), separate from the
@@ -368,7 +367,6 @@ export function App() {
           resizer={<PanelResizer bodyRef={bodyRef} />}
         />
       </div>
-      <UiSettings />
       {/* Open file's fallback for browsers without a file-open dialog API. */}
       <input ref={documentFileInputRef} type="file" accept={DOCUMENT_INPUT_ACCEPT} onChange={handleDocumentFileSelected} className="hidden" />
     </div>

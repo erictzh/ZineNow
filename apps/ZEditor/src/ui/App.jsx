@@ -33,6 +33,7 @@ import { Sidebar } from "./sidebar/Sidebar.jsx";
 import { ToolBar } from "./toolbar/ToolBar.jsx";
 import { TouchBar } from "./TouchBar.jsx";
 import { Topbar } from "./topbar/Topbar.jsx";
+import { attachDisplayGear } from "./displaySettings.js";
 
 export function App() {
   // Order matters only in that each hook gets the ones it builds on.
@@ -160,15 +161,19 @@ export function App() {
               />
             </div>
           </div>
-          {/* Shown only while a finger is being used (styles/touch.css). */}
-          {selectedPage && (
-            <TouchBar
-              selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
-              isEditing={editingAnnId !== null}
-              isCropping={croppingAnnId !== null && croppingAnnId === selectedAnnId}
-              onEditText={selection.setEditingAnnId}
-            />
-          )}
+          {/* Bottom left of the canvas: the Display gear (ui/displaySettings.js), then the touch bar,
+              shown only while a finger is being used (styles/touch.css). */}
+          <div className="ze-bottom-left">
+            <div className="ze-display-slot" ref={attachDisplayGear} />
+            {selectedPage && (
+              <TouchBar
+                selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+                isEditing={editingAnnId !== null}
+                isCropping={croppingAnnId !== null && croppingAnnId === selectedAnnId}
+                onEditText={selection.setEditingAnnId}
+              />
+            )}
+          </div>
           </div>
         </div>
         {selectedPage && (

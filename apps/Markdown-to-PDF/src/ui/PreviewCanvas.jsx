@@ -185,7 +185,7 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
   // escape the iframe and manipulate this app directly. postMessage
   // keeps the iframe's contents fully confined to their own opaque
   // origin regardless of what's inside them.
-  // Dark paper (gear pop-up, UiSettings.jsx) is a class on this page's <html>; the preview frame
+  // Dark paper (gear pop-up, ui/displaySettings.js) is a class on this page's <html>; the preview frame
   // is sandboxed, so it's passed on by postMessage: when the frame reports in, and when the
   // setting changes.
   function sendDarkPaper() {
@@ -195,8 +195,8 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
     try { win.postMessage({ source: "md2ebook-app", type: "darkPaper", on }, "*"); } catch (e) { /* frame gone */ }
   }
   useEffect(() => {
-    window.addEventListener("md2ebook-uiprefs", sendDarkPaper);
-    return () => window.removeEventListener("md2ebook-uiprefs", sendDarkPaper);
+    window.addEventListener("zn-display-prefs", sendDarkPaper);
+    return () => window.removeEventListener("zn-display-prefs", sendDarkPaper);
   }, []);
   useEffect(() => {
     function handleMessage(event) {
