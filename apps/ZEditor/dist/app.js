@@ -14428,7 +14428,10 @@
 
   // apps/ZEditor/src/ui/touchInput.js
   var DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
-  var NATIVE_TARGETS = "input, textarea, select, [contenteditable], .ze-typeset-surface";
+  var NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
+  var SCROLL_AREA = ".ze-ruler-frame";
+  var FINGER_HOLD_MS = 120;
+  var RULER_SLOP_PX = 12;
   var DOUBLE_TAP_MS = 350;
   var DOUBLE_TAP_PX = 24;
   var TAP_SLOP_PX = 10;
@@ -14455,38 +14458,126 @@
     const target = el && el.isConnected ? el : document;
     target.dispatchEvent(mouseEventFrom(type, e, extra));
   }
+  function rulerNear(x, y) {
+    for (const ruler of document.querySelectorAll(".ze-ruler")) {
+      const r = ruler.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const top = ruler.classList.contains("ze-ruler-top");
+      const inside = top ? x >= r.left && x <= r.right && y >= r.top && y <= r.bottom + RULER_SLOP_PX : y >= r.top && y <= r.bottom && x >= r.left && x <= r.right + RULER_SLOP_PX;
+      if (inside) return ruler;
+    }
+    return null;
+  }
   function installTouchInput() {
     if (typeof window === "undefined" || !window.PointerEvent) return () => {
     };
     const root = document.documentElement;
+    const fingers = /* @__PURE__ */ new Map();
+    let pending = null;
     let active = null;
+    let pan = null;
     let lastTap = null;
     let lastTouchTime = 0;
     const markInput = (e) => {
       const kind = e.pointerType === "mouse" ? "mouse" : "touch";
       if (root.dataset.zeInput !== kind) root.dataset.zeInput = kind;
     };
+    const midpoint = () => {
+      const [a, b] = [...fingers.values()];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    };
+    function begin(press) {
+      active = { id: press.id, target: press.target, x: press.down.clientX, y: press.down.clientY, moved: false };
+      send(press.target, "mousedown", press.down);
+      for (const move of press.moves) forwardMove(move);
+    }
+    function flushPending() {
+      if (!pending) return;
+      const press = pending;
+      clearTimeout(press.timer);
+      pending = null;
+      begin(press);
+    }
+    function forwardMove(e) {
+      if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
+      send(active.target, "mousemove", e);
+    }
     function onPointerDown(e) {
       markInput(e);
       if (e.pointerType === "mouse") return;
       lastTouchTime = Date.now();
-      if (active) return;
-      const target = e.target instanceof Element ? e.target : null;
-      if (!target || !target.closest(DRAG_SURFACES) || target.closest(NATIVE_TARGETS)) return;
+      const isFinger = e.pointerType === "touch";
+      let target = e.target instanceof Element ? e.target : null;
+      if (!target) return;
+      if (isFinger) {
+        const ruler = rulerNear(e.clientX, e.clientY);
+        if (ruler) target = ruler;
+      }
+      const inScrollArea = Boolean(target.closest(SCROLL_AREA));
+      const surface = target.closest(DRAG_SURFACES) && !target.closest(NATIVE_TARGETS);
+      if (isFinger && inScrollArea) {
+        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (fingers.size === 2 && !active) {
+          if (pending) {
+            clearTimeout(pending.timer);
+            pending = null;
+          }
+          pan = { pane: target.closest(SCROLL_AREA).querySelector(".preview-pane"), mid: midpoint() };
+          e.preventDefault();
+          return;
+        }
+        if (fingers.size > 1 || pan) {
+          e.preventDefault();
+          return;
+        }
+      }
+      if (active || pending || !surface) return;
       e.preventDefault();
-      active = { id: e.pointerId, target, x: e.clientX, y: e.clientY, moved: false };
-      send(target, "mousedown", e);
+      const press = { id: e.pointerId, target, down: e, moves: [] };
+      if (isFinger && inScrollArea) {
+        pending = press;
+        press.timer = setTimeout(flushPending, FINGER_HOLD_MS);
+      } else {
+        begin(press);
+      }
     }
     function onPointerMove(e) {
       if (e.pointerType === "mouse") {
         if (root.dataset.zeInput === "touch" && e.buttons === 0) markInput(e);
         return;
       }
-      if (!active || e.pointerId !== active.id) return;
-      if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
-      send(active.target, "mousemove", e);
+      if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pan) {
+        if (fingers.size < 2) return;
+        const mid = midpoint();
+        if (pan.pane) {
+          pan.pane.scrollLeft -= mid.x - pan.mid.x;
+          pan.pane.scrollTop -= mid.y - pan.mid.y;
+        }
+        pan.mid = mid;
+        return;
+      }
+      if (pending && e.pointerId === pending.id) {
+        pending.moves.push(e);
+        if (Math.hypot(e.clientX - pending.down.clientX, e.clientY - pending.down.clientY) > TAP_SLOP_PX) flushPending();
+        return;
+      }
+      if (active && e.pointerId === active.id) forwardMove(e);
     }
     function onPointerEnd(e) {
+      fingers.delete(e.pointerId);
+      if (pan) {
+        if (fingers.size < 2) pan = null;
+        return;
+      }
+      if (pending && e.pointerId === pending.id) {
+        if (e.type === "pointercancel") {
+          clearTimeout(pending.timer);
+          pending = null;
+          return;
+        }
+        flushPending();
+      }
       if (!active || e.pointerId !== active.id) return;
       const { target, moved } = active;
       active = null;
@@ -14510,7 +14601,7 @@
       if (e.isTrusted && Date.now() - lastTouchTime < 1e3) e.stopPropagation();
     }
     function onContextMenu(e) {
-      if (Date.now() - lastTouchTime < 1e3 && e.target instanceof Element && e.target.closest(DRAG_SURFACES)) e.preventDefault();
+      if (Date.now() - lastTouchTime < 1e3 && e.target instanceof Element && e.target.closest(SCROLL_AREA + ", " + DRAG_SURFACES)) e.preventDefault();
     }
     window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
     window.addEventListener("pointermove", onPointerMove, true);
