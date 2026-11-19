@@ -69,6 +69,10 @@ export function generateStyleBlock(normalized, paper) {
     '      min-height: var(--md2ebook-page-height);\n' +
     '      padding: var(--md2ebook-page-margin-vertical) var(--md2ebook-page-margin-horizontal);\n' +
     '      background: #ffffff;\n' +
+    // Keep code, table and quote backgrounds in the PDF without the user
+    // ticking "Background graphics" in the print dialog (inherited by children).
+    '      -webkit-print-color-adjust: exact;\n' +
+    '      print-color-adjust: exact;\n' +
     '      font-family: var(--md2ebook-font-family);\n' +
     '      font-size: var(--md2ebook-font-size);\n' +
     '      line-height: var(--md2ebook-line-height);\n' +
