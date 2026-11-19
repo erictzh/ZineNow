@@ -1086,10 +1086,11 @@
       const menu = menuRef.current;
       if (!open || !menu) return;
       menu.style.transform = "";
-      const { left, right } = menu.getBoundingClientRect();
+      const { left, right, width } = menu.getBoundingClientRect();
       const limit = document.documentElement.clientWidth - 8;
-      if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right)}px)`;
-      else if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+      const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
+      if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right) / zoom}px)`;
+      else if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
     }, [open]);
     return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu-wrap", ref: containerRef }, /* @__PURE__ */ React.createElement(
       "button",
@@ -1135,7 +1136,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "b23981a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "afab6ae"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1184,7 +1185,7 @@
   function PanelResizer({ bodyRef }) {
     const handleRef = useRef2(null);
     const widthRef = useRef2(null);
-    const clamp = (px) => {
+    const clamp2 = (px) => {
       const body = bodyRef.current;
       const most = Math.max(MIN_PANEL, (body ? body.getBoundingClientRect().width : window.innerWidth) - MIN_PREVIEW);
       return Math.round(Math.min(most, Math.max(MIN_PANEL, px)));
@@ -1199,7 +1200,7 @@
         } catch (e) {
         }
       } else {
-        widthRef.current = clamp(px);
+        widthRef.current = clamp2(px);
         root2.style.setProperty("--md2ebook-sidebar-width", widthRef.current + "px");
         if (save) {
           try {
@@ -1221,7 +1222,7 @@
       }
       if (saved > 0) apply(saved, false);
       const onResize = () => {
-        if (widthRef.current != null && clamp(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
       };
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
@@ -2450,24 +2451,101 @@
     ), /* @__PURE__ */ React.createElement(TypefaceSection, { ...sectionProps, fontOptions, setFontOptions }), /* @__PURE__ */ React.createElement(PageSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(BodyTextSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(HeadingsSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(TocSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(PageNumbersSection, { ...sectionProps }))));
   }
 
+  // apps/Markdown-to-PDF/src/ui/UiSettings.jsx
+  var { useState: useState6, useEffect: useEffect4, useRef: useRef6 } = React;
+  var STORAGE_KEY2 = "md2ebook-ui-prefs";
+  var EDITOR_FONT = { min: 10, max: 28, step: 0.5, initial: 13.5 };
+  var UI_SCALE = { min: 75, max: 175, step: 5, initial: 100 };
+  var clamp = (v, { min, max, initial }) => Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : initial;
+  function loadPrefs() {
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(STORAGE_KEY2)) || {};
+    } catch (e) {
+    }
+    return { editorFontSize: clamp(Number(saved.editorFontSize), EDITOR_FONT), uiScale: clamp(Number(saved.uiScale), UI_SCALE) };
+  }
+  function applyPrefs({ editorFontSize, uiScale }) {
+    const root2 = document.documentElement.style;
+    root2.setProperty("--md2ebook-editor-font-size", editorFontSize + "px");
+    root2.setProperty("--md2ebook-ui-zoom", String(uiScale / 100));
+  }
+  applyPrefs(loadPrefs());
+  function PrefSlider({ label, value, range, unit, onChange }) {
+    const set = (v) => onChange(clamp(Math.round(v / range.step) * range.step, range));
+    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-row" }, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-label" }, /* @__PURE__ */ React.createElement("span", null, label), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-uiprefs-value" }, value, unit)), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-control" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-step", "aria-label": "Smaller " + label.toLowerCase(), onClick: () => set(value - range.step), disabled: value <= range.min }, "−"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "range",
+        min: range.min,
+        max: range.max,
+        step: range.step,
+        value,
+        "aria-label": label,
+        onChange: (e) => set(Number(e.target.value))
+      }
+    ), /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-step", "aria-label": "Larger " + label.toLowerCase(), onClick: () => set(value + range.step), disabled: value >= range.max }, "+")));
+  }
+  function UiSettings() {
+    const [prefs, setPrefs] = useState6(loadPrefs);
+    const [open, setOpen] = useState6(false);
+    const wrapRef = useRef6(null);
+    useEffect4(() => {
+      applyPrefs(prefs);
+      try {
+        localStorage.setItem(STORAGE_KEY2, JSON.stringify(prefs));
+      } catch (e) {
+      }
+    }, [prefs]);
+    useEffect4(() => {
+      if (!open) return void 0;
+      const onDown = (e) => {
+        if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("pointerdown", onDown);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("pointerdown", onDown);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [open]);
+    const update = (key) => (value) => setPrefs((p) => ({ ...p, [key]: value }));
+    const isDefault = prefs.editorFontSize === EDITOR_FONT.initial && prefs.uiScale === UI_SCALE.initial;
+    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs md2ebook-no-print", ref: wrapRef }, open ? /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-panel", role: "dialog", "aria-label": "Display settings" }, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-title" }, "Display"), /* @__PURE__ */ React.createElement(PrefSlider, { label: "Editor text size", value: prefs.editorFontSize, range: EDITOR_FONT, unit: "px", onChange: update("editorFontSize") }), /* @__PURE__ */ React.createElement(PrefSlider, { label: "Interface size", value: prefs.uiScale, range: UI_SCALE, unit: "%", onChange: update("uiScale") }), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-uiprefs-foot" }, /* @__PURE__ */ React.createElement("span", { className: "md2ebook-uiprefs-note" }, "Saved in this browser"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2ebook-uiprefs-reset", disabled: isDefault, onClick: () => setPrefs({ editorFontSize: EDITOR_FONT.initial, uiScale: UI_SCALE.initial }) }, "Reset"))) : null, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "md2ebook-uiprefs-gear" + (open ? " open" : ""),
+        title: "Display settings: editor text size and interface size",
+        "aria-label": "Display settings",
+        "aria-expanded": open,
+        onClick: () => setOpen((o) => !o)
+      },
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }), /* @__PURE__ */ React.createElement("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" }))
+    ));
+  }
+
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect4, useState: useState6, useRef: useRef6, useCallback } = React;
+  var { useEffect: useEffect5, useState: useState7, useRef: useRef7, useCallback } = React;
   var DOCUMENT_PICKER_ID = "md2ebook-document";
   function App() {
-    const [markdown, setMarkdown] = useState6(SAMPLE_MARKDOWN);
-    const [config, setConfig] = useState6(INITIAL_CONFIG);
-    const [activeTab, setActiveTab] = useState6("editor");
-    const [fontOptions, setFontOptions] = useState6(DEFAULT_FONT_OPTIONS);
-    const [isExporting, setIsExporting] = useState6(false);
-    const [exportError, setExportError] = useState6(null);
-    const [isSendingToArranger, setIsSendingToArranger] = useState6(false);
-    const bodyRef = useRef6(null);
-    const markdownRef = useRef6(markdown);
+    const [markdown, setMarkdown] = useState7(SAMPLE_MARKDOWN);
+    const [config, setConfig] = useState7(INITIAL_CONFIG);
+    const [activeTab, setActiveTab] = useState7("editor");
+    const [fontOptions, setFontOptions] = useState7(DEFAULT_FONT_OPTIONS);
+    const [isExporting, setIsExporting] = useState7(false);
+    const [exportError, setExportError] = useState7(null);
+    const [isSendingToArranger, setIsSendingToArranger] = useState7(false);
+    const bodyRef = useRef7(null);
+    const markdownRef = useRef7(markdown);
     markdownRef.current = markdown;
-    useEffect4(() => {
+    useEffect5(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
-    const tocPagesRef = useRef6(null);
+    const tocPagesRef = useRef7(null);
     const handleTocPages = useCallback((map) => {
       tocPagesRef.current = map;
     }, []);
@@ -2502,9 +2580,9 @@
         return next;
       });
     }, []);
-    const [docStatus, setDocStatus] = useState6(null);
-    const editorRef = useRef6(null);
-    const documentFileInputRef = useRef6(null);
+    const [docStatus, setDocStatus] = useState7(null);
+    const editorRef = useRef7(null);
+    const documentFileInputRef = useRef7(null);
     const errorText = (err) => err && err.message ? err.message : String(err);
     function replaceAllText(text) {
       if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
@@ -2516,7 +2594,7 @@
       applyToTextarea(el, replaceAllEdit(el, text), setMarkdown);
       el.scrollTop = 0;
     }
-    const [savedFile, setSavedFile] = useState6(null);
+    const [savedFile, setSavedFile] = useState7(null);
     function handleLoadSample() {
       setDocStatus(null);
       setSavedFile(null);
@@ -2581,9 +2659,9 @@
         setDocStatus({ type: "error", message: `Could not save "${savedFile.name}": ${errorText(err)} Use File → Save as Markdown… to pick the file again.` });
       }
     }
-    const fileShortcutsRef = useRef6(null);
+    const fileShortcutsRef = useRef7(null);
     fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
-    useEffect4(() => {
+    useEffect5(() => {
       function onKeyDown(e) {
         if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
         const action = fileShortcutsRef.current[(e.shiftKey ? "shift+" : "") + e.key.toLowerCase()];
@@ -2730,7 +2808,7 @@
         setFontOptions,
         resizer: /* @__PURE__ */ React.createElement(PanelResizer, { bodyRef })
       }
-    )), /* @__PURE__ */ React.createElement("input", { ref: documentFileInputRef, type: "file", accept: DOCUMENT_INPUT_ACCEPT, onChange: handleDocumentFileSelected, className: "hidden" }));
+    )), /* @__PURE__ */ React.createElement(UiSettings, null), /* @__PURE__ */ React.createElement("input", { ref: documentFileInputRef, type: "file", accept: DOCUMENT_INPUT_ACCEPT, onChange: handleDocumentFileSelected, className: "hidden" }));
   }
 
   // apps/Markdown-to-PDF/src/main.jsx
