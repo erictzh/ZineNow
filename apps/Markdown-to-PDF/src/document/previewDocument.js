@@ -47,6 +47,15 @@ export function renderHtmlDocument(markdownText, config) {
 
   var paginationScript =
     '<script>\n' +
+    // The height of the content itself (the stack of pages, last page's
+    // gap included). Not document.documentElement.scrollHeight: that is
+    // never less than the frame's own height, and the frame is sized
+    // from the previous measurement — so once a long document had made
+    // it tall, deleting text could never shrink it again, and the
+    // removed pages' worth of empty space stayed behind as "ghost pages".
+    '  function __contentHeight() {\n' +
+    '    return Math.ceil(document.body.getBoundingClientRect().height);\n' +
+    '  }\n' +
     '  window.PagedConfig = {\n' +
     '    after: function (flow) {\n' +
     // Page numbers: Paged.js's own handling of `counter-reset: page N`
@@ -84,7 +93,7 @@ export function renderHtmlDocument(markdownText, config) {
     "          source: 'md2ebook-pagedjs',\n" +
     '          tocPages: __tocPages,\n' +
     '          pageCount: flow && flow.total,\n' +
-    '          height: document.documentElement.scrollHeight\n' +
+    '          height: __contentHeight()\n' +
     "        }, '*');\n" +
     '      } catch (e) {}\n' +
     '    }\n' +
@@ -94,7 +103,7 @@ export function renderHtmlDocument(markdownText, config) {
     '      window.parent.postMessage({\n' +
     "        source: 'md2ebook-pagedjs',\n" +
     '        pageCount: null,\n' +
-    '        height: document.documentElement.scrollHeight\n' +
+    '        height: __contentHeight()\n' +
     "      }, '*');\n" +
     '    } catch (e) {}\n' +
     '  });\n' +

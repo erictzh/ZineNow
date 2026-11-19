@@ -2,7 +2,52 @@
 
 import { renderHtmlDocument } from "../document/previewDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
+import { PAPER_SIZE_OPTIONS } from "../settings/initialConfig.js";
 const { useState, useEffect, useRef, useMemo } = React;
+
+// Preview geometry, in unscaled px: the seam (border-bottom) and gap (margin-bottom) under every page
+// — the .pagedjs_page rule in document/styleBlock.js — and the canvas wrapper's top padding
+// (.md2ebook-canvas-wrapper in styles.css). Keep them in step with those.
+const PAGE_SEAM_PX = 3;
+const PAGE_GAP_PX = 24;
+const CANVAS_TOP_PAD_PX = 40;
+
+// "Page [n] of N" in the status bar: the box shows the page in view; type a number and press Enter
+// (or leave the box) to jump there. The spinner arrows jump straight away.
+function PageJump({ current, total, onGo }) {
+  const [draft, setDraft] = useState(null); // the box's text while it's being typed in
+  const commit = () => {
+    if (draft == null) return;
+    const n = parseInt(draft, 10);
+    if (Number.isFinite(n)) onGo(n);
+    setDraft(null);
+  };
+  return (
+    <span className="md2ebook-page-jump">
+      Page
+      <input
+        type="number"
+        min={1}
+        max={total}
+        step={1}
+        value={draft != null ? draft : current}
+        disabled={total <= 1}
+        onChange={(e) => {
+          if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
+          else onGo(Number(e.target.value));
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") setDraft(null);
+        }}
+        aria-label={`Go to page (1 to ${total})`}
+        title={`Go to page — type 1 to ${total} and press Enter`}
+      />
+      of {total}
+    </span>
+  );
+}
 
 const ZOOM_MIN = 15; // percent
 const ZOOM_MAX = 200;
@@ -76,7 +121,7 @@ function ZoomControl({ percent, isFit, onZoom }) {
    surrounding preview pane's own scrollbar, with no separate/nested
    scrollbar trapped inside the iframe.
    ========================================================================== */
-export function PreviewCanvas({ markdown, config, onTocPages }) {
+export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange }) {
   const onTocPagesRef = useRef(onTocPages);
   onTocPagesRef.current = onTocPages;
   const outerRef = useRef(null);
@@ -162,17 +207,15 @@ export function PreviewCanvas({ markdown, config, onTocPages }) {
     return () => window.removeEventListener("message", handleMessage);
   }, []);
   const [currentPage, setCurrentPage] = useState(1);
-  // Tracks which page is currently in view for the status bar, purely
-  // from scroll position — every Paged.js page box is sized to exactly
-  // one physical page (paper.heightIn) plus the fixed gap between pages
-  // (see the .pagedjs_page rule in document/previewDocument.js), both scaled down by
-  // the same factor the preview itself is scaled by, so dividing the
-  // scroll position by one page-with-gap's scaled height gives which
-  // page is centered in the visible viewport.
+  // Every Paged.js page box is exactly one physical page (paper.heightIn) tall, followed by its seam
+  // and the gap before the next page (the .pagedjs_page rule in document/styleBlock.js), all scaled
+  // by the preview's scale — so page n starts at a fixed distance down the pane.
+  const pageStridePx = (minPageHeightPx + PAGE_SEAM_PX + PAGE_GAP_PX) * scale;
+  // Tracks which page is in view for the status bar, purely from scroll position: the page at the
+  // top of the view (the one a page jump scrolls to), or the last page once scrolled to the bottom.
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return undefined;
-    const PAGE_GAP_PX = 24; // must match .pagedjs_page's margin-bottom in document/previewDocument.js
     let ticking = false;
     function computeCurrentPage() {
       ticking = false;
@@ -180,10 +223,13 @@ export function PreviewCanvas({ markdown, config, onTocPages }) {
         setCurrentPage(1);
         return;
       }
-      const pageStridePx = (minPageHeightPx + PAGE_GAP_PX) * scale;
       if (!(pageStridePx > 0)) return;
-      const viewportCenter = el.scrollTop + el.clientHeight / 2;
-      const estimated = Math.floor(viewportCenter / pageStridePx) + 1;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) {
+        setCurrentPage(pageCount);
+        return;
+      }
+      // A page counts as "at the top" once less than a third of it has scrolled out of view.
+      const estimated = Math.floor((el.scrollTop - CANVAS_TOP_PAD_PX + pageStridePx / 3) / pageStridePx) + 1;
       setCurrentPage(Math.min(pageCount, Math.max(1, estimated)));
     }
     function handleScroll() {
@@ -194,7 +240,15 @@ export function PreviewCanvas({ markdown, config, onTocPages }) {
     computeCurrentPage();
     el.addEventListener("scroll", handleScroll);
     return () => el.removeEventListener("scroll", handleScroll);
-  }, [pageCount, scale, minPageHeightPx]);
+  }, [pageCount, pageStridePx]);
+  // Scrolls the preview so page n's top sits at the top of the view (the status bar's page box).
+  const goToPage = (n) => {
+    const el = outerRef.current;
+    if (!el || !pageCount) return;
+    const page = Math.min(pageCount, Math.max(1, Math.round(n)));
+    el.scrollTop = CANVAS_TOP_PAD_PX + (page - 1) * pageStridePx - 8;
+    setCurrentPage(page);
+  };
   // Drag-to-scroll ("hand" scrolling) over the paper: the pane follows the pointer in both directions.
   const panRef = useRef(null); // { x, y, left, top } at the start of a drag
   const startPan = (e) => {
@@ -256,9 +310,26 @@ export function PreviewCanvas({ markdown, config, onTocPages }) {
         </div>
       </div>
       <div className="md2ebook-no-print md2ebook-preview-statusbar">
-        <span>{paper.label}</span>
+        {/* Paper size, changeable right here: the same setting as Typography → Page → Paper Size. */}
+        <select
+          className="md2ebook-statusbar-select"
+          value={config.paperSize}
+          onChange={(e) => onPaperSizeChange(e.target.value)}
+          aria-label="Paper size"
+          title="Paper size (also in Typography → Page)"
+        >
+          {PAPER_SIZE_OPTIONS.map((p) => (
+            <option key={p.key} value={p.key}>
+              {p.label}
+            </option>
+          ))}
+        </select>
         <span className="md2ebook-statusbar-divider" aria-hidden="true">|</span>
-        <span>{paginating ? "Paginating…" : pageCount ? `Page ${currentPage} of ${pageCount}` : "Page 1 of 1"}</span>
+        {paginating ? (
+          <span>Paginating…</span>
+        ) : (
+          <PageJump current={currentPage} total={pageCount || 1} onGo={goToPage} />
+        )}
         <span className="md2ebook-statusbar-divider" aria-hidden="true">|</span>
         <ZoomControl percent={Math.round(scale * 100)} isFit={zoomPct == null} onZoom={setZoomPct} />
       </div>

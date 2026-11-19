@@ -40,18 +40,180 @@
     win.postMessage({ type: HANDOFF_PDF_MESSAGE, buffer, filename }, "*", [buffer]);
   }
 
-  // apps/Markdown-to-PDF/src/document/html.js
-  function escapeHtml(str) {
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  // apps/Markdown-to-PDF/src/editor/format.js
+  var INLINE = {
+    bold: "**",
+    italic: "*",
+    strike: "~~",
+    code: "`"
+  };
+  function runBefore(text, pos, ch) {
+    let n = 0;
+    while (pos - n - 1 >= 0 && text[pos - n - 1] === ch) n++;
+    return n;
   }
-  function slugify(text) {
-    var s = String(text).replace(/&[a-z0-9#]+;/gi, " ").toLowerCase().trim();
-    try {
-      s = s.replace(/[^\p{L}\p{N}]+/gu, "-");
-    } catch (e) {
-      s = s.replace(/[^a-z0-9\u00c0-\uffff]+/g, "-");
+  function runAfter(text, pos, ch) {
+    let n = 0;
+    while (pos + n < text.length && text[pos + n] === ch) n++;
+    return n;
+  }
+  function wrappedBy(text, s, e, marker) {
+    if (marker === "**" || marker === "*") {
+      const n = Math.min(runBefore(text, s, "*"), runAfter(text, e, "*"));
+      return marker === "**" ? n >= 2 : n % 2 === 1;
     }
-    return s.replace(/^-+|-+$/g, "").slice(0, 60);
+    return text.slice(s - marker.length, s) === marker && text.slice(e, e + marker.length) === marker;
+  }
+  function toggleInline(text, start, end, kind) {
+    const m = INLINE[kind];
+    const len = m.length;
+    if (start === end) {
+      if (text.slice(start - len, start) === m && text.slice(start, start + len) === m && wrappedBy(text, start, start, m)) {
+        return { from: start - len, to: start + len, insert: "", selStart: start - len, selEnd: start - len };
+      }
+      return { from: start, to: end, insert: m + m, selStart: start + len, selEnd: start + len };
+    }
+    let s = start;
+    let e = end;
+    while (s < e && /\s/.test(text[s])) s++;
+    while (e > s && /\s/.test(text[e - 1])) e--;
+    if (s === e) return { from: start, to: end, insert: text.slice(start, end), selStart: start, selEnd: end };
+    const inner = text.slice(s, e);
+    if (wrappedBy(text, s, e, m)) {
+      return { from: s - len, to: e + len, insert: inner, selStart: s - len, selEnd: e - len };
+    }
+    if (inner.length >= 2 * len && inner.startsWith(m) && inner.endsWith(m) && wrappedBy(inner, len, inner.length - len, m)) {
+      const bare = inner.slice(len, inner.length - len);
+      return { from: s, to: e, insert: bare, selStart: s, selEnd: s + bare.length };
+    }
+    return { from: s, to: e, insert: m + inner + m, selStart: s + len, selEnd: e + len };
+  }
+  var HEADING_RE = /^(#{1,6})[ \t]+/;
+  var QUOTE_RE = /^>[ \t]?/;
+  var BULLET_RE = /^[ \t]*[-*+][ \t]+/;
+  var NUMBER_RE = /^[ \t]*\d+[.)][ \t]+/;
+  function lineKind(line) {
+    const h = HEADING_RE.exec(line);
+    if (h) return "h" + h[1].length;
+    if (QUOTE_RE.test(line)) return "quote";
+    if (BULLET_RE.test(line)) return "ul";
+    if (NUMBER_RE.test(line)) return "ol";
+    return "p";
+  }
+  function blockAt(text, pos) {
+    const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+    let lineEnd = text.indexOf("\n", pos);
+    if (lineEnd === -1) lineEnd = text.length;
+    return lineKind(text.slice(lineStart, lineEnd));
+  }
+  function stripPrefix(line) {
+    return line.replace(HEADING_RE, "").replace(QUOTE_RE, "").replace(BULLET_RE, "").replace(NUMBER_RE, "");
+  }
+  function setBlock(text, start, end, kind) {
+    const from = text.lastIndexOf("\n", start - 1) + 1;
+    const lastPos = end > start && text[end - 1] === "\n" ? end - 1 : end;
+    let to = text.indexOf("\n", lastPos);
+    if (to === -1) to = text.length;
+    const lines = text.slice(from, to).split("\n");
+    const content = lines.filter((l) => l.trim() !== "");
+    const allAlready = content.length > 0 && content.every((l) => lineKind(l) === kind);
+    const target = allAlready ? "p" : kind;
+    let number = 0;
+    const prefixFor = () => {
+      if (target === "h1" || target === "h2" || target === "h3") return "#".repeat(Number(target[1])) + " ";
+      if (target === "quote") return "> ";
+      if (target === "ul") return "- ";
+      if (target === "ol") return ++number + ". ";
+      return "";
+    };
+    const out = lines.map((l) => l.trim() === "" ? l : prefixFor() + stripPrefix(l));
+    const insert = out.join("\n");
+    if (start === end) {
+      const oldLine = lines[0];
+      const oldPrefix = oldLine.length - stripPrefix(oldLine).length;
+      const newPrefix = out[0].length - stripPrefix(out[0]).length;
+      const caret = from + Math.max(newPrefix, start - from - oldPrefix + newPrefix);
+      return { from, to, insert, selStart: caret, selEnd: caret };
+    }
+    return { from, to, insert, selStart: from, selEnd: from + insert.length };
+  }
+  function insertLink(text, start, end) {
+    const label = text.slice(start, end);
+    if (label === "") {
+      const insert2 = "[link text](url)";
+      return { from: start, to: end, insert: insert2, selStart: start + 1, selEnd: start + 10 };
+    }
+    const insert = "[" + label + "](url)";
+    const urlAt = start + label.length + 3;
+    return { from: start, to: end, insert, selStart: urlAt, selEnd: urlAt + 3 };
+  }
+  function insertBlockLine(text, start, end, line) {
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+    const prefix = before.length === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+    const suffix = after.length === 0 ? "" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+    const insert = prefix + line + suffix;
+    const caret = start + insert.length;
+    return { from: start, to: end, insert, selStart: caret, selEnd: caret };
+  }
+  function clampSpaceLines(value) {
+    return Math.min(200, Math.max(1, parseInt(value, 10) || 5));
+  }
+  function applyEdit(text, edit) {
+    return text.slice(0, edit.from) + edit.insert + text.slice(edit.to);
+  }
+
+  // apps/Markdown-to-PDF/src/editor/applyToTextarea.js
+  function applyToTextarea(el, edit, setMarkdown) {
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(edit.from, edit.to);
+    let typed = false;
+    if (edit.from === edit.to && edit.insert === "") typed = true;
+    else {
+      try {
+        typed = edit.insert === "" ? document.execCommand("delete") : document.execCommand("insertText", false, edit.insert);
+      } catch (e) {
+        typed = false;
+      }
+    }
+    if (!typed) {
+      const savedScrollTop = el.scrollTop;
+      ReactDOM.flushSync(() => setMarkdown(applyEdit(el.value, edit)));
+      el.scrollTop = savedScrollTop;
+    }
+    el.setSelectionRange(edit.selStart, edit.selEnd);
+  }
+  function replaceAllEdit(el, text) {
+    return { from: 0, to: el.value.length, insert: text, selStart: 0, selEnd: 0 };
+  }
+
+  // apps/Markdown-to-PDF/src/convert/requireGlobal.js
+  function requireGlobal(name, featureLabel) {
+    if (typeof window[name] === "undefined") {
+      throw new Error(
+        featureLabel + ' needs the "' + name + '" library, which did not load (this app loads it from a CDN, so it needs internet access the first time). Try again once you are online, or reload the page.'
+      );
+    }
+    return window[name];
+  }
+
+  // apps/Markdown-to-PDF/src/convert/htmlToMarkdown.js
+  function htmlToMarkdown(html) {
+    var TurndownService = requireGlobal("TurndownService", "Document import");
+    var td = new TurndownService({
+      headingStyle: "atx",
+      bulletListMarker: "-",
+      codeBlockStyle: "fenced"
+    });
+    return td.turndown(html || "");
+  }
+
+  // apps/Markdown-to-PDF/src/convert/docx.js
+  function convertDocxToMarkdown(arrayBuffer) {
+    var mammoth = requireGlobal("mammoth", "Word (.docx) import");
+    return mammoth.convertToHtml({ arrayBuffer }).then(function(result) {
+      return htmlToMarkdown(result.value);
+    });
   }
 
   // apps/Markdown-to-PDF/src/document/markers.js
@@ -66,6 +228,228 @@
       var lines = Math.min(MAX_SPACE_LINES, Math.max(1, parseInt(n, 10) || 1));
       return '\n\n<div class="md2ebook-space" data-lines="' + lines + '" style="--md2ebook-space-lines: ' + lines + ';"></div>\n\n';
     });
+  }
+
+  // apps/Markdown-to-PDF/src/convert/epub.js
+  function convertEpubToMarkdown(arrayBuffer) {
+    var JSZip = requireGlobal("JSZip", "EPUB import");
+    return JSZip.loadAsync(arrayBuffer).then(function(zip) {
+      var containerFile = zip.file("META-INF/container.xml");
+      if (!containerFile) {
+        throw new Error("This file does not look like a valid EPUB (missing META-INF/container.xml).");
+      }
+      return containerFile.async("string").then(function(containerXml) {
+        var containerDoc = new DOMParser().parseFromString(containerXml, "application/xml");
+        var rootfileEl = containerDoc.querySelector("rootfile");
+        var rootfilePath = rootfileEl ? rootfileEl.getAttribute("full-path") : null;
+        if (!rootfilePath) {
+          throw new Error("Could not find the EPUB's content file (rootfile) in container.xml.");
+        }
+        var opfFile = zip.file(rootfilePath);
+        if (!opfFile) {
+          throw new Error(`The EPUB's content file ("` + rootfilePath + '") is missing from the archive.');
+        }
+        var opfDir = rootfilePath.indexOf("/") > -1 ? rootfilePath.slice(0, rootfilePath.lastIndexOf("/") + 1) : "";
+        return opfFile.async("string").then(function(opfText) {
+          var opfDoc = new DOMParser().parseFromString(opfText, "application/xml");
+          var manifest = {};
+          var manifestItems = opfDoc.querySelectorAll("manifest > item");
+          for (var m = 0; m < manifestItems.length; m++) {
+            manifest[manifestItems[m].getAttribute("id")] = manifestItems[m].getAttribute("href");
+          }
+          var spineEls = opfDoc.querySelectorAll("spine > itemref");
+          var spinePaths = [];
+          for (var s = 0; s < spineEls.length; s++) {
+            var href = manifest[spineEls[s].getAttribute("idref")];
+            if (href) spinePaths.push(opfDir + href);
+          }
+          if (spinePaths.length === 0) {
+            throw new Error("This EPUB's spine (chapter reading order) is empty or could not be read.");
+          }
+          var chapterPromises = spinePaths.map(function(path) {
+            var file = zip.file(path) || zip.file(decodeURIComponent(path));
+            if (!file) return Promise.resolve("");
+            return file.async("string").then(function(xhtml) {
+              var doc = new DOMParser().parseFromString(xhtml, "text/html");
+              return doc.body ? htmlToMarkdown(doc.body.innerHTML).trim() : "";
+            });
+          });
+          return Promise.all(chapterPromises).then(function(chapters) {
+            return chapters.filter(Boolean).join("\n\n" + PAGE_BREAK_MARKER + "\n\n");
+          });
+        });
+      });
+    });
+  }
+
+  // apps/Markdown-to-PDF/src/convert/muse.js
+  function convertMuseInline(s) {
+    var result = String(s);
+    result = result.replace(/\[\[([^\]\[]+)\]\[([^\]\[]+)\]\]/g, "[$2]($1)");
+    result = result.replace(/\[\[([^\]\[]+)\]\]/g, "[$1]($1)");
+    result = result.replace(/_([^_]+)_/g, "<u>$1</u>");
+    result = result.replace(/=([^=]+)=/g, "`$1`");
+    return result;
+  }
+  function convertMuseToMarkdown(museText) {
+    var text = String(museText || "").replace(/\r\n?/g, "\n");
+    var lines = text.split("\n");
+    var out = [];
+    var inBlock = false;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (/^\s*<(example|verbatim)>\s*$/i.test(line)) {
+        inBlock = true;
+        out.push("```");
+        continue;
+      }
+      if (/^\s*<\/(example|verbatim)>\s*$/i.test(line)) {
+        inBlock = false;
+        out.push("```");
+        continue;
+      }
+      if (inBlock) {
+        out.push(line);
+        continue;
+      }
+      if (line.trim() === "" || /^#\w+\s/.test(line)) {
+        out.push(line);
+        continue;
+      }
+      if (/^-{4,}\s*$/.test(line)) {
+        out.push("---");
+        continue;
+      }
+      var headingMatch = line.match(/^(\*{1,5})\s+(.*)$/);
+      if (headingMatch) {
+        var level = Math.min(headingMatch[1].length, 6);
+        out.push(new Array(level + 1).join("#") + " " + convertMuseInline(headingMatch[2]));
+        continue;
+      }
+      var ulMatch = line.match(/^(\s*)-\s+(.*)$/);
+      if (ulMatch) {
+        out.push(ulMatch[1] + "- " + convertMuseInline(ulMatch[2]));
+        continue;
+      }
+      var olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
+      if (olMatch) {
+        out.push(olMatch[1] + olMatch[2] + ". " + convertMuseInline(olMatch[3]));
+        continue;
+      }
+      if (/^ {2,}\S/.test(line)) {
+        out.push("> " + convertMuseInline(line.trim()));
+        continue;
+      }
+      out.push(convertMuseInline(line));
+    }
+    return out.join("\n");
+  }
+
+  // apps/Markdown-to-PDF/src/editor/importDocument.js
+  var DOCUMENT_INPUT_ACCEPT = ".md,.markdown,.txt,.muse,.docx,.epub";
+  var DOCUMENT_PICKER_TYPES = {
+    description: "Markdown, Word, EPUB, or Muse document",
+    accept: {
+      "text/markdown": [".md", ".markdown"],
+      "text/plain": [".txt"],
+      "text/x-muse": [".muse"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/epub+zip": [".epub"]
+    }
+  };
+  async function documentToMarkdown(file) {
+    const name = file && file.name || "document";
+    const dot = name.lastIndexOf(".");
+    const ext = dot > -1 ? name.slice(dot + 1).toLowerCase() : "";
+    if (ext === "md" || ext === "markdown" || ext === "txt") return file.text();
+    if (ext === "muse") return convertMuseToMarkdown(await file.text());
+    if (ext === "docx") return convertDocxToMarkdown(await file.arrayBuffer());
+    if (ext === "epub") return convertEpubToMarkdown(await file.arrayBuffer());
+    throw new Error(`Unsupported file type ".${ext || "?"}" — supported: .md, .txt, .muse, .docx, .epub.`);
+  }
+
+  // shared/js/download.js
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+  }
+
+  // apps/Markdown-to-PDF/src/io/filePickers.js
+  async function pickFile({ id, description, accept }) {
+    if (typeof window.showOpenFilePicker !== "function") return "fallback";
+    try {
+      const handles = await window.showOpenFilePicker({ id, multiple: false, types: [{ description, accept }] });
+      return await handles[0].getFile();
+    } catch (err) {
+      if (err && err.name === "AbortError") return null;
+      return "fallback";
+    }
+  }
+  async function saveTextFile(text, { id, filename, mimeType, description, extensions }) {
+    if (typeof window.showSaveFilePicker !== "function") return downloadText(text, filename, mimeType);
+    try {
+      const handle = await window.showSaveFilePicker({
+        id,
+        suggestedName: filename,
+        types: [{ description, accept: { [mimeType]: extensions } }]
+      });
+      await writeTextToHandle(handle, text);
+      return { saved: handle.name, handle };
+    } catch (err) {
+      if (err && err.name === "AbortError") return null;
+      return downloadText(text, filename, mimeType);
+    }
+  }
+  async function writeTextToHandle(handle, text) {
+    if (handle.queryPermission && await handle.queryPermission({ mode: "readwrite" }) !== "granted") {
+      if (await handle.requestPermission({ mode: "readwrite" }) !== "granted") {
+        throw new Error("The browser didn't allow writing to that file.");
+      }
+    }
+    const writable = await handle.createWritable();
+    await writable.write(text);
+    await writable.close();
+  }
+  function downloadText(text, filename, mimeType) {
+    const blob = new Blob([text], { type: mimeType });
+    downloadBlob(blob, filename);
+    return { downloaded: filename };
+  }
+  async function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (!ok) throw new Error("The browser blocked the copy.");
+  }
+
+  // apps/Markdown-to-PDF/src/document/html.js
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function slugify(text) {
+    var s = String(text).replace(/&[a-z0-9#]+;/gi, " ").toLowerCase().trim();
+    try {
+      s = s.replace(/[^\p{L}\p{N}]+/gu, "-");
+    } catch (e) {
+      s = s.replace(/[^a-z0-9\u00c0-\uffff]+/g, "-");
+    }
+    return s.replace(/^-+|-+$/g, "").slice(0, 60);
   }
 
   // apps/Markdown-to-PDF/src/document/styleBlock.js
@@ -109,7 +493,7 @@
   }
   function buildPageBoxRule(parts) {
     var pageNumbers = buildPageNumberCss(parts.normalized);
-    return "\n@page {\n  size: " + parts.paper.widthIn + "in " + parts.paper.heightIn + "in;\n  margin: " + parts.normalized.marginVerticalIn + "in " + parts.normalized.marginHorizontalIn + "in;\n" + pageNumbers.marginBox + "}\n" + pageNumbers.rootReset + pageNumbers.overrideRule + ".page {\n  width: 100%;\n  min-height: 0;\n  padding: 0;\n  box-shadow: none;\n}\n.pagedjs_page {\n  margin-bottom: 24px !important;\n  border-bottom: 3px solid #4b4b4b !important;\n}\n" + paginationJustifyFix();
+    return "\n@page {\n  size: " + parts.paper.widthIn + "in " + parts.paper.heightIn + "in;\n  margin: " + parts.normalized.marginVerticalIn + "in " + parts.normalized.marginHorizontalIn + "in;\n" + pageNumbers.marginBox + "}\n" + pageNumbers.rootReset + pageNumbers.overrideRule + ".page {\n  width: 100%;\n  min-height: 0;\n  padding: 0;\n  box-shadow: none;\n}\nhtml, body {\n  background: transparent !important;\n}\n.pagedjs_page {\n  background: #ffffff !important;\n  margin-bottom: 24px !important;\n  border-bottom: 3px solid #4b4b4b !important;\n}\n" + paginationJustifyFix();
   }
   function buildPageNumberCss(normalized) {
     if (!normalized.pageNumbersEnabled) return { marginBox: "", rootReset: "", overrideRule: "" };
@@ -664,13 +1048,94 @@
     pageStartFrom: ""
   };
 
-  // apps/Markdown-to-PDF/src/ui/Header.jsx
-  function Header({ onLoadSample, onClear, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle" }, "Markdown → Publication-ready PDF"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onLoadSample }, "Load Sample Markdown"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onClear }, "Clear Editor"), /* @__PURE__ */ React.createElement(
+  // apps/Markdown-to-PDF/src/ui/Menu.jsx
+  var { useState, useRef, useEffect, useLayoutEffect } = React;
+  function DropMenu({ trigger, title, align = "left", triggerClassName, keepEditorFocus, children }) {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef(null);
+    useEffect(() => {
+      if (!open) return void 0;
+      const onDown = (e) => {
+        if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("mousedown", onDown);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onDown);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [open]);
+    const menuRef = useRef(null);
+    useLayoutEffect(() => {
+      const menu = menuRef.current;
+      if (!open || !menu) return;
+      menu.style.transform = "";
+      const { left, right } = menu.getBoundingClientRect();
+      const limit = document.documentElement.clientWidth - 8;
+      if (right > limit) menu.style.transform = `translateX(${Math.max(8 - left, limit - right)}px)`;
+      else if (left < 8) menu.style.transform = `translateX(${8 - left}px)`;
+    }, [open]);
+    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu-wrap", ref: containerRef }, /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
-        className: "log-btn",
+        className: "md2ebook-menu-trigger" + (open ? " open" : "") + (triggerClassName ? " " + triggerClassName : ""),
+        "aria-haspopup": "menu",
+        "aria-expanded": open,
+        title,
+        onMouseDown: keepEditorFocus ? (e) => e.preventDefault() : void 0,
+        onClick: () => setOpen((o) => !o)
+      },
+      trigger,
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
+    ), open ? /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu md2ebook-menu-" + align, role: "menu", ref: menuRef }, children({ close: () => setOpen(false), keepEditorFocus })) : null);
+  }
+  function MenuItem({ label, detail, shortcut, hint, onClick, close, keepEditorFocus, children }) {
+    return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu-row" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        role: "menuitem",
+        className: "md2ebook-menu-item",
+        title: hint,
+        onMouseDown: keepEditorFocus ? (e) => e.preventDefault() : void 0,
+        onClick: () => {
+          close();
+          onClick();
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", { className: "md2ebook-menu-item-text" }, /* @__PURE__ */ React.createElement("span", null, label), detail ? /* @__PURE__ */ React.createElement("span", { className: "md2ebook-menu-item-detail" }, detail) : null),
+      shortcut ? /* @__PURE__ */ React.createElement("span", { className: "md2ebook-menu-item-shortcut" }, shortcut) : null
+    ), children);
+  }
+  var MenuSeparator = () => /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu-sep", role: "separator" });
+
+  // apps/Markdown-to-PDF/src/ui/shortcutKeys.js
+  var IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  var MOD = IS_MAC ? "⌘" : "Ctrl+";
+  var ALT = IS_MAC ? "⌥" : "Alt+";
+  var SHIFT = IS_MAC ? "⇧" : "Shift+";
+
+  // apps/Markdown-to-PDF/src/ui/Header.jsx
+  var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
+  function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle" }, "Markdown → Publication-ready PDF"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        label: "Save as Markdown…",
+        shortcut: savedFileName ? MOD + SHIFT + "S" : MOD + "S",
+        hint: "Save the editor's text as a .md file. After that, Save (and the toolbar's save button) writes back to it in one click.",
+        onClick: onSaveMarkdown,
+        close
+      }
+    ), /* @__PURE__ */ React.createElement(MenuSeparator, null), /* @__PURE__ */ React.createElement(MenuItem, { label: "Load sample Markdown", hint: `Replaces the editor's text with a sample document (${MOD}Z brings yours back)`, onClick: onLoadSample, close }))), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "md2ebook-topbar-btn",
         onClick: onSendToZineArranger,
         disabled: isSendingToArranger,
         title: "Exports the current document and opens it directly in ZineArranger — no manual save/reopen step"
@@ -698,14 +1163,14 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/PanelResizer.jsx
-  var { useLayoutEffect, useRef } = React;
+  var { useLayoutEffect: useLayoutEffect2, useRef: useRef2 } = React;
   var STORAGE_KEY = "md2pdf.sidebarWidth";
   var MIN_PANEL = 300;
   var MIN_PREVIEW = 320;
   var KEY_STEP = 16;
   function PanelResizer({ bodyRef }) {
-    const handleRef = useRef(null);
-    const widthRef = useRef(null);
+    const handleRef = useRef2(null);
+    const widthRef = useRef2(null);
     const clamp = (px) => {
       const body = bodyRef.current;
       const most = Math.max(MIN_PANEL, (body ? body.getBoundingClientRect().width : window.innerWidth) - MIN_PREVIEW);
@@ -735,7 +1200,7 @@
       const aside = handleRef.current && handleRef.current.parentElement;
       return aside ? aside.getBoundingClientRect().width : MIN_PANEL;
     };
-    useLayoutEffect(() => {
+    useLayoutEffect2(() => {
       let saved = null;
       try {
         saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
@@ -805,12 +1270,12 @@
   // apps/Markdown-to-PDF/src/document/previewDocument.js
   function renderHtmlDocument(markdownText, config) {
     var parts = buildDocumentParts(markdownText, config);
-    var paginationScript = "<script>\n  window.PagedConfig = {\n    after: function (flow) {\n      try {\n" + (parts.normalized.pageNumbersEnabled ? '        var __pages = document.querySelectorAll(".pagedjs_page");\n        for (var __i = 0; __i < __pages.length; __i++) {\n          var __box = __pages[__i].querySelector(".pagedjs_margin-bottom-center .pagedjs_margin-content");\n          if (__box) {\n            __box.setAttribute("data-md2ebook-pagenum", String(' + parts.normalized.pageStartFrom + " + __i));\n          }\n        }\n" : "") + "      } catch (e) {}\n" + tocFillScript(parts.normalized) + `      try {
+    var paginationScript = "<script>\n  function __contentHeight() {\n    return Math.ceil(document.body.getBoundingClientRect().height);\n  }\n  window.PagedConfig = {\n    after: function (flow) {\n      try {\n" + (parts.normalized.pageNumbersEnabled ? '        var __pages = document.querySelectorAll(".pagedjs_page");\n        for (var __i = 0; __i < __pages.length; __i++) {\n          var __box = __pages[__i].querySelector(".pagedjs_margin-bottom-center .pagedjs_margin-content");\n          if (__box) {\n            __box.setAttribute("data-md2ebook-pagenum", String(' + parts.normalized.pageStartFrom + " + __i));\n          }\n        }\n" : "") + "      } catch (e) {}\n" + tocFillScript(parts.normalized) + `      try {
         window.parent.postMessage({
           source: 'md2ebook-pagedjs',
           tocPages: __tocPages,
           pageCount: flow && flow.total,
-          height: document.documentElement.scrollHeight
+          height: __contentHeight()
         }, '*');
       } catch (e) {}
     }
@@ -820,7 +1285,7 @@
       window.parent.postMessage({
         source: 'md2ebook-pagedjs',
         pageCount: null,
-        height: document.documentElement.scrollHeight
+        height: __contentHeight()
       }, '*');
     } catch (e) {}
   });
@@ -831,12 +1296,48 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/PreviewCanvas.jsx
-  var { useState, useEffect, useRef: useRef2, useMemo } = React;
+  var { useState: useState2, useEffect: useEffect2, useRef: useRef3, useMemo } = React;
+  var PAGE_SEAM_PX = 3;
+  var PAGE_GAP_PX = 24;
+  var CANVAS_TOP_PAD_PX = 40;
+  function PageJump({ current, total, onGo }) {
+    const [draft, setDraft] = useState2(null);
+    const commit = () => {
+      if (draft == null) return;
+      const n = parseInt(draft, 10);
+      if (Number.isFinite(n)) onGo(n);
+      setDraft(null);
+    };
+    return /* @__PURE__ */ React.createElement("span", { className: "md2ebook-page-jump" }, "Page", /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "number",
+        min: 1,
+        max: total,
+        step: 1,
+        value: draft != null ? draft : current,
+        disabled: total <= 1,
+        onChange: (e) => {
+          if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
+          else onGo(Number(e.target.value));
+        },
+        onBlur: commit,
+        onKeyDown: (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") setDraft(null);
+        },
+        "aria-label": `Go to page (1 to ${total})`,
+        title: `Go to page — type 1 to ${total} and press Enter`
+      }
+    ), "of ", total);
+  }
   var ZOOM_MIN = 15;
   var ZOOM_MAX = 200;
   var clampZoom = (n) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(n)));
   function ZoomControl({ percent, isFit, onZoom }) {
-    const [draft, setDraft] = useState(null);
+    const [draft, setDraft] = useState2(null);
     const commit = () => {
       if (draft == null) return;
       const n = parseFloat(draft);
@@ -891,17 +1392,17 @@
       "Fit"
     ));
   }
-  function PreviewCanvas({ markdown, config, onTocPages }) {
-    const onTocPagesRef = useRef2(onTocPages);
+  function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange }) {
+    const onTocPagesRef = useRef3(onTocPages);
     onTocPagesRef.current = onTocPages;
-    const outerRef = useRef2(null);
-    const iframeRef = useRef2(null);
-    const [fitScale, setFitScale] = useState(1);
-    const [zoomPct, setZoomPct] = useState(null);
+    const outerRef = useRef3(null);
+    const iframeRef = useRef3(null);
+    const [fitScale, setFitScale] = useState2(1);
+    const [zoomPct, setZoomPct] = useState2(null);
     const scale = zoomPct == null ? fitScale : zoomPct / 100;
-    const [contentHeightPx, setContentHeightPx] = useState(0);
-    const [pageCount, setPageCount] = useState(null);
-    const [paginating, setPaginating] = useState(true);
+    const [contentHeightPx, setContentHeightPx] = useState2(0);
+    const [pageCount, setPageCount] = useState2(null);
+    const [paginating, setPaginating] = useState2(true);
     const paper = PAPER_SIZES[config.paperSize] || PAPER_SIZES.a4;
     const DPI = 96;
     const pageWidthPx = Math.round(paper.widthIn * DPI);
@@ -910,12 +1411,12 @@
     const srcDoc = useMemo(() => {
       return renderHtmlDocument(markdown, config);
     }, [markdown, config]);
-    useEffect(() => {
+    useEffect2(() => {
       setPaginating(true);
       setPageCount(null);
       if (onTocPagesRef.current) onTocPagesRef.current(null);
     }, [srcDoc]);
-    useEffect(() => {
+    useEffect2(() => {
       const el = outerRef.current;
       if (!el) return void 0;
       function recompute() {
@@ -936,7 +1437,7 @@
         else window.removeEventListener("resize", recompute);
       };
     }, [pageWidthPx]);
-    useEffect(() => {
+    useEffect2(() => {
       function handleMessage(event) {
         const data = event.data;
         if (!data || data.source !== "md2ebook-pagedjs") return;
@@ -957,11 +1458,11 @@
       window.addEventListener("message", handleMessage);
       return () => window.removeEventListener("message", handleMessage);
     }, []);
-    const [currentPage, setCurrentPage] = useState(1);
-    useEffect(() => {
+    const [currentPage, setCurrentPage] = useState2(1);
+    const pageStridePx = (minPageHeightPx + PAGE_SEAM_PX + PAGE_GAP_PX) * scale;
+    useEffect2(() => {
       const el = outerRef.current;
       if (!el) return void 0;
-      const PAGE_GAP_PX = 24;
       let ticking = false;
       function computeCurrentPage() {
         ticking = false;
@@ -969,10 +1470,12 @@
           setCurrentPage(1);
           return;
         }
-        const pageStridePx = (minPageHeightPx + PAGE_GAP_PX) * scale;
         if (!(pageStridePx > 0)) return;
-        const viewportCenter = el.scrollTop + el.clientHeight / 2;
-        const estimated = Math.floor(viewportCenter / pageStridePx) + 1;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) {
+          setCurrentPage(pageCount);
+          return;
+        }
+        const estimated = Math.floor((el.scrollTop - CANVAS_TOP_PAD_PX + pageStridePx / 3) / pageStridePx) + 1;
         setCurrentPage(Math.min(pageCount, Math.max(1, estimated)));
       }
       function handleScroll() {
@@ -983,8 +1486,15 @@
       computeCurrentPage();
       el.addEventListener("scroll", handleScroll);
       return () => el.removeEventListener("scroll", handleScroll);
-    }, [pageCount, scale, minPageHeightPx]);
-    const panRef = useRef2(null);
+    }, [pageCount, pageStridePx]);
+    const goToPage = (n) => {
+      const el = outerRef.current;
+      if (!el || !pageCount) return;
+      const page = Math.min(pageCount, Math.max(1, Math.round(n)));
+      el.scrollTop = CANVAS_TOP_PAD_PX + (page - 1) * pageStridePx - 8;
+      setCurrentPage(page);
+    };
+    const panRef = useRef3(null);
     const startPan = (e) => {
       if (e.button !== 0 || !outerRef.current) return;
       e.preventDefault();
@@ -1046,359 +1556,17 @@
           onPointerCancel: endPan
         }
       )
-    )), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-no-print md2ebook-preview-statusbar" }, /* @__PURE__ */ React.createElement("span", null, paper.label), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), /* @__PURE__ */ React.createElement("span", null, paginating ? "Paginating…" : pageCount ? `Page ${currentPage} of ${pageCount}` : "Page 1 of 1"), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), /* @__PURE__ */ React.createElement(ZoomControl, { percent: Math.round(scale * 100), isFit: zoomPct == null, onZoom: setZoomPct })));
-  }
-
-  // apps/Markdown-to-PDF/src/editor/format.js
-  var INLINE = {
-    bold: "**",
-    italic: "*",
-    strike: "~~",
-    code: "`"
-  };
-  function runBefore(text, pos, ch) {
-    let n = 0;
-    while (pos - n - 1 >= 0 && text[pos - n - 1] === ch) n++;
-    return n;
-  }
-  function runAfter(text, pos, ch) {
-    let n = 0;
-    while (pos + n < text.length && text[pos + n] === ch) n++;
-    return n;
-  }
-  function wrappedBy(text, s, e, marker) {
-    if (marker === "**" || marker === "*") {
-      const n = Math.min(runBefore(text, s, "*"), runAfter(text, e, "*"));
-      return marker === "**" ? n >= 2 : n % 2 === 1;
-    }
-    return text.slice(s - marker.length, s) === marker && text.slice(e, e + marker.length) === marker;
-  }
-  function toggleInline(text, start, end, kind) {
-    const m = INLINE[kind];
-    const len = m.length;
-    if (start === end) {
-      if (text.slice(start - len, start) === m && text.slice(start, start + len) === m && wrappedBy(text, start, start, m)) {
-        return { from: start - len, to: start + len, insert: "", selStart: start - len, selEnd: start - len };
-      }
-      return { from: start, to: end, insert: m + m, selStart: start + len, selEnd: start + len };
-    }
-    let s = start;
-    let e = end;
-    while (s < e && /\s/.test(text[s])) s++;
-    while (e > s && /\s/.test(text[e - 1])) e--;
-    if (s === e) return { from: start, to: end, insert: text.slice(start, end), selStart: start, selEnd: end };
-    const inner = text.slice(s, e);
-    if (wrappedBy(text, s, e, m)) {
-      return { from: s - len, to: e + len, insert: inner, selStart: s - len, selEnd: e - len };
-    }
-    if (inner.length >= 2 * len && inner.startsWith(m) && inner.endsWith(m) && wrappedBy(inner, len, inner.length - len, m)) {
-      const bare = inner.slice(len, inner.length - len);
-      return { from: s, to: e, insert: bare, selStart: s, selEnd: s + bare.length };
-    }
-    return { from: s, to: e, insert: m + inner + m, selStart: s + len, selEnd: e + len };
-  }
-  var HEADING_RE = /^(#{1,6})[ \t]+/;
-  var QUOTE_RE = /^>[ \t]?/;
-  var BULLET_RE = /^[ \t]*[-*+][ \t]+/;
-  var NUMBER_RE = /^[ \t]*\d+[.)][ \t]+/;
-  function lineKind(line) {
-    const h = HEADING_RE.exec(line);
-    if (h) return "h" + h[1].length;
-    if (QUOTE_RE.test(line)) return "quote";
-    if (BULLET_RE.test(line)) return "ul";
-    if (NUMBER_RE.test(line)) return "ol";
-    return "p";
-  }
-  function blockAt(text, pos) {
-    const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
-    let lineEnd = text.indexOf("\n", pos);
-    if (lineEnd === -1) lineEnd = text.length;
-    return lineKind(text.slice(lineStart, lineEnd));
-  }
-  function stripPrefix(line) {
-    return line.replace(HEADING_RE, "").replace(QUOTE_RE, "").replace(BULLET_RE, "").replace(NUMBER_RE, "");
-  }
-  function setBlock(text, start, end, kind) {
-    const from = text.lastIndexOf("\n", start - 1) + 1;
-    const lastPos = end > start && text[end - 1] === "\n" ? end - 1 : end;
-    let to = text.indexOf("\n", lastPos);
-    if (to === -1) to = text.length;
-    const lines = text.slice(from, to).split("\n");
-    const content = lines.filter((l) => l.trim() !== "");
-    const allAlready = content.length > 0 && content.every((l) => lineKind(l) === kind);
-    const target = allAlready ? "p" : kind;
-    let number = 0;
-    const prefixFor = () => {
-      if (target === "h1" || target === "h2" || target === "h3") return "#".repeat(Number(target[1])) + " ";
-      if (target === "quote") return "> ";
-      if (target === "ul") return "- ";
-      if (target === "ol") return ++number + ". ";
-      return "";
-    };
-    const out = lines.map((l) => l.trim() === "" ? l : prefixFor() + stripPrefix(l));
-    const insert = out.join("\n");
-    if (start === end) {
-      const oldLine = lines[0];
-      const oldPrefix = oldLine.length - stripPrefix(oldLine).length;
-      const newPrefix = out[0].length - stripPrefix(out[0]).length;
-      const caret = from + Math.max(newPrefix, start - from - oldPrefix + newPrefix);
-      return { from, to, insert, selStart: caret, selEnd: caret };
-    }
-    return { from, to, insert, selStart: from, selEnd: from + insert.length };
-  }
-  function insertLink(text, start, end) {
-    const label = text.slice(start, end);
-    if (label === "") {
-      const insert2 = "[link text](url)";
-      return { from: start, to: end, insert: insert2, selStart: start + 1, selEnd: start + 10 };
-    }
-    const insert = "[" + label + "](url)";
-    const urlAt = start + label.length + 3;
-    return { from: start, to: end, insert, selStart: urlAt, selEnd: urlAt + 3 };
-  }
-  function insertBlockLine(text, start, end, line) {
-    const before = text.slice(0, start);
-    const after = text.slice(end);
-    const prefix = before.length === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-    const suffix = after.length === 0 ? "" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
-    const insert = prefix + line + suffix;
-    const caret = start + insert.length;
-    return { from: start, to: end, insert, selStart: caret, selEnd: caret };
-  }
-  function clampSpaceLines(value) {
-    return Math.min(200, Math.max(1, parseInt(value, 10) || 5));
-  }
-  function applyEdit(text, edit) {
-    return text.slice(0, edit.from) + edit.insert + text.slice(edit.to);
-  }
-
-  // apps/Markdown-to-PDF/src/convert/requireGlobal.js
-  function requireGlobal(name, featureLabel) {
-    if (typeof window[name] === "undefined") {
-      throw new Error(
-        featureLabel + ' needs the "' + name + '" library, which did not load (this app loads it from a CDN, so it needs internet access the first time). Try again once you are online, or reload the page.'
-      );
-    }
-    return window[name];
-  }
-
-  // apps/Markdown-to-PDF/src/convert/htmlToMarkdown.js
-  function htmlToMarkdown(html) {
-    var TurndownService = requireGlobal("TurndownService", "Document import");
-    var td = new TurndownService({
-      headingStyle: "atx",
-      bulletListMarker: "-",
-      codeBlockStyle: "fenced"
-    });
-    return td.turndown(html || "");
-  }
-
-  // apps/Markdown-to-PDF/src/convert/docx.js
-  function convertDocxToMarkdown(arrayBuffer) {
-    var mammoth = requireGlobal("mammoth", "Word (.docx) import");
-    return mammoth.convertToHtml({ arrayBuffer }).then(function(result) {
-      return htmlToMarkdown(result.value);
-    });
-  }
-
-  // apps/Markdown-to-PDF/src/convert/epub.js
-  function convertEpubToMarkdown(arrayBuffer) {
-    var JSZip = requireGlobal("JSZip", "EPUB import");
-    return JSZip.loadAsync(arrayBuffer).then(function(zip) {
-      var containerFile = zip.file("META-INF/container.xml");
-      if (!containerFile) {
-        throw new Error("This file does not look like a valid EPUB (missing META-INF/container.xml).");
-      }
-      return containerFile.async("string").then(function(containerXml) {
-        var containerDoc = new DOMParser().parseFromString(containerXml, "application/xml");
-        var rootfileEl = containerDoc.querySelector("rootfile");
-        var rootfilePath = rootfileEl ? rootfileEl.getAttribute("full-path") : null;
-        if (!rootfilePath) {
-          throw new Error("Could not find the EPUB's content file (rootfile) in container.xml.");
-        }
-        var opfFile = zip.file(rootfilePath);
-        if (!opfFile) {
-          throw new Error(`The EPUB's content file ("` + rootfilePath + '") is missing from the archive.');
-        }
-        var opfDir = rootfilePath.indexOf("/") > -1 ? rootfilePath.slice(0, rootfilePath.lastIndexOf("/") + 1) : "";
-        return opfFile.async("string").then(function(opfText) {
-          var opfDoc = new DOMParser().parseFromString(opfText, "application/xml");
-          var manifest = {};
-          var manifestItems = opfDoc.querySelectorAll("manifest > item");
-          for (var m = 0; m < manifestItems.length; m++) {
-            manifest[manifestItems[m].getAttribute("id")] = manifestItems[m].getAttribute("href");
-          }
-          var spineEls = opfDoc.querySelectorAll("spine > itemref");
-          var spinePaths = [];
-          for (var s = 0; s < spineEls.length; s++) {
-            var href = manifest[spineEls[s].getAttribute("idref")];
-            if (href) spinePaths.push(opfDir + href);
-          }
-          if (spinePaths.length === 0) {
-            throw new Error("This EPUB's spine (chapter reading order) is empty or could not be read.");
-          }
-          var chapterPromises = spinePaths.map(function(path) {
-            var file = zip.file(path) || zip.file(decodeURIComponent(path));
-            if (!file) return Promise.resolve("");
-            return file.async("string").then(function(xhtml) {
-              var doc = new DOMParser().parseFromString(xhtml, "text/html");
-              return doc.body ? htmlToMarkdown(doc.body.innerHTML).trim() : "";
-            });
-          });
-          return Promise.all(chapterPromises).then(function(chapters) {
-            return chapters.filter(Boolean).join("\n\n" + PAGE_BREAK_MARKER + "\n\n");
-          });
-        });
-      });
-    });
-  }
-
-  // apps/Markdown-to-PDF/src/convert/muse.js
-  function convertMuseInline(s) {
-    var result = String(s);
-    result = result.replace(/\[\[([^\]\[]+)\]\[([^\]\[]+)\]\]/g, "[$2]($1)");
-    result = result.replace(/\[\[([^\]\[]+)\]\]/g, "[$1]($1)");
-    result = result.replace(/_([^_]+)_/g, "<u>$1</u>");
-    result = result.replace(/=([^=]+)=/g, "`$1`");
-    return result;
-  }
-  function convertMuseToMarkdown(museText) {
-    var text = String(museText || "").replace(/\r\n?/g, "\n");
-    var lines = text.split("\n");
-    var out = [];
-    var inBlock = false;
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      if (/^\s*<(example|verbatim)>\s*$/i.test(line)) {
-        inBlock = true;
-        out.push("```");
-        continue;
-      }
-      if (/^\s*<\/(example|verbatim)>\s*$/i.test(line)) {
-        inBlock = false;
-        out.push("```");
-        continue;
-      }
-      if (inBlock) {
-        out.push(line);
-        continue;
-      }
-      if (line.trim() === "" || /^#\w+\s/.test(line)) {
-        out.push(line);
-        continue;
-      }
-      if (/^-{4,}\s*$/.test(line)) {
-        out.push("---");
-        continue;
-      }
-      var headingMatch = line.match(/^(\*{1,5})\s+(.*)$/);
-      if (headingMatch) {
-        var level = Math.min(headingMatch[1].length, 6);
-        out.push(new Array(level + 1).join("#") + " " + convertMuseInline(headingMatch[2]));
-        continue;
-      }
-      var ulMatch = line.match(/^(\s*)-\s+(.*)$/);
-      if (ulMatch) {
-        out.push(ulMatch[1] + "- " + convertMuseInline(ulMatch[2]));
-        continue;
-      }
-      var olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)$/);
-      if (olMatch) {
-        out.push(olMatch[1] + olMatch[2] + ". " + convertMuseInline(olMatch[3]));
-        continue;
-      }
-      if (/^ {2,}\S/.test(line)) {
-        out.push("> " + convertMuseInline(line.trim()));
-        continue;
-      }
-      out.push(convertMuseInline(line));
-    }
-    return out.join("\n");
-  }
-
-  // apps/Markdown-to-PDF/src/editor/importDocument.js
-  var DOCUMENT_INPUT_ACCEPT = ".md,.markdown,.txt,.muse,.docx,.epub";
-  var DOCUMENT_PICKER_TYPES = {
-    description: "Markdown, Word, EPUB, or Muse document",
-    accept: {
-      "text/markdown": [".md", ".markdown"],
-      "text/plain": [".txt"],
-      "text/x-muse": [".muse"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-      "application/epub+zip": [".epub"]
-    }
-  };
-  async function documentToMarkdown(file) {
-    const name = file && file.name || "document";
-    const dot = name.lastIndexOf(".");
-    const ext = dot > -1 ? name.slice(dot + 1).toLowerCase() : "";
-    if (ext === "md" || ext === "markdown" || ext === "txt") return file.text();
-    if (ext === "muse") return convertMuseToMarkdown(await file.text());
-    if (ext === "docx") return convertDocxToMarkdown(await file.arrayBuffer());
-    if (ext === "epub") return convertEpubToMarkdown(await file.arrayBuffer());
-    throw new Error(`Unsupported file type ".${ext || "?"}" — supported: .md, .txt, .muse, .docx, .epub.`);
-  }
-
-  // shared/js/download.js
-  function downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1e3);
-  }
-
-  // apps/Markdown-to-PDF/src/io/filePickers.js
-  async function pickFile({ id, description, accept }) {
-    if (typeof window.showOpenFilePicker !== "function") return "fallback";
-    try {
-      const handles = await window.showOpenFilePicker({ id, multiple: false, types: [{ description, accept }] });
-      return await handles[0].getFile();
-    } catch (err) {
-      if (err && err.name === "AbortError") return null;
-      return "fallback";
-    }
-  }
-  async function saveTextFile(text, { id, filename, mimeType, description, extensions }) {
-    if (typeof window.showSaveFilePicker !== "function") return downloadText(text, filename, mimeType);
-    try {
-      const handle = await window.showSaveFilePicker({
-        id,
-        suggestedName: filename,
-        types: [{ description, accept: { [mimeType]: extensions } }]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(text);
-      await writable.close();
-      return { saved: handle.name };
-    } catch (err) {
-      if (err && err.name === "AbortError") return null;
-      return downloadText(text, filename, mimeType);
-    }
-  }
-  function downloadText(text, filename, mimeType) {
-    const blob = new Blob([text], { type: mimeType });
-    downloadBlob(blob, filename);
-    return { downloaded: filename };
-  }
-  async function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    if (!ok) throw new Error("The browser blocked the copy.");
+    )), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-no-print md2ebook-preview-statusbar" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        className: "md2ebook-statusbar-select",
+        value: config.paperSize,
+        onChange: (e) => onPaperSizeChange(e.target.value),
+        "aria-label": "Paper size",
+        title: "Paper size (also in Typography → Page)"
+      },
+      PAPER_SIZE_OPTIONS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label))
+    ), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), paginating ? /* @__PURE__ */ React.createElement("span", null, "Paginating…") : /* @__PURE__ */ React.createElement(PageJump, { current: currentPage, total: pageCount || 1, onGo: goToPage }), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), /* @__PURE__ */ React.createElement(ZoomControl, { percent: Math.round(scale * 100), isFit: zoomPct == null, onZoom: setZoomPct })));
   }
 
   // apps/Markdown-to-PDF/src/ui/fields.jsx
@@ -1615,10 +1783,6 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/editor/FormatToolbar.jsx
-  var IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-  var MOD = IS_MAC ? "⌘" : "Ctrl+";
-  var ALT = IS_MAC ? "⌥" : "Alt+";
-  var SHIFT = IS_MAC ? "⇧" : "Shift+";
   var BLOCK_OPTIONS = [
     { value: "p", label: "Paragraph", keys: MOD + ALT + "0" },
     { value: "h1", label: "Heading 1", keys: MOD + ALT + "1" },
@@ -1636,17 +1800,19 @@
     ul: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6 4h8M6 8h8M6 12h8" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "4", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "8", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "12", r: "0.9", fill: "currentColor", stroke: "none" })),
     ol: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6.5 4h7.5M6.5 8h7.5M6.5 12h7.5" }), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "5.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "1"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "9.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "2"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "13.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "3")),
     quote: /* @__PURE__ */ React.createElement(Svg, { fill: "currentColor" }, /* @__PURE__ */ React.createElement("path", { d: "M2.5 9.2C2.5 6.6 3.8 4.7 6.3 4l.5 1c-1.3.5-2 1.3-2.1 2.4H6.6V12H2.5V9.2Zm7 0c0-2.6 1.3-4.5 3.8-5.2l.5 1c-1.3.5-2 1.3-2.1 2.4h1.9V12H9.5V9.2Z" })),
-    divider: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M2 8h12" }), /* @__PURE__ */ React.createElement("path", { d: "M4 4.5h8M4 11.5h8", strokeOpacity: "0.4" })),
-    toc: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M2.5 3.5h11M2.5 8h7M2.5 12.5h9" }), /* @__PURE__ */ React.createElement("path", { d: "M12 8h1.5", strokeDasharray: "0.1 1.6" })),
-    pagebreak: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M3.5 6V2.5h9V6M3.5 10v3.5h9V10" }), /* @__PURE__ */ React.createElement("path", { d: "M1.5 8h13", strokeDasharray: "1.6 1.6" })),
-    space: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "3", width: "11", height: "10", rx: "1", strokeDasharray: "2 1.6" }))
+    save: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M3 2.5h8l2.5 2.5v8a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z" }), /* @__PURE__ */ React.createElement("path", { d: "M5.5 2.5v3h4.5v-3M5 13.5V9.5h6v4" })),
+    // A floppy disk with a pencil over its corner: save under a new name.
+    saveAs: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M8.5 13.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5h8l2.5 2.5v2" }), /* @__PURE__ */ React.createElement("path", { d: "M5.5 2.5v3h4.5v-3M5 13.5V9.5h3" }), /* @__PURE__ */ React.createElement("path", { d: "M13.6 8.9l1 1-4 4H9.6v-1Z" })),
+    copy: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("rect", { x: "5.5", y: "5.5", width: "8", height: "8.5", rx: "1.5" }), /* @__PURE__ */ React.createElement("path", { d: "M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H4A1.5 1.5 0 0 0 2.5 3.5V10A1.5 1.5 0 0 0 4 11.5h1.5" })),
+    clear: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M2.5 4.5h11M6.5 4.5V3a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" }), /* @__PURE__ */ React.createElement("path", { d: "M6.8 7v4.5M9.2 7v4.5" }))
   };
-  function ToolButton({ icon, title, onPress, active }) {
+  function ToolButton({ icon, title, onPress, active, marked, disabled }) {
     return /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
-        className: "md2ebook-fmt-btn" + (active ? " active" : ""),
+        disabled,
+        className: "md2ebook-fmt-btn" + (active ? " active" : "") + (marked ? " marked" : ""),
         title,
         "aria-label": title,
         "aria-pressed": active == null ? void 0 : active,
@@ -1657,7 +1823,7 @@
     );
   }
   var Divider = () => /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-divider", "aria-hidden": "true" });
-  function FormatToolbar({ blockKind, onAction, spaceLines, setSpaceLines }) {
+  function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines }) {
     const isOther = !BLOCK_OPTIONS.some((o) => o.value === blockKind);
     return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-fmt-bar", role: "toolbar", "aria-label": "Formatting" }, /* @__PURE__ */ React.createElement(
       "select",
@@ -1670,22 +1836,54 @@
       },
       BLOCK_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label)),
       isOther ? /* @__PURE__ */ React.createElement("option", { value: "other", disabled: true, hidden: true }, OTHER_BLOCK_LABELS[blockKind] || "Paragraph") : null
-    ), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "bold", title: `Bold (${MOD}B)`, onPress: () => onAction("inline", "bold") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "italic", title: `Italic (${MOD}I)`, onPress: () => onAction("inline", "italic") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "strike", title: `Strikethrough (${MOD}${SHIFT}X)`, onPress: () => onAction("inline", "strike") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "code", title: `Inline code (${MOD}E)`, onPress: () => onAction("inline", "code") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "divider", title: "Divider line (---)", onPress: () => onAction("line", "---") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "toc", title: "Table of contents at the cursor (\\toc) — its settings are in the Typography tab", onPress: () => onAction("line", "\\toc") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "pagebreak", title: "Page break at the cursor (\\pagebreak)", onPress: () => onAction("line", "\\pagebreak") }), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-space" }, /* @__PURE__ */ React.createElement(ToolButton, { icon: "space", title: "Blank space at the cursor, this many body lines tall (\\space{N}) — room to paste an image into the PDF later", onPress: () => onAction("space") }), /* @__PURE__ */ React.createElement(
-      "input",
+    ), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "bold", title: `Bold (${MOD}B)`, onPress: () => onAction("inline", "bold") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "italic", title: `Italic (${MOD}I)`, onPress: () => onAction("inline", "italic") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "strike", title: `Strikethrough (${MOD}${SHIFT}X)`, onPress: () => onAction("inline", "strike") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "code", title: `Inline code (${MOD}E)`, onPress: () => onAction("inline", "code") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(DropMenu, { trigger: "Insert", title: "Insert at the cursor", triggerClassName: "md2ebook-fmt-menu-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Table of contents", hint: "Inserts \\toc — its look is set in the Typography tab", onClick: () => onAction("line", "\\toc"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Page break", hint: "Inserts \\pagebreak — what follows starts on a new page", onClick: () => onAction("line", "\\pagebreak"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Divider line", hint: "Inserts --- (a horizontal rule)", onClick: () => onAction("line", "---"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(
+      MenuItem,
       {
-        type: "number",
-        min: "1",
-        max: "200",
-        value: spaceLines,
-        onChange: (e) => setSpaceLines(e.target.value),
-        "aria-label": "Blank space height in lines",
-        title: "Blank space height, in lines"
+        label: "Blank space",
+        hint: "Inserts \\space{N}: empty space N body lines tall — room to paste an image into the PDF later",
+        onClick: () => onAction("space"),
+        close,
+        keepEditorFocus
+      },
+      /* @__PURE__ */ React.createElement("span", { className: "md2ebook-menu-space" }, /* @__PURE__ */ React.createElement(
+        "input",
+        {
+          type: "number",
+          min: "1",
+          max: "200",
+          value: spaceLines,
+          onChange: (e) => setSpaceLines(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              close();
+              onAction("space");
+            }
+          },
+          "aria-label": "Blank space height in lines"
+        }
+      ), "lines")
+    ))), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-spacer" }), /* @__PURE__ */ React.createElement(
+      ToolButton,
+      {
+        icon: "save",
+        disabled: !fileSave.name,
+        marked: fileSave.unsaved,
+        title: fileSave.name ? `Save to "${fileSave.name}" (${MOD}S)` + (fileSave.unsaved ? " — has unsaved changes" : " — no unsaved changes") : "Save — use Save As first to pick a .md file, then this saves back to it in one click",
+        onPress: () => onAction("save")
       }
-    )));
+    ), /* @__PURE__ */ React.createElement(
+      ToolButton,
+      {
+        icon: "saveAs",
+        title: `Save As… — save as a new .md file (${fileSave.name ? MOD + SHIFT + "S" : MOD + "S"})`,
+        onPress: () => onAction("saveAs")
+      }
+    ), /* @__PURE__ */ React.createElement(ToolButton, { icon: "copy", title: "Copy all the Markdown to the clipboard", onPress: () => onAction("copy") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "clear", title: `Clear the editor (${MOD}Z brings the text back)`, onPress: () => onAction("clear") }));
   }
 
   // apps/Markdown-to-PDF/src/ui/editor/EditorTab.jsx
-  var { useRef: useRef3, useState: useState2 } = React;
+  var { useState: useState3 } = React;
   function shortcutFor(e) {
     if (!(e.ctrlKey || e.metaKey) || e.getModifierState && e.getModifierState("AltGraph")) return null;
     const k = e.key.toLowerCase();
@@ -1701,40 +1899,40 @@
     }
     return { b: ["inline", "bold"], i: ["inline", "italic"], e: ["inline", "code"], k: ["link"] }[k] || null;
   }
-  var DOCUMENT_PICKER_ID = "md2ebook-document";
-  function EditorTab({ markdown, setMarkdown, docStatus, setDocStatus, spaceLines, setSpaceLines }) {
-    const editorTextareaRef = useRef3(null);
-    const documentFileInputRef = useRef3(null);
-    const [blockKind, setBlockKind] = useState2("p");
+  function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatus, setDocStatus, spaceLines, setSpaceLines }) {
+    const [blockKind, setBlockKind] = useState3("p");
     const errorText = (err) => err && err.message ? err.message : String(err);
     const refreshBlockKind = () => {
-      const el = editorTextareaRef.current;
+      const el = editorRef.current;
       if (el) setBlockKind(blockAt(el.value, el.selectionStart));
     };
     function applyToEditor(edit) {
-      const el = editorTextareaRef.current;
+      const el = editorRef.current;
       if (!el) return;
-      el.focus({ preventScroll: true });
-      el.setSelectionRange(edit.from, edit.to);
-      let typed = false;
-      if (edit.from === edit.to && edit.insert === "") typed = true;
-      else {
-        try {
-          typed = edit.insert === "" ? document.execCommand("delete") : document.execCommand("insertText", false, edit.insert);
-        } catch (e) {
-          typed = false;
-        }
-      }
-      if (!typed) {
-        const savedScrollTop = el.scrollTop;
-        ReactDOM.flushSync(() => setMarkdown(applyEdit(el.value, edit)));
-        el.scrollTop = savedScrollTop;
-      }
-      el.setSelectionRange(edit.selStart, edit.selEnd);
+      applyToTextarea(el, edit, setMarkdown);
       refreshBlockKind();
     }
+    async function handleCopyAll() {
+      setDocStatus(null);
+      try {
+        await copyText(markdown || "");
+        setDocStatus({ type: "success", message: "Copied the Markdown source to the clipboard." });
+      } catch (err) {
+        setDocStatus({ type: "error", message: "Could not copy to the clipboard: " + errorText(err) });
+      }
+    }
+    function handleClear() {
+      const el = editorRef.current;
+      if (!el || el.value === "") return;
+      applyToEditor(replaceAllEdit(el, ""));
+      setDocStatus({ type: "success", message: `Cleared the editor. ${MOD}Z brings the text back.` });
+    }
     function runAction(action, arg) {
-      const el = editorTextareaRef.current;
+      if (action === "save") return fileSave.onSave();
+      if (action === "saveAs") return fileSave.onSaveAs();
+      if (action === "copy") return handleCopyAll();
+      if (action === "clear") return handleClear();
+      const el = editorRef.current;
       if (!el) return;
       const text = el.value;
       const s = el.selectionStart;
@@ -1755,88 +1953,10 @@
       e.preventDefault();
       runAction(shortcut[0], shortcut[1]);
     }
-    async function handleImportFile(file) {
-      setDocStatus(null);
-      const name = file && file.name || "document";
-      try {
-        const converted = await documentToMarkdown(file);
-        const el = editorTextareaRef.current;
-        if (el) {
-          applyToEditor({ from: 0, to: el.value.length, insert: converted, selStart: 0, selEnd: 0 });
-          el.scrollTop = 0;
-        } else {
-          setMarkdown(converted);
-        }
-        setDocStatus({ type: "success", message: `Imported "${name}", replacing the editor's contents.` });
-      } catch (err) {
-        setDocStatus({ type: "error", message: "Could not import that file: " + errorText(err) });
-      }
-    }
-    function handleDocumentFileSelected(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (!file) return;
-      handleImportFile(file);
-    }
-    async function handleImportClick() {
-      setDocStatus(null);
-      const file = await pickFile({ id: DOCUMENT_PICKER_ID, ...DOCUMENT_PICKER_TYPES });
-      if (file === "fallback") {
-        if (documentFileInputRef.current) documentFileInputRef.current.click();
-        return;
-      }
-      if (file) await handleImportFile(file);
-    }
-    async function handleSaveMarkdown() {
-      setDocStatus(null);
-      try {
-        const result = await saveTextFile(markdown || "", {
-          id: DOCUMENT_PICKER_ID,
-          filename: "document.md",
-          mimeType: "text/markdown",
-          description: "Markdown file",
-          extensions: [".md"]
-        });
-        if (!result) return;
-        setDocStatus({
-          type: "success",
-          message: result.saved ? `Saved "${result.saved}".` : `Downloaded "${result.downloaded}" (this browser doesn't support a Save As dialog).`
-        });
-      } catch (err) {
-        setDocStatus({ type: "error", message: "Could not save the Markdown file." });
-      }
-    }
-    async function handleCopyAll() {
-      setDocStatus(null);
-      try {
-        await copyText(markdown || "");
-        setDocStatus({ type: "success", message: "Copied the Markdown source to the clipboard." });
-      } catch (err) {
-        setDocStatus({ type: "error", message: "Could not copy to the clipboard: " + errorText(err) });
-      }
-    }
-    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-1 mb-2" }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        onClick: handleImportClick,
-        className: "log-btn",
-        title: "Import a Markdown, Word (.docx), EPUB, or Muse (.muse) file — replaces the editor's contents"
-      },
-      "Upload…"
-    ), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: handleSaveMarkdown, className: "log-btn", title: "Save the editor's Markdown as a .md file" }, "Save…"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: handleCopyAll, className: "log-btn", title: "Copy the Markdown source to the clipboard" }, "Copy All"), /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        ref: documentFileInputRef,
-        type: "file",
-        accept: DOCUMENT_INPUT_ACCEPT,
-        onChange: handleDocumentFileSelected,
-        className: "hidden"
-      }
-    )), /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, onAction: runAction, spaceLines, setSpaceLines }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, fileSave, onAction: runAction, spaceLines, setSpaceLines }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
       "textarea",
       {
-        ref: editorTextareaRef,
+        ref: editorRef,
         onKeyDown: handleEditorKeyDown,
         onSelect: refreshBlockKind,
         className: "md2ebook-editor-textarea flex-1 w-full min-h-[60vh] rounded-md border border-line\n                         bg-ink p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent",
@@ -2088,17 +2208,17 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/FontCombobox.jsx
-  var { useState: useState3, useEffect: useEffect2, useRef: useRef5, useMemo: useMemo3 } = React;
+  var { useState: useState4, useEffect: useEffect3, useRef: useRef5, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState3(value || "");
-    const [open, setOpen] = useState3(false);
-    const [status, setStatus] = useState3(null);
-    const [loadingFonts, setLoadingFonts] = useState3(false);
+    const [query, setQuery] = useState4(value || "");
+    const [open, setOpen] = useState4(false);
+    const [status, setStatus] = useState4(null);
+    const [loadingFonts, setLoadingFonts] = useState4(false);
     const containerRef = useRef5(null);
-    useEffect2(() => {
+    useEffect3(() => {
       setQuery(value || "");
     }, [value]);
-    useEffect2(() => {
+    useEffect3(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           setOpen(false);
@@ -2231,18 +2351,19 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/Sidebar.jsx
-  var { useState: useState4 } = React;
-  function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
-    const [docStatus, setDocStatus] = useState4(null);
-    const [spaceLines, setSpaceLines] = useState4("5");
-    const [configFilename, setConfigFilename] = useState4("config.json");
-    const [configStatus, setConfigStatus] = useState4(null);
+  var { useState: useState5 } = React;
+  function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, editorRef, fileSave, docStatus, setDocStatus, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
+    const [spaceLines, setSpaceLines] = useState5("5");
+    const [configFilename, setConfigFilename] = useState5("config.json");
+    const [configStatus, setConfigStatus] = useState5(null);
     const sectionProps = { config, updateConfig };
     return /* @__PURE__ */ React.createElement("aside", { className: "md2ebook-sidebar" }, resizer, /* @__PURE__ */ React.createElement("div", { className: "tabbar" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("editor"), className: "tab" + (activeTab === "editor" ? " active" : "") }, "Editor"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => setActiveTab("typography"), className: "tab" + (activeTab === "typography" ? " active" : "") }, "Typography")), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-sidebar-content" }, activeTab === "editor" ? /* @__PURE__ */ React.createElement(
       EditorTab,
       {
         markdown,
         setMarkdown,
+        editorRef,
+        fileSave,
         docStatus,
         setDocStatus,
         spaceLines,
@@ -2262,19 +2383,20 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect3, useState: useState5, useRef: useRef6, useCallback } = React;
+  var { useEffect: useEffect4, useState: useState6, useRef: useRef6, useCallback } = React;
+  var DOCUMENT_PICKER_ID = "md2ebook-document";
   function App() {
-    const [markdown, setMarkdown] = useState5(SAMPLE_MARKDOWN);
-    const [config, setConfig] = useState5(INITIAL_CONFIG);
-    const [activeTab, setActiveTab] = useState5("editor");
-    const [fontOptions, setFontOptions] = useState5(DEFAULT_FONT_OPTIONS);
-    const [isExporting, setIsExporting] = useState5(false);
-    const [exportError, setExportError] = useState5(null);
-    const [isSendingToArranger, setIsSendingToArranger] = useState5(false);
+    const [markdown, setMarkdown] = useState6(SAMPLE_MARKDOWN);
+    const [config, setConfig] = useState6(INITIAL_CONFIG);
+    const [activeTab, setActiveTab] = useState6("editor");
+    const [fontOptions, setFontOptions] = useState6(DEFAULT_FONT_OPTIONS);
+    const [isExporting, setIsExporting] = useState6(false);
+    const [exportError, setExportError] = useState6(null);
+    const [isSendingToArranger, setIsSendingToArranger] = useState6(false);
     const bodyRef = useRef6(null);
     const markdownRef = useRef6(markdown);
     markdownRef.current = markdown;
-    useEffect3(() => {
+    useEffect4(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
     const tocPagesRef = useRef6(null);
@@ -2312,12 +2434,98 @@
         return next;
       });
     }, []);
+    const [docStatus, setDocStatus] = useState6(null);
+    const editorRef = useRef6(null);
+    const documentFileInputRef = useRef6(null);
+    const errorText = (err) => err && err.message ? err.message : String(err);
+    function replaceAllText(text) {
+      if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
+      const el = editorRef.current;
+      if (!el) {
+        setMarkdown(text);
+        return;
+      }
+      applyToTextarea(el, replaceAllEdit(el, text), setMarkdown);
+      el.scrollTop = 0;
+    }
+    const [savedFile, setSavedFile] = useState6(null);
     function handleLoadSample() {
-      setMarkdown(SAMPLE_MARKDOWN);
+      setDocStatus(null);
+      setSavedFile(null);
+      replaceAllText(SAMPLE_MARKDOWN);
     }
-    function handleClear() {
-      setMarkdown("");
+    async function handleImportFile(file) {
+      setDocStatus(null);
+      const name = file && file.name || "document";
+      try {
+        const text = await documentToMarkdown(file);
+        setSavedFile(null);
+        replaceAllText(text);
+        setDocStatus({ type: "success", message: `Opened "${name}". ${MOD}Z brings back the text it replaced.` });
+      } catch (err) {
+        setDocStatus({ type: "error", message: "Could not open that file: " + errorText(err) });
+      }
     }
+    function handleDocumentFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) handleImportFile(file);
+    }
+    async function handleOpenFile() {
+      setDocStatus(null);
+      const file = await pickFile({ id: DOCUMENT_PICKER_ID, ...DOCUMENT_PICKER_TYPES });
+      if (file === "fallback") {
+        if (documentFileInputRef.current) documentFileInputRef.current.click();
+        return;
+      }
+      if (file) await handleImportFile(file);
+    }
+    async function handleSaveMarkdown() {
+      setDocStatus(null);
+      try {
+        const text = markdownRef.current || "";
+        const result = await saveTextFile(text, {
+          id: DOCUMENT_PICKER_ID,
+          filename: deriveFilename(markdownRef.current).replace(/\.pdf$/, ".md"),
+          mimeType: "text/markdown",
+          description: "Markdown file",
+          extensions: [".md"]
+        });
+        if (!result) return;
+        setSavedFile(result.handle ? { handle: result.handle, name: result.saved, text } : null);
+        setDocStatus({
+          type: "success",
+          message: result.saved ? `Saved "${result.saved}".` : `Downloaded "${result.downloaded}" (this browser doesn't support a Save As dialog).`
+        });
+      } catch (err) {
+        setDocStatus({ type: "error", message: "Could not save the Markdown file." });
+      }
+    }
+    async function handleQuickSave() {
+      if (!savedFile) return handleSaveMarkdown();
+      setDocStatus(null);
+      const text = markdownRef.current || "";
+      try {
+        await writeTextToHandle(savedFile.handle, text);
+        setSavedFile({ ...savedFile, text });
+        setDocStatus({ type: "success", message: `Saved "${savedFile.name}".` });
+      } catch (err) {
+        setDocStatus({ type: "error", message: `Could not save "${savedFile.name}": ${errorText(err)} Use File → Save as Markdown… to pick the file again.` });
+      }
+    }
+    const fileShortcutsRef = useRef6(null);
+    fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
+    useEffect4(() => {
+      function onKeyDown(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+        const action = fileShortcutsRef.current[(e.shiftKey ? "shift+" : "") + e.key.toLowerCase()];
+        if (!action) return;
+        e.preventDefault();
+        action();
+      }
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
     function deriveFilename(md) {
       const match = /^#\s+(.+)$/m.exec(md || "");
       if (!match) return "md-to-pdf-converter.pdf";
@@ -2413,8 +2621,11 @@
     return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-app" }, /* @__PURE__ */ React.createElement(
       Header,
       {
+        onOpenFile: handleOpenFile,
+        onSaveMarkdown: handleSaveMarkdown,
+        onQuickSave: handleQuickSave,
+        savedFileName: savedFile ? savedFile.name : null,
         onLoadSample: handleLoadSample,
-        onClear: handleClear,
         onExport: handleExport,
         isExporting,
         onSendToZineArranger: handleSendToZineArranger,
@@ -2428,13 +2639,22 @@
         className: "text-red-400 hover:text-red-300 font-medium ml-4 bg-transparent border-0 p-0"
       },
       "Dismiss"
-    )) : null, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(PreviewCanvas, { markdown, config, onTocPages: handleTocPages }), /* @__PURE__ */ React.createElement(
+    )) : null, /* @__PURE__ */ React.createElement("div", { className: "md2ebook-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(PreviewCanvas, { markdown, config, onTocPages: handleTocPages, onPaperSizeChange: (v) => updateConfig("paperSize", v) }), /* @__PURE__ */ React.createElement(
       Sidebar,
       {
         activeTab,
         setActiveTab,
         markdown,
         setMarkdown,
+        editorRef,
+        fileSave: {
+          name: savedFile ? savedFile.name : null,
+          unsaved: savedFile ? markdown !== savedFile.text : false,
+          onSave: handleQuickSave,
+          onSaveAs: handleSaveMarkdown
+        },
+        docStatus,
+        setDocStatus,
         config,
         updateConfig,
         applyConfig,
@@ -2442,7 +2662,7 @@
         setFontOptions,
         resizer: /* @__PURE__ */ React.createElement(PanelResizer, { bodyRef })
       }
-    )));
+    )), /* @__PURE__ */ React.createElement("input", { ref: documentFileInputRef, type: "file", accept: DOCUMENT_INPUT_ACCEPT, onChange: handleDocumentFileSelected, className: "hidden" }));
   }
 
   // apps/Markdown-to-PDF/src/main.jsx

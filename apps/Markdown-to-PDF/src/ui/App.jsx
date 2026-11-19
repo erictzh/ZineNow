@@ -2,6 +2,9 @@
 
 import { warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
 import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
+import { applyToTextarea, replaceAllEdit } from "../editor/applyToTextarea.js";
+import { DOCUMENT_INPUT_ACCEPT, DOCUMENT_PICKER_TYPES, documentToMarkdown } from "../editor/importDocument.js";
+import { pickFile, saveTextFile, writeTextToHandle } from "../io/filePickers.js";
 import { exportToPdf } from "../export/printExport.js";
 import { renderRasterizationDocument } from "../export/rasterDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
@@ -9,8 +12,13 @@ import { BOOLEAN_CONFIG_KEYS, DEFAULT_FONT_OPTIONS, INITIAL_CONFIG, SAMPLE_MARKD
 import { Header } from "./Header.jsx";
 import { PanelResizer } from "./PanelResizer.jsx";
 import { PreviewCanvas } from "./PreviewCanvas.jsx";
+import { MOD } from "./shortcutKeys.js";
 import { Sidebar } from "./Sidebar.jsx";
 const { useEffect, useState, useRef, useCallback } = React;
+
+// Open and Save remember their own last-used folder (your documents), separate from the
+// settings-file picker's.
+const DOCUMENT_PICKER_ID = "md2ebook-document";
 
 /* ==========================================================================
    Root App component
@@ -74,12 +82,117 @@ export function App() {
       return next;
     });
   }, []);
+  /* ---- File menu: open, save, sample ---------------------------------- */
+  // Shown above the editor; kept here so it survives switching tabs.
+  const [docStatus, setDocStatus] = useState(null); // { type: 'success'|'error', message }
+  const editorRef = useRef(null); // the editor's <textarea>, while the Editor tab is showing
+  const documentFileInputRef = useRef(null);
+  const errorText = (err) => (err && err.message ? err.message : String(err));
+
+  // Replaces the whole text as one typed edit, so Ctrl+Z brings the old text back. Switches to the
+  // Editor tab first, so the text being replaced is on screen (and the textarea exists to edit).
+  function replaceAllText(text) {
+    if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
+    const el = editorRef.current;
+    if (!el) {
+      setMarkdown(text);
+      return;
+    }
+    applyToTextarea(el, replaceAllEdit(el, text), setMarkdown);
+    el.scrollTop = 0;
+  }
+
+  // The .md file last saved with Save as Markdown…, which one-click Save writes back to:
+  // { handle, name, text } where text is what was last written (to tell if there are unsaved
+  // changes). Forgotten when another document replaces the text (Open file, Load sample), so a
+  // one-click Save can't overwrite the old file with a different document.
+  const [savedFile, setSavedFile] = useState(null);
+
   function handleLoadSample() {
-    setMarkdown(SAMPLE_MARKDOWN);
+    setDocStatus(null);
+    setSavedFile(null);
+    replaceAllText(SAMPLE_MARKDOWN);
   }
-  function handleClear() {
-    setMarkdown("");
+
+  async function handleImportFile(file) {
+    setDocStatus(null);
+    const name = (file && file.name) || "document";
+    try {
+      const text = await documentToMarkdown(file);
+      setSavedFile(null);
+      replaceAllText(text);
+      setDocStatus({ type: "success", message: `Opened "${name}". ${MOD}Z brings back the text it replaced.` });
+    } catch (err) {
+      setDocStatus({ type: "error", message: "Could not open that file: " + errorText(err) });
+    }
   }
+  function handleDocumentFileSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // reset so picking the same file again still fires onChange
+    if (file) handleImportFile(file);
+  }
+  async function handleOpenFile() {
+    setDocStatus(null);
+    const file = await pickFile({ id: DOCUMENT_PICKER_ID, ...DOCUMENT_PICKER_TYPES });
+    if (file === "fallback") {
+      if (documentFileInputRef.current) documentFileInputRef.current.click();
+      return;
+    }
+    if (file) await handleImportFile(file);
+  }
+
+  // Saves the Markdown source as a .md file — separate from PDF export, and from the Typography
+  // tab's Save… (which saves the settings).
+  async function handleSaveMarkdown() {
+    setDocStatus(null);
+    try {
+      const text = markdownRef.current || "";
+      const result = await saveTextFile(text, {
+        id: DOCUMENT_PICKER_ID, filename: deriveFilename(markdownRef.current).replace(/\.pdf$/, ".md"), mimeType: "text/markdown",
+        description: "Markdown file", extensions: [".md"],
+      });
+      if (!result) return;
+      // Only a real file (not a download) can be saved back to with one click.
+      setSavedFile(result.handle ? { handle: result.handle, name: result.saved, text } : null);
+      setDocStatus({
+        type: "success",
+        message: result.saved ? `Saved "${result.saved}".` : `Downloaded "${result.downloaded}" (this browser doesn't support a Save As dialog).`,
+      });
+    } catch (err) {
+      setDocStatus({ type: "error", message: "Could not save the Markdown file." });
+    }
+  }
+
+  // One-click Save: writes the text back over the file last saved with Save as Markdown…, with no
+  // dialog. Without such a file yet, it falls back to Save as Markdown….
+  async function handleQuickSave() {
+    if (!savedFile) return handleSaveMarkdown();
+    setDocStatus(null);
+    const text = markdownRef.current || "";
+    try {
+      await writeTextToHandle(savedFile.handle, text);
+      setSavedFile({ ...savedFile, text });
+      setDocStatus({ type: "success", message: `Saved "${savedFile.name}".` });
+    } catch (err) {
+      setDocStatus({ type: "error", message: `Could not save "${savedFile.name}": ${errorText(err)} Use File → Save as Markdown… to pick the file again.` });
+    }
+  }
+
+  // Ctrl+O / Ctrl+S / Ctrl+Shift+S (⌘ on a Mac) anywhere in the app, instead of the browser's own
+  // open/save page.
+  const fileShortcutsRef = useRef(null);
+  fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const action = fileShortcutsRef.current[(e.shiftKey ? "shift+" : "") + e.key.toLowerCase()];
+      if (!action) return;
+      e.preventDefault();
+      action();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   function deriveFilename(md) {
     const match = /^#\s+(.+)$/m.exec(md || "");
     if (!match) return "md-to-pdf-converter.pdf";
@@ -205,8 +318,11 @@ export function App() {
   return (
     <div className="md2ebook-app">
       <Header
+        onOpenFile={handleOpenFile}
+        onSaveMarkdown={handleSaveMarkdown}
+        onQuickSave={handleQuickSave}
+        savedFileName={savedFile ? savedFile.name : null}
         onLoadSample={handleLoadSample}
-        onClear={handleClear}
         onExport={handleExport}
         isExporting={isExporting}
         onSendToZineArranger={handleSendToZineArranger}
@@ -228,12 +344,21 @@ export function App() {
         </div>
       ) : null}
       <div className="md2ebook-body" ref={bodyRef}>
-        <PreviewCanvas markdown={markdown} config={config} onTocPages={handleTocPages} />
+        <PreviewCanvas markdown={markdown} config={config} onTocPages={handleTocPages} onPaperSizeChange={(v) => updateConfig("paperSize", v)} />
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           markdown={markdown}
           setMarkdown={setMarkdown}
+          editorRef={editorRef}
+          fileSave={{
+            name: savedFile ? savedFile.name : null,
+            unsaved: savedFile ? markdown !== savedFile.text : false,
+            onSave: handleQuickSave,
+            onSaveAs: handleSaveMarkdown,
+          }}
+          docStatus={docStatus}
+          setDocStatus={setDocStatus}
           config={config}
           updateConfig={updateConfig}
           applyConfig={applyConfig}
@@ -242,6 +367,8 @@ export function App() {
           resizer={<PanelResizer bodyRef={bodyRef} />}
         />
       </div>
+      {/* Open file's fallback for browsers without a file-open dialog API. */}
+      <input ref={documentFileInputRef} type="file" accept={DOCUMENT_INPUT_ACCEPT} onChange={handleDocumentFileSelected} className="hidden" />
     </div>
   );
 }

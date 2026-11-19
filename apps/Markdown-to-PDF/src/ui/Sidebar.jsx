@@ -11,10 +11,10 @@ import { TypefaceSection } from "./typography/TypefaceSection.jsx";
 
 const { useState } = React;
 
-export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
+export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, editorRef, fileSave, docStatus, setDocStatus, config, updateConfig, applyConfig, fontOptions, setFontOptions, resizer }) {
   // Kept here rather than in the tabs, so status messages, the typed
-  // settings-file name and the blank-space height survive switching tabs.
-  const [docStatus, setDocStatus] = useState(null); // { type: 'success'|'error', message }
+  // settings-file name and the blank-space height survive switching tabs
+  // (the editor's own status message lives in App, next to the File menu).
   const [spaceLines, setSpaceLines] = useState("5");
   const [configFilename, setConfigFilename] = useState("config.json");
   const [configStatus, setConfigStatus] = useState(null); // { type: 'success'|'error', message }
@@ -36,6 +36,8 @@ export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, config
           <EditorTab
             markdown={markdown}
             setMarkdown={setMarkdown}
+            editorRef={editorRef}
+            fileSave={fileSave}
             docStatus={docStatus}
             setDocStatus={setDocStatus}
             spaceLines={spaceLines}

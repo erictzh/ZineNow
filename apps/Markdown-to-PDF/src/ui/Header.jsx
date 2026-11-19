@@ -1,9 +1,15 @@
-// The top bar: sample/clear, Send to ZineArranger, Download PDF.
+// The top bar: the File menu (open, save, sample), Send to ZineArranger, Download PDF.
+
+import { DropMenu, MenuItem, MenuSeparator } from "./Menu.jsx";
+import { MOD, SHIFT } from "./shortcutKeys.js";
+
+const OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
 
 /* ==========================================================================
    Header
    ========================================================================== */
-export function Header({ onLoadSample, onClear, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
+// `savedFileName` is the .md file one-click Save writes to, once Save as Markdown… has picked one.
+export function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
   // .topbar and its children come straight from component-kit.css — see
   // component-kit-demo.html's "Top menu bar" section, which this markup
   // matches structurally so the kit's CSS applies with no overrides
@@ -20,15 +26,28 @@ export function Header({ onLoadSample, onClear, onExport, isExporting, onSendToZ
         </div>
       </div>
       <div className="topbar-actions">
-        <button type="button" className="log-btn" onClick={onLoadSample}>
-          Load Sample Markdown
-        </button>
-        <button type="button" className="log-btn" onClick={onClear}>
-          Clear Editor
-        </button>
+        <DropMenu trigger="File" align="right" triggerClassName="md2ebook-topbar-btn md2ebook-file-menu">
+          {({ close }) => (
+            <>
+              <MenuItem label="Open file…" detail="md · txt · docx · epub · muse" shortcut={MOD + "O"} hint={OPEN_FILE_TYPES} onClick={onOpenFile} close={close} />
+              {savedFileName ? (
+                <MenuItem label="Save" detail={savedFileName} shortcut={MOD + "S"} hint={`Save back to "${savedFileName}", no dialog`} onClick={onQuickSave} close={close} />
+              ) : null}
+              <MenuItem
+                label="Save as Markdown…"
+                shortcut={savedFileName ? MOD + SHIFT + "S" : MOD + "S"}
+                hint="Save the editor's text as a .md file. After that, Save (and the toolbar's save button) writes back to it in one click."
+                onClick={onSaveMarkdown}
+                close={close}
+              />
+              <MenuSeparator />
+              <MenuItem label="Load sample Markdown" hint={`Replaces the editor's text with a sample document (${MOD}Z brings yours back)`} onClick={onLoadSample} close={close} />
+            </>
+          )}
+        </DropMenu>
         <button
           type="button"
-          className="log-btn"
+          className="md2ebook-topbar-btn"
           onClick={onSendToZineArranger}
           disabled={isSendingToArranger}
           title="Exports the current document and opens it directly in ZineArranger — no manual save/reopen step"
