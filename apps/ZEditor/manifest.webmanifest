@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "ZineNow ZEditor",
+  "short_name": "ZEditor",
+  "description": "Lay out and edit zine pages, then export a print-ready PDF.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171312",
+  "theme_color": "#171312",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

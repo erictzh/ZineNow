@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+  Draws each app's PWA icons from its top-bar logo badge (shared/styles/topbar.css:
+  the 347deg accent gradient with a white bold 1-3 letter mark). Open it over the dev
+  server (npx http-server -p 8765, then /tools/pwa-icons.html), check the previews, and
+  press "Download all" to save the PNGs; move them to apps/<App>/icons/.
+  Not part of any app and not cached by any service worker.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ZineNow PWA icons</title>
+<style>
+  body { background: #171312; color: #e9e9ee; font: 14px system-ui, sans-serif; padding: 16px; }
+  .row { display: flex; gap: 16px; align-items: end; margin-bottom: 16px; flex-wrap: wrap; }
+  canvas { background: repeating-conic-gradient(#333 0 25%, #444 0 50%) 0 0 / 16px 16px; width: 128px; height: 128px; }
+  figure { margin: 0; text-align: center; }
+</style>
+</head>
+<body>
+<button id="dl">Download all</button>
+<div id="out"></div>
+<script>
+const ACCENT = [221, 83, 26];              // --ui-accent #dd531a
+const MID = ACCENT.map((c) => Math.round(c * 0.75)); // color-mix(accent 75%, #000)
+const rgb = (c) => `rgb(${c.join(",")})`;
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+const APPS = [
+  { dir: "Markdown-to-PDF", mark: "Md" },
+  { dir: "ZEditor", mark: "ZE" },
+  { dir: "ZineArranger", mark: "Z|A" },
+];
+
+// CSS linear-gradient(347deg, ...) mapped onto a size x size square.
+function fillBadgeGradient(ctx, size) {
+  const a = (347 * Math.PI) / 180;
+  const half = (Math.abs(size * Math.sin(a)) + Math.abs(size * Math.cos(a))) / 2;
+  const dx = Math.sin(a) * half, dy = -Math.cos(a) * half;
+  const g = ctx.createLinearGradient(size / 2 - dx, size / 2 - dy, size / 2 + dx, size / 2 + dy);
+  g.addColorStop(0, rgb(ACCENT));
+  g.addColorStop(0.5, rgb(MID));
+  g.addColorStop(1, rgb(ACCENT));
+  ctx.fillStyle = g;
+}
+
+// maskable: full-bleed square, mark kept inside the central safe zone.
+// any: the rounded badge (8px radius on a 32px badge = 25%) on transparency.
+function draw(mark, size, maskable) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  fillBadgeGradient(ctx, size);
+  if (maskable) {
+    ctx.fillRect(0, 0, size, size);
+  } else {
+    ctx.beginPath();
+    ctx.roundRect(0, 0, size, size, size * 0.25);
+    ctx.fill();
+  }
+  // 14px text on a 32px badge; shrink to fit for wider marks.
+  const maxWidth = size * (maskable ? 0.5 : 0.74);
+  let fontSize = size * (maskable ? 0.32 : 0.4375);
+  ctx.font = `700 ${fontSize}px ${FONT}`;
+  const w = ctx.measureText(mark).width;
+  if (w > maxWidth) fontSize *= maxWidth / w;
+  ctx.font = `700 ${fontSize}px ${FONT}`;
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const m = ctx.measureText(mark);
+  const yFix = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+  ctx.fillText(mark, size / 2, size / 2 + yFix);
+  return c;
+}
+
+// Single-icon mode (?mark=Md&size=512&maskable=1): the page is just that icon at 1:1,
+// for a headless-browser screenshot (see tools/pwa-icons.mjs).
+const params = new URLSearchParams(location.search);
+if (params.has("mark")) {
+  document.body.innerHTML = "";
+  document.body.style.cssText = "margin:0;padding:0;background:transparent";
+  document.documentElement.style.background = "transparent";
+  const c = draw(params.get("mark"), Number(params.get("size")), params.get("maskable") === "1");
+  c.style.cssText = "display:block;background:none;width:auto;height:auto";
+  document.body.append(c);
+  throw "single icon"; // stop here
+}
+
+const outputs = [];
+const out = document.getElementById("out");
+for (const app of APPS) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.append(app.dir);
+  for (const [name, size, maskable] of [["icon-192.png", 192, false], ["icon-512.png", 512, false], ["maskable-512.png", 512, true]]) {
+    const c = draw(app.mark, size, maskable);
+    outputs.push({ file: `${app.dir}--${name}`, canvas: c });
+    const f = document.createElement("figure");
+    f.append(c, Object.assign(document.createElement("figcaption"), { textContent: name }));
+    row.append(f);
+  }
+  out.append(row);
+}
+window.zinenowIcons = () => outputs.map((o) => ({ file: o.file, data: o.canvas.toDataURL("image/png").split(",")[1] }));
+document.getElementById("dl").onclick = () => {
+  for (const o of outputs) {
+    const a = document.createElement("a");
+    a.href = o.canvas.toDataURL("image/png");
+    a.download = o.file;
+    a.click();
+  }
+};
+</script>
+</body>
+</html>

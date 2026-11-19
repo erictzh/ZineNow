@@ -84,12 +84,15 @@ ZineNow/
 ├─ apps/
 │  ├─ ZEditor/              index.html · styles/ (11 CSS files, in cascade order) · src/ · dist/
 │  ├─ Markdown-to-PDF/      index.html · styles.css · component-kit.css · defaultConfig.json · sample.md · src/ · dist/
-│  └─ ZineArranger/         index.html · style.css · src/ · dist/
+│  ├─ ZineArranger/         index.html · style.css · src/ · dist/
+│  └─ (each app also has)   manifest.webmanifest · sw.js · icons/  (installable app / offline, see §5 "Offline / PWA")
 ├─ shared/
 │  ├─ vendor/               pdf.js and pdf-lib, one copy for every app
 │  ├─ styles/               tokens.css (colours, fonts) and shared components: buttons, topbar, tabs, toggle, scrollbars
-│  └─ js/                   zineArrangerHandoff.js (send a PDF to ZineArranger), download.js (download fallback)
+│  └─ js/                   zineArrangerHandoff.js (send a PDF to ZineArranger), download.js (download fallback),
+│                           pwa/ (service-worker core and registration; plain scripts, not bundled)
 ├─ tools/build.mjs          The build: each apps/<App>/src/main.js(x) → apps/<App>/dist/app.js
+├─ tools/pwa-icons.*        Redraws the apps' PWA icons from their logo badges (node tools/pwa-icons.mjs)
 └─ docs/                    ARCHITECTURE.md (structure and rules), MAINTAINING.md (this file)
 ```
 
@@ -296,6 +299,81 @@ and fold it to check.
 6. `main.js`: add the handler to the `window` list.
 7. `style.css`: add the grid's CSS class (the cell positions).
 
+### Offline / PWA: installable apps
+
+Each app is an installable Progressive Web App when served over http(s)
+(the live site, or the dev server). Opened from disk (`file://`) nothing
+PWA-related runs and nothing is logged.
+
+**The pieces**
+
+- `apps/<App>/manifest.webmanifest`: name, `start_url`/`scope` = the app's
+  own folder, `standalone`, dark theme colour `#171312`, icons in
+  `apps/<App>/icons/` (192, 512 and a maskable 512). The icons are drawn
+  from the top-bar logo badge by `tools/pwa-icons.html`; rerun
+  `node tools/pwa-icons.mjs` (needs Chrome or Edge) if a logo mark changes.
+- `apps/<App>/index.html` has `theme-color`, the icon links and
+  `<script src="../../shared/js/pwa/register.js" defer>`. That script adds
+  the `<link rel="manifest">` and registers `sw.js` only under http(s): a
+  static manifest link would make Chrome try (and fail, with a CORS error)
+  to fetch it from `file://`.
+- `apps/<App>/sw.js` lists the app's files (`FILES`, must all exist or
+  install fails) and the CDN libraries it loads (`CDN`, best effort), then
+  calls the shared logic in `shared/js/pwa/sw-core.js`.
+
+**How updates reach users.** Same-origin files (HTML, `dist/app.js`, CSS,
+`shared/`) are fetched **network first**; the cache is only the offline
+fallback, or the answer if the network takes over 4 s and a cached copy
+exists. So an ordinary deploy needs no SW change. `sw.js` and
+`sw-core.js` are checked against the server on every visit
+(`updateViaCache: "none"`), and a changed worker takes over at once
+(`skipWaiting` + `clients.claim`).
+
+**When to bump `CACHE_VERSION`** in an app's `sw.js`: when you add,
+rename or remove a file the page loads (a new stylesheet, a new CDN
+library, a new vendor file), update `FILES`/`CDN` and bump the number.
+Old caches for that app (`zinenow-<app>-v*`) are deleted on activate.
+A file missing from the lists is still cached the first time a controlled
+page loads it, so forgetting one only costs offline coverage until it's used once.
+
+**CDN scripts.** Pinned CDN URLs (React on unpkg, marked, mammoth, turndown,
+jszip, pdf-lib, DOMPurify, Paged.js, html2canvas on jsdelivr) are cached at
+install and served cache first. Unpinned ones (`cdn.tailwindcss.com`,
+Google Fonts CSS) are served from cache and refreshed in the background.
+After the first load, `register.js` also sends the worker every URL the page
+fetched before it was controlled (fonts, scripts), so those get cached too.
+Only these hosts are touched: unpkg.com, cdn.jsdelivr.net,
+cdn.tailwindcss.com, fonts.googleapis.com, fonts.gstatic.com.
+
+**What works offline** (after one online visit to *that* app; each app has
+its own worker and cache):
+
+- All three apps open and render; ZEditor and ZineArranger are fully
+  local (pdf.js, pdf-lib, fontkit are in `shared/vendor`), so loading,
+  editing, export and print work offline.
+- Markdown-to-PDF: editor, Download PDF (browser print), import of
+  .docx/.epub, Send to ZineArranger (if ZineArranger was also visited
+  online once).
+
+**What still needs (or may need) a connection**
+
+- Markdown-to-PDF's **live preview** runs in a sandboxed iframe without
+  `allow-same-origin`, which a service worker can't control. Its Paged.js
+  and Google Fonts come from the browser's ordinary HTTP cache instead:
+  in testing the preview still paginated offline, but once the browser
+  evicts that cache the preview can't paginate until you're online again.
+- **Google Fonts** chosen in Markdown-to-PDF's typography settings that
+  were never loaded online: they fall back to system fonts offline.
+- Opening an app for the first time, or a CDN library the worker failed to
+  fetch at install.
+
+**Testing it.** Serve the repo (`.claude/launch.json`'s `zinenow` config,
+or `npx http-server -p 8765 -c-1`), open an app, then in Chrome DevTools →
+Application check Manifest (no errors) and Service workers (activated). Tick
+Network → Offline and reload: the app should still open. Also open each
+`index.html` from disk and check the console stays clean. To reset, use
+Application → Storage → Clear site data.
+
 ### Shared look and code
 
 - **A colour or font for every app:** `shared/styles/tokens.css`.
@@ -376,8 +454,13 @@ compare the new code against it.
   or load ES modules, which is why the apps are bundled and why
   `defaultConfig.json` and `sample.md` are scripts that set globals. Keep any
   new code within those limits.
-- **Markdown-to-PDF needs internet.** Its libraries (marked, Paged.js,
-  html2canvas, mammoth, …) come from CDNs.
+- **Markdown-to-PDF needs internet the first time.** Its libraries (marked,
+  Paged.js, html2canvas, mammoth, …) come from CDNs. Over http(s) its service
+  worker caches them after one visit (see §5 "Offline / PWA"); from
+  `file://` there is no service worker, so it needs internet every time.
+- **"My change doesn't show up" on the live site / dev server.** The service
+  worker is network first, so this is rarely it, but to rule it out:
+  DevTools → Application → Service workers → Unregister, or Clear site data.
 - **Send to ZineArranger in test browsers.** Some embedded or test browsers
   open `window.open` in the *same* tab, so the hand-off can't finish there.
   Test in a normal browser.
