@@ -85,6 +85,17 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
   const [geom, setGeom] = useState(null); // { left, top, width, height, pageW, pageH }: the page's 0 and the pane's size (pane px), the page's size (pt)
   const [cursor, setCursor] = useState(null); // { x, y } pointer in pane px, for the ruler marks
   const [drag, setDrag] = useState(null); // { id, axis, pos, isNew, removing, x, y }
+  // Where the dragged guide's measurement shows, from the pointer (pane px). With a mouse: just
+  // below-right of the pointer. With a finger it would sit under the finger and hand, so it goes
+  // well above and to the right of the touch point instead, kept inside the pane (styles: the
+  // touch size in styles/touch.css).
+  const readoutSpot = (x, y) => {
+    if (document.documentElement.getAttribute("data-ze-input") !== "touch") return { left: x + 12, top: y + 12 };
+    const pane = paneRef.current;
+    const w = pane ? pane.clientWidth : Infinity;
+    const left = x + 40 > w - 90 ? x - 130 : x + 40; // flip to the left near the right edge
+    return { left: Math.max(4, left), top: Math.max(4, y - 72) };
+  };
   const [hover, setHover] = useState(null); // { axis, at }: the pointer over a ruler, `at` px along it
   const pxPerPt = MAIN_SCALE * zoom;
 
@@ -232,7 +243,7 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
           {drag && (
             <React.Fragment>
               <div className={"ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : "")} style={lineStyle(drag.axis, drag.pos)} />
-              <div className="ze-ruler-readout" style={{ left: drag.x + 12, top: drag.y + 12 }}>
+              <div className="ze-ruler-readout" style={readoutSpot(drag.x, drag.y)}>
                 {drag.removing ? "Remove guide" : formatInUnit(drag.pos, unit)}
               </div>
             </React.Fragment>
