@@ -12,6 +12,46 @@
     -webkit-touch-callout: none; /* no "Save image" bubble on a long press */
 }
 
+/* ---- The touch bar (src/ui/TouchBar.jsx): Shift / Alt and the selection's actions --------- */
+
+.ze-touch-bar {
+    display: none; /* only for a finger */
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 20;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background-color: #201918; /* opaque, like the menus */
+    border: 1px solid var(--ui-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+.ze-ruler-frame.has-rulers .ze-touch-bar { left: 30px; } /* clear of the left ruler */
+[data-ze-input="touch"] .ze-touch-bar { display: flex; }
+.ze-touch-bar .ze-touch-btn {
+    min-width: 44px;
+    height: 44px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ui-fg-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+.ze-touch-bar .ze-touch-btn.is-on {
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
+    color: #fff;
+}
+.ze-touch-bar .ze-touch-danger { color: #f87171; }
+.ze-touch-sep { width: 1px; height: 26px; margin: 0 2px; background: var(--ui-border); }
+
 /* ---- Bigger targets while using a finger ------------------------------------------------- */
 
 [data-ze-input="touch"] .ze-page {

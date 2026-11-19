@@ -10217,31 +10217,68 @@
   }
 
   // apps/ZEditor/src/state/useZoom.js
-  var { useState: useState13, useRef: useRef8, useLayoutEffect } = React;
+  var { useState: useState13, useRef: useRef8, useLayoutEffect, useEffect: useEffect8 } = React;
+  var PINCH_EVENT = "ze-pinch";
   function useZoom() {
     const [zoomPercent, setZoomPercent] = useState13(ZOOM_PERCENT.initial);
     const previewPaneRef = useRef8(null);
     const zoomAnchorRef = useRef8(null);
+    const zoomRef = useRef8(zoomPercent);
+    zoomRef.current = zoomPercent;
     function artboardElement() {
       return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
     }
-    function handleZoomChange(percent) {
+    function pagePointAt(fx, fy) {
       const pane = previewPaneRef.current, board = artboardElement();
-      if (board) {
-        zoomAnchorRef.current = {
-          x: (pane.scrollLeft + pane.clientWidth / 2 - board.offsetLeft) / zoomPercent,
-          y: (pane.scrollTop + pane.clientHeight / 2 - board.offsetTop) / zoomPercent
-        };
+      return { x: (pane.scrollLeft + fx - board.offsetLeft) / zoomRef.current, y: (pane.scrollTop + fy - board.offsetTop) / zoomRef.current };
+    }
+    function scrollPointTo(point, fx, fy, percent) {
+      const pane = previewPaneRef.current, board = artboardElement();
+      pane.scrollLeft = point.x * percent + board.offsetLeft - fx;
+      pane.scrollTop = point.y * percent + board.offsetTop - fy;
+    }
+    function handleZoomChange(percent) {
+      const pane = previewPaneRef.current;
+      if (artboardElement()) {
+        const fx = pane.clientWidth / 2, fy = pane.clientHeight / 2;
+        zoomAnchorRef.current = { ...pagePointAt(fx, fy), fx, fy };
       }
       setZoomPercent(percent);
     }
     useLayoutEffect(() => {
-      const anchor = zoomAnchorRef.current, pane = previewPaneRef.current, board = artboardElement();
-      if (!anchor || !board) return;
+      const anchor = zoomAnchorRef.current;
+      if (!anchor || !artboardElement()) return;
       zoomAnchorRef.current = null;
-      pane.scrollLeft = anchor.x * zoomPercent + board.offsetLeft - pane.clientWidth / 2;
-      pane.scrollTop = anchor.y * zoomPercent + board.offsetTop - pane.clientHeight / 2;
+      scrollPointTo(anchor, anchor.fx, anchor.fy, zoomPercent);
     }, [zoomPercent]);
+    useEffect8(() => {
+      let pinch = null;
+      function onPinch(e) {
+        const pane = previewPaneRef.current;
+        const { phase, scale, x, y } = e.detail || {};
+        if (!pane || !artboardElement()) return;
+        const r = pane.getBoundingClientRect();
+        const fx = x - r.left, fy = y - r.top;
+        if (phase === "start") {
+          pinch = { point: pagePointAt(fx, fy), startPercent: zoomRef.current };
+          return;
+        }
+        if (!pinch) return;
+        if (phase === "end") {
+          pinch = null;
+          return;
+        }
+        const percent = Math.round(Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, pinch.startPercent * scale)));
+        if (percent === zoomRef.current) {
+          scrollPointTo(pinch.point, fx, fy, percent);
+        } else {
+          zoomAnchorRef.current = { ...pinch.point, fx, fy };
+          setZoomPercent(percent);
+        }
+      }
+      window.addEventListener(PINCH_EVENT, onPinch);
+      return () => window.removeEventListener(PINCH_EVENT, onPinch);
+    }, []);
     return { zoomPercent, previewPaneRef, handleZoomChange };
   }
 
@@ -10313,12 +10350,12 @@
   }
 
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef: useRef9, useEffect: useEffect8 } = React;
+  var { useRef: useRef9, useEffect: useEffect9 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
     const textureCanvasRef = useRef9(null);
     const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
     const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-    useEffect8(() => {
+    useEffect9(() => {
       const canvas = textureCanvasRef.current;
       if (!textureKey || !canvas) return;
       canvas.width = Math.max(1, Math.ceil(ann.width));
@@ -10395,7 +10432,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
-  var { useRef: useRef10, useEffect: useEffect9 } = React;
+  var { useRef: useRef10, useEffect: useEffect10 } = React;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
     const halftoneCanvasRef = useRef10(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
@@ -10451,7 +10488,7 @@
     const adjusted = hasPhotoAdjust(ann);
     const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
     const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null]) : null;
-    useEffect9(() => {
+    useEffect10(() => {
       if (!usesFilterCanvas || isCropping) return;
       let cancelled = false;
       (async () => {
@@ -10680,7 +10717,7 @@
   var textSelectionStore = { annId: null, start: 0, end: 0 };
 
   // apps/ZEditor/src/ui/canvas/AnnotationText.jsx
-  var { useRef: useRef11, useState: useState14, useMemo: useMemo2, useEffect: useEffect10, useLayoutEffect: useLayoutEffect2 } = React;
+  var { useRef: useRef11, useState: useState14, useMemo: useMemo2, useEffect: useEffect11, useLayoutEffect: useLayoutEffect2 } = React;
   function spanCss(seg) {
     const span = seg.span || {};
     if (!seg.color && span.underline == null && span.strike == null) return void 0;
@@ -10824,7 +10861,7 @@
       }
       goalXRef.current = null;
     }
-    useEffect10(() => {
+    useEffect11(() => {
       if (!canvasMode) return void 0;
       let cancelled = false;
       (async () => {
@@ -11532,11 +11569,11 @@
   }
 
   // apps/ZEditor/src/ui/canvas/usePageBackground.js
-  var { useState: useState15, useRef: useRef12, useEffect: useEffect11 } = React;
+  var { useState: useState15, useRef: useRef12, useEffect: useEffect12 } = React;
   function usePageBackground(page, pdfDocsRef, pageFilter) {
     const canvasRef = useRef12(null);
     const [canvasSize, setCanvasSize] = useState15({ width: 0, height: 0 });
-    useEffect11(() => {
+    useEffect12(() => {
       if (!page) return;
       let cancelled = false;
       (async () => {
@@ -11578,7 +11615,7 @@
 
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
   var SNAP_PX = 6;
-  var { useState: useState16, useRef: useRef13, useEffect: useEffect12 } = React;
+  var { useState: useState16, useRef: useRef13, useEffect: useEffect13 } = React;
   function ComposeCanvas({
     pdfDocsRef,
     page,
@@ -11629,7 +11666,7 @@
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
     const layerRef = useRef13(null);
     const [, setWrapTick] = useState16(0);
-    useEffect12(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
+    useEffect13(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
     const [dragRect, setDragRect] = useState16(null);
     const drawingRef = useRef13(null);
     const [brushPos, setBrushPos] = useState16(null);
@@ -11640,9 +11677,9 @@
     const measureGesture = useRef13(null);
     const measuring = tool === "measure";
     const pageKey = page && page.key;
-    useEffect12(() => setMeasure(null), [measuring, pageKey]);
+    useEffect13(() => setMeasure(null), [measuring, pageKey]);
     const [eraseTargetId, setEraseTargetId] = useState16(null);
-    useEffect12(() => setEraseTargetId(null), [softErasing, pageKey]);
+    useEffect13(() => setEraseTargetId(null), [softErasing, pageKey]);
     const eraseTarget = eraseTargetId !== null && annotations.some((a) => a.id === eraseTargetId && a.type === "image" && !a.hidden && !a.locked) ? eraseTargetId : null;
     function overlayPoint(e) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -11916,7 +11953,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/Rulers.jsx
-  var { useEffect: useEffect13, useLayoutEffect: useLayoutEffect3, useRef: useRef14, useState: useState17 } = React;
+  var { useEffect: useEffect14, useLayoutEffect: useLayoutEffect3, useRef: useRef14, useState: useState17 } = React;
   var RULER_SIZE = 18;
   function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
     const dpr = window.devicePixelRatio || 1;
@@ -12044,7 +12081,7 @@
         ro.disconnect();
       };
     }, [paneRef, zoom, pageKey]);
-    useEffect13(() => {
+    useEffect14(() => {
       if (!geom || !topRef.current || !leftRef.current) return;
       const dragAt = drag ? geom[drag.axis === "x" ? "left" : "top"] + drag.pos * pxPerPt : null;
       drawRuler(topRef.current, true, geom.width, geom.left, pxPerPt, unit, {
@@ -12289,9 +12326,9 @@
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect14 } = React;
+  var { useEffect: useEffect15 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect14(() => {
+    useEffect15(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -12304,14 +12341,14 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
-  var { useEffect: useEffect15, useState: useState19 } = React;
+  var { useEffect: useEffect16, useState: useState19 } = React;
   var OPEN_KINDS = [
     { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
     { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
   ];
   function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
     const [kind, setKind] = useState19("project");
-    useEffect15(() => {
+    useEffect16(() => {
       if (!open) return void 0;
       const onKey = (e) => {
         if (e.key === "Escape") onClose();
@@ -12380,7 +12417,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState21, useRef: useRef15, useEffect: useEffect16 } = React;
+  var { useState: useState21, useRef: useRef15, useEffect: useEffect17 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -12406,7 +12443,7 @@
       setOpenState(value);
     };
     const wasChecked = useRef15(checked);
-    useEffect16(() => {
+    useEffect17(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -12648,7 +12685,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState22, useRef: useRef16, useEffect: useEffect17, useMemo: useMemo3 } = React;
+  var { useState: useState22, useRef: useRef16, useEffect: useEffect18, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState22(value || "");
     const [typed, setTyped] = useState22(false);
@@ -12660,13 +12697,13 @@
     const [loadingFonts, setLoadingFonts] = useState22(false);
     const containerRef = useRef16(null);
     const uploadInputRef = useRef16(null);
-    useEffect17(() => {
+    useEffect18(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect17(() => {
+    useEffect18(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -12680,7 +12717,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect17(() => {
+    useEffect18(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -13319,7 +13356,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState27, useRef: useRef18, useEffect: useEffect18 } = React;
+  var { useState: useState27, useRef: useRef18, useEffect: useEffect19 } = React;
   function layerName(ann) {
     if (ann.name) return ann.name;
     if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
@@ -13385,7 +13422,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect18(() => {
+    useEffect19(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -13401,7 +13438,7 @@
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
     }
-    useEffect18(() => {
+    useEffect19(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -13744,7 +13781,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState28, useRef: useRef20, useEffect: useEffect19 } = React;
+  var { useState: useState28, useRef: useRef20, useEffect: useEffect20 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
@@ -13771,7 +13808,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect19(() => stopAutoScroll, []);
+    useEffect20(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -13880,6 +13917,300 @@
     )));
   }
 
+  // apps/ZEditor/src/ui/touchInput.js
+  var DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
+  var NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
+  var SCROLL_AREA = ".ze-ruler-frame";
+  var FINGER_HOLD_MS = 120;
+  var RULER_SLOP_PX = 12;
+  var DOUBLE_TAP_MS = 350;
+  var DOUBLE_TAP_PX = 24;
+  var TAP_SLOP_PX = 10;
+  var heldKeys = { shift: false, alt: false };
+  function setTouchModifier(name, on) {
+    heldKeys[name] = Boolean(on);
+  }
+  function mouseEventFrom(type, e, extra) {
+    return new MouseEvent(type, {
+      bubbles: type !== "mouseleave",
+      cancelable: true,
+      view: window,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      button: 0,
+      buttons: type === "mouseup" || type === "dblclick" ? 0 : 1,
+      detail: type === "dblclick" ? 2 : 1,
+      shiftKey: Boolean(e.shiftKey) || heldKeys.shift,
+      altKey: Boolean(e.altKey) || heldKeys.alt,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      ...extra
+    });
+  }
+  function send(el, type, e, extra) {
+    const target = el && el.isConnected ? el : document;
+    target.dispatchEvent(mouseEventFrom(type, e, extra));
+  }
+  function rulerNear(x, y) {
+    for (const ruler of document.querySelectorAll(".ze-ruler")) {
+      const r = ruler.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const top = ruler.classList.contains("ze-ruler-top");
+      const inside = top ? x >= r.left && x <= r.right && y >= r.top && y <= r.bottom + RULER_SLOP_PX : y >= r.top && y <= r.bottom && x >= r.left && x <= r.right + RULER_SLOP_PX;
+      if (inside) return ruler;
+    }
+    return null;
+  }
+  function installTouchInput() {
+    if (typeof window === "undefined" || !window.PointerEvent) return () => {
+    };
+    const root = document.documentElement;
+    const fingers = /* @__PURE__ */ new Map();
+    let pending = null;
+    let active = null;
+    let pan = null;
+    let lastTap = null;
+    let lastTouchTime = 0;
+    const markInput = (e) => {
+      const kind = e.pointerType === "mouse" ? "mouse" : "touch";
+      if (root.dataset.zeInput !== kind) root.dataset.zeInput = kind;
+    };
+    const midpoint = () => {
+      const [a, b] = [...fingers.values()];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    };
+    const spread = () => {
+      const [a, b] = [...fingers.values()];
+      return Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    };
+    const pinchEvent = (phase, scale, at) => window.dispatchEvent(new CustomEvent(PINCH_EVENT, { detail: { phase, scale, x: at.x, y: at.y } }));
+    function begin(press) {
+      active = { id: press.id, target: press.target, x: press.down.clientX, y: press.down.clientY, moved: false };
+      send(press.target, "mousedown", press.down);
+      for (const move of press.moves) forwardMove(move);
+    }
+    function flushPending() {
+      if (!pending) return;
+      const press = pending;
+      clearTimeout(press.timer);
+      pending = null;
+      begin(press);
+    }
+    function forwardMove(e) {
+      if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
+      send(active.target, "mousemove", e);
+    }
+    function onPointerDown(e) {
+      markInput(e);
+      if (e.pointerType === "mouse") return;
+      lastTouchTime = Date.now();
+      const isFinger = e.pointerType === "touch";
+      let target = e.target instanceof Element ? e.target : null;
+      if (!target) return;
+      if (isFinger) {
+        const ruler = rulerNear(e.clientX, e.clientY);
+        if (ruler) target = ruler;
+      }
+      if (target.closest(NATIVE_TARGETS)) return;
+      const inScrollArea = Boolean(target.closest(SCROLL_AREA));
+      const surface = Boolean(target.closest(DRAG_SURFACES));
+      if (isFinger && inScrollArea) {
+        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (fingers.size === 2 && active && !active.moved && fingers.has(active.id)) {
+          const first = active;
+          active = null;
+          send(first.target, "mouseup", { clientX: first.x, clientY: first.y, screenX: e.screenX, screenY: e.screenY, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
+          lastTap = null;
+        }
+        if (fingers.size === 2 && !active) {
+          if (pending) {
+            clearTimeout(pending.timer);
+            pending = null;
+          }
+          pan = { startSpread: spread(), frame: 0 };
+          pinchEvent("start", 1, midpoint());
+          e.preventDefault();
+          return;
+        }
+        if (fingers.size > 1 || pan) {
+          e.preventDefault();
+          return;
+        }
+      }
+      if (active || pending || !surface) return;
+      e.preventDefault();
+      const press = { id: e.pointerId, target, down: e, moves: [] };
+      if (isFinger && inScrollArea) {
+        pending = press;
+        press.timer = setTimeout(flushPending, FINGER_HOLD_MS);
+      } else {
+        begin(press);
+      }
+    }
+    function onPointerMove(e) {
+      if (e.pointerType === "mouse") {
+        if (root.dataset.zeInput === "touch" && e.buttons === 0) markInput(e);
+        return;
+      }
+      if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pan) {
+        if (fingers.size < 2 || pan.frame) return;
+        pan.frame = setTimeout(() => {
+          if (!pan) return;
+          pan.frame = 0;
+          if (fingers.size < 2) return;
+          pan.last = { scale: spread() / pan.startSpread, at: midpoint() };
+          pinchEvent("move", pan.last.scale, pan.last.at);
+        }, 16);
+        return;
+      }
+      if (pending && e.pointerId === pending.id) {
+        pending.moves.push(e);
+        if (Math.hypot(e.clientX - pending.down.clientX, e.clientY - pending.down.clientY) > TAP_SLOP_PX) flushPending();
+        return;
+      }
+      if (active && e.pointerId === active.id) forwardMove(e);
+    }
+    function onPointerEnd(e) {
+      fingers.delete(e.pointerId);
+      if (pan) {
+        if (fingers.size < 2) {
+          if (pan.frame) {
+            clearTimeout(pan.frame);
+            const last = [...fingers.values()].concat({ x: e.clientX, y: e.clientY });
+            if (last.length === 2) {
+              const s = Math.max(1, Math.hypot(last[0].x - last[1].x, last[0].y - last[1].y));
+              pinchEvent("move", s / pan.startSpread, { x: (last[0].x + last[1].x) / 2, y: (last[0].y + last[1].y) / 2 });
+            }
+          }
+          pan = null;
+          pinchEvent("end", 1, { x: e.clientX, y: e.clientY });
+        }
+        return;
+      }
+      if (pending && e.pointerId === pending.id) {
+        if (e.type === "pointercancel") {
+          clearTimeout(pending.timer);
+          pending = null;
+          return;
+        }
+        flushPending();
+      }
+      if (!active || e.pointerId !== active.id) return;
+      const { target, moved } = active;
+      active = null;
+      send(target, "mouseup", e);
+      send(target, "mouseout", e, { relatedTarget: null });
+      const pane = target.isConnected && target.closest(".preview-pane");
+      if (pane) pane.dispatchEvent(mouseEventFrom("mouseleave", e));
+      if (e.type === "pointercancel" || moved) {
+        lastTap = null;
+        return;
+      }
+      const now = Date.now();
+      if (lastTap && now - lastTap.time < DOUBLE_TAP_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_PX) {
+        lastTap = null;
+        setTimeout(() => send(target, "dblclick", e), 0);
+      } else {
+        lastTap = { time: now, x: e.clientX, y: e.clientY };
+      }
+    }
+    function onDblClick(e) {
+      if (e.isTrusted && Date.now() - lastTouchTime < 1e3) e.stopPropagation();
+    }
+    function onContextMenu(e) {
+      if (Date.now() - lastTouchTime < 1e3 && e.target instanceof Element && e.target.closest(SCROLL_AREA + ", " + DRAG_SURFACES)) e.preventDefault();
+    }
+    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
+    window.addEventListener("pointermove", onPointerMove, true);
+    window.addEventListener("pointerup", onPointerEnd, true);
+    window.addEventListener("pointercancel", onPointerEnd, true);
+    window.addEventListener("dblclick", onDblClick, true);
+    window.addEventListener("contextmenu", onContextMenu, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+      window.removeEventListener("dblclick", onDblClick, true);
+      window.removeEventListener("contextmenu", onContextMenu, true);
+    };
+  }
+
+  // apps/ZEditor/src/ui/TouchBar.jsx
+  var { useState: useState29, useEffect: useEffect21 } = React;
+  function pressKey(key, mods) {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
+  }
+  var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
+  function TouchBar({ selectedAnn, isEditing, isCropping, onEditText }) {
+    const [shift, setShift] = useState29(false);
+    const [alt, setAlt] = useState29(false);
+    useEffect21(() => {
+      setTouchModifier("shift", shift);
+    }, [shift]);
+    useEffect21(() => {
+      setTouchModifier("alt", alt);
+    }, [alt]);
+    useEffect21(() => () => {
+      setTouchModifier("shift", false);
+      setTouchModifier("alt", false);
+    }, []);
+    const hasSelection = Boolean(selectedAnn) && !isEditing;
+    const keep = (e) => e.preventDefault();
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-touch-bar", role: "toolbar", "aria-label": "Touch controls" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-touch-btn ze-touch-key" + (shift ? " is-on" : ""),
+        "aria-pressed": shift,
+        onMouseDown: keep,
+        title: "Shift, held until tapped again: add to the selection, keep proportions, snap turns to 15°, draw at 45°",
+        onClick: () => setShift((v) => !v)
+      },
+      "Shift"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-touch-btn ze-touch-key" + (alt ? " is-on" : ""),
+        "aria-pressed": alt,
+        onMouseDown: keep,
+        title: "Alt, held until tapped again: move without snapping to guides, pick one item out of a group",
+        onClick: () => setAlt((v) => !v)
+      },
+      "Alt"
+    ), hasSelection && /* @__PURE__ */ React.createElement("span", { className: "ze-touch-sep", "aria-hidden": "true" }), hasSelection && selectedAnn && selectedAnn.type === "text" && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn", title: "Edit text", "aria-label": "Edit text", onMouseDown: keep, onClick: () => onEditText(selectedAnn.id) }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 20h4L19 9l-4-4L4 16v4Z" }), /* @__PURE__ */ React.createElement("path", { d: "M13.5 6.5l4 4" }))), hasSelection && selectedAnn && selectedAnn.type === "image" && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-touch-btn" + (isCropping ? " is-on" : ""),
+        "aria-pressed": isCropping,
+        onMouseDown: keep,
+        title: isCropping ? "Done cropping" : "Crop (the image's rotation must be 0°)",
+        "aria-label": "Crop",
+        onClick: () => pressKey("c")
+      },
+      /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M6 2v14a2 2 0 0 0 2 2h14" }), /* @__PURE__ */ React.createElement("path", { d: "M2 6h14a2 2 0 0 1 2 2v14" }))
+    ), hasSelection && selectedAnn && /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-touch-btn",
+        title: "Duplicate",
+        "aria-label": "Duplicate",
+        onMouseDown: keep,
+        onClick: () => {
+          pressKey("c", { ctrlKey: true });
+          pressKey("v", { ctrlKey: true });
+        }
+      },
+      /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("rect", { x: "8", y: "8", width: "12", height: "12", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" }))
+    ), hasSelection && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-danger", title: "Delete", "aria-label": "Delete", onMouseDown: keep, onClick: () => pressKey("Delete") }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))));
+  }
+
   // apps/ZEditor/src/ui/settings/FilterSettings.jsx
   function FilterSettings({
     filterType,
@@ -13950,9 +14281,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState29 } = React;
+  var { useState: useState30 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState29(null);
+    const [customizing, setCustomizing] = useState30(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -13961,11 +14292,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState30, useRef: useRef21, useEffect: useEffect20, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState31, useRef: useRef21, useEffect: useEffect22, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState30(false);
+    const [open, setOpen] = useState31(false);
     const containerRef = useRef21(null);
-    useEffect20(() => {
+    useEffect22(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -14036,7 +14367,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "aef749c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "0e6ccf2"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -14354,7 +14685,15 @@
         onMagicClick: magic.start,
         snapGuides: view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null
       }
-    ))))), selectedPage && /* @__PURE__ */ React.createElement(
+    ))), selectedPage && /* @__PURE__ */ React.createElement(
+      TouchBar,
+      {
+        selectedAnn: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null,
+        isEditing: editingAnnId !== null,
+        isCropping: croppingAnnId !== null && croppingAnnId === selectedAnnId,
+        onEditText: selection.setEditingAnnId
+      }
+    ))), selectedPage && /* @__PURE__ */ React.createElement(
       FormatPanel,
       {
         key: selectedAnnId,
@@ -14424,205 +14763,6 @@
         onCancel: dialogs.handleConfirmCancel
       }
     ), /* @__PURE__ */ React.createElement(LiveFilterDefs, { pageFilter }));
-  }
-
-  // apps/ZEditor/src/ui/touchInput.js
-  var DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
-  var NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
-  var SCROLL_AREA = ".ze-ruler-frame";
-  var FINGER_HOLD_MS = 120;
-  var RULER_SLOP_PX = 12;
-  var DOUBLE_TAP_MS = 350;
-  var DOUBLE_TAP_PX = 24;
-  var TAP_SLOP_PX = 10;
-  function mouseEventFrom(type, e, extra) {
-    return new MouseEvent(type, {
-      bubbles: type !== "mouseleave",
-      cancelable: true,
-      view: window,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      screenX: e.screenX,
-      screenY: e.screenY,
-      button: 0,
-      buttons: type === "mouseup" || type === "dblclick" ? 0 : 1,
-      detail: type === "dblclick" ? 2 : 1,
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      ctrlKey: e.ctrlKey,
-      metaKey: e.metaKey,
-      ...extra
-    });
-  }
-  function send(el, type, e, extra) {
-    const target = el && el.isConnected ? el : document;
-    target.dispatchEvent(mouseEventFrom(type, e, extra));
-  }
-  function rulerNear(x, y) {
-    for (const ruler of document.querySelectorAll(".ze-ruler")) {
-      const r = ruler.getBoundingClientRect();
-      if (!r.width || !r.height) continue;
-      const top = ruler.classList.contains("ze-ruler-top");
-      const inside = top ? x >= r.left && x <= r.right && y >= r.top && y <= r.bottom + RULER_SLOP_PX : y >= r.top && y <= r.bottom && x >= r.left && x <= r.right + RULER_SLOP_PX;
-      if (inside) return ruler;
-    }
-    return null;
-  }
-  function installTouchInput() {
-    if (typeof window === "undefined" || !window.PointerEvent) return () => {
-    };
-    const root = document.documentElement;
-    const fingers = /* @__PURE__ */ new Map();
-    let pending = null;
-    let active = null;
-    let pan = null;
-    let lastTap = null;
-    let lastTouchTime = 0;
-    const markInput = (e) => {
-      const kind = e.pointerType === "mouse" ? "mouse" : "touch";
-      if (root.dataset.zeInput !== kind) root.dataset.zeInput = kind;
-    };
-    const midpoint = () => {
-      const [a, b] = [...fingers.values()];
-      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    };
-    function begin(press) {
-      active = { id: press.id, target: press.target, x: press.down.clientX, y: press.down.clientY, moved: false };
-      send(press.target, "mousedown", press.down);
-      for (const move of press.moves) forwardMove(move);
-    }
-    function flushPending() {
-      if (!pending) return;
-      const press = pending;
-      clearTimeout(press.timer);
-      pending = null;
-      begin(press);
-    }
-    function forwardMove(e) {
-      if (Math.hypot(e.clientX - active.x, e.clientY - active.y) > TAP_SLOP_PX) active.moved = true;
-      send(active.target, "mousemove", e);
-    }
-    function onPointerDown(e) {
-      markInput(e);
-      if (e.pointerType === "mouse") return;
-      lastTouchTime = Date.now();
-      const isFinger = e.pointerType === "touch";
-      let target = e.target instanceof Element ? e.target : null;
-      if (!target) return;
-      if (isFinger) {
-        const ruler = rulerNear(e.clientX, e.clientY);
-        if (ruler) target = ruler;
-      }
-      const inScrollArea = Boolean(target.closest(SCROLL_AREA));
-      const surface = target.closest(DRAG_SURFACES) && !target.closest(NATIVE_TARGETS);
-      if (isFinger && inScrollArea) {
-        fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (fingers.size === 2 && active && !active.moved && fingers.has(active.id)) {
-          const first = active;
-          active = null;
-          send(first.target, "mouseup", { clientX: first.x, clientY: first.y, screenX: e.screenX, screenY: e.screenY, shiftKey: e.shiftKey, altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey });
-          lastTap = null;
-        }
-        if (fingers.size === 2 && !active) {
-          if (pending) {
-            clearTimeout(pending.timer);
-            pending = null;
-          }
-          pan = { pane: target.closest(SCROLL_AREA).querySelector(".preview-pane"), mid: midpoint() };
-          e.preventDefault();
-          return;
-        }
-        if (fingers.size > 1 || pan) {
-          e.preventDefault();
-          return;
-        }
-      }
-      if (active || pending || !surface) return;
-      e.preventDefault();
-      const press = { id: e.pointerId, target, down: e, moves: [] };
-      if (isFinger && inScrollArea) {
-        pending = press;
-        press.timer = setTimeout(flushPending, FINGER_HOLD_MS);
-      } else {
-        begin(press);
-      }
-    }
-    function onPointerMove(e) {
-      if (e.pointerType === "mouse") {
-        if (root.dataset.zeInput === "touch" && e.buttons === 0) markInput(e);
-        return;
-      }
-      if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pan) {
-        if (fingers.size < 2) return;
-        const mid = midpoint();
-        if (pan.pane) {
-          pan.pane.scrollLeft -= mid.x - pan.mid.x;
-          pan.pane.scrollTop -= mid.y - pan.mid.y;
-        }
-        pan.mid = mid;
-        return;
-      }
-      if (pending && e.pointerId === pending.id) {
-        pending.moves.push(e);
-        if (Math.hypot(e.clientX - pending.down.clientX, e.clientY - pending.down.clientY) > TAP_SLOP_PX) flushPending();
-        return;
-      }
-      if (active && e.pointerId === active.id) forwardMove(e);
-    }
-    function onPointerEnd(e) {
-      fingers.delete(e.pointerId);
-      if (pan) {
-        if (fingers.size < 2) pan = null;
-        return;
-      }
-      if (pending && e.pointerId === pending.id) {
-        if (e.type === "pointercancel") {
-          clearTimeout(pending.timer);
-          pending = null;
-          return;
-        }
-        flushPending();
-      }
-      if (!active || e.pointerId !== active.id) return;
-      const { target, moved } = active;
-      active = null;
-      send(target, "mouseup", e);
-      send(target, "mouseout", e, { relatedTarget: null });
-      const pane = target.isConnected && target.closest(".preview-pane");
-      if (pane) pane.dispatchEvent(mouseEventFrom("mouseleave", e));
-      if (e.type === "pointercancel" || moved) {
-        lastTap = null;
-        return;
-      }
-      const now = Date.now();
-      if (lastTap && now - lastTap.time < DOUBLE_TAP_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_PX) {
-        lastTap = null;
-        setTimeout(() => send(target, "dblclick", e), 0);
-      } else {
-        lastTap = { time: now, x: e.clientX, y: e.clientY };
-      }
-    }
-    function onDblClick(e) {
-      if (e.isTrusted && Date.now() - lastTouchTime < 1e3) e.stopPropagation();
-    }
-    function onContextMenu(e) {
-      if (Date.now() - lastTouchTime < 1e3 && e.target instanceof Element && e.target.closest(SCROLL_AREA + ", " + DRAG_SURFACES)) e.preventDefault();
-    }
-    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
-    window.addEventListener("pointermove", onPointerMove, true);
-    window.addEventListener("pointerup", onPointerEnd, true);
-    window.addEventListener("pointercancel", onPointerEnd, true);
-    window.addEventListener("dblclick", onDblClick, true);
-    window.addEventListener("contextmenu", onContextMenu, true);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointermove", onPointerMove, true);
-      window.removeEventListener("pointerup", onPointerEnd, true);
-      window.removeEventListener("pointercancel", onPointerEnd, true);
-      window.removeEventListener("dblclick", onDblClick, true);
-      window.removeEventListener("contextmenu", onContextMenu, true);
-    };
   }
 
   // apps/ZEditor/src/main.jsx

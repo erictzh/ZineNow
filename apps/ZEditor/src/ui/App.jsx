@@ -31,6 +31,7 @@ import { LayersPanel } from "./panels/LayersPanel.jsx";
 import { PanelResizer } from "./PanelResizer.jsx";
 import { Sidebar } from "./sidebar/Sidebar.jsx";
 import { ToolBar } from "./toolbar/ToolBar.jsx";
+import { TouchBar } from "./TouchBar.jsx";
 import { Topbar } from "./topbar/Topbar.jsx";
 
 export function App() {
@@ -159,6 +160,15 @@ export function App() {
               />
             </div>
           </div>
+          {/* Shown only while a finger is being used (styles/touch.css). */}
+          {selectedPage && (
+            <TouchBar
+              selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+              isEditing={editingAnnId !== null}
+              isCropping={croppingAnnId !== null && croppingAnnId === selectedAnnId}
+              onEditText={selection.setEditingAnnId}
+            />
+          )}
           </div>
         </div>
         {selectedPage && (

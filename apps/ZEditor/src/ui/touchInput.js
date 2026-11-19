@@ -11,10 +11,11 @@
 // is sent on as mousedown, the moves as mousemove and the release as mouseup, carrying the same
 // position and Shift/Alt/Ctrl flags. Mouse input never goes through here.
 //
-// On the canvas area one finger edits and two fingers scroll (the browser's own scrolling is
-// off there: styles/touch.css). So a finger press waits a moment (FINGER_HOLD_MS, or until it
-// moves) before it acts: if a second finger lands in that time it's a scroll, and nothing is
-// edited. A pen never waits.
+// On the canvas area one finger edits and two fingers scroll and pinch-zoom (the browser's own
+// scrolling and zooming are off there: styles/touch.css; the zooming itself is in
+// state/useZoom.js). So a finger press waits a moment (FINGER_HOLD_MS, or until it moves) before
+// it acts: if a second finger lands in that time it's a scroll/zoom, and nothing is edited.
+// A pen never waits.
 //
 // It also:
 //  - counts a finger landing just below or beside a ruler as on the ruler (they're thin, and a
@@ -26,6 +27,8 @@
 //
 // Text fields (and the typeset text surface, which handles pointer events itself) are left to
 // the browser: a real tap is what focuses them and brings up the on-screen keyboard.
+
+import { PINCH_EVENT } from "../state/useZoom.js";
 
 // Where a finger or pen press is treated as a mouse press. Keep in step with the touch-action
 // rule in styles/touch.css.
@@ -41,6 +44,14 @@ const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 24;
 const TAP_SLOP_PX = 10; // more movement than this and it was a drag, not a tap
 
+// Shift and Alt for a finger, from the touch bar's toggles (ui/TouchBar.jsx): while one is on,
+// every press passed on from here counts as having that key held — keep proportions, snap to 15°,
+// add to the selection, move freely, pick one out of a group… A real key still works as well.
+const heldKeys = { shift: false, alt: false };
+export function setTouchModifier(name, on) {
+  heldKeys[name] = Boolean(on);
+}
+
 function mouseEventFrom(type, e, extra) {
   return new MouseEvent(type, {
     bubbles: type !== "mouseleave",
@@ -53,8 +64,8 @@ function mouseEventFrom(type, e, extra) {
     button: 0,
     buttons: type === "mouseup" || type === "dblclick" ? 0 : 1,
     detail: type === "dblclick" ? 2 : 1,
-    shiftKey: e.shiftKey,
-    altKey: e.altKey,
+    shiftKey: Boolean(e.shiftKey) || heldKeys.shift,
+    altKey: Boolean(e.altKey) || heldKeys.alt,
     ctrlKey: e.ctrlKey,
     metaKey: e.metaKey,
     ...extra,
@@ -101,6 +112,12 @@ export function installTouchInput() {
     const [a, b] = [...fingers.values()];
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   };
+  const spread = () => {
+    const [a, b] = [...fingers.values()];
+    return Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+  };
+  // Two fingers zoom (by their spread) and scroll (by their midpoint): state/useZoom.js does both.
+  const pinchEvent = (phase, scale, at) => window.dispatchEvent(new CustomEvent(PINCH_EVENT, { detail: { phase, scale, x: at.x, y: at.y } }));
 
   // Starts forwarding a press as mouse events (and replays any moves it made while waiting).
   function begin(press) {
@@ -131,8 +148,10 @@ export function installTouchInput() {
       const ruler = rulerNear(e.clientX, e.clientY);
       if (ruler) target = ruler;
     }
+    // Buttons and fields (the touch bar's too) are the browser's: they neither edit nor scroll.
+    if (target.closest(NATIVE_TARGETS)) return;
     const inScrollArea = Boolean(target.closest(SCROLL_AREA));
-    const surface = target.closest(DRAG_SURFACES) && !target.closest(NATIVE_TARGETS);
+    const surface = Boolean(target.closest(DRAG_SURFACES));
 
     if (isFinger && inScrollArea) {
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -147,7 +166,8 @@ export function installTouchInput() {
       if (fingers.size === 2 && !active) {
         // Second finger: it's a scroll. A press still waiting is dropped, unseen by the editor.
         if (pending) { clearTimeout(pending.timer); pending = null; }
-        pan = { pane: target.closest(SCROLL_AREA).querySelector(".preview-pane"), mid: midpoint() };
+        pan = { startSpread: spread(), frame: 0 };
+        pinchEvent("start", 1, midpoint());
         e.preventDefault();
         return;
       }
@@ -174,13 +194,16 @@ export function installTouchInput() {
     }
     if (fingers.has(e.pointerId)) fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pan) {
-      if (fingers.size < 2) return;
-      const mid = midpoint();
-      if (pan.pane) {
-        pan.pane.scrollLeft -= mid.x - pan.mid.x;
-        pan.pane.scrollTop -= mid.y - pan.mid.y;
-      }
-      pan.mid = mid;
+      // At most one zoom/scroll step per ~frame (each one re-lays out the page). A timer rather
+      // than requestAnimationFrame, which doesn't run while the page isn't being drawn.
+      if (fingers.size < 2 || pan.frame) return;
+      pan.frame = setTimeout(() => {
+        if (!pan) return;
+        pan.frame = 0;
+        if (fingers.size < 2) return;
+        pan.last = { scale: spread() / pan.startSpread, at: midpoint() };
+        pinchEvent("move", pan.last.scale, pan.last.at);
+      }, 16);
       return;
     }
     if (pending && e.pointerId === pending.id) {
@@ -194,7 +217,19 @@ export function installTouchInput() {
   function onPointerEnd(e) {
     fingers.delete(e.pointerId);
     if (pan) {
-      if (fingers.size < 2) pan = null; // the finger still down does nothing until it's lifted
+      if (fingers.size < 2) { // the finger still down does nothing until it's lifted
+        // The last movement before the lift, which a pending step would otherwise drop.
+        if (pan.frame) {
+          clearTimeout(pan.frame);
+          const last = [...fingers.values()].concat({ x: e.clientX, y: e.clientY });
+          if (last.length === 2) {
+            const s = Math.max(1, Math.hypot(last[0].x - last[1].x, last[0].y - last[1].y));
+            pinchEvent("move", s / pan.startSpread, { x: (last[0].x + last[1].x) / 2, y: (last[0].y + last[1].y) / 2 });
+          }
+        }
+        pan = null;
+        pinchEvent("end", 1, { x: e.clientX, y: e.clientY });
+      }
       return;
     }
     if (pending && e.pointerId === pending.id) {
