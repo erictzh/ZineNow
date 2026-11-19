@@ -134,3 +134,10 @@
 [data-ze-input="touch"] .ze-ruler-guide-x::after { left: 14px; }
 [data-ze-input="touch"] .ze-ruler-guide-y { height: 28px; margin-top: -14px; }
 [data-ze-input="touch"] .ze-ruler-guide-y::after { top: 14px; }
+
+/* The measurement shown while dragging a guide (Rulers.jsx puts it clear of the finger). */
+[data-ze-input="touch"] .ze-ruler-readout {
+    padding: 4px 10px;
+    font-size: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
