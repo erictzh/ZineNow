@@ -805,6 +805,17 @@ input {
         text-overflow: ellipsis;
     }
 
+    /* Credit to Nash High, who made the original Zine Arranger (see LICENSE and README.md). */
+    .za-credit {
+        display: inline-flex;
+        vertical-align: -1px;
+        margin-left: 4px;
+        color: var(--ui-fg-muted);
+    }
+    .za-credit:hover {
+        color: var(--ui-fg);
+    }
+
     .topbar-subtitle {
         font-size: 11px;
         line-height: 1.25;

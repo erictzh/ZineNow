@@ -5204,7 +5204,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 4c6a84a";
+    subtitle.textContent += " · build 88a064f";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   logSys("Zine Arranger ready. Select a PDF to begin.");

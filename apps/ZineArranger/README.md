@@ -1,3 +1,11 @@
+# ZineArranger (ZineNow)
+
+ZineNow's version of **[Zine Arranger by Nash High](https://codeberg.org/nashhigh/zine-arranger)**, used under the MIT License. Nash High's notice is kept in [LICENSE](LICENSE); ZineNow's changes and additions are under the AGPL-3.0-or-later like the rest of ZineNow.
+
+Nash High's original README follows.
+
+---
+
 # zine-arranger
 Arranges PDFs into printable zine layouts
 
