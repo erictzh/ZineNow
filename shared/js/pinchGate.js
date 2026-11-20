@@ -5,7 +5,7 @@
 // the gap at that moment, so the zoom picks up smoothly rather than jumping by the threshold.
 // Used by all three apps' pinch handling.
 
-export const PINCH_THRESHOLD = 0.25; // 25% change in the gap between the fingers (15% still wobbled on the tablet)
+export const PINCH_THRESHOLD = 0.3; // 30% change in the gap between the fingers (15% and 25% still wobbled on the tablet)
 
 /**
  * Make one per pinch (when the second finger lands).
