@@ -12,6 +12,20 @@ const { useState, useRef, useLayoutEffect, useEffect } = React;
 // spreading zooms and moving both scrolls, together.
 export const PINCH_EVENT = "ze-pinch";
 
+// Scrolls the pane so the page is in the middle of it, or, for a page taller than the view, its
+// top a little below the top edge. Used when a page opens: the pasteboard round the page
+// (styles/layout.css) is half a view wide, so without this the view would start in its corner.
+const TOP_GAP = 40; // px above a page too tall to centre
+export function centerArtboard(board) {
+  const pane = board && board.closest(".preview-pane");
+  if (!pane) return;
+  const w = board.offsetWidth, h = board.offsetHeight;
+  pane.scrollLeft = board.offsetLeft + w / 2 - pane.clientWidth / 2;
+  pane.scrollTop = h + 2 * TOP_GAP <= pane.clientHeight
+    ? board.offsetTop + h / 2 - pane.clientHeight / 2
+    : board.offsetTop - TOP_GAP;
+}
+
 export function useZoom() {
   const [zoomPercent, setZoomPercent] = useState(ZOOM_PERCENT.initial);
   const previewPaneRef = useRef(null);

@@ -16,10 +16,11 @@ import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
 import { magicEraseAt } from "./magicEraseGesture.js";
 import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
+import { centerArtboard } from "../../state/useZoom.js";
 
 const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
 
-const { useState, useRef, useEffect } = React;
+const { useState, useRef, useEffect, useLayoutEffect } = React;
 
 export function ComposeCanvas({
   pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn, tool,
@@ -33,6 +34,10 @@ export function ComposeCanvas({
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
+  // Centre the page in the view when it opens, and again once its real size is known (the
+  // background renders after the page is picked). Not on zoom: useZoom keeps its own anchor.
+  const artboardRef = useRef(null);
+  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height]);
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
@@ -319,7 +324,7 @@ export function ComposeCanvas({
   // The page is scaled visually; this outer box takes up the scaled
   // size, which is what gives the pane something to scroll.
   return (
-    <div className="ze-artboard-zoom" style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
+    <div className="ze-artboard-zoom" ref={artboardRef} style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
     <div className="ze-page ze-page--rendered" style={{ transform: zoom === 1 ? undefined : `scale(${zoom})`, "--ze-zoom": zoom }}>
       <canvas ref={canvasRef} />
       {onionGhostSrc && (

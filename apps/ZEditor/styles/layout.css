@@ -48,6 +48,16 @@
     flex: 0 0 auto;
 }
 .ze-artboard-zoom { flex: 0 0 auto; }
+/* The pasteboard: half the visible pane of empty space on every side of the page, so any edge of
+   the page, or an item hanging off it (an oversized image being cropped), can be scrolled to the
+   middle of the view. cq units are the pane's own size (vh/vw before they existed). Only with a
+   page: the "No pages yet" note stays in view. ComposeCanvas centres the page when it opens
+   (centerArtboard in state/useZoom.js). */
+.preview-pane { container-type: size; }
+.preview-canvas-wrapper:has(> .ze-artboard-zoom) {
+    padding: 50vh 50vw;
+    padding: 50cqh 50cqw;
+}
 .ze-page--rendered {
     isolation: isolate; /* items' blend modes mix with the page, never the workspace behind it */
     width: max-content;
