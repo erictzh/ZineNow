@@ -3,7 +3,9 @@
 // says which settings it has; this file builds the gear, remembers the choices in localStorage
 // (per browser, not per document) and applies them to <html>:
 //   - a slider sets a CSS variable (its `cssVar`, the value from `cssValue`);
-//   - a checkbox toggles a class (its `htmlClass`) while its setting is on.
+//   - a checkbox toggles a class (its `htmlClass`) while its setting is on;
+//   - a dropdown picks one of a few combinations of on/off settings (its `flags`, each with
+//     its own `htmlClass`), e.g. "Pages only / Format only / Show both" for two side panels.
 // The app's own CSS decides what those variables and classes do. Styles: shared/styles/displaySettings.css.
 // After every change (and once at install) the window gets a "zn-display-prefs" event whose
 // detail is the settings object, for code that has to react in script (e.g. a sandboxed frame).
@@ -26,20 +28,29 @@ const tidy = (v) => Math.round(v * 1000) / 1000;
  *                                     it wants once that spot exists (ZEditor, after React renders).
  *                                     Either way the settings apply at once.
  * @param {Array} [options.sliders]    { key, label, min, max, step, initial, unit, cssVar, cssValue(v) }
- * @param {Array} [options.groups]     { title, checks: [{ key, label, hint, htmlClass, showMeans }] }
+ * @param {Array} [options.groups]     { title, checks: [{ key, label, hint, htmlClass, showMeans }],
+ *                                       choices: [{ label, hint, initial, flags: [{ key, htmlClass }],
+ *                                                   options: [{ label, values: { key: bool } }] }] }
  *                                     A check with `showMeans: true` is a "Show" box: ticked while
  *                                     its setting (a "hide" flag) is off.
- * @param {Array} [options.notBoth]    Pairs of check keys that can't both be on (e.g. hiding both
- *                                     columns); while one is on the other's box is disabled.
- * @param {string} [options.notBothHint] Hover text on a box disabled by `notBoth`.
+ *                                     A choice is a dropdown; picking an option sets every one of its
+ *                                     flags (a flag missing from `values` is off). `initial` is the
+ *                                     default option's index (0 if left out); a saved mix that matches
+ *                                     no option falls back to it. Choices come after the group's checks.
  * @param {string} [options.title]     Pop-up heading, default "Display".
  */
 export function installDisplaySettings(options) {
-  const { storageKey, sliders = [], groups = [], notBoth = [], notBothHint = "", title = "Display" } = options;
-  const checks = groups.flatMap((g) => g.checks);
+  const { storageKey, sliders = [], groups = [], title = "Display" } = options;
+  const checks = groups.flatMap((g) => g.checks || []);
+  const choices = groups.flatMap((g) => g.choices || []);
+  // An option's full set of flag values, unlisted flags off.
+  const optionValues = (ch, o) => Object.fromEntries(ch.flags.map((f) => [f.key, o.values[f.key] === true]));
+  const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
+  const initialOption = (ch) => ch.options[ch.initial || 0];
   const defaults = {};
   for (const s of sliders) defaults[s.key] = s.initial;
   for (const c of checks) defaults[c.key] = false;
+  for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
 
   // ---- settings: load, apply, save ------------------------------------------------------------
 
@@ -49,7 +60,10 @@ export function installDisplaySettings(options) {
     const prefs = {};
     for (const s of sliders) prefs[s.key] = clampTo(Number(saved[s.key]), s);
     for (const c of checks) prefs[c.key] = saved[c.key] === true;
-    for (const [a, b] of notBoth) if (prefs[a] && prefs[b]) prefs[b] = false;
+    for (const ch of choices) {
+      for (const f of ch.flags) prefs[f.key] = saved[f.key] === true;
+      if (optionIndex(ch, prefs) < 0) Object.assign(prefs, optionValues(ch, initialOption(ch)));
+    }
     return prefs;
   }
 
@@ -57,6 +71,7 @@ export function installDisplaySettings(options) {
     const root = document.documentElement;
     for (const s of sliders) root.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
     for (const c of checks) if (c.htmlClass) root.classList.toggle(c.htmlClass, prefs[c.key]);
+    for (const ch of choices) for (const f of ch.flags) if (f.htmlClass) root.classList.toggle(f.htmlClass, prefs[f.key]);
     window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
   }
 
@@ -110,6 +125,7 @@ export function installDisplaySettings(options) {
   });
 
   const checkViews = [];
+  const choiceViews = [];
   for (const g of groups) {
     if (g.title) {
       const sub = el("div", "zn-display-subtitle");
@@ -117,7 +133,7 @@ export function installDisplaySettings(options) {
       panel.appendChild(sub);
     }
     const list = el("div", "zn-display-checks");
-    for (const c of g.checks) {
+    for (const c of g.checks || []) {
       const label = el("label", "zn-display-check");
       const box = el("input", "", { type: "checkbox" });
       const text = el("span");
@@ -126,6 +142,22 @@ export function installDisplaySettings(options) {
       list.appendChild(label);
       box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
       checkViews.push({ c, label, box });
+    }
+    for (const ch of g.choices || []) {
+      const label = el("label", "zn-display-choice");
+      if (ch.hint) label.title = ch.hint;
+      const text = el("span");
+      text.textContent = ch.label;
+      const select = el("select", "", { "aria-label": ch.label });
+      ch.options.forEach((o, i) => {
+        const opt = el("option", "", { value: String(i) });
+        opt.textContent = o.label;
+        select.appendChild(opt);
+      });
+      label.append(text, select);
+      list.appendChild(label);
+      select.addEventListener("change", () => set(optionValues(ch, ch.options[Number(select.value)])));
+      choiceViews.push({ ch, select });
     }
     panel.appendChild(list);
   }
@@ -167,12 +199,9 @@ export function installDisplaySettings(options) {
     for (const v of checkViews) {
       const on = prefs[v.c.key];
       v.box.checked = v.c.showMeans ? !on : on;
-      const pair = notBoth.find((p) => p.includes(v.c.key));
-      const blocked = !on && pair && prefs[pair[0] === v.c.key ? pair[1] : pair[0]];
-      v.box.disabled = !!blocked;
-      v.label.classList.toggle("disabled", !!blocked);
-      v.label.title = blocked && notBothHint ? notBothHint : v.c.hint || "";
+      v.label.title = v.c.hint || "";
     }
+    for (const v of choiceViews) v.select.value = String(Math.max(0, optionIndex(v.ch, prefs)));
     reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
   }
   refresh();

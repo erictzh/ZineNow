@@ -1136,7 +1136,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "cdf6998"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "eae7ce6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -2754,11 +2754,16 @@
   var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
   var tidy = (v) => Math.round(v * 1e3) / 1e3;
   function installDisplaySettings(options) {
-    const { storageKey, sliders = [], groups = [], notBoth = [], notBothHint = "", title = "Display" } = options;
-    const checks = groups.flatMap((g) => g.checks);
+    const { storageKey, sliders = [], groups = [], title = "Display" } = options;
+    const checks = groups.flatMap((g) => g.checks || []);
+    const choices = groups.flatMap((g) => g.choices || []);
+    const optionValues = (ch, o) => Object.fromEntries(ch.flags.map((f) => [f.key, o.values[f.key] === true]));
+    const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
+    const initialOption = (ch) => ch.options[ch.initial || 0];
     const defaults = {};
     for (const s of sliders) defaults[s.key] = s.initial;
     for (const c of checks) defaults[c.key] = false;
+    for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
     function load() {
       let saved = {};
       try {
@@ -2768,13 +2773,17 @@
       const prefs2 = {};
       for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
       for (const c of checks) prefs2[c.key] = saved[c.key] === true;
-      for (const [a, b] of notBoth) if (prefs2[a] && prefs2[b]) prefs2[b] = false;
+      for (const ch of choices) {
+        for (const f of ch.flags) prefs2[f.key] = saved[f.key] === true;
+        if (optionIndex(ch, prefs2) < 0) Object.assign(prefs2, optionValues(ch, initialOption(ch)));
+      }
       return prefs2;
     }
     function apply() {
       const root2 = document.documentElement;
       for (const s of sliders) root2.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
       for (const c of checks) if (c.htmlClass) root2.classList.toggle(c.htmlClass, prefs[c.key]);
+      for (const ch of choices) for (const f of ch.flags) if (f.htmlClass) root2.classList.toggle(f.htmlClass, prefs[f.key]);
       window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
     }
     function set(changes) {
@@ -2823,6 +2832,7 @@
       return { s, value, minus, range, plus };
     });
     const checkViews = [];
+    const choiceViews = [];
     for (const g of groups) {
       if (g.title) {
         const sub = el("div", "zn-display-subtitle");
@@ -2830,7 +2840,7 @@
         panel.appendChild(sub);
       }
       const list = el("div", "zn-display-checks");
-      for (const c of g.checks) {
+      for (const c of g.checks || []) {
         const label = el("label", "zn-display-check");
         const box = el("input", "", { type: "checkbox" });
         const text = el("span");
@@ -2839,6 +2849,22 @@
         list.appendChild(label);
         box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
         checkViews.push({ c, label, box });
+      }
+      for (const ch of g.choices || []) {
+        const label = el("label", "zn-display-choice");
+        if (ch.hint) label.title = ch.hint;
+        const text = el("span");
+        text.textContent = ch.label;
+        const select = el("select", "", { "aria-label": ch.label });
+        ch.options.forEach((o, i) => {
+          const opt = el("option", "", { value: String(i) });
+          opt.textContent = o.label;
+          select.appendChild(opt);
+        });
+        label.append(text, select);
+        list.appendChild(label);
+        select.addEventListener("change", () => set(optionValues(ch, ch.options[Number(select.value)])));
+        choiceViews.push({ ch, select });
       }
       panel.appendChild(list);
     }
@@ -2871,12 +2897,9 @@
       for (const v of checkViews) {
         const on = prefs[v.c.key];
         v.box.checked = v.c.showMeans ? !on : on;
-        const pair = notBoth.find((p) => p.includes(v.c.key));
-        const blocked = !on && pair && prefs[pair[0] === v.c.key ? pair[1] : pair[0]];
-        v.box.disabled = !!blocked;
-        v.label.classList.toggle("disabled", !!blocked);
-        v.label.title = blocked && notBothHint ? notBothHint : v.c.hint || "";
+        v.label.title = v.c.hint || "";
       }
+      for (const v of choiceViews) v.select.value = String(Math.max(0, optionIndex(v.ch, prefs)));
       reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
     }
     refresh();
@@ -2912,13 +2935,21 @@
           { key: "darkPaper", label: "Dark paper", htmlClass: "md2ebook-dark-paper", hint: "Shows the pages dark while you work. Only the preview: the PDF stays white." }
         ] },
         { title: "Show", checks: [
-          { key: "hideHeader", label: "Top bar", showMeans: true, htmlClass: "md2ebook-hide-header", hint: "The title, File menu and export buttons" },
-          { key: "hidePreview", label: "Preview (left)", showMeans: true, htmlClass: "md2ebook-hide-preview", hint: "The page preview and its status bar" },
-          { key: "hideSidebar", label: "Editor panel (right)", showMeans: true, htmlClass: "md2ebook-hide-sidebar", hint: "The Editor and Typography tabs" }
+          { key: "hideHeader", label: "Top bar", showMeans: true, htmlClass: "md2ebook-hide-header", hint: "The title, File menu and export buttons" }
+        ], choices: [
+          {
+            label: "Panels",
+            hint: "Preview: the pages and their status bar. Editor panel: the Editor and Typography tabs.",
+            initial: 2,
+            flags: [{ key: "hidePreview", htmlClass: "md2ebook-hide-preview" }, { key: "hideSidebar", htmlClass: "md2ebook-hide-sidebar" }],
+            options: [
+              { label: "Preview (left) only", values: { hideSidebar: true } },
+              { label: "Editor panel (right) only", values: { hidePreview: true } },
+              { label: "Show both", values: {} }
+            ]
+          }
         ] }
-      ],
-      notBoth: [["hidePreview", "hideSidebar"]],
-      notBothHint: "Keep at least one of the preview and the editor panel"
+      ]
     });
   }
 

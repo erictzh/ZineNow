@@ -3,8 +3,8 @@
 //   - Interface size: --zn-ui-zoom, a CSS zoom on the top bar, side panel contents and status bar.
 //   - Dark paper: md2ebook-dark-paper on <html>; PreviewCanvas.jsx passes it on to the sandboxed
 //     preview frame. Preview only, the PDF stays white.
-//   - Show: md2ebook-hide-header / -preview / -sidebar on <html> (styles.css); the two columns
-//     can't both be hidden.
+//   - Show: md2ebook-hide-header on <html>, and a Panels dropdown (both, Preview only, Editor
+//     panel only) that sets md2ebook-hide-preview / -sidebar (styles.css).
 // The storage key and setting names are the ones the app used before the gear became shared, so
 // settings saved then still apply.
 
@@ -23,11 +23,16 @@ export function installMd2pdfDisplaySettings() {
       ] },
       { title: "Show", checks: [
         { key: "hideHeader", label: "Top bar", showMeans: true, htmlClass: "md2ebook-hide-header", hint: "The title, File menu and export buttons" },
-        { key: "hidePreview", label: "Preview (left)", showMeans: true, htmlClass: "md2ebook-hide-preview", hint: "The page preview and its status bar" },
-        { key: "hideSidebar", label: "Editor panel (right)", showMeans: true, htmlClass: "md2ebook-hide-sidebar", hint: "The Editor and Typography tabs" },
+      ], choices: [
+        { label: "Panels", hint: "Preview: the pages and their status bar. Editor panel: the Editor and Typography tabs.",
+          initial: 2,
+          flags: [{ key: "hidePreview", htmlClass: "md2ebook-hide-preview" }, { key: "hideSidebar", htmlClass: "md2ebook-hide-sidebar" }],
+          options: [
+            { label: "Preview (left) only", values: { hideSidebar: true } },
+            { label: "Editor panel (right) only", values: { hidePreview: true } },
+            { label: "Show both", values: {} },
+          ] },
       ] },
     ],
-    notBoth: [["hidePreview", "hideSidebar"]],
-    notBothHint: "Keep at least one of the preview and the editor panel",
   });
 }

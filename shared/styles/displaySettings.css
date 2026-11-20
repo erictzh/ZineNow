@@ -146,9 +146,24 @@
   accent-color: var(--ui-accent);
   cursor: inherit;
 }
-.zn-display-check.disabled {
-  opacity: 0.45;
-  cursor: default;
+.zn-display-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ui-fg);
+}
+.zn-display-choice select {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background-color: #2a2220;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .zn-display-foot {
   display: flex;
@@ -188,4 +203,8 @@
 [data-ze-input="touch"] .zn-display-check input {
   width: 22px;
   height: 22px;
+}
+[data-input="touch"] .zn-display-choice select,
+[data-ze-input="touch"] .zn-display-choice select {
+  padding: 8px;
 }

@@ -14383,7 +14383,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2d0b0ed"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "db90d0c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -14578,11 +14578,16 @@
   var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
   var tidy = (v) => Math.round(v * 1e3) / 1e3;
   function installDisplaySettings(options) {
-    const { storageKey, sliders = [], groups = [], notBoth = [], notBothHint = "", title = "Display" } = options;
-    const checks = groups.flatMap((g) => g.checks);
+    const { storageKey, sliders = [], groups = [], title = "Display" } = options;
+    const checks = groups.flatMap((g) => g.checks || []);
+    const choices = groups.flatMap((g) => g.choices || []);
+    const optionValues = (ch, o) => Object.fromEntries(ch.flags.map((f) => [f.key, o.values[f.key] === true]));
+    const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
+    const initialOption = (ch) => ch.options[ch.initial || 0];
     const defaults = {};
     for (const s of sliders) defaults[s.key] = s.initial;
     for (const c of checks) defaults[c.key] = false;
+    for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
     function load2() {
       let saved = {};
       try {
@@ -14592,13 +14597,17 @@
       const prefs2 = {};
       for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
       for (const c of checks) prefs2[c.key] = saved[c.key] === true;
-      for (const [a, b] of notBoth) if (prefs2[a] && prefs2[b]) prefs2[b] = false;
+      for (const ch of choices) {
+        for (const f of ch.flags) prefs2[f.key] = saved[f.key] === true;
+        if (optionIndex(ch, prefs2) < 0) Object.assign(prefs2, optionValues(ch, initialOption(ch)));
+      }
       return prefs2;
     }
     function apply() {
       const root = document.documentElement;
       for (const s of sliders) root.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
       for (const c of checks) if (c.htmlClass) root.classList.toggle(c.htmlClass, prefs[c.key]);
+      for (const ch of choices) for (const f of ch.flags) if (f.htmlClass) root.classList.toggle(f.htmlClass, prefs[f.key]);
       window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
     }
     function set(changes) {
@@ -14647,6 +14656,7 @@
       return { s, value, minus, range, plus };
     });
     const checkViews = [];
+    const choiceViews = [];
     for (const g of groups) {
       if (g.title) {
         const sub = el("div", "zn-display-subtitle");
@@ -14654,7 +14664,7 @@
         panel.appendChild(sub);
       }
       const list = el("div", "zn-display-checks");
-      for (const c of g.checks) {
+      for (const c of g.checks || []) {
         const label = el("label", "zn-display-check");
         const box = el("input", "", { type: "checkbox" });
         const text = el("span");
@@ -14663,6 +14673,22 @@
         list.appendChild(label);
         box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
         checkViews.push({ c, label, box });
+      }
+      for (const ch of g.choices || []) {
+        const label = el("label", "zn-display-choice");
+        if (ch.hint) label.title = ch.hint;
+        const text = el("span");
+        text.textContent = ch.label;
+        const select = el("select", "", { "aria-label": ch.label });
+        ch.options.forEach((o, i) => {
+          const opt = el("option", "", { value: String(i) });
+          opt.textContent = o.label;
+          select.appendChild(opt);
+        });
+        label.append(text, select);
+        list.appendChild(label);
+        select.addEventListener("change", () => set(optionValues(ch, ch.options[Number(select.value)])));
+        choiceViews.push({ ch, select });
       }
       panel.appendChild(list);
     }
@@ -14695,12 +14721,9 @@
       for (const v of checkViews) {
         const on = prefs[v.c.key];
         v.box.checked = v.c.showMeans ? !on : on;
-        const pair = notBoth.find((p) => p.includes(v.c.key));
-        const blocked = !on && pair && prefs[pair[0] === v.c.key ? pair[1] : pair[0]];
-        v.box.disabled = !!blocked;
-        v.label.classList.toggle("disabled", !!blocked);
-        v.label.title = blocked && notBothHint ? notBothHint : v.c.hint || "";
+        v.label.title = v.c.hint || "";
       }
+      for (const v of choiceViews) v.select.value = String(Math.max(0, optionIndex(v.ch, prefs)));
       reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
     }
     refresh();
@@ -14736,9 +14759,19 @@
       ],
       groups: [
         { title: "Show", checks: [
-          { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
-          { key: "hidePages", label: "Pages panel (left)", showMeans: true, htmlClass: "ze-hide-pages", hint: "The page thumbnails" },
-          { key: "hideFormat", label: "Format panel (right)", showMeans: true, htmlClass: "ze-hide-format", hint: "The selected item's or tool's settings" }
+          { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" }
+        ], choices: [
+          {
+            label: "Side panels",
+            hint: "Pages panel: the page thumbnails. Format panel: the selected item's or tool's settings.",
+            initial: 2,
+            flags: [{ key: "hidePages", htmlClass: "ze-hide-pages" }, { key: "hideFormat", htmlClass: "ze-hide-format" }],
+            options: [
+              { label: "Pages panel (left) only", values: { hideFormat: true } },
+              { label: "Format panel (right) only", values: { hidePages: true } },
+              { label: "Show both", values: {} }
+            ]
+          }
         ] }
       ]
     });

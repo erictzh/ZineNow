@@ -4,7 +4,8 @@
 //     contents and the gear + touch bar group (styles/display.css). Not the canvas or rulers (they
 //     have their own zoom and measure in screen pixels) and not the floating Layers panel.
 //   - Thumbnail size: --ze-thumb-zoom on the page thumbnails, 30-100% of their usual size.
-//   - Show: ze-hide-topbar / -pages / -format on <html> (styles/display.css).
+//   - Show: ze-hide-topbar on <html>, and a Side panels dropdown (both, Pages only, Format only)
+//     that sets ze-hide-pages / -format (styles/display.css).
 // No dark paper here on purpose: ZEditor is where colours are picked, and an inverted page would
 // show them wrong.
 
@@ -24,8 +25,15 @@ export function installZeditorDisplaySettings() {
     groups: [
       { title: "Show", checks: [
         { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
-        { key: "hidePages", label: "Pages panel (left)", showMeans: true, htmlClass: "ze-hide-pages", hint: "The page thumbnails" },
-        { key: "hideFormat", label: "Format panel (right)", showMeans: true, htmlClass: "ze-hide-format", hint: "The selected item's or tool's settings" },
+      ], choices: [
+        { label: "Side panels", hint: "Pages panel: the page thumbnails. Format panel: the selected item's or tool's settings.",
+          initial: 2,
+          flags: [{ key: "hidePages", htmlClass: "ze-hide-pages" }, { key: "hideFormat", htmlClass: "ze-hide-format" }],
+          options: [
+            { label: "Pages panel (left) only", values: { hideFormat: true } },
+            { label: "Format panel (right) only", values: { hidePages: true } },
+            { label: "Show both", values: {} },
+          ] },
       ] },
     ],
   });
