@@ -3,6 +3,7 @@
 import { renderHtmlDocument } from "../document/previewDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
 import { PAPER_SIZE_OPTIONS } from "../settings/initialConfig.js";
+import { createPinchGate } from "../../../../shared/js/pinchGate.js";
 const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 
 // Preview geometry, in unscaled px: the seam (border-bottom) and gap (margin-bottom) under every page
@@ -269,7 +270,7 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
   const boxRef = useRef(null); // the scale box (the paper as drawn)
   const pointersRef = useRef(new Map()); // pointerId -> { x, y } for each pointer down on the paper
   const panRef = useRef(null); // { x, y, left, top } at the start of a one-pointer drag
-  const pinchRef = useRef(null); // { spread0, pct0, fx, fy, mid } during a two-finger pinch
+  const pinchRef = useRef(null); // { spread0, pct0, fx, fy, mid, gate } during a two-finger pinch
   const twoPoints = () => [...pointersRef.current.values()].slice(0, 2);
   const startPanFrom = (p) => {
     panRef.current = { x: p.x, y: p.y, left: outerRef.current.scrollLeft, top: outerRef.current.scrollTop };
@@ -306,6 +307,7 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
         fx: (mid.x - r.left) / r.width,
         fy: (mid.y - r.top) / r.height,
         mid,
+        gate: createPinchGate(), // a small change in the fingers' gap only scrolls
       };
     }
   };
@@ -316,8 +318,9 @@ export function PreviewCanvas({ markdown, config, onTocPages, onPaperSizeChange 
     if (pinch && pointersRef.current.size >= 2) {
       const [a, b] = twoPoints();
       pinch.mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const pct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
-      if (pct !== Math.round(scale * 100)) setZoomPct(pct); // the layout effect above keeps the spot
+      const s = pinch.gate(Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+      const pct = clampZoom(pinch.pct0 * s);
+      if (s !== 1 && pct !== Math.round(scale * 100)) setZoomPct(pct); // the layout effect above keeps the spot
       else keepPinchSpot();
       return;
     }

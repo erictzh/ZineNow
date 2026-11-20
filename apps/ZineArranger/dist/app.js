@@ -4160,6 +4160,19 @@
     return result.length > 0 ? result : null;
   }
 
+  // shared/js/pinchGate.js
+  var PINCH_THRESHOLD = 0.15;
+  function createPinchGate(threshold = PINCH_THRESHOLD) {
+    let base = null;
+    return function gate(rawScale) {
+      if (base === null) {
+        if (!(rawScale > 0) || Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)) return 1;
+        base = rawScale;
+      }
+      return rawScale / base;
+    };
+  }
+
   // apps/ZineArranger/src/previewZoom.js
   var ZOOM_MIN = 15;
   var ZOOM_MAX = 200;
@@ -4322,7 +4335,7 @@
         var box = document.getElementById("zine").getBoundingClientRect();
         var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         pan = null;
-        pinch = { spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), pct0: currentZoomPercent(), fx: (mx - box.left) / box.width, fy: (my - box.top) / box.height };
+        pinch = { spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), pct0: currentZoomPercent(), fx: (mx - box.left) / box.width, fy: (my - box.top) / box.height, gate: createPinchGate() };
       }
     });
     wrapper.addEventListener("pointermove", function(e) {
@@ -4331,8 +4344,11 @@
       if (pinch && pointers.size >= 2) {
         var ab = two(), a = ab[0], b = ab[1];
         var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        zoomPct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
-        applyPreviewScale();
+        var s = pinch.gate(Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+        if (s !== 1) {
+          zoomPct = clampZoom(pinch.pct0 * s);
+          applyPreviewScale();
+        }
         keepSpot({ fx: pinch.fx, fy: pinch.fy, ax: mx, ay: my });
         return;
       }
@@ -5188,7 +5204,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 2673505";
+    subtitle.textContent += " · build bf87193";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   logSys("Zine Arranger ready. Select a PDF to begin.");

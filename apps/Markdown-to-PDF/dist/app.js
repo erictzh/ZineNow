@@ -1136,7 +1136,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "eae7ce6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "772110c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1307,6 +1307,19 @@
 <script src="https://cdn.jsdelivr.net/npm/pagedjs@0.4.3/dist/paged.polyfill.js"><\/script>
 `;
     return '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Md to PDF Converter — Preview</title>\n  ' + fontLinkTags(parts.normalized) + "\n  <style>" + parts.styleText + buildPageBoxRule(parts) + "\n    .md2ebook-space { outline: 1px dashed #cbd5e1; outline-offset: -1px; position: relative; }\n    html.md2ebook-dark-paper .pagedjs_page, html.md2ebook-dark-paper body > .page { filter: invert(0.92) hue-rotate(180deg); }\n    html.md2ebook-dark-paper img, html.md2ebook-dark-paper svg, html.md2ebook-dark-paper video, html.md2ebook-dark-paper picture { filter: invert(1) hue-rotate(180deg); }\n    .md2ebook-space::after { content: 'blank space \\00b7  ' attr(data-lines) ' lines'; position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; font: 11px ui-sans-serif, system-ui, sans-serif; color: #94a3b8; }\n  </style>\n  " + paginationScript + '</head>\n<body>\n  <div class="page md2ebook-doc">' + parts.bodyHtml + "</div>\n</body>\n</html>";
+  }
+
+  // shared/js/pinchGate.js
+  var PINCH_THRESHOLD = 0.15;
+  function createPinchGate(threshold = PINCH_THRESHOLD) {
+    let base = null;
+    return function gate(rawScale) {
+      if (base === null) {
+        if (!(rawScale > 0) || Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)) return 1;
+        base = rawScale;
+      }
+      return rawScale / base;
+    };
   }
 
   // apps/Markdown-to-PDF/src/ui/PreviewCanvas.jsx
@@ -1559,7 +1572,9 @@
           pct0: scale * 100,
           fx: (mid.x - r.left) / r.width,
           fy: (mid.y - r.top) / r.height,
-          mid
+          mid,
+          gate: createPinchGate()
+          // a small change in the fingers' gap only scrolls
         };
       }
     };
@@ -1570,8 +1585,9 @@
       if (pinch && pointersRef.current.size >= 2) {
         const [a, b] = twoPoints();
         pinch.mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        const pct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
-        if (pct !== Math.round(scale * 100)) setZoomPct(pct);
+        const s = pinch.gate(Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+        const pct = clampZoom(pinch.pct0 * s);
+        if (s !== 1 && pct !== Math.round(scale * 100)) setZoomPct(pct);
         else keepPinchSpot();
         return;
       }

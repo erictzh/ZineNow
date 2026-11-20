@@ -2,6 +2,7 @@
 // of the view for the zoom controls, the spot between two fingers for a pinch.
 
 import { ZOOM_PERCENT } from "../constants.js";
+import { createPinchGate } from "../../../../shared/js/pinchGate.js";
 
 const { useState, useRef, useLayoutEffect, useEffect } = React;
 
@@ -69,7 +70,7 @@ export function useZoom() {
 
   // Pinch to zoom (and scroll), from two fingers on the canvas.
   useEffect(() => {
-    let pinch = null; // { point, startPercent } for the pinch under way
+    let pinch = null; // { point, startPercent, gate } for the pinch under way
     function onPinch(e) {
       const pane = previewPaneRef.current;
       const { phase, scale, x, y } = e.detail || {};
@@ -77,12 +78,12 @@ export function useZoom() {
       const r = pane.getBoundingClientRect();
       const fx = x - r.left, fy = y - r.top;
       if (phase === "start") {
-        pinch = { point: pagePointAt(fx, fy), startPercent: zoomRef.current };
+        pinch = { point: pagePointAt(fx, fy), startPercent: zoomRef.current, gate: createPinchGate() };
         return;
       }
       if (!pinch) return;
       if (phase === "end") { pinch = null; return; }
-      const percent = Math.round(Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, pinch.startPercent * scale)));
+      const percent = Math.round(Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, pinch.startPercent * pinch.gate(scale))));
       if (percent === zoomRef.current) {
         scrollPointTo(pinch.point, fx, fy, percent); // same zoom: just follow the fingers
       } else {

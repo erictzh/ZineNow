@@ -9,6 +9,7 @@
 // is what lets the pane centre them, and scroll both ways once they're zoomed in.
 
 import { state } from "./state.js";
+import { createPinchGate } from "../../../shared/js/pinchGate.js";
 
 const ZOOM_MIN = 15; // percent
 const ZOOM_MAX = 200;
@@ -162,7 +163,7 @@ export function setUpPreviewZoom() {
     // Drag to scroll (mouse or one finger) and pinch to zoom (two fingers) over the sheets.
     var pointers = new Map(); // pointerId -> { x, y }
     var pan = null; // { x, y, left, top }
-    var pinch = null; // { spread0, pct0, fx, fy }
+    var pinch = null; // { spread0, pct0, fx, fy, gate }
     var two = function () { return Array.from(pointers.values()).slice(0, 2); };
     var startPanAt = function (p) { pan = { x: p.x, y: p.y, left: pane.scrollLeft, top: pane.scrollTop }; };
     wrapper.addEventListener("pointerdown", function (e) {
@@ -178,7 +179,7 @@ export function setUpPreviewZoom() {
             var box = document.getElementById("zine").getBoundingClientRect();
             var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
             pan = null;
-            pinch = { spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), pct0: currentZoomPercent(), fx: (mx - box.left) / box.width, fy: (my - box.top) / box.height };
+            pinch = { spread0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), pct0: currentZoomPercent(), fx: (mx - box.left) / box.width, fy: (my - box.top) / box.height, gate: createPinchGate() };
         }
     });
     wrapper.addEventListener("pointermove", function (e) {
@@ -187,8 +188,11 @@ export function setUpPreviewZoom() {
         if (pinch && pointers.size >= 2) {
             var ab = two(), a = ab[0], b = ab[1];
             var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            zoomPct = clampZoom(pinch.pct0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
-            applyPreviewScale();
+            var s = pinch.gate(Math.hypot(a.x - b.x, a.y - b.y) / pinch.spread0);
+            if (s !== 1) { // under the threshold it's a two-finger scroll: the zoom (or Fit) stays
+                zoomPct = clampZoom(pinch.pct0 * s);
+                applyPreviewScale();
+            }
             keepSpot({ fx: pinch.fx, fy: pinch.fy, ax: mx, ay: my });
             return;
         }
