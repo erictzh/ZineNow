@@ -8,6 +8,7 @@ import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
 import { refreshSpecs, select12thSize, select16thSize, select24thSize, select32ndSize, select36thSize, select48thSize, select64thSize, selectEighthSize, selectHalfSize, selectQuarterSize, setPage11_17, setPageA3, setPageA4, setPageUSLetter, switchOptionsTab, toggleMoreSizes, toggleReverseImpose } from "./optionsPanel.js";
 import { installArrangerDisplaySettings } from "./displaySettings.js";
+import { setUpCredit } from "./credit.js";
 import { setUpPanelResize } from "./panelResize.js";
 import { applyPreviewScale, setUpPreviewZoom } from "./previewZoom.js";
 import { state } from "./state.js";
@@ -27,6 +28,9 @@ installArrangerDisplaySettings();
     subtitle.textContent += " · build " + __BUILD__;
     subtitle.title = "Build number: changes whenever the app is updated";
 })();
+
+// The ⓘ by the title: who made the original Zine Arranger (credit.js).
+setUpCredit();
 
 logSys("Zine Arranger ready. Select a PDF to begin.");
 

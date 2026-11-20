@@ -5102,6 +5102,34 @@
     });
   }
 
+  // apps/ZineArranger/src/credit.js
+  function setUpCredit() {
+    var button = document.getElementById("za-credit");
+    var pop = document.getElementById("za-credit-pop");
+    if (!button || !pop) return;
+    function setOpen(open) {
+      pop.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      if (!open) return;
+      var r = button.getBoundingClientRect();
+      var left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 8);
+      pop.style.left = Math.max(8, left) + "px";
+      pop.style.top = r.bottom + 6 + "px";
+    }
+    button.addEventListener("click", function() {
+      setOpen(pop.hidden);
+    });
+    document.addEventListener("pointerdown", function(e) {
+      if (!pop.hidden && !button.contains(e.target) && !pop.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && !pop.hidden) setOpen(false);
+    });
+    window.addEventListener("resize", function() {
+      if (!pop.hidden) setOpen(false);
+    });
+  }
+
   // apps/ZineArranger/src/panelResize.js
   var STORAGE_KEY = "zinearranger.settingsPanelWidth";
   var MIN_PANEL = 280;
@@ -5204,9 +5232,10 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 88a064f";
+    subtitle.textContent += " · build 53dfbcf";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
+  setUpCredit();
   logSys("Zine Arranger ready. Select a PDF to begin.");
   warnBeforeLeaving(() => state.pageCount > 0);
   window.addEventListener("resize", function() {
