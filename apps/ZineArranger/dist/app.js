@@ -4161,7 +4161,7 @@
   }
 
   // shared/js/pinchGate.js
-  var PINCH_THRESHOLD = 0.15;
+  var PINCH_THRESHOLD = 0.25;
   function createPinchGate(threshold = PINCH_THRESHOLD) {
     let base = null;
     return function gate(rawScale) {
@@ -5204,7 +5204,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build bf87193";
+    subtitle.textContent += " · build e16d7eb";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   logSys("Zine Arranger ready. Select a PDF to begin.");
