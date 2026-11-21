@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-20 (panel dropdown, wider ZEditor pasteboard, pinch zoom threshold, Nash High credit for ZineArranger; see "Session 2026-11-20" at the end).
+Last updated: 2026-11-21 (SVG files in ZEditor Insert Image; see "Session 2026-11-21 (cloud session): SVG in Insert Image" at the end).
 
 ## 1. Project overview
 
@@ -369,3 +369,9 @@ At the user's request every commit, branch and the `pre-modular-refactor` tag no
 - **On any other PC or old clone:** don't pull into it (that would merge the old history back). Re-clone, or run `git fetch origin` then `git reset --hard origin/main` (after saving any local work), and set `git config --global user.name erictzh` and `user.email 59077352+erictzh@users.noreply.github.com` there too.
 - The 19 commits made on github.com lost their "Verified" badge (their GitHub signature can't survive the rewrite).
 - A full backup of the old history: `C:\Users\User\ZineNow-before-author-rewrite.bundle` on the main PC (`git clone` it to get everything back). Old commits can stay visible on GitHub by direct link for a while; GitHub Support can purge cached views if needed.
+
+## Session 2026-11-21 (cloud session): SVG in Insert Image
+- **ZEditor Insert Image takes SVG files.** The file input's `accept` is now `image/*,.svg,image/svg+xml` (`ui/App.jsx`): on Android, `image/*` alone opens the photo gallery, which never lists .svg files; naming SVG makes it offer the file browser.
+- **An SVG is turned into a PNG as it's inserted** (`svgFileToPng` in `io/images.js`, called from `addImageAnnotationFromFile` in `state/useAnnotationEdits.js`, so pasted SVGs too): its longest side is drawn at 2048 px, and it starts at its own size (width/height with px/pt/pc/in/cm/mm converted, else the viewBox, else 300 x 150), capped at 260 px wide like other pictures. Why a PNG and not the SVG itself: an SVG with only a viewBox has no size of its own (the browser draws it at 0 x 0), and the eraser, filters, crop, Vectorize and PDF export all work on pixels anyway (PDF export rasterises the page). An unreadable SVG shows an alert and adds nothing.
+- Tested headless: a viewBox-only SVG and a 40 x 20 mm one insert at 100 x 50 and 151 x 76 px with 2048 px pixels; a broken file alerts. Not tried on the tablet's file picker.
+- This cloud container commits as **erictzh <59077352+erictzh@users.noreply.github.com>** (repo-local git config), per the author-rename note above.
