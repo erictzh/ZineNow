@@ -87,13 +87,21 @@ ok(st.paths.length === 3 && ["#c81e1e", "#1ea028", "#1428c8"].every((c) => st.pa
 const abut = traceImage(stripes, { ...presetSettings("color3"), noise: 0, method: "abut" });
 ok(abut.paths.length === 3 && abut.paths[0].d.length < st.paths[0].d.length + 200, "Abutting traces each colour's own area");
 const specks = picture(30, 30, (x, y) => ((x === 5 && y === 5) || (x > 10 && x < 25 && y > 10 && y < 25) ? [0, 0, 0] : [255, 255, 255]));
-ok((traceImage(specks, { ...presetSettings("bw"), noise: 4 }).paths[0].d.match(/M/g) || []).length === 1, "Noise drops a one-pixel speck but keeps the big square");
+ok((traceImage(specks, { ...presetSettings("bw"), noise: 40 }).paths[0].d.match(/M/g) || []).length === 1, "Noise drops a one-pixel speck but keeps the big square");
 ok((traceImage(specks, { ...presetSettings("bw"), noise: 0 }).paths[0].d.match(/M/g) || []).length === 2, "...and with Noise at 0 the speck stays");
 
 // ---- Settings
 const n = normalizeTraceSettings({ preset: "color6", colors: 99, detail: -5, view: "nope" });
 ok(n.mode === "color" && n.colors === 16 && n.detail === 0 && n.view === "result" && n.fills === "on", "settings are filled from the preset and kept in range");
 ok(tracerParams({ detail: 100 }).tolerance < tracerParams({ detail: 0 }).tolerance, "more Paths detail means a tighter tolerance");
+const p900 = tracerParams({ detail: 0, noise: 100 }, 900), p300 = tracerParams({ detail: 0, noise: 100 }, 300);
+ok(Math.abs(p900.tolerance - 18) < 1e-9 && Math.abs(tracerParams({ detail: 100 }, 900).tolerance - 0.35) < 1e-9, "Paths runs from loose (1/50 of the long side) to 0.35 px");
+ok(p900.minArea > p300.minArea && Math.abs(p900.minArea - 45 * 45) < 1e-6, "Noise grows with the picture: at 100 it drops specks up to 1/20 of the long side across");
+// Each Advanced slider visibly changes a trace: fewer points when loose, more corners when high.
+const blob = picture(200, 200, (x, y) => (Math.hypot(x - 100, y - 100) < 70 + 12 * Math.sin(Math.atan2(y - 100, x - 100) * 5) ? [0, 0, 0] : [255, 255, 255]));
+const count = (set, re) => (traceImage(blob, { ...presetSettings("bw"), ...set }).paths[0].d.match(re) || []).length;
+ok(count({ detail: 0 }, /[QL]/g) * 2 < count({ detail: 100 }, /[QL]/g), "Paths 0 uses far fewer points than Paths 100");
+ok(count({ corners: 100 }, /Q/g) < count({ corners: 0 }, /Q/g), "Corners 100 turns curves into corners");
 
 if (fails) { console.log(`${fails} failed`); process.exit(1); }
 console.log("all image trace checks passed");

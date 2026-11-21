@@ -46,16 +46,17 @@ export const TRACE_MAIN_CONTROLS = [
     kind: "select", prop: "mode", label: "Mode", fallback: "bw",
     options: [{ key: "bw", label: "Black & white" }, { key: "gray", label: "Shades of grey" }, { key: "color", label: "Colour" }],
   },
-  { kind: "slider", prop: "threshold", label: "Threshold", min: 0, max: 255, fallback: 128, showIf: isBw },
-  { kind: "slider", prop: "colors", label: "Colours", min: 2, max: 16, fallback: 6, showIf: (v) => !isBw(v) },
+  { kind: "slider", prop: "threshold", label: "Threshold", min: 0, max: 255, fallback: 128, showIf: isBw, hint: "Higher turns more of the picture black (pale areas too); lower keeps only the darkest parts." },
+  { kind: "slider", prop: "colors", label: "Colours", min: 2, max: 16, fallback: 6, showIf: (v) => !isBw(v), hint: "How many colours (or greys) the picture is reduced to. Fewer = flatter, poster-like." },
 ];
 export const TRACE_ADVANCED_CONTROLS = [
-  { kind: "slider", prop: "detail", label: "Paths (%)", min: 0, max: 100, fallback: 50 },
-  { kind: "slider", prop: "corners", label: "Corners (%)", min: 0, max: 100, fallback: 50 },
-  { kind: "slider", prop: "noise", label: "Noise (px)", min: 0, max: 100, fallback: 8 },
+  { kind: "slider", prop: "detail", label: "Paths", min: 0, max: 100, fallback: 50, hint: "Low = loose, smooth, blobby outlines. High = outlines hug the pixels closely." },
+  { kind: "slider", prop: "corners", label: "Corners", min: 0, max: 100, fallback: 50, hint: "Low = bends become round curves. High = bends become sharp, cut-paper corners." },
+  { kind: "slider", prop: "noise", label: "Noise", min: 0, max: 100, fallback: 8, hint: "Drops specks and dust smaller than this. Raise it to clean up grainy photos." },
   {
     kind: "select", prop: "ignoreWhite", label: "White areas", fallback: "keep",
     options: [{ key: "keep", label: "Keep as shapes" }, { key: "drop", label: "Leave see-through" }],
+    hint: "See-through lets the paper (or what's below) show where the picture was white.",
   },
 ];
 // Settings that only change how the result is drawn: changing them needs no new trace.
@@ -100,15 +101,21 @@ export function normalizeTraceSettings(s = {}) {
   };
 }
 
-// Slider values → the numbers the tracer works with.
-//   tolerance: how far (trace px) a simplified outline may stray from the pixel edge
-//   cornerAngle: a bend sharper than this (degrees) is drawn as a corner
-//   minArea: outlines enclosing less than this (trace px²) are dropped
-export function tracerParams(settings) {
+// Slider values → the numbers the tracer works with, for a picture whose long side is `size` px.
+// The ranges grow with the picture, so each slider changes the look about as much at any size
+// (a trace is usually shown far smaller than it is traced, so pixel-sized steps would be invisible).
+//   tolerance: how far (trace px) a simplified outline may stray from the pixel edge. Paths 100 =
+//     0.35 px (hugs the pixels), Paths 0 = 1/50 of the long side (loose blobs); an even scale between.
+//   cornerAngle: a bend sharper than this (degrees) is drawn as a corner (Corners 0 = 150°, 100 = 30°)
+//   minArea: outlines enclosing less than this (trace px²) are dropped. Noise 100 = specks up to
+//     a twentieth of the long side across.
+export function tracerParams(settings, size = TRACE_MAX_SIDE) {
   const s = normalizeTraceSettings(settings);
+  const tight = 0.35, loose = Math.max(1.5, size / 50);
+  const speck = (s.noise / 100) * (Math.max(size, 200) / 20);
   return {
-    tolerance: 2.2 - (s.detail / 100) * 1.8,
+    tolerance: loose * Math.pow(tight / loose, s.detail / 100),
     cornerAngle: 150 - (s.corners / 100) * 120,
-    minArea: s.noise,
+    minArea: speck * speck,
   };
 }

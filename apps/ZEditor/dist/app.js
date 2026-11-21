@@ -6440,19 +6440,20 @@
       fallback: "bw",
       options: [{ key: "bw", label: "Black & white" }, { key: "gray", label: "Shades of grey" }, { key: "color", label: "Colour" }]
     },
-    { kind: "slider", prop: "threshold", label: "Threshold", min: 0, max: 255, fallback: 128, showIf: isBw },
-    { kind: "slider", prop: "colors", label: "Colours", min: 2, max: 16, fallback: 6, showIf: (v) => !isBw(v) }
+    { kind: "slider", prop: "threshold", label: "Threshold", min: 0, max: 255, fallback: 128, showIf: isBw, hint: "Higher turns more of the picture black (pale areas too); lower keeps only the darkest parts." },
+    { kind: "slider", prop: "colors", label: "Colours", min: 2, max: 16, fallback: 6, showIf: (v) => !isBw(v), hint: "How many colours (or greys) the picture is reduced to. Fewer = flatter, poster-like." }
   ];
   var TRACE_ADVANCED_CONTROLS = [
-    { kind: "slider", prop: "detail", label: "Paths (%)", min: 0, max: 100, fallback: 50 },
-    { kind: "slider", prop: "corners", label: "Corners (%)", min: 0, max: 100, fallback: 50 },
-    { kind: "slider", prop: "noise", label: "Noise (px)", min: 0, max: 100, fallback: 8 },
+    { kind: "slider", prop: "detail", label: "Paths", min: 0, max: 100, fallback: 50, hint: "Low = loose, smooth, blobby outlines. High = outlines hug the pixels closely." },
+    { kind: "slider", prop: "corners", label: "Corners", min: 0, max: 100, fallback: 50, hint: "Low = bends become round curves. High = bends become sharp, cut-paper corners." },
+    { kind: "slider", prop: "noise", label: "Noise", min: 0, max: 100, fallback: 8, hint: "Drops specks and dust smaller than this. Raise it to clean up grainy photos." },
     {
       kind: "select",
       prop: "ignoreWhite",
       label: "White areas",
       fallback: "keep",
-      options: [{ key: "keep", label: "Keep as shapes" }, { key: "drop", label: "Leave see-through" }]
+      options: [{ key: "keep", label: "Keep as shapes" }, { key: "drop", label: "Leave see-through" }],
+      hint: "See-through lets the paper (or what's below) show where the picture was white."
     }
   ];
   var TRACE_DRAW_PROPS = ["fills", "strokes", "strokeWidth", "view"];
@@ -6487,12 +6488,14 @@
       view: TRACE_VIEW_OPTIONS.some((o) => o.key === v.view) ? v.view : "result"
     };
   }
-  function tracerParams(settings) {
+  function tracerParams(settings, size = TRACE_MAX_SIDE) {
     const s = normalizeTraceSettings(settings);
+    const tight = 0.35, loose = Math.max(1.5, size / 50);
+    const speck = s.noise / 100 * (Math.max(size, 200) / 20);
     return {
-      tolerance: 2.2 - s.detail / 100 * 1.8,
+      tolerance: loose * Math.pow(tight / loose, s.detail / 100),
       cornerAngle: 150 - s.corners / 100 * 120,
-      minArea: s.noise
+      minArea: speck * speck
     };
   }
 
@@ -9486,8 +9489,8 @@
   var hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
   function traceImage(pixels, settings) {
     const s = normalizeTraceSettings(settings);
-    const { tolerance, cornerAngle, minArea } = tracerParams(s);
     const { width, height } = pixels;
+    const { tolerance, cornerAngle, minArea } = tracerParams(s, Math.max(width, height));
     const { labels, palette } = quantizePixels(pixels, s);
     const mask = new Uint8Array(width * height);
     const paths = [];
@@ -13716,9 +13719,9 @@
   // apps/ZEditor/src/ui/controls/ControlList.jsx
   function ControlList({ controls, source, onPatch }) {
     const values = controlValues(source, controls);
-    return controls.filter((c) => !c.showIf || c.showIf(values)).map(({ kind, prop, label, min, max, options }) => {
+    return controls.filter((c) => !c.showIf || c.showIf(values)).map(({ kind, prop, label, min, max, options, hint }) => {
       const ControlInput = EFFECT_CONTROL_INPUTS[kind];
-      return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: prop }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label), /* @__PURE__ */ React.createElement(ControlInput, { min, max, options, value: values[prop], onChange: (v) => onPatch({ [prop]: v }) }));
+      return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: prop }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label), /* @__PURE__ */ React.createElement(ControlInput, { min, max, options, value: values[prop], onChange: (v) => onPatch({ [prop]: v }) }), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
     });
   }
 
@@ -15957,7 +15960,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "42383e1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2f6840a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

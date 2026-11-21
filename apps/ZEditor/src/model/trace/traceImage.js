@@ -17,8 +17,8 @@ const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
 // with paths in drawing order (bottom first), in the picture's own pixel coordinates.
 export function traceImage(pixels, settings) {
   const s = normalizeTraceSettings(settings);
-  const { tolerance, cornerAngle, minArea } = tracerParams(s);
   const { width, height } = pixels;
+  const { tolerance, cornerAngle, minArea } = tracerParams(s, Math.max(width, height));
   const { labels, palette } = quantizePixels(pixels, s);
   const mask = new Uint8Array(width * height);
   const paths = [];
