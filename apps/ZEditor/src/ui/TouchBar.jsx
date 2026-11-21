@@ -68,10 +68,10 @@ export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqu
           <Icon><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M2 6h14a2 2 0 0 1 2 2v14" /></Icon>
         </button>
       )}
-      {hasSelection && selectedAnn && selectedAnn.type === "image" && (
+      {hasSelection && selectedAnn && (
         <button
           type="button" className={"ze-touch-btn" + (selectedAnn.clipToBelow ? " is-on" : "")} aria-pressed={Boolean(selectedAnn.clipToBelow)} onMouseDown={keep}
-          title="Clipping mask: show this image only inside the layer below it" aria-label="Clipping mask"
+          title="Clipping mask: show this layer only inside the layer below it" aria-label="Clipping mask"
           onClick={() => pressKey("g", { ctrlKey: true, altKey: true })}
         >
           <Icon><path d="M5 4v8a3 3 0 0 0 3 3h11" /><path d="M15 11l4 4-4 4" /></Icon>

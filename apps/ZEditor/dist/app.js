@@ -6175,16 +6175,15 @@
   }
 
   // apps/ZEditor/src/model/clipping.js
-  var isClippedImage = (a) => Boolean(a) && a.type === "image" && Boolean(a.clipToBelow);
+  var isClipped = (a) => Boolean(a) && Boolean(a.clipToBelow);
   function clipBaseIndex(items, index) {
     for (let i = index - 1; i >= 0; i--) {
-      if (!isClippedImage(items[i])) return i;
+      if (!isClipped(items[i])) return i;
     }
     return -1;
   }
   function canClipAt(items, index) {
-    const item = items[index];
-    return Boolean(item) && item.type === "image" && clipBaseIndex(items, index) >= 0;
+    return Boolean(items[index]) && clipBaseIndex(items, index) >= 0;
   }
 
   // apps/ZEditor/src/model/pageFilters.js
@@ -7580,7 +7579,7 @@
   async function drawPageItem(ctx, items, index, scaleFactor, pageFilter) {
     const item = items[index];
     if (item.hidden) return;
-    if (isClippedImage(item)) {
+    if (isClipped(item)) {
       const baseIndex = clipBaseIndex(items, index);
       if (baseIndex >= 0) {
         if (!items[baseIndex].hidden) await drawClippedItem(ctx, item, items[baseIndex], scaleFactor, pageFilter);
@@ -7807,13 +7806,28 @@
       if (groups.size === 0) return;
       updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => groups.has(a.groupId) ? { ...a, groupId: void 0, groupName: void 0 } : a));
     }
-    function handleToggleClip(id) {
+    function handleSetClip(ids, on) {
       if (selectedIdx === null) return;
       const items = currentAnnotations();
-      const index = items.findIndex((a) => a.id === id);
-      const item = items[index];
-      if (!item || item.type !== "image" || !item.clipToBelow && !canClipAt(items, index)) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.id === id ? { ...a, clipToBelow: a.clipToBelow ? void 0 : true } : a));
+      const targets = new Set(ids.filter((id) => {
+        const index = items.findIndex((a) => a.id === id);
+        return index >= 0 && (on ? !items[index].clipToBelow && canClipAt(items, index) : items[index].clipToBelow);
+      }));
+      if (targets.size === 0) return;
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => targets.has(a.id) ? { ...a, clipToBelow: on ? true : void 0 } : a));
+    }
+    function handleToggleClip(id) {
+      const item = currentAnnotations().find((a) => a.id === id);
+      if (item) handleSetClip([id], !item.clipToBelow);
+    }
+    function handleClipSelection() {
+      const ids = selectedAnnotationIds();
+      const items = currentAnnotations();
+      const clippable = ids.some((id) => {
+        const i = items.findIndex((a) => a.id === id);
+        return i >= 0 && !items[i].clipToBelow && canClipAt(items, i);
+      });
+      handleSetClip(ids, clippable);
     }
     function handleRenameGroup(groupId, name) {
       if (selectedIdx === null) return;
@@ -8017,7 +8031,9 @@
       finishTextEdit,
       handleGroupSelection,
       handleUngroupSelection,
+      handleSetClip,
       handleToggleClip,
+      handleClipSelection,
       handleAddText,
       handleAddRect,
       handleAddStroke,
@@ -8914,7 +8930,7 @@
           }
           if (key === "g" && e.altKey) {
             e.preventDefault();
-            if (selectedAnnId !== null && selectedAnnIds.length === 0) edits.handleToggleClip(selectedAnnId);
+            if (selectedAnnId !== null) edits.handleClipSelection();
             return;
           }
           if (key === "g") {
@@ -10898,7 +10914,7 @@
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
   var { useRef: useRef11, useEffect: useEffect11 } = React;
-  function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, contentOnly, chromeOnly, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
+  function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
     const halftoneCanvasRef = useRef11(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
@@ -10954,7 +10970,7 @@
     const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
     const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null]) : null;
     useEffect11(() => {
-      if (!usesFilterCanvas || isCropping || chromeOnly) return;
+      if (!usesFilterCanvas || isCropping) return;
       let cancelled = false;
       (async () => {
         const img = await loadImageElement(ann.src);
@@ -10974,20 +10990,6 @@
         cancelled = true;
       };
     }, [filterCanvasKey, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH]);
-    if (chromeOnly) {
-      return /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          "data-ann-id": ann.id,
-          className: "ze-ann-image ze-ann-image--chrome" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : ""),
-          style: boxOuterStyle({ ...ann, blend: void 0 }),
-          onMouseDown: (e) => {
-            if (tool === "select") onPress(e, ann);
-          }
-        },
-        showHandles && /* @__PURE__ */ React.createElement(ResizeHandles, { handles: ALL_RESIZE_HANDLES, onStart: startResize, onRotate: (angle) => onUpdate(ann.id, { angle }) })
-      );
-    }
     if (isCropping) {
       const imageOriginX = ann.x - cropX * displayScaleX;
       const imageOriginY = ann.y - cropY * displayScaleY;
@@ -11010,10 +11012,10 @@
     return /* @__PURE__ */ React.createElement(
       "div",
       {
-        ...contentOnly ? {} : { "data-ann-id": ann.id },
-        className: "ze-ann-image" + (contentOnly ? " is-content-only" : (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : "")),
+        "data-ann-id": ann.id,
+        className: "ze-ann-image" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : ""),
         style: boxOuterStyle(ann),
-        onMouseDown: contentOnly ? void 0 : (e) => {
+        onMouseDown: (e) => {
           if (tool === "select") onPress(e, ann);
         }
       },
@@ -11026,7 +11028,7 @@
           style: { position: "absolute", left: -cropX * displayScaleX, top: -cropY * displayScaleY, width: naturalW * displayScaleX, height: naturalH * displayScaleY }
         }
       )), /* @__PURE__ */ React.createElement(BoxEffectOverlays, { ann, edgeOutline })),
-      showHandles && !contentOnly && /* @__PURE__ */ React.createElement(ResizeHandles, { handles: ALL_RESIZE_HANDLES, onStart: startResize, onRotate: (angle) => onUpdate(ann.id, { angle }) }),
+      showHandles && /* @__PURE__ */ React.createElement(ResizeHandles, { handles: ALL_RESIZE_HANDLES, onStart: startResize, onRotate: (angle) => onUpdate(ann.id, { angle }) }),
       hasOwnDuotone && /* @__PURE__ */ React.createElement("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("filter", { id: duotoneFilterId, colorInterpolationFilters: "sRGB" }, /* @__PURE__ */ React.createElement("feColorMatrix", { type: "matrix", values: LUMINANCE_MATRIX_VALUES }), /* @__PURE__ */ React.createElement("feComponentTransfer", null, /* @__PURE__ */ React.createElement("feFuncR", { type: "linear", slope: (ownDuotoneLightRgb.r - ownDuotoneDarkRgb.r) / 255, intercept: ownDuotoneDarkRgb.r / 255 }), /* @__PURE__ */ React.createElement("feFuncG", { type: "linear", slope: (ownDuotoneLightRgb.g - ownDuotoneDarkRgb.g) / 255, intercept: ownDuotoneDarkRgb.g / 255 }), /* @__PURE__ */ React.createElement("feFuncB", { type: "linear", slope: (ownDuotoneLightRgb.b - ownDuotoneDarkRgb.b) / 255, intercept: ownDuotoneDarkRgb.b / 255 })))))
     );
   }
@@ -11637,8 +11639,6 @@
     isEditing,
     isCropping,
     isEraseTarget,
-    contentOnly,
-    chromeOnly,
     onPress,
     onUpdate,
     onToggleCrop,
@@ -11656,8 +11656,6 @@
           showHandles,
           isCropping,
           isEraseTarget,
-          contentOnly,
-          chromeOnly,
           onPress,
           onUpdate,
           onToggleCrop,
@@ -12589,10 +12587,11 @@
           onFinishTextEdit,
           onLinkNextFrame
         };
-        const baseIndex = isClippedImage(a) && a.id !== croppingAnnId ? clipBaseIndex(pageViews, index) : -1;
+        const drawnPlain = a.id === croppingAnnId || a.id === editingAnnId;
+        const baseIndex = isClipped(a) && !drawnPlain ? clipBaseIndex(pageViews, index) : -1;
         if (baseIndex < 0) return /* @__PURE__ */ React.createElement(AnnotationItem, { key: a.id, ann: a, ...itemProps });
         if (pageViews[baseIndex].hidden) return null;
-        return /* @__PURE__ */ React.createElement(React.Fragment, { key: a.id }, /* @__PURE__ */ React.createElement(ClipWrap, { base: pageViews[baseIndex], pageSize: canvasSize, pageFilter, blend: blendOf(a) }, /* @__PURE__ */ React.createElement(AnnotationItem, { ann: { ...a, blend: void 0 }, ...itemProps, showHandles: false, isSelected: false, contentOnly: true })), /* @__PURE__ */ React.createElement(AnnotationItem, { ann: a, ...itemProps, chromeOnly: true }));
+        return /* @__PURE__ */ React.createElement(React.Fragment, { key: a.id }, /* @__PURE__ */ React.createElement(ClipWrap, { base: pageViews[baseIndex], pageSize: canvasSize, pageFilter, blend: blendOf(a) }, /* @__PURE__ */ React.createElement(AnnotationItem, { ann: { ...a, blend: void 0 }, ...itemProps, showHandles: false, isSelected: false, isEditing: false, isCropping: false, isEraseTarget: false })), /* @__PURE__ */ React.createElement("div", { className: "ze-clip-ghost" }, /* @__PURE__ */ React.createElement(AnnotationItem, { ann: a, ...itemProps })));
       }),
       /* @__PURE__ */ React.createElement(ThreadLinks, { views: pageViews, pageSize: canvasSize, selectedIds: [selectedAnnId, ...selectedAnnIds], zoom, onUnlink: onUnlinkNextFrame }),
       /* @__PURE__ */ React.createElement(LiveStroke, { drawing: drawingRef.current, pageSize: canvasSize }),
@@ -12990,7 +12989,7 @@
         ["Ctrl + R", "Rotate the selected page"],
         ["Ctrl + G", "Group the selected items (select several first)"],
         ["Ctrl + Shift + G", "Ungroup"],
-        ["Ctrl + Alt + G", "Clipping mask on/off: the selected image shows only where the layer directly below it has pixels"],
+        ["Ctrl + Alt + G", "Clipping mask on/off: the selected layer shows only where the layer directly below it has pixels (also in the Layers panel menu)"],
         ["Alt + click", "Pick one item out of a group"],
         ["Shift + click", "Add to or remove from the selection (pages and items)"],
         ["Drag on empty page", "Select the items it touches (Move tool)"],
@@ -13034,15 +13033,6 @@
     if (!open) return null;
     const chosen = OPEN_KINDS.find((k) => k.key === kind);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop" }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-modal--welcome", role: "dialog", "aria-labelledby": "ze-welcome-title" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-welcome-close", "aria-label": "Close", title: "Close (Esc)", onClick: onClose }, "×"), /* @__PURE__ */ React.createElement("div", { className: "ze-welcome-title", id: "ze-welcome-title" }, "Let's make a Zine!"), /* @__PURE__ */ React.createElement("p", { className: "ze-welcome-lead" }, "Start something new, or open what you have."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-welcome-option", onClick: onNewDocument }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "22", height: "22", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 3h8l4 4v14H6z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v4h4" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" })), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-option-text" }, /* @__PURE__ */ React.createElement("strong", null, "New document"), /* @__PURE__ */ React.createElement("span", null, "Blank pages in A5, A4, Digest… or your own size."))), /* @__PURE__ */ React.createElement("div", { className: "ze-welcome-option ze-welcome-open" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "22", height: "22", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" }), /* @__PURE__ */ React.createElement("path", { d: "M3 7v11a2 2 0 0 0 2 2h13l3-9H7l-3 9" })), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-option-text" }, /* @__PURE__ */ React.createElement("strong", null, "Open existing"), /* @__PURE__ */ React.createElement("span", null, chosen.hint), /* @__PURE__ */ React.createElement("span", { className: "ze-welcome-open-row" }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "What to open", value: kind, onChange: (e) => setKind(e.target.value) }, OPEN_KINDS.map((k) => /* @__PURE__ */ React.createElement("option", { key: k.key, value: k.key }, k.label))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: kind === "pdf" ? onOpenPdf : onOpenProject }, "Open…"))))));
-  }
-
-  // apps/ZEditor/src/model/layerNames.js
-  function layerName(ann) {
-    if (ann.name) return ann.name;
-    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
-    return "Image";
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
@@ -13193,7 +13183,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, clip, onToggleClip }) {
+  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage }) {
     const patch = (p) => onUpdate(ann.id, p);
     const isCroppingThis = croppingAnnId === ann.id;
     const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -13221,20 +13211,7 @@
         onReset: hasCrop ? () => patch(cropReset) : void 0
       },
       /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : ""), onClick: () => onToggleCrop(ann.id) }, isCroppingThis ? "Done Cropping" : "Edit Crop")
-    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "image.basic", title: "Basic", defaultOpen: true, hint: "Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely.", onReset: () => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(
-      PanelSection,
-      {
-        id: "image.clip",
-        title: "Clipping mask",
-        checked: Boolean(ann.clipToBelow),
-        disabled: !ann.clipToBelow && !clip.canClip,
-        defaultOpen: Boolean(ann.clipToBelow),
-        summary: ann.clipToBelow && clip.baseName ? "to " + clip.baseName : void 0,
-        hint: "Shows this image only where the layer directly below it has pixels, like a flag inside a shield. Drag or resize the image to change what shows through. Ctrl+Alt+G switches it on and off.",
-        onToggle: () => onToggleClip(ann.id)
-      },
-      /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, ann.clipToBelow ? clip.baseName ? "Clipped to " + clip.baseName + ". Anything of this image outside its shape is hidden." : "There is no layer below to clip to, so it shows in full." : clip.canClip ? "Switch on to clip this image to " + clip.baseName + "." : "Put this image directly above the layer to clip it to (a logo, shape or text).")
-    ), /* @__PURE__ */ React.createElement(TextWrapSection, { ann, patch }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "image.basic", title: "Basic", defaultOpen: true, hint: "Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely.", onReset: () => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(TextWrapSection, { ann, patch }), /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.filters",
@@ -14049,20 +14026,13 @@
     magicErase,
     marquee,
     targetLayer,
-    styleActions,
-    annotations,
-    onToggleClip
+    styleActions
   }) {
     const ann = selectedAnn;
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
-    if (ann && ann.type === "image") {
-      const index = (annotations || []).findIndex((a) => a.id === ann.id);
-      const baseIndex = index >= 0 ? clipBaseIndex(annotations, index) : -1;
-      const clip = { canClip: index >= 0 && canClipAt(annotations, index), baseName: baseIndex >= 0 ? layerName(annotations[baseIndex]) : null };
-      return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, clip, onToggleClip });
-    }
+    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage });
     if (ann && ann.type === "rect") return /* @__PURE__ */ React.createElement(ShapeFormat, { key: ann.id, ann, onUpdate, onRasterizeRect });
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
     if (tool === "text") return /* @__PURE__ */ React.createElement(TextToolPanel, { toolDefaults });
@@ -14072,6 +14042,86 @@
       return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Measure", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Click one point, then another, to see the distance between them in the ruler's unit. A third click clears it. Dragging from one point to the other works too. Once the line is shown, drag either end to adjust. Hold Shift for 45° steps; ends land on ruler guides unless you hold Alt."));
     }
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add."));
+  }
+
+  // apps/ZEditor/src/model/layerNames.js
+  function layerName(ann) {
+    if (ann.name) return ann.name;
+    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
+    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
+    return "Image";
+  }
+
+  // apps/ZEditor/src/ui/topbar/TopMenu.jsx
+  var { useState: useState29, useRef: useRef20, useEffect: useEffect21, useLayoutEffect: useLayoutEffect5 } = React;
+  function TopMenu({ label, solid, children }) {
+    const [open, setOpen] = useState29(false);
+    const containerRef = useRef20(null);
+    useEffect21(() => {
+      if (!open) return;
+      function handleClickOutside(e) {
+        if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
+      }
+      function handleEscape(e) {
+        if (e.key === "Escape") setOpen(false);
+      }
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEscape);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+        document.removeEventListener("keydown", handleEscape);
+      };
+    }, [open]);
+    const menuRef = useRef20(null);
+    useLayoutEffect5(() => {
+      const menu = menuRef.current;
+      if (!open || !menu) return;
+      const fit = () => {
+        menu.style.transform = "";
+        const { left, width } = menu.getBoundingClientRect();
+        const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
+        if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
+      };
+      fit();
+      const observer = new ResizeObserver(fit);
+      observer.observe(menu);
+      window.addEventListener("resize", fit);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener("resize", fit);
+      };
+    }, [open]);
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-topbar-control", ref: containerRef }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-menu-trigger" + (solid ? " btn-solid" : "") + (open ? " open" : ""),
+        "aria-haspopup": "menu",
+        "aria-expanded": open,
+        onClick: () => setOpen((o) => !o)
+      },
+      label,
+      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
+    ), open && /* @__PURE__ */ React.createElement("div", { className: "ze-menu", role: "menu", ref: menuRef }, children({ close: () => setOpen(false) })));
+  }
+  function MenuItem({ label, detail, shortcut, hint, disabled, onClick, close }) {
+    return /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        role: "menuitem",
+        className: "ze-menu-item",
+        disabled,
+        title: hint,
+        onClick: () => {
+          close();
+          onClick();
+        }
+      },
+      /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-text" }, /* @__PURE__ */ React.createElement("span", null, label), detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-detail" }, detail)),
+      shortcut && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-shortcut" }, shortcut)
+    );
   }
 
   // apps/ZEditor/src/ui/touchInput.js
@@ -14301,7 +14351,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState29, useRef: useRef20, useEffect: useEffect21 } = React;
+  var { useState: useState30, useRef: useRef21, useEffect: useEffect22 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -14340,16 +14390,35 @@
       }
     );
   }
-  function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip }) {
-    const [renamingId, setRenamingId] = useState29(null);
-    const [dropInfo, setDropInfo] = useState29(null);
-    const [, setCollapseTick] = useState29(0);
-    const dragIdRef = useRef20(null);
-    const listRef = useRef20(null);
-    const panelRef = useRef20(null);
-    const headRef = useRef20(null);
+  function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
+    const [renamingId, setRenamingId] = useState30(null);
+    const [menuOpen, setMenuOpen] = useState30(false);
+    const menuRef = useRef21(null);
+    const [dropInfo, setDropInfo] = useState30(null);
+    const [, setCollapseTick] = useState30(0);
+    const dragIdRef = useRef21(null);
+    const listRef = useRef21(null);
+    const panelRef = useRef21(null);
+    const headRef = useRef21(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
+    const canClip = annotations.some((a, i) => selectedIds.includes(a.id) && !a.clipToBelow && canClipAt(annotations, i));
+    const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
+    useEffect22(() => {
+      if (!menuOpen) return;
+      const outside = (e) => {
+        if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      };
+      const escape = (e) => {
+        if (e.key === "Escape") setMenuOpen(false);
+      };
+      document.addEventListener("mousedown", outside);
+      document.addEventListener("keydown", escape);
+      return () => {
+        document.removeEventListener("mousedown", outside);
+        document.removeEventListener("keydown", escape);
+      };
+    }, [menuOpen]);
     function toggleCollapsed(groupId) {
       if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
       else collapsedGroups.add(groupId);
@@ -14361,7 +14430,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect21(() => {
+    useEffect22(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -14377,7 +14446,7 @@
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
     }
-    useEffect21(() => {
+    useEffect22(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -14419,7 +14488,7 @@
       return /* @__PURE__ */ React.createElement(React.Fragment, { key: ann.id }, dropLine(ann.id, true), /* @__PURE__ */ React.createElement(
         "div",
         {
-          className: "ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.type === "image" && ann.clipToBelow ? " is-clipped" : "") + (inGroup ? " is-grouped is-in-group" : ""),
+          className: "ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.clipToBelow ? " is-clipped" : "") + (inGroup ? " is-grouped is-in-group" : ""),
           style: inGroup ? { "--ze-group-color": groupColor(ann.groupId) } : void 0,
           title: inGroup ? "In a group — Alt + click selects just this layer" : void 0,
           "data-layer-id": ann.id,
@@ -14432,7 +14501,7 @@
         },
         /* @__PURE__ */ React.createElement(LayerThumb, { ann }),
         isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: layerName(ann), onDone: (text) => finishRename(ann, text) }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, layerName(ann)),
-        ann.type === "image" && ann.clipToBelow && /* @__PURE__ */ React.createElement(
+        ann.clipToBelow && /* @__PURE__ */ React.createElement(
           "button",
           {
             type: "button",
@@ -14564,7 +14633,19 @@
         ref: panelRef,
         style: position ? { left: position.x, top: position.y, right: "auto" } : void 0
       },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startPanelDrag }, /* @__PURE__ */ React.createElement("span", null, "Layers", annotations.length > 0 ? " (" + annotations.length + ")" : ""), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Group the selected layers (Ctrl+G)", "aria-label": "Group selected layers", disabled: selectedIds.length < 2, onClick: onGroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "11", height: "11", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "10", y: "10", width: "11", height: "11", rx: "2" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Ungroup (Ctrl+Shift+G)", "aria-label": "Ungroup selected layers", disabled: !canUngroup, onClick: onUngroup }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("rect", { x: "13", y: "13", width: "8", height: "8", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7h4M7 14v4", strokeDasharray: "1 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startPanelDrag }, /* @__PURE__ */ React.createElement("span", null, "Layers", annotations.length > 0 ? " (" + annotations.length + ")" : ""), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("span", { className: "ze-layers-menu-wrap", ref: menuRef }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "ze-guides-settings-btn" + (menuOpen ? " is-open" : ""),
+          title: "Group, ungroup and clipping mask",
+          "aria-label": "More layer actions",
+          "aria-haspopup": "menu",
+          "aria-expanded": menuOpen,
+          onClick: () => setMenuOpen((open) => !open)
+        },
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "5", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "19", cy: "12", r: "1.9" }))
+      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Group", shortcut: "Ctrl+G", hint: "Group the selected layers (select two or more)", disabled: selectedIds.length < 2, onClick: onGroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Ungroup", shortcut: "Ctrl+Shift+G", disabled: !canUngroup, onClick: onUngroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to layer below", shortcut: "Ctrl+Alt+G", hint: "Shows the selected layer only where the layer directly below it has pixels", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
       /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
         if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
         if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
@@ -14574,11 +14655,11 @@
   }
 
   // apps/ZEditor/src/ui/PanelResizer.jsx
-  var { useLayoutEffect: useLayoutEffect5, useRef: useRef21 } = React;
+  var { useLayoutEffect: useLayoutEffect6, useRef: useRef22 } = React;
   var MIN_CANVAS = 360;
   var KEY_STEP = 16;
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
-    const widthRef = useRef21(null);
+    const widthRef = useRef22(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
     const clamp2 = (px) => {
       const body = bodyRef.current;
@@ -14605,7 +14686,7 @@
         }
       }
     };
-    useLayoutEffect5(() => {
+    useLayoutEffect6(() => {
       let saved = null;
       try {
         saved = parseInt(localStorage.getItem(storageKey), 10);
@@ -14735,15 +14816,15 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState30, useRef: useRef22, useEffect: useEffect22 } = React;
+  var { useState: useState31, useRef: useRef23, useEffect: useEffect23 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef22(null);
-    const bodyRef = useRef22(null);
-    const scrollDirRef = useRef22(0);
-    const rafRef = useRef22(null);
-    const [dragOverInfo, setDragOverInfo] = useState30(null);
+    const dragIndexRef = useRef23(null);
+    const bodyRef = useRef23(null);
+    const scrollDirRef = useRef23(0);
+    const rafRef = useRef23(null);
+    const [dragOverInfo, setDragOverInfo] = useState31(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -14762,7 +14843,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect22(() => stopAutoScroll, []);
+    useEffect23(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -14872,21 +14953,21 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState31, useEffect: useEffect23 } = React;
+  var { useState: useState32, useEffect: useEffect24 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState31(false);
-    const [alt, setAlt] = useState31(false);
-    useEffect23(() => {
+    const [shift, setShift] = useState32(false);
+    const [alt, setAlt] = useState32(false);
+    useEffect24(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect23(() => {
+    useEffect24(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect23(() => () => {
+    useEffect24(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
     }, []);
@@ -14926,14 +15007,14 @@
         onClick: () => pressKey("c")
       },
       /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M6 2v14a2 2 0 0 0 2 2h14" }), /* @__PURE__ */ React.createElement("path", { d: "M2 6h14a2 2 0 0 1 2 2v14" }))
-    ), hasSelection && selectedAnn && selectedAnn.type === "image" && /* @__PURE__ */ React.createElement(
+    ), hasSelection && selectedAnn && /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
         className: "ze-touch-btn" + (selectedAnn.clipToBelow ? " is-on" : ""),
         "aria-pressed": Boolean(selectedAnn.clipToBelow),
         onMouseDown: keep,
-        title: "Clipping mask: show this image only inside the layer below it",
+        title: "Clipping mask: show this layer only inside the layer below it",
         "aria-label": "Clipping mask",
         onClick: () => pressKey("g", { ctrlKey: true, altKey: true })
       },
@@ -15025,85 +15106,14 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState32 } = React;
+  var { useState: useState33 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState32(null);
+    const [customizing, setCustomizing] = useState33(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
     }
     return rows.map((row) => /* @__PURE__ */ React.createElement("div", { key: row.key, className: "ze-menu-toggle-row" + (row.disabled ? " disabled" : "") }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, row.label), row.detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, row.detail)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-customize", disabled: row.disabled, onClick: () => setCustomizing(row.key) }, "Customize…"), /* @__PURE__ */ React.createElement("label", { className: "toggle-switch", title: (row.checked ? "Turn off " : "Turn on ") + row.label }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: row.checked, disabled: row.disabled, onChange: (e) => row.onToggle(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))));
-  }
-
-  // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState33, useRef: useRef23, useEffect: useEffect24, useLayoutEffect: useLayoutEffect6 } = React;
-  function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState33(false);
-    const containerRef = useRef23(null);
-    useEffect24(() => {
-      if (!open) return;
-      function handleClickOutside(e) {
-        if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
-      }
-      function handleEscape(e) {
-        if (e.key === "Escape") setOpen(false);
-      }
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-        document.removeEventListener("keydown", handleEscape);
-      };
-    }, [open]);
-    const menuRef = useRef23(null);
-    useLayoutEffect6(() => {
-      const menu = menuRef.current;
-      if (!open || !menu) return;
-      const fit = () => {
-        menu.style.transform = "";
-        const { left, width } = menu.getBoundingClientRect();
-        const zoom = menu.offsetWidth ? width / menu.offsetWidth : 1;
-        if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
-      };
-      fit();
-      const observer = new ResizeObserver(fit);
-      observer.observe(menu);
-      window.addEventListener("resize", fit);
-      return () => {
-        observer.disconnect();
-        window.removeEventListener("resize", fit);
-      };
-    }, [open]);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-topbar-control", ref: containerRef }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: "ze-menu-trigger" + (solid ? " btn-solid" : "") + (open ? " open" : ""),
-        "aria-haspopup": "menu",
-        "aria-expanded": open,
-        onClick: () => setOpen((o) => !o)
-      },
-      label,
-      /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
-    ), open && /* @__PURE__ */ React.createElement("div", { className: "ze-menu", role: "menu", ref: menuRef }, children({ close: () => setOpen(false) })));
-  }
-  function MenuItem({ label, detail, shortcut, hint, disabled, onClick, close }) {
-    return /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        role: "menuitem",
-        className: "ze-menu-item",
-        disabled,
-        title: hint,
-        onClick: () => {
-          close();
-          onClick();
-        }
-      },
-      /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-text" }, /* @__PURE__ */ React.createElement("span", null, label), detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-detail" }, detail)),
-      shortcut && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-shortcut" }, shortcut)
-    );
   }
 
   // apps/ZEditor/src/ui/topbar/Topbar.jsx
@@ -15112,7 +15122,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "24ea151"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "888ae8a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -15667,8 +15677,6 @@
         toolDefaults,
         styleActions: edits.styleActions,
         magicErase: magic,
-        annotations: selectedPage.annotations || [],
-        onToggleClip: edits.handleToggleClip,
         marquee,
         targetLayer: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null
       }
@@ -15688,6 +15696,8 @@
         onSetGroupFlag: edits.handleSetGroupFlag,
         onToggleFlag: edits.handleToggleLayerFlag,
         onToggleClip: edits.handleToggleClip,
+        onClip: () => edits.handleSetClip(selection.selectedAnnotationIds(), true),
+        onRelease: () => edits.handleSetClip(selection.selectedAnnotationIds(), false),
         onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
         onReorder: edits.handleReorderLayers
       }

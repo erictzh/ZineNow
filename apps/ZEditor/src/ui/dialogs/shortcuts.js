@@ -48,7 +48,7 @@ export const KEYBOARD_SHORTCUTS = [
       ["Ctrl + R", "Rotate the selected page"],
       ["Ctrl + G", "Group the selected items (select several first)"],
       ["Ctrl + Shift + G", "Ungroup"],
-      ["Ctrl + Alt + G", "Clipping mask on/off: the selected image shows only where the layer directly below it has pixels"],
+      ["Ctrl + Alt + G", "Clipping mask on/off: the selected layer shows only where the layer directly below it has pixels (also in the Layers panel menu)"],
       ["Alt + click", "Pick one item out of a group"],
       ["Shift + click", "Add to or remove from the selection (pages and items)"],
       ["Drag on empty page", "Select the items it touches (Move tool)"],

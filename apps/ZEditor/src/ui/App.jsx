@@ -196,8 +196,6 @@ export function App() {
             toolDefaults={toolDefaults}
             styleActions={edits.styleActions}
             magicErase={magic}
-            annotations={selectedPage.annotations || []}
-            onToggleClip={edits.handleToggleClip}
             marquee={marquee}
             targetLayer={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
           />
@@ -219,6 +217,8 @@ export function App() {
           onSetGroupFlag={edits.handleSetGroupFlag}
           onToggleFlag={edits.handleToggleLayerFlag}
           onToggleClip={edits.handleToggleClip}
+          onClip={() => edits.handleSetClip(selection.selectedAnnotationIds(), true)}
+          onRelease={() => edits.handleSetClip(selection.selectedAnnotationIds(), false)}
           onRename={(id, name) => edits.handleUpdateAnnotation(id, { name })}
           onReorder={edits.handleReorderLayers}
         />

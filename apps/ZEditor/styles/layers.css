@@ -125,3 +125,10 @@
 
 /* A clipped image's row is set in a little, like Photoshop's clipped layers. */
 .ze-layer-row.is-clipped { padding-left: 24px; }
+
+/* The ... menu in the Layers panel's title bar. */
+/* The menu hangs from the panel itself (not the button), so the panel's edge can't cut it off. */
+.ze-layers-menu-wrap { display: inline-flex; }
+.ze-layers-menu-wrap .ze-guides-settings-btn.is-open { color: var(--ui-fg); }
+.ze-layers-menu { min-width: 0; width: 210px; top: 44px; right: 8px; z-index: 30; }
+.ze-layers-menu .ze-menu-item { gap: 12px; padding: 8px; font-size: 12px; }

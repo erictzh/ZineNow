@@ -38,9 +38,9 @@ export function useKeyboardShortcuts(app) {
         if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); history.handleRedo(); return; }
         if (key === "r") { e.preventDefault(); if (selectedIdx !== null) pageOps.handleRotate(selectedIdx); return; }
         if (key === "j") { e.preventDefault(); marquee.makeLayer(e.shiftKey ? "cut" : "copy"); return; } // Layer via Copy / Layer via Cut, from the Marquee
-        if (key === "g" && e.altKey) { // Ctrl+Alt+G: clipping mask on/off for the selected image (as in Photoshop)
+        if (key === "g" && e.altKey) { // Ctrl+Alt+G: clipping mask on/off for the selected layers (as in Photoshop)
           e.preventDefault();
-          if (selectedAnnId !== null && selectedAnnIds.length === 0) edits.handleToggleClip(selectedAnnId);
+          if (selectedAnnId !== null) edits.handleClipSelection();
           return;
         }
         if (key === "g") { e.preventDefault(); if (e.shiftKey) edits.handleUngroupSelection(); else edits.handleGroupSelection(); return; }

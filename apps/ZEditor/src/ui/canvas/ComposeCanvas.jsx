@@ -2,7 +2,7 @@
 
 import { MAIN_SCALE } from "../../constants.js";
 import { withGroupMates } from "../../model/annotations.js";
-import { clipBaseIndex, isClippedImage } from "../../model/clipping.js";
+import { clipBaseIndex, isClipped } from "../../model/clipping.js";
 import { blendOf } from "../../model/controls.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
@@ -370,18 +370,20 @@ export function ComposeCanvas({
             onFinishTextEdit,
             onLinkNextFrame: onLinkNextFrame,
           };
-          // A clipped image shows only where the layer below has pixels (ui/canvas/ClipWrap.jsx). Its box,
-          // outline and handles are drawn apart from the picture, so they aren't cut off by the mask. (While
-          // it's being cropped it is drawn plainly.)
-          const baseIndex = isClippedImage(a) && a.id !== croppingAnnId ? clipBaseIndex(pageViews, index) : -1;
+          // A clipped layer shows only where the layer below has pixels (ui/canvas/ClipWrap.jsx): a copy of
+          // it is drawn inside the mask, and the real item sits above it with its picture hidden (the
+          // .ze-clip-ghost rules in styles/compose.css) so it can still be pressed, dragged and held by its
+          // handles outside the mask. While it is being cropped or typed in it is drawn plainly.
+          const drawnPlain = a.id === croppingAnnId || a.id === editingAnnId;
+          const baseIndex = isClipped(a) && !drawnPlain ? clipBaseIndex(pageViews, index) : -1;
           if (baseIndex < 0) return <AnnotationItem key={a.id} ann={a} {...itemProps} />;
           if (pageViews[baseIndex].hidden) return null; // it goes with the layer it is clipped to
           return (
             <React.Fragment key={a.id}>
               <ClipWrap base={pageViews[baseIndex]} pageSize={canvasSize} pageFilter={pageFilter} blend={blendOf(a)}>
-                <AnnotationItem ann={{ ...a, blend: undefined }} {...itemProps} showHandles={false} isSelected={false} contentOnly />
+                <AnnotationItem ann={{ ...a, blend: undefined }} {...itemProps} showHandles={false} isSelected={false} isEditing={false} isCropping={false} isEraseTarget={false} />
               </ClipWrap>
-              <AnnotationItem ann={a} {...itemProps} chromeOnly />
+              <div className="ze-clip-ghost"><AnnotationItem ann={a} {...itemProps} /></div>
             </React.Fragment>
           );
         })}

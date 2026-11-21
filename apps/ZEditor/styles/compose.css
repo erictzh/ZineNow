@@ -509,18 +509,20 @@
 .ze-marquee-corner { cursor: pointer; z-index: 13; }
 .ze-marquee-corner.is-first { background-color: var(--ui-accent); width: 14px; height: 14px; }
 
-/* A clipped image's picture: page-sized, masked by the layer below (ui/canvas/ClipWrap.jsx), and out of the
-   mouse's way; its box, outline and handles are a separate unmasked item above it. */
+/* A clipped layer's picture: page-sized, masked by the layer below (ui/canvas/ClipWrap.jsx), and out of the
+   mouse's way. The real item sits above it inside .ze-clip-ghost with its own picture hidden: its box, outline
+   and handles stay (so it can be pressed, dragged and resized outside the mask), but nothing of it shows. */
 .ze-clip-wrap {
     position: absolute;
     left: 0;
     top: 0;
-    pointer-events: none;
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
 }
-.ze-ann-image.is-content-only { pointer-events: none; }
-/* The unmasked box of a clipped image has no picture of its own: it is only there to press, select and hold handles. */
-.ze-ann-image--chrome { background: transparent; }
+.ze-clip-wrap, .ze-clip-wrap * { pointer-events: none !important; }
+.ze-clip-ghost { display: contents; }
+.ze-clip-ghost [data-ann-id] { color: transparent !important; background: transparent !important; text-shadow: none !important; }
+.ze-clip-ghost [data-ann-id] > :not(.ze-resize-handle):not(.ze-rotate-handle):not(.ze-text-port) { visibility: hidden; }
+.ze-clip-ghost path[data-ann-id] { stroke-opacity: 0 !important; fill-opacity: 0 !important; }

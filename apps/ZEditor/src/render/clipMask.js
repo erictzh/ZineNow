@@ -1,7 +1,7 @@
-// Draws clipping masks: a clipped image is drawn only where the layer it is clipped to has pixels.
+// Draws clipping masks: a clipped layer is drawn only where the layer it is clipped to has pixels.
 
 import { blendOf } from "../model/controls.js";
-import { clipBaseIndex, isClippedImage } from "../model/clipping.js";
+import { clipBaseIndex, isClipped } from "../model/clipping.js";
 import { SHADOW_EFFECT, STROKE_EFFECT, TEXTURE_EFFECT } from "../model/imageEffects.js";
 import { TEXT_LABEL_EFFECT } from "../model/text/textControls.js";
 import { drawAnnotationOnCanvas } from "./drawAnnotation.js";
@@ -31,7 +31,7 @@ export async function clipMaskCanvas(base, width, height, scaleFactor, pageFilte
   return canvas;
 }
 
-// A clipped item drawn on `ctx` (a page-sized canvas): drawn on its own layer, cut to the mask, then
+// A clipped item (of any kind) drawn on `ctx` (a page-sized canvas): drawn on its own layer, cut to the mask, then
 // blended onto the page with its own blend mode (its opacity is part of its drawing).
 export async function drawClippedItem(ctx, item, base, scaleFactor, pageFilter) {
   const { width, height } = ctx.canvas;
@@ -47,13 +47,13 @@ export async function drawClippedItem(ctx, item, base, scaleFactor, pageFilter) 
   ctx.restore();
 }
 
-// One item of a page's list drawn the way the page shows it: hidden items skipped, and a clipped image
-// cut to the layer below. A clipped image with no layer to clip to is drawn as an ordinary one, and one
+// One item of a page's list drawn the way the page shows it: hidden items skipped, and a clipped layer
+// cut to the layer below. A clipped layer with no layer to clip to is drawn as an ordinary one, and one
 // whose base is hidden isn't drawn at all (it disappears with it).
 export async function drawPageItem(ctx, items, index, scaleFactor, pageFilter) {
   const item = items[index];
   if (item.hidden) return;
-  if (isClippedImage(item)) {
+  if (isClipped(item)) {
     const baseIndex = clipBaseIndex(items, index);
     if (baseIndex >= 0) {
       if (!items[baseIndex].hidden) await drawClippedItem(ctx, item, items[baseIndex], scaleFactor, pageFilter);

@@ -23,10 +23,7 @@ const { useRef, useEffect } = React;
 // scales width/height together, keeping the image's aspect ratio
 // rather than letting it stretch. Cropping isn't built yet — this is
 // add/move/resize/select/delete only, deliberately scoped that way.
-// A clipped image is shown in two parts (ui/canvas/ComposeCanvas.jsx): `contentOnly` is the picture, drawn
-// inside the mask and out of the mouse's way, and `chromeOnly` is everything you work with (its box to press
-// and drag, the selection outline, handles), drawn unmasked so the handles stay reachable.
-export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, contentOnly, chromeOnly, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
+export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
   const halftoneCanvasRef = useRef(null);
   const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
   // Crop is a sub-rect of the source image, in ITS OWN natural pixel
@@ -110,7 +107,7 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
     : null;
 
   useEffect(() => {
-    if (!usesFilterCanvas || isCropping || chromeOnly) return;
+    if (!usesFilterCanvas || isCropping) return;
     let cancelled = false;
     (async () => {
       const img = await loadImageElement(ann.src);
@@ -128,19 +125,6 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
     })();
     return () => { cancelled = true; };
   }, [filterCanvasKey, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH]);
-
-  if (chromeOnly) {
-    return (
-      <div
-        data-ann-id={ann.id}
-        className={"ze-ann-image ze-ann-image--chrome" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : "")}
-        style={boxOuterStyle({ ...ann, blend: undefined })}
-        onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
-      >
-        {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
-      </div>
-    );
-  }
 
   // Crop-editing view — shows the WHOLE source image (dimmed outside
   // the current crop window) at the scale the crop rect is already
@@ -189,10 +173,10 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
 
   return (
     <div
-      {...(contentOnly ? {} : { "data-ann-id": ann.id })}
-      className={"ze-ann-image" + (contentOnly ? " is-content-only" : (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : ""))}
+      data-ann-id={ann.id}
+      className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : "")}
       style={boxOuterStyle(ann)}
-      onMouseDown={contentOnly ? undefined : (e) => { if (tool === "select") onPress(e, ann); }}
+      onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
     >
       {/* Shadow sits on this wrapper, outside the edge clip so the clip
           can't cut it off, and away from the resize handle. It stays
@@ -213,7 +197,7 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
         )}
         <BoxEffectOverlays ann={ann} edgeOutline={edgeOutline} />
       </div>
-      {showHandles && !contentOnly && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
+      {showHandles && <ResizeHandles handles={ALL_RESIZE_HANDLES} onStart={startResize} onRotate={(angle) => onUpdate(ann.id, { angle })} />}
       {hasOwnDuotone && (
         <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
           <defs>

@@ -1,11 +1,13 @@
 // Floating layers list: select, lock, hide, group (collapsible, renamable) and reorder items.
 
 import { groupColor } from "../../model/annotations.js";
+import { canClipAt } from "../../model/clipping.js";
 import { layerName } from "../../model/layerNames.js";
 import { isEllipse } from "../../model/outlines.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../../model/strokes.js";
 import { rectFillCss } from "../../render/gradients.js";
 import { trackPointerDrag } from "../pointer.js";
+import { MenuItem } from "../topbar/TopMenu.jsx";
 import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
 
@@ -81,8 +83,10 @@ function RenameInput({ current, onDone }) {
 
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet.
-export function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip }) {
+export function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
+  const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
+  const menuRef = useRef(null);
   const [dropInfo, setDropInfo] = useState(null); // { key, row, before }: the line shown above/below row `key`
   const [, setCollapseTick] = useState(0);
   const dragIdRef = useRef(null);
@@ -91,6 +95,19 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
   const headRef = useRef(null);
   const topFirst = annotations.slice().reverse();
   const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
+  // Clipping mask: the selected layers that can be clipped (they need a layer below and no clip yet), and those that are.
+  const canClip = annotations.some((a, i) => selectedIds.includes(a.id) && !a.clipToBelow && canClipAt(annotations, i));
+  const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
+
+  // The menu closes on a press outside it or Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const outside = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    const escape = (e) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", escape); };
+  }, [menuOpen]);
 
   function toggleCollapsed(groupId) {
     if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId); else collapsedGroups.add(groupId);
@@ -165,7 +182,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
       <React.Fragment key={ann.id}>
         {dropLine(ann.id, true)}
         <div
-          className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.type === "image" && ann.clipToBelow ? " is-clipped" : "") + (inGroup ? " is-grouped is-in-group" : "")}
+          className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.clipToBelow ? " is-clipped" : "") + (inGroup ? " is-grouped is-in-group" : "")}
           style={inGroup ? { "--ze-group-color": groupColor(ann.groupId) } : undefined}
           title={inGroup ? "In a group — Alt + click selects just this layer" : undefined}
           data-layer-id={ann.id}
@@ -178,7 +195,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
           {isRenaming
             ? <RenameInput current={layerName(ann)} onDone={(text) => finishRename(ann, text)} />
             : <span className="ze-layer-name" title="Double-click to rename">{layerName(ann)}</span>}
-          {ann.type === "image" && ann.clipToBelow && (
+          {ann.clipToBelow && (
             <button
               type="button" className="ze-layer-icon-btn active" title="Clipped to the layer below. Click to release it." aria-label="Release the clipping mask"
               onClick={(e) => { e.stopPropagation(); onToggleClip(ann.id); }}
@@ -282,19 +299,26 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
       <div className="ze-format-panel-head ze-layers-head" ref={headRef} onMouseDown={startPanelDrag}>
         <span>Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}</span>
         <span className="ze-layers-head-actions" onMouseDown={(e) => e.stopPropagation()}>
-          <button type="button" className="ze-guides-settings-btn" title="Group the selected layers (Ctrl+G)" aria-label="Group selected layers" disabled={selectedIds.length < 2} onClick={onGroup}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="11" height="11" rx="2" />
-              <rect x="10" y="10" width="11" height="11" rx="2" />
-            </svg>
-          </button>
-          <button type="button" className="ze-guides-settings-btn" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup selected layers" disabled={!canUngroup} onClick={onUngroup}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="8" height="8" rx="2" />
-              <rect x="13" y="13" width="8" height="8" rx="2" />
-              <path d="M14 7h4M7 14v4" strokeDasharray="1 3" />
-            </svg>
-          </button>
+          <span className="ze-layers-menu-wrap" ref={menuRef}>
+            <button
+              type="button" className={"ze-guides-settings-btn" + (menuOpen ? " is-open" : "")} title="Group, ungroup and clipping mask" aria-label="More layer actions"
+              aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <circle cx="5" cy="12" r="1.9" />
+                <circle cx="12" cy="12" r="1.9" />
+                <circle cx="19" cy="12" r="1.9" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="ze-menu ze-layers-menu" role="menu">
+                <MenuItem label="Group" shortcut="Ctrl+G" hint="Group the selected layers (select two or more)" disabled={selectedIds.length < 2} onClick={onGroup} close={() => setMenuOpen(false)} />
+                <MenuItem label="Ungroup" shortcut="Ctrl+Shift+G" disabled={!canUngroup} onClick={onUngroup} close={() => setMenuOpen(false)} />
+                <MenuItem label="Clip to layer below" shortcut="Ctrl+Alt+G" hint="Shows the selected layer only where the layer directly below it has pixels" disabled={!canClip} onClick={onClip} close={() => setMenuOpen(false)} />
+                <MenuItem label="Release clipping mask" disabled={!canRelease} onClick={onRelease} close={() => setMenuOpen(false)} />
+              </div>
+            )}
+          </span>
           <button type="button" className="ze-guides-settings-btn" title="Delete the selected layers (Delete)" aria-label="Delete selected layers" disabled={selectedIds.length === 0} onClick={onDelete}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M4 7h16" />

@@ -123,14 +123,30 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined, groupName: undefined } : a)));
   }
 
-  // Clipping mask on/off for an image (its own undo step). Switching on needs a layer below to clip to.
-  function handleToggleClip(id) {
+  // Clipping masks (model/clipping.js), each its own undo step. `handleSetClip(ids, true)` clips the layers
+  // that can be (they need a layer below to clip to and must not be clipped already); `false` releases
+  // those that are clipped.
+  function handleSetClip(ids, on) {
     if (selectedIdx === null) return;
     const items = currentAnnotations();
-    const index = items.findIndex((a) => a.id === id);
-    const item = items[index];
-    if (!item || item.type !== "image" || (!item.clipToBelow && !canClipAt(items, index))) return;
-    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, clipToBelow: a.clipToBelow ? undefined : true } : a)));
+    const targets = new Set(ids.filter((id) => {
+      const index = items.findIndex((a) => a.id === id);
+      return index >= 0 && (on ? !items[index].clipToBelow && canClipAt(items, index) : items[index].clipToBelow);
+    }));
+    if (targets.size === 0) return;
+    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (targets.has(a.id) ? { ...a, clipToBelow: on ? true : undefined } : a)));
+  }
+  // One layer: clipped if it isn't, released if it is.
+  function handleToggleClip(id) {
+    const item = currentAnnotations().find((a) => a.id === id);
+    if (item) handleSetClip([id], !item.clipToBelow);
+  }
+  // Ctrl+Alt+G and the touch bar: clips the selected layers that can be, or releases them all when none can.
+  function handleClipSelection() {
+    const ids = selectedAnnotationIds();
+    const items = currentAnnotations();
+    const clippable = ids.some((id) => { const i = items.findIndex((a) => a.id === id); return i >= 0 && !items[i].clipToBelow && canClipAt(items, i); });
+    handleSetClip(ids, clippable);
   }
 
   // A group's name lives on each of its members (`groupName`), so it travels with them in saved projects.
@@ -367,7 +383,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     frameActions,
     updateAnnotationsFor, updatePageFilter,
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
-    handleGroupSelection, handleUngroupSelection, handleToggleClip,
+    handleGroupSelection, handleUngroupSelection, handleSetClip, handleToggleClip, handleClipSelection,
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
