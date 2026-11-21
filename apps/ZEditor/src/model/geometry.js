@@ -9,6 +9,21 @@ export function rotatePoint(x, y, degrees) {
   const cos = Math.cos(radians), sin = Math.sin(radians);
   return [x * cos - y * sin, x * sin + y * cos];
 }
+
+// The box a drag from `start` to `point` draws: Shift makes it a square (a circle, for the Ellipse tool), Alt grows it out from `start`
+// (which then stays its middle).
+export function dragBox(start, point, square, fromCenter) {
+  let dx = point.x - start.x, dy = point.y - start.y;
+  if (square) {
+    const side = Math.max(Math.abs(dx), Math.abs(dy));
+    dx = (dx < 0 ? -1 : 1) * side;
+    dy = (dy < 0 ? -1 : 1) * side;
+  }
+  const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
+  const x1 = start.x + dx, y1 = start.y + dy;
+  return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
+}
+
 export const MIN_RESIZE_SIZE = 20;
 
 // A box after dragging one of its handles. `handle` is a compass name

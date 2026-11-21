@@ -7489,6 +7489,17 @@
     const cos = Math.cos(radians), sin = Math.sin(radians);
     return [x * cos - y * sin, x * sin + y * cos];
   }
+  function dragBox(start, point, square, fromCenter) {
+    let dx = point.x - start.x, dy = point.y - start.y;
+    if (square) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = (dx < 0 ? -1 : 1) * side;
+      dy = (dy < 0 ? -1 : 1) * side;
+    }
+    const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
+    const x1 = start.x + dx, y1 = start.y + dy;
+    return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
+  }
   var MIN_RESIZE_SIZE = 20;
   function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE, angle = 0) {
     const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
@@ -9519,17 +9530,6 @@
   var POLYGON_REPEAT_PX = 4;
   function rectMarquee(box, angle = 0) {
     return { kind: "rect", x: box.x, y: box.y, width: box.width, height: box.height, angle };
-  }
-  function dragBox(start, point, square, fromCenter) {
-    let dx = point.x - start.x, dy = point.y - start.y;
-    if (square) {
-      const side = Math.max(Math.abs(dx), Math.abs(dy));
-      dx = (dx < 0 ? -1 : 1) * side;
-      dy = (dy < 0 ? -1 : 1) * side;
-    }
-    const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
-    const x1 = start.x + dx, y1 = start.y + dy;
-    return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
   }
   function regionPolygon(m) {
     if (m.kind === "polygon") return m.points.map(([x, y]) => [x, y]);
@@ -12450,18 +12450,28 @@
       const additive = e.shiftKey;
       if (!additive) onSelectAnnotation(null);
       const start = overlayPoint(e);
-      let rect = null;
+      const shape = tool === "rect" || tool === "ellipse";
+      let rect = null, lastPoint = null;
+      const layout = (shift) => {
+        if (!lastPoint) return;
+        rect = dragBox(start, lastPoint, shape && shift, false);
+        setDragRect(rect);
+      };
+      const onKey = (ev) => {
+        if (ev.key === "Shift") layout(ev.shiftKey);
+      };
+      if (shape) {
+        window.addEventListener("keydown", onKey);
+        window.addEventListener("keyup", onKey);
+      }
       trackPointerDrag((ev) => {
         const p = overlayPoint(ev);
         if (!rect && Math.hypot(p.x - start.x, p.y - start.y) * zoom <= DRAG_THRESHOLD) return;
-        rect = {
-          x: Math.min(start.x, p.x),
-          y: Math.min(start.y, p.y),
-          width: Math.abs(p.x - start.x),
-          height: Math.abs(p.y - start.y)
-        };
-        setDragRect(rect);
+        lastPoint = p;
+        layout(ev.shiftKey);
       }, () => {
+        window.removeEventListener("keydown", onKey);
+        window.removeEventListener("keyup", onKey);
         setDragRect(null);
         if (tool === "text") {
           if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
@@ -15277,7 +15287,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "8265e0a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f1ded04"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

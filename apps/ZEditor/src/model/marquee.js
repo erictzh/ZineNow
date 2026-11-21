@@ -2,6 +2,9 @@
 
 import { rotatePoint } from "./geometry.js";
 
+// The marquee and the Rectangle/Ellipse tools share the drag-out box (Shift = square, Alt = from the middle).
+export { dragBox } from "./geometry.js";
+
 // What the panel's settings mean:
 // action:       "copy" = Layer via Copy (the source stays as it is), "cut" = Layer via Cut (the region is
 //               taken out of the source).
@@ -32,20 +35,6 @@ export const POLYGON_REPEAT_PX = 4; // screen px: a press this close to its last
 // in page px. `closed` is false while the polygon is still being drawn.
 export function rectMarquee(box, angle = 0) {
   return { kind: "rect", x: box.x, y: box.y, width: box.width, height: box.height, angle };
-}
-
-// The box a drag from `start` to `point` draws: Shift makes it a square, Alt grows it out from `start`
-// (which then stays its middle).
-export function dragBox(start, point, square, fromCenter) {
-  let dx = point.x - start.x, dy = point.y - start.y;
-  if (square) {
-    const side = Math.max(Math.abs(dx), Math.abs(dy));
-    dx = (dx < 0 ? -1 : 1) * side;
-    dy = (dy < 0 ? -1 : 1) * side;
-  }
-  const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
-  const x1 = start.x + dx, y1 = start.y + dy;
-  return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
 }
 
 // The marquee's outline as a list of points, whatever its shape (a rectangle gives its four corners).

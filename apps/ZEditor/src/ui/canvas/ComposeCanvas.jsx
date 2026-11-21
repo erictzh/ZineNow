@@ -4,6 +4,7 @@ import { MAIN_SCALE } from "../../constants.js";
 import { withGroupMates } from "../../model/annotations.js";
 import { clipBaseIndex, isClipped } from "../../model/clipping.js";
 import { blendOf } from "../../model/controls.js";
+import { dragBox } from "../../model/geometry.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
 import { strokeHitTest } from "../../model/strokes.js";
@@ -175,16 +176,25 @@ export function ComposeCanvas({
     const additive = e.shiftKey;
     if (!additive) onSelectAnnotation(null);
     const start = overlayPoint(e);
-    let rect = null;
+    // Rectangle/Ellipse: Shift keeps the box square (a circle), checked live as
+    // Shift goes down or up mid-drag, not only when the pointer moves.
+    const shape = tool === "rect" || tool === "ellipse";
+    let rect = null, lastPoint = null;
+    const layout = (shift) => {
+      if (!lastPoint) return;
+      rect = dragBox(start, lastPoint, shape && shift, false);
+      setDragRect(rect);
+    };
+    const onKey = (ev) => { if (ev.key === "Shift") layout(ev.shiftKey); };
+    if (shape) { window.addEventListener("keydown", onKey); window.addEventListener("keyup", onKey); }
     trackPointerDrag((ev) => {
       const p = overlayPoint(ev);
       if (!rect && Math.hypot(p.x - start.x, p.y - start.y) * zoom <= DRAG_THRESHOLD) return;
-      rect = {
-        x: Math.min(start.x, p.x), y: Math.min(start.y, p.y),
-        width: Math.abs(p.x - start.x), height: Math.abs(p.y - start.y),
-      };
-      setDragRect(rect);
+      lastPoint = p;
+      layout(ev.shiftKey);
     }, () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
       setDragRect(null);
       if (tool === "text") {
         // A click makes a text box that fits its text; a drag sets its width.
