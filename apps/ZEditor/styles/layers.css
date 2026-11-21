@@ -132,3 +132,12 @@
 .ze-layers-menu-wrap .ze-guides-settings-btn.is-open { color: var(--ui-fg); }
 .ze-layers-menu { min-width: 0; width: 210px; top: 44px; right: 8px; z-index: 30; }
 .ze-layers-menu .ze-menu-item { gap: 12px; padding: 8px; font-size: 12px; }
+
+/* Hovering the title bar makes the ⋮ button flash white once (half a second), so people notice the menu is there. */
+@keyframes ze-layers-menu-shine {
+    50% { color: #fff; filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9)); }
+}
+.ze-layers-head:hover .ze-layers-menu-wrap > .ze-guides-settings-btn { animation: ze-layers-menu-shine 0.5s ease-in-out 1; }
+@media (prefers-reduced-motion: reduce) {
+    .ze-layers-head:hover .ze-layers-menu-wrap > .ze-guides-settings-btn { animation: none; }
+}
