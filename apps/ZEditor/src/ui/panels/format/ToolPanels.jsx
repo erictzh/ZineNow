@@ -55,10 +55,10 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it."
         : "Drag on the page to draw a box, then move, resize or turn it."} Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect.</span>
       <PanelSection id="marquee.shape" title="Shape" defaultOpen>
-        <div className="ze-format-row">
-          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!polygon ? " active" : "")} onClick={() => change({ shape: "rect" })}>Rectangle</button>
-          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (polygon ? " active" : "")} onClick={() => change({ shape: "polygon" })}>Polygon</button>
-        </div>
+        <select className="ze-format-select" aria-label="Marquee shape" value={polygon ? "polygon" : "rect"} onChange={(e) => change({ shape: e.target.value })}>
+          <option value="rect">Rectangle</option>
+          <option value="polygon">Polygon</option>
+        </select>
         {marquee && marquee.polygonOpen && (
           <div className="ze-format-row">
             <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={marquee.region.points.length < 3} title="Enter" onClick={() => marquee.setRegion({ ...marquee.region, closed: true })}>Close shape</button>
