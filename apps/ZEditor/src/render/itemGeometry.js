@@ -3,7 +3,7 @@
 import { bboxOf } from "../model/annotations.js";
 import { angleOf } from "../model/controls.js";
 import { rotatePoint } from "../model/geometry.js";
-import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../model/strokes.js";
+import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS, strokeHitTest } from "../model/strokes.js";
 import { measureTextBox } from "./textLayout.js";
 
 // The page area an item covers (x, y, width, height), allowing for its
@@ -22,6 +22,14 @@ export function annotationBounds(ann) {
   });
   const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
   return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+}
+
+// Whether the page point {x, y} is on the item: inside its (turned) box, or near a stroke.
+export function hitsItem(ann, point) {
+  if (ann.type === "stroke") return strokeHitTest([point.x, point.y], ann);
+  const size = ann.type === "text" ? measureTextBox(ann) : ann;
+  const [lx, ly] = rotatePoint(point.x - (ann.x + size.width / 2), point.y - (ann.y + size.height / 2), -angleOf(ann));
+  return Math.abs(lx) <= size.width / 2 && Math.abs(ly) <= size.height / 2;
 }
 
 // An item turned `degrees` about the page point (cx, cy). A stroke has no

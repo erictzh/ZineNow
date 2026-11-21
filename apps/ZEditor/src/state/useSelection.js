@@ -2,7 +2,7 @@
 
 import { withGroupMates } from "../model/annotations.js";
 
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
   const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser' | 'marquee' | 'measure'
@@ -17,6 +17,9 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   const [selectedAnnIds, setSelectedAnnIds] = useState([]);
   const [editingAnnId, setEditingAnnId] = useState(null);
   const [croppingAnnId, setCroppingAnnId] = useState(null);
+  // The layer last picked in the Layers panel. While it is still the selected layer, a press on the page
+  // that lands on it works on it even when another layer lies on top there (see ComposeCanvas).
+  const panelPickRef = useRef(null);
 
   // Clicking any toolbar tool switches the format panel to that tool's
   // own settings — any previous selection is cleared so the panel
@@ -34,6 +37,7 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   const currentAnnotations = () => (selectedIdx === null ? [] : pages[selectedIdx].annotations || []);
 
   function handleSelectAnnotations(ids, additive) {
+    panelPickRef.current = null;
     const existing = additive && selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [];
     const all = [...new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])];
     setSelectedAnnId(all.length > 0 ? all[0] : null);
@@ -48,6 +52,7 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   // delete. A plain click (no shift) always resets to that one item.
   // An item in a group brings its whole group along, unless `single`.
   function handleSelectAnnotation(id, shiftKey, single) {
+    panelPickRef.current = null;
     if (id === null) {
       setSelectedAnnId(null);
       setSelectedAnnIds([]);
@@ -75,6 +80,7 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   function handleSelectLayer(id, shiftKey, single) {
     selectTool("select");
     handleSelectAnnotation(id, shiftKey, single);
+    panelPickRef.current = id;
   }
 
   function selectedAnnotationIds() {
@@ -131,7 +137,7 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   }, [selectedAnnId]);
 
   return {
-    tool, setTool, selectTool,
+    tool, setTool, selectTool, panelPickId: panelPickRef.current,
     selectedAnnId, setSelectedAnnId, selectedAnnIds, setSelectedAnnIds, selectedAnnotationIds, currentAnnotations,
     editingAnnId, setEditingAnnId, croppingAnnId, handleToggleCrop,
     handleSelectAnnotations, handleSelectAnnotation, handleSelectLayer,

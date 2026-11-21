@@ -147,6 +147,7 @@ export function App() {
                 onMoveAnnotations={edits.handleMoveAnnotations}
                 onRotateAnnotations={edits.handleRotateAnnotations}
                 croppingAnnId={croppingAnnId}
+                priorityAnnId={selection.panelPickId !== null && selection.panelPickId === selectedAnnId ? selectedAnnId : null}
                 onSelectAnnotation={selection.handleSelectAnnotation}
                 onAddText={edits.handleAddText}
                 onAddRect={edits.handleAddRect}

@@ -7,6 +7,7 @@ import { blendOf } from "../../model/controls.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
 import { strokeHitTest } from "../../model/strokes.js";
+import { hitsItem } from "../../render/itemGeometry.js";
 import { resolvePageText } from "../../render/pageText.js";
 import { onWrapShapesChange } from "../../render/wrapShapes.js";
 import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
@@ -31,7 +32,7 @@ export function ComposeCanvas({
   pdfDocsRef, page, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn, tool,
   pageFilter, onionGhostSrc, onionSkinOpacity, pageNumberSpec: numberSpec,
   penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
-  annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId,
+  annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId, priorityAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
@@ -280,6 +281,12 @@ export function ComposeCanvas({
   function pressAnnotation(e, ann, onPlainClick) {
     e.preventDefault();
     e.stopPropagation();
+    // A layer picked in the Layers panel keeps priority: pressing where it lies, under another layer, works
+    // on it (drags it) instead of selecting the one on top. Ctrl/Cmd + press picks the top layer as usual.
+    if (priorityAnnId !== null && ann.id !== priorityAnnId && !e.ctrlKey && !e.metaKey) {
+      const chosen = annotations.find((a) => a.id === priorityAnnId);
+      if (chosen && !chosen.hidden && !chosen.locked && hitsItem(chosen, overlayPoint(e))) { ann = chosen; onPlainClick = undefined; }
+    }
     if (editingAnnId !== null && editingAnnId !== ann.id) onFinishTextEdit();
     const current = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
     const wasSelected = current.includes(ann.id);
