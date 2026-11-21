@@ -5,7 +5,7 @@ import { withGroupMates } from "../model/annotations.js";
 const { useState, useEffect } = React;
 
 export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
-  const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser' | 'measure'
+  const [tool, setTool] = useState("select"); // 'select' | 'text' | 'rect' | 'ellipse' | 'pen' | 'highlighter' | 'eraser' | 'marquee' | 'measure'
   const [selectedAnnId, setSelectedAnnId] = useState(null);
   // Shift+Click multi-select — `selectedAnnId` stays the single
   // "primary" item (the one resize/crop/drag/Ctrl+C/the FormatPanel's
@@ -25,7 +25,8 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
   function selectTool(t) {
     setTool(t);
     setEditingAnnId(null);
-    if (t === "select") return;
+    // The Marquee tool keeps the selected layer: it is the layer "Selected layer" works on.
+    if (t === "select" || t === "marquee") return;
     setSelectedAnnId(null);
     setSelectedAnnIds([]);
   }
@@ -69,7 +70,8 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
     }
   }
 
-  // Picking a row in the Layers panel switches to Move and selects it.
+  // Picking a row in the Layers panel switches to Move and selects it (its settings show in the Format
+  // panel). Back on the Marquee tool (M), that layer is the one "Selected layer" works on.
   function handleSelectLayer(id, shiftKey, single) {
     selectTool("select");
     handleSelectAnnotation(id, shiftKey, single);

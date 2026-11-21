@@ -1,8 +1,9 @@
-// Settings for the next item each tool makes (pen, highlighter, eraser, text, shapes), the font list and saved text styles.
+// Settings for the next item each tool makes (pen, highlighter, eraser, marquee, text, shapes), the font list and saved text styles.
 
 import { controlValues } from "../model/controls.js";
 import { RECT_CONTROLS } from "../model/rect.js";
 import { MAGIC_ERASER_DEFAULTS } from "../model/magicEraser.js";
+import { MARQUEE_DEFAULTS } from "../model/marquee.js";
 import { SOFT_ERASER_DEFAULTS } from "../model/softEraser.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../model/strokes.js";
 import { DEFAULT_FONT_OPTIONS } from "../model/text/textControls.js";
@@ -50,6 +51,8 @@ export function useToolDefaults() {
   const [eraserMode, setEraserMode] = useState("soft");
   const [softEraser, setSoftEraser] = useState(SOFT_ERASER_DEFAULTS);
   const [magicEraser, setMagicEraser] = useState(MAGIC_ERASER_DEFAULTS);
+  // Marquee: how "make layer" works (Copy or Cut, what it samples, what a cut leaves). See model/marquee.js.
+  const [marquee, setMarquee] = useState(MARQUEE_DEFAULTS);
   const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
   const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);
   const [highlighterTaper, setHighlighterTaper] = useState(0);
@@ -69,7 +72,7 @@ export function useToolDefaults() {
     fontOptions, setFontOptions, addFontFamilies,
     textStyles, setTextStyles, handleSaveTextStyle, handleDeleteTextStyle, mergeTextStyles,
     penColor, setPenColor, penWidth, setPenWidth, penTaper, setPenTaper,
-    eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser,
+    eraserMode, setEraserMode, softEraser, setSoftEraser, magicEraser, setMagicEraser, marquee, setMarquee,
     highlighterColor, setHighlighterColor, highlighterWidth, setHighlighterWidth, highlighterTaper, setHighlighterTaper,
     textFontFamily, setTextFontFamily, textFontSize, setTextFontSize, textBold, setTextBold,
     textItalic, setTextItalic, textUnderline, setTextUnderline, textColor, setTextColor, textAlign, setTextAlign,

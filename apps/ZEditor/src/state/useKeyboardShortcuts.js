@@ -17,7 +17,7 @@ export function useKeyboardShortcuts(app) {
 
   useEffect(() => {
     function handleKeyDown(e) {
-      const { doc, history, selection, edits, pageOps, project, modalOpen } = appRef.current;
+      const { doc, history, selection, edits, pageOps, project, marquee, modalOpen } = appRef.current;
       const { pages, selectedIdx, selectedPageIndices, setSelectedIdx, setSelectedPageIndices, nextAnnIdRef } = doc;
       const { selectedAnnId, selectedAnnIds, setSelectedAnnId, selectTool } = selection;
       // Save works even mid-typing in a field; the browser's own "Save
@@ -37,6 +37,12 @@ export function useKeyboardShortcuts(app) {
         if (key === "z" && !e.shiftKey) { e.preventDefault(); history.handleUndo(); return; }
         if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); history.handleRedo(); return; }
         if (key === "r") { e.preventDefault(); if (selectedIdx !== null) pageOps.handleRotate(selectedIdx); return; }
+        if (key === "j") { e.preventDefault(); marquee.makeLayer(e.shiftKey ? "cut" : "copy"); return; } // Layer via Copy / Layer via Cut, from the Marquee
+        if (key === "g" && e.altKey) { // Ctrl+Alt+G: clipping mask on/off for the selected image (as in Photoshop)
+          e.preventDefault();
+          if (selectedAnnId !== null && selectedAnnIds.length === 0) edits.handleToggleClip(selectedAnnId);
+          return;
+        }
         if (key === "g") { e.preventDefault(); if (e.shiftKey) edits.handleUngroupSelection(); else edits.handleGroupSelection(); return; }
         if (key === "c") {
           if (selectedIdx !== null && selectedAnnId !== null) {
@@ -67,6 +73,7 @@ export function useKeyboardShortcuts(app) {
 
       if (key === "delete") {
         e.preventDefault();
+        if (selection.tool === "marquee") return; // the selected layer is only the marquee's target: Delete must not remove it
         if (selectedAnnId !== null) edits.handleDeleteAnnotation();
         else if (selectedIdx !== null) {
           if (selectedPageIndices.length > 0) pageOps.handleDeleteSelectedPages();
@@ -88,7 +95,8 @@ export function useKeyboardShortcuts(app) {
       if (key === "r") { selectTool("rect"); return; }
       if (key === "e") { selectTool("ellipse"); return; }
       if (key === "h") { selectTool("highlighter"); return; }
-      if (key === "m") { selectTool("measure"); return; }
+      if (key === "m") { selectTool("marquee"); return; }
+      if (key === "u") { selectTool("measure"); return; } // "ukur"
       if (key === "c") {
         // Crop on/off for the selected image: the same as the Format panel's Crop switch, which is
         // unavailable on a rotated image (unless it is already cropping).

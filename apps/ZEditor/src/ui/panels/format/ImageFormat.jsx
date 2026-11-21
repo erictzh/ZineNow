@@ -11,7 +11,9 @@ import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 
-export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage }) {
+// `clip` is { canClip, baseName }: whether there is a layer below to clip to, and its name; `onToggleClip(id)`
+// switches the clipping mask on or off.
+export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, clip, onToggleClip }) {
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
   const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -42,6 +44,22 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely." onReset={() => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]))}>
         <SizeReadout ann={ann} />
         <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+      </PanelSection>
+      <PanelSection
+        id="image.clip"
+        title="Clipping mask"
+        checked={Boolean(ann.clipToBelow)}
+        disabled={!ann.clipToBelow && !clip.canClip}
+        defaultOpen={Boolean(ann.clipToBelow)}
+        summary={ann.clipToBelow && clip.baseName ? "to " + clip.baseName : undefined}
+        hint="Shows this image only where the layer directly below it has pixels, like a flag inside a shield. Drag or resize the image to change what shows through. Ctrl+Alt+G switches it on and off."
+        onToggle={() => onToggleClip(ann.id)}
+      >
+        <span className="ze-format-hint">
+          {ann.clipToBelow
+            ? (clip.baseName ? "Clipped to " + clip.baseName + ". Anything of this image outside its shape is hidden." : "There is no layer below to clip to, so it shows in full.")
+            : (clip.canClip ? "Switch on to clip this image to " + clip.baseName + "." : "Put this image directly above the layer to clip it to (a logo, shape or text).")}
+        </span>
       </PanelSection>
       <TextWrapSection ann={ann} patch={patch} />
       <PanelSection

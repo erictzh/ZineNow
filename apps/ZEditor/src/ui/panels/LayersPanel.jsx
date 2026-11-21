@@ -1,6 +1,7 @@
 // Floating layers list: select, lock, hide, group (collapsible, renamable) and reorder items.
 
 import { groupColor } from "../../model/annotations.js";
+import { layerName } from "../../model/layerNames.js";
 import { isEllipse } from "../../model/outlines.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../../model/strokes.js";
 import { rectFillCss } from "../../render/gradients.js";
@@ -9,14 +10,6 @@ import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
 
 // ---- Layers panel — the page's items, top layer first. ----------------
-function layerName(ann) {
-  if (ann.name) return ann.name;
-  if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-  if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-  if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
-  return "Image";
-}
-
 function LayerThumb({ ann }) {
   if (ann.type === "image") return <span className="ze-layer-thumb"><img src={ann.src} alt="" draggable="false" /></span>;
   if (ann.type === "rect") return <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : undefined }} /></span>;
@@ -31,6 +24,13 @@ function LayerThumb({ ann }) {
   );
 }
 
+// Clipped to the layer below: an arrow turning down into it.
+const ClipIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M5 4v8a3 3 0 0 0 3 3h11" />
+    <path d="M15 11l4 4-4 4" />
+  </svg>
+);
 const LockIcon = ({ locked }) => (
   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <rect x="5" y="11" width="14" height="10" rx="2" />
@@ -81,7 +81,7 @@ function RenameInput({ current, onDone }) {
 
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet.
-export function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag }) {
+export function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [dropInfo, setDropInfo] = useState(null); // { key, row, before }: the line shown above/below row `key`
   const [, setCollapseTick] = useState(0);
@@ -165,7 +165,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
       <React.Fragment key={ann.id}>
         {dropLine(ann.id, true)}
         <div
-          className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (inGroup ? " is-grouped is-in-group" : "")}
+          className={"ze-layer-row" + (selectedIds.includes(ann.id) ? " is-selected" : "") + (ann.hidden ? " is-hidden" : "") + (ann.type === "image" && ann.clipToBelow ? " is-clipped" : "") + (inGroup ? " is-grouped is-in-group" : "")}
           style={inGroup ? { "--ze-group-color": groupColor(ann.groupId) } : undefined}
           title={inGroup ? "In a group — Alt + click selects just this layer" : undefined}
           data-layer-id={ann.id}
@@ -178,6 +178,15 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
           {isRenaming
             ? <RenameInput current={layerName(ann)} onDone={(text) => finishRename(ann, text)} />
             : <span className="ze-layer-name" title="Double-click to rename">{layerName(ann)}</span>}
+          {ann.type === "image" && ann.clipToBelow && (
+            <button
+              type="button" className="ze-layer-icon-btn active" title="Clipped to the layer below. Click to release it." aria-label="Release the clipping mask"
+              onClick={(e) => { e.stopPropagation(); onToggleClip(ann.id); }}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              <ClipIcon />
+            </button>
+          )}
           <button
             type="button" className={"ze-layer-icon-btn" + (ann.locked ? " active" : "")}
             title={ann.locked ? "Unlock layer" : "Lock layer"} aria-pressed={Boolean(ann.locked)}

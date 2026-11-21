@@ -2,6 +2,7 @@
 
 import { MAIN_SCALE } from "../constants.js";
 import { orderAfterMove, translatedAnnotation, withGroupMates } from "../model/annotations.js";
+import { canClipAt } from "../model/clipping.js";
 import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { MIN_RECT_SIZE } from "../model/rect.js";
 import { captureTextStyle, relinkPatch, resolvedStyleProps, styleDiff, textStylePatch, withStyleOverrides } from "../model/text/textStyles.js";
@@ -120,6 +121,16 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const groups = new Set(currentAnnotations().filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
     if (groups.size === 0) return;
     updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined, groupName: undefined } : a)));
+  }
+
+  // Clipping mask on/off for an image (its own undo step). Switching on needs a layer below to clip to.
+  function handleToggleClip(id) {
+    if (selectedIdx === null) return;
+    const items = currentAnnotations();
+    const index = items.findIndex((a) => a.id === id);
+    const item = items[index];
+    if (!item || item.type !== "image" || (!item.clipToBelow && !canClipAt(items, index))) return;
+    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.id === id ? { ...a, clipToBelow: a.clipToBelow ? undefined : true } : a)));
   }
 
   // A group's name lives on each of its members (`groupName`), so it travels with them in saved projects.
@@ -356,7 +367,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     frameActions,
     updateAnnotationsFor, updatePageFilter,
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
-    handleGroupSelection, handleUngroupSelection,
+    handleGroupSelection, handleUngroupSelection, handleToggleClip,
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,

@@ -128,7 +128,27 @@ async function bakeBoxToImage(ann, scale, draw) {
   const ctx = canvas.getContext("2d");
   await draw(ctx, { ...ann, x: boxLeft / scale, y: boxTop / scale, width: widthPx / scale, height: heightPx / scale });
 
-  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const trimmed = trimmedImageFromCanvas(canvas);
+  if (!trimmed) return null;
+  const { src, left, top, width: trimmedW, height: trimmedH } = trimmed;
+
+  return {
+    src,
+    x: ann.x + (left - boxLeft) / scale,
+    y: ann.y + (top - boxTop) / scale,
+    angle: undefined, // the rotation is part of the pixels now
+    width: trimmedW / scale,
+    height: trimmedH / scale,
+    naturalWidth: trimmedW,
+    naturalHeight: trimmedH,
+  };
+}
+
+// Crops a canvas to the pixels that aren't fully transparent and encodes them: { src, left, top,
+// width, height } (the crop's place in the canvas, in canvas px), or null when nothing is visible.
+// Shared with the Marquee tool's new layers (render/marqueeLayer.js).
+export function trimmedImageFromCanvas(canvas) {
+  const { data } = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
   const alphaAt = (x, y) => data[(y * canvas.width + x) * 4 + 3];
   let left = canvas.width, top = canvas.height, right = -1, bottom = -1;
   for (let y = 0; y < canvas.height; y++) {
@@ -143,10 +163,10 @@ async function bakeBoxToImage(ann, scale, draw) {
   for (let y = top; y <= bottom && opaque; y++) {
     for (let x = left; x <= right && opaque; x++) opaque = alphaAt(x, y) === 255;
   }
-  const trimmedW = right - left + 1, trimmedH = bottom - top + 1;
+  const width = right - left + 1, height = bottom - top + 1;
   const trimmed = document.createElement("canvas");
-  trimmed.width = trimmedW;
-  trimmed.height = trimmedH;
+  trimmed.width = width;
+  trimmed.height = height;
   trimmed.getContext("2d").drawImage(canvas, -left, -top);
 
   // PNG keeps transparency and suits hard-edged screens; JPEG is far
@@ -154,15 +174,5 @@ async function bakeBoxToImage(ann, scale, draw) {
   const png = trimmed.toDataURL("image/png");
   const jpeg = opaque ? trimmed.toDataURL("image/jpeg", 0.92) : null;
   const src = jpeg && jpeg.length < png.length ? jpeg : png;
-
-  return {
-    src,
-    x: ann.x + (left - boxLeft) / scale,
-    y: ann.y + (top - boxTop) / scale,
-    angle: undefined, // the rotation is part of the pixels now
-    width: trimmedW / scale,
-    height: trimmedH / scale,
-    naturalWidth: trimmedW,
-    naturalHeight: trimmedH,
-  };
+  return { src, left, top, width, height };
 }

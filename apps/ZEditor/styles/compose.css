@@ -484,3 +484,43 @@
 .ze-measure-readout strong { font-weight: 700; font-size: 12px; }
 .ze-measure-readout span { color: #cfc9c5; }
 .ze-measure-handle.is-waiting { pointer-events: none; }
+
+/* The Marquee tool's box: dotted, with a light edge so it shows on any picture. Handles and the rotate knob
+   are the same ones items use. */
+.ze-marquee {
+    position: absolute;
+    border: calc(1px / var(--ze-zoom, 1)) dashed #000;
+    box-shadow: 0 0 0 calc(1px / var(--ze-zoom, 1)) rgba(255, 255, 255, 0.85);
+    cursor: move;
+    z-index: 12;
+}
+
+/* The Marquee polygon's outline (drawn over the whole page, only its filled inside takes the mouse) and its
+   corner handles; the first corner is bigger while the shape is open, to show where a click closes it. */
+.ze-marquee-svg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 12;
+}
+.ze-marquee-poly { pointer-events: all; cursor: move; }
+.ze-marquee-corner { cursor: pointer; z-index: 13; }
+.ze-marquee-corner.is-first { background-color: var(--ui-accent); width: 14px; height: 14px; }
+
+/* A clipped image's picture: page-sized, masked by the layer below (ui/canvas/ClipWrap.jsx), and out of the
+   mouse's way; its box, outline and handles are a separate unmasked item above it. */
+.ze-clip-wrap {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+.ze-ann-image.is-content-only { pointer-events: none; }
+/* The unmasked box of a clipped image has no picture of its own: it is only there to press, select and hold handles. */
+.ze-ann-image--chrome { background: transparent; }

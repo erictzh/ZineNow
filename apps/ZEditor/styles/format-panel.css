@@ -340,3 +340,10 @@
     background-color: #3a3a3e;
     color: var(--ui-fg);
 }
+
+/* Radio and checkbox rows (Marquee panel): the control, its label, and a hint under it. */
+.ze-format-radio-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.ze-format-radio, .ze-format-check { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; font-size: 13px; cursor: pointer; }
+.ze-format-radio input, .ze-format-check input { margin: 3px 0 0; accent-color: var(--ui-accent); }
+.ze-format-radio .ze-format-hint, .ze-format-check .ze-format-hint { grid-column: 2; margin-top: 2px; }
+.ze-format-radio:has(input:disabled) { opacity: 0.5; cursor: default; }

@@ -2,6 +2,8 @@
 
 import { MAIN_SCALE } from "../../constants.js";
 import { withGroupMates } from "../../model/annotations.js";
+import { clipBaseIndex, isClippedImage } from "../../model/clipping.js";
+import { blendOf } from "../../model/controls.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
 import { strokeHitTest } from "../../model/strokes.js";
@@ -9,11 +11,14 @@ import { resolvePageText } from "../../render/pageText.js";
 import { onWrapShapesChange } from "../../render/wrapShapes.js";
 import { DRAG_THRESHOLD, dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 import { AnnotationItem } from "./AnnotationItem.jsx";
+import { ClipWrap } from "./ClipWrap.jsx";
 import { MeasureOverlay } from "./MeasureOverlay.jsx";
 import { ThreadLinks } from "./ThreadLinks.jsx";
 import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
 import { magicEraseAt } from "./magicEraseGesture.js";
+import { MarqueeOverlay } from "./MarqueeOverlay.jsx";
+import { pressPolygon, startMarqueeDraw } from "./marqueeGesture.js";
 import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 import { centerArtboard } from "../../state/useZoom.js";
@@ -30,6 +35,7 @@ export function ComposeCanvas({
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
+  marquee, marqueeShape, onMarqueeChange,
   zoom, rulerUnit,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
@@ -44,6 +50,8 @@ export function ComposeCanvas({
   const [dragRect, setDragRect] = useState(null); // the box being dragged out on empty page
   const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
   const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
+  const [polygonHover, setPolygonHover] = useState(null); // Marquee polygon being drawn: { x, y, shift } of the pointer, for the line that follows it
+  const drawingPolygon = tool === "marquee" && Boolean(marquee) && marquee.kind === "polygon" && !marquee.closed;
   const softErasing = tool === "eraser" && eraserMode === "soft";
   const magicErasing = tool === "eraser" && eraserMode === "magic";
   const [, setDrawTick] = useState(0); // bumped on every drawing mousemove to force a repaint
@@ -126,6 +134,11 @@ export function ComposeCanvas({
     if (!page) return;
     if (measuring) {
       startMeasure(e);
+      return;
+    }
+    if (tool === "marquee") { // draws the marquee; the selected layer (the one "Selected layer" works on) stays selected
+      if (marqueeShape === "polygon") pressPolygon(e, { toPagePoint: overlayPoint, zoom, region: marquee, onChange: onMarqueeChange });
+      else startMarqueeDraw(e, { toPagePoint: overlayPoint, zoom, onChange: onMarqueeChange });
       return;
     }
     if (tool === "pen" || tool === "highlighter") {
@@ -317,7 +330,7 @@ export function ComposeCanvas({
   const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
   const cursorClass =
     tool === "text" ? "ze-tool-text" :
-    (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || measuring) ? "ze-tool-draw" :
+    (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || tool === "marquee" || measuring) ? "ze-tool-draw" :
     softErasing || magicErasing ? "ze-tool-soft-erase" : // both work on image pixels: crosshair over everything
     tool === "eraser" ? "ze-tool-erase" : "";
 
@@ -335,33 +348,43 @@ export function ComposeCanvas({
         className={"ze-annotation-layer " + cursorClass}
         style={{ width: canvasSize.width, height: canvasSize.height }}
         onMouseDown={handleOverlayMouseDown}
-        onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : undefined}
-        onMouseLeave={softErasing ? () => setBrushPos(null) : undefined}
+        onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : drawingPolygon ? (e) => setPolygonHover({ ...overlayPoint(e), shift: e.shiftKey }) : undefined}
+        onMouseLeave={softErasing ? () => setBrushPos(null) : drawingPolygon ? () => setPolygonHover(null) : undefined}
       >
         {/* While the magic eraser has a preview open, that image is drawn from it
             instead of from the document, which stays untouched until Apply. */}
         {/* Text is laid out for the whole page (threaded stories, text wrap: render/pageText.js). */}
-        {pageViews.filter((a) => !a.hidden).map((a) => (
-          <AnnotationItem
-            key={a.id}
-            ann={a}
-            tool={tool}
-            zoom={zoom}
-            pageSize={canvasSize}
-            pageFilter={pageFilter}
-            isSelected={a.id === selectedAnnId || selectedAnnIds.includes(a.id)}
-            showHandles={showHandlesFor(a)}
-            isEditing={a.id === editingAnnId}
-            isCropping={a.id === croppingAnnId}
-            isEraseTarget={a.id === eraseTarget}
-            onPress={pressAnnotation}
-            onUpdate={onUpdateAnnotation}
-            onToggleCrop={onToggleCrop}
-            onStartTextEdit={onStartTextEdit}
-            onFinishTextEdit={onFinishTextEdit}
-            onLinkNextFrame={onLinkNextFrame}
-          />
-        ))}
+        {pageViews.map((a, index) => {
+          if (a.hidden) return null;
+          const itemProps = {
+            tool, zoom, pageSize: canvasSize, pageFilter,
+            isSelected: a.id === selectedAnnId || selectedAnnIds.includes(a.id),
+            showHandles: showHandlesFor(a),
+            isEditing: a.id === editingAnnId,
+            isCropping: a.id === croppingAnnId,
+            isEraseTarget: a.id === eraseTarget,
+            onPress: pressAnnotation,
+            onUpdate: onUpdateAnnotation,
+            onToggleCrop,
+            onStartTextEdit,
+            onFinishTextEdit,
+            onLinkNextFrame: onLinkNextFrame,
+          };
+          // A clipped image shows only where the layer below has pixels (ui/canvas/ClipWrap.jsx). Its box,
+          // outline and handles are drawn apart from the picture, so they aren't cut off by the mask. (While
+          // it's being cropped it is drawn plainly.)
+          const baseIndex = isClippedImage(a) && a.id !== croppingAnnId ? clipBaseIndex(pageViews, index) : -1;
+          if (baseIndex < 0) return <AnnotationItem key={a.id} ann={a} {...itemProps} />;
+          if (pageViews[baseIndex].hidden) return null; // it goes with the layer it is clipped to
+          return (
+            <React.Fragment key={a.id}>
+              <ClipWrap base={pageViews[baseIndex]} pageSize={canvasSize} pageFilter={pageFilter} blend={blendOf(a)}>
+                <AnnotationItem ann={{ ...a, blend: undefined }} {...itemProps} showHandles={false} isSelected={false} contentOnly />
+              </ClipWrap>
+              <AnnotationItem ann={a} {...itemProps} chromeOnly />
+            </React.Fragment>
+          );
+        })}
         <ThreadLinks views={pageViews} pageSize={canvasSize} selectedIds={[selectedAnnId, ...selectedAnnIds]} zoom={zoom} onUnlink={onUnlinkNextFrame} />
         <LiveStroke drawing={drawingRef.current} pageSize={canvasSize} />
         {selectionTurn && (
@@ -369,6 +392,7 @@ export function ComposeCanvas({
         )}
         {measuring && measure && <MeasureOverlay measure={measure} pageSize={canvasSize} zoom={zoom} unit={rulerUnit} onHandleDown={dragMeasureEnd} />}
         {softErasing && brushPos && <BrushCursor pos={brushPos} softEraser={softEraser} />}
+        {tool === "marquee" && marquee && <MarqueeOverlay region={marquee} zoom={zoom} pageSize={canvasSize} hover={polygonHover} toPagePoint={overlayPoint} onChange={onMarqueeChange} />}
         {dragRect && (
           <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
         )}

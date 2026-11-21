@@ -1,7 +1,7 @@
 // Renders whole pages: source PDF page or blank, items, filter, page number; thumbnails.
 
 import { MAIN_SCALE, THUMB_SCALE } from "../constants.js";
-import { drawAnnotationOnCanvas } from "./drawAnnotation.js";
+import { drawPageItem } from "./clipMask.js";
 import { applyPageFilter } from "./filters/applyFilter.js";
 import { resolvePageText } from "./pageText.js";
 
@@ -75,9 +75,9 @@ export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilt
   if (!(transparent && page.isBlank)) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
   // The annotation list is the stacking order: first is the bottom layer.
   // Threaded stories and text wrap need the whole page (render/pageText.js).
-  for (const a of resolvePageText(page.annotations || [])) {
-    if (!a.hidden) await drawAnnotationOnCanvas(ctx, a, scaleFactor, pageFilter);
-  }
+  // A clipped image is cut to the layer below it (render/clipMask.js).
+  const items = resolvePageText(page.annotations || []);
+  for (let i = 0; i < items.length; i++) await drawPageItem(ctx, items, i, scaleFactor, pageFilter);
   if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
   return canvas;
 }

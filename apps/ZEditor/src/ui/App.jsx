@@ -10,6 +10,7 @@ import { useExport } from "../state/useExport.js";
 import { useHistory } from "../state/useHistory.js";
 import { useKeyboardShortcuts } from "../state/useKeyboardShortcuts.js";
 import { useMagicErase } from "../state/useMagicErase.js";
+import { useMarquee } from "../state/useMarquee.js";
 import { useOnionGhost } from "../state/useOnionGhost.js";
 import { usePageOps } from "../state/usePageOps.js";
 import { useProject } from "../state/useProject.js";
@@ -47,6 +48,7 @@ export function App() {
   const selection = useSelection(doc);
   const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
   const magic = useMagicErase({ doc, selection, edits, toolDefaults });
+  const marquee = useMarquee({ doc, selection, edits, toolDefaults, status });
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
@@ -57,7 +59,7 @@ export function App() {
   const zoom = useZoom();
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
   const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
-  useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, modalOpen });
+  useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
   const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
@@ -157,6 +159,9 @@ export function App() {
                 onEraseImagePixels={edits.handleEraseImagePixels}
                 magicPreview={magic.preview}
                 onMagicClick={magic.start}
+                marquee={marquee.region}
+                marqueeShape={t.marquee.shape}
+                onMarqueeChange={marquee.setRegion}
                 snapGuides={view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null}
               />
             </div>
@@ -167,7 +172,8 @@ export function App() {
             <div className="ze-display-slot" ref={attachDisplayGear} />
             {selectedPage && (
               <TouchBar
-                selectedAnn={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+                selectedAnn={tool === "marquee" ? null : (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
+                marqueePolygonOpen={marquee.polygonOpen}
                 isEditing={editingAnnId !== null}
                 isCropping={croppingAnnId !== null && croppingAnnId === selectedAnnId}
                 onEditText={selection.setEditingAnnId}
@@ -190,6 +196,10 @@ export function App() {
             toolDefaults={toolDefaults}
             styleActions={edits.styleActions}
             magicErase={magic}
+            annotations={selectedPage.annotations || []}
+            onToggleClip={edits.handleToggleClip}
+            marquee={marquee}
+            targetLayer={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
           />
         )}
       </div>
@@ -208,6 +218,7 @@ export function App() {
           onRenameGroup={edits.handleRenameGroup}
           onSetGroupFlag={edits.handleSetGroupFlag}
           onToggleFlag={edits.handleToggleLayerFlag}
+          onToggleClip={edits.handleToggleClip}
           onRename={(id, name) => edits.handleUpdateAnnotation(id, { name })}
           onReorder={edits.handleReorderLayers}
         />

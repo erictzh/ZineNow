@@ -5,6 +5,8 @@ import { MAGIC_ERASER_DEFAULTS, MAGIC_FEATHER_MAX, MAGIC_SHIFT_MAX, MAGIC_SMOOTH
 import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/strokes.js";
 import { ControlList } from "../../controls/ControlList.jsx";
+import { CustomColorInput } from "../../controls/inputs.jsx";
+import { isUsableMarquee } from "../../../model/marquee.js";
 import { SliderNumberInput } from "../../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { StrokeFormatFields } from "../../controls/StrokeFormatFields.jsx";
@@ -23,6 +25,83 @@ export function ShapeToolPanel({ tool, toolDefaults }) {
       </PanelSection>
       <PanelSection id="rect.look" title="Opacity & blend" onReset={() => onChangeRectDefaults(resetPatch([OPACITY_CONTROL, BLEND_CONTROL]))}>
         <ControlList controls={[OPACITY_CONTROL, BLEND_CONTROL]} source={rectDefaults} onPatch={onChangeRectDefaults} />
+      </PanelSection>
+    </FormatPanelShell>
+  );
+}
+
+// The Marquee tool: how "Make layer" works. `marquee` is the tool's state (state/useMarquee.js), `targetLayer`
+// the selected layer (what "Selected layer" works on).
+export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
+  const { marquee: settings, setMarquee } = toolDefaults;
+  const change = (patch) => setMarquee((cur) => ({ ...cur, ...patch }));
+  const fromLayer = settings.source === "layer";
+  // Cutting from everything visible can only cover the spot, so it always fills.
+  const fills = settings.cutLeaves === "fill" || !fromLayer;
+  const needsLayer = fromLayer && !targetLayer;
+  const radio = (name, value, label, current, onPick, hint, disabled) => (
+    <label className="ze-format-radio" key={value}>
+      <input type="radio" name={name} checked={current === value} disabled={disabled} onChange={() => onPick(value)} />
+      <span>{label}</span>
+      {hint && <span className="ze-format-hint">{hint}</span>}
+    </label>
+  );
+  const layerName = targetLayer ? (targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : "Image")) : null;
+  const ready = Boolean(marquee && isUsableMarquee(marquee.region));
+  const polygon = settings.shape === "polygon";
+  return (
+    <FormatPanelShell title="Marquee">
+      <span className="ze-sec-intro">{polygon
+        ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it."
+        : "Drag on the page to draw a box, then move, resize or turn it."} Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect.</span>
+      <PanelSection id="marquee.shape" title="Shape" defaultOpen>
+        <div className="ze-format-row">
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!polygon ? " active" : "")} onClick={() => change({ shape: "rect" })}>Rectangle</button>
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (polygon ? " active" : "")} onClick={() => change({ shape: "polygon" })}>Polygon</button>
+        </div>
+        {marquee && marquee.polygonOpen && (
+          <div className="ze-format-row">
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={marquee.region.points.length < 3} title="Enter" onClick={() => marquee.setRegion({ ...marquee.region, closed: true })}>Close shape</button>
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Backspace" onClick={() => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null)}>Undo point</button>
+          </div>
+        )}
+      </PanelSection>
+      <PanelSection id="marquee.make" title="Make layer" defaultOpen>
+        <div className="ze-format-radio-group" role="radiogroup" aria-label="Make layer">
+          {radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is.")}
+          {radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")}
+        </div>
+        <div className="ze-format-row">
+          <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
+        </div>
+        <span className="ze-format-hint">
+          {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut."}
+        </span>
+      </PanelSection>
+      <PanelSection id="marquee.from" title="Take it from" defaultOpen>
+        <div className="ze-format-radio-group" role="radiogroup" aria-label="Take it from">
+          {radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top.")}
+          {radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")}
+        </div>
+        {fromLayer && <span className="ze-format-hint">{layerName ? "Layer: " + layerName : "No layer selected. Select one (Move tool or Layers panel), then press M."}</span>}
+        {!fromLayer && (
+          <label className="ze-format-check">
+            <input type="checkbox" checked={settings.includePaper} onChange={(e) => change({ includePaper: e.target.checked })} />
+            <span>Include the paper</span>
+            <span className="ze-format-hint">Off: where only paper shows, the new layer is see-through. On: it carries the paper's white.</span>
+          </label>
+        )}
+      </PanelSection>
+      <PanelSection id="marquee.cut" title="When cutting" defaultOpen>
+        <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
+          {radio("marquee-leaves", "transparent", "Leave it transparent", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
+          {radio("marquee-leaves", "fill", "Fill it with a colour", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }))}
+        </div>
+        <div className="ze-format-row">
+          <span className="ze-format-label">Fill colour</span>
+          <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff"} onChange={(color) => change({ fillColor: color })} />
+        </div>
+        <span className="ze-format-hint">A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.</span>
       </PanelSection>
     </FormatPanelShell>
   );

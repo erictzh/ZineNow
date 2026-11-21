@@ -21,7 +21,7 @@ const Icon = ({ children }) => (
 // `selectedAnn` is the selected item (the main one, if several are), or null; `onEditText` starts
 // typing in a text box. The item buttons only show with an item selected (the Delete key deletes
 // the page otherwise) and not while typing (they'd act on the box being typed in).
-export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText }) {
+export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
   const [shift, setShift] = useState(false);
   const [alt, setAlt] = useState(false);
   useEffect(() => { setTouchModifier("shift", shift); }, [shift]);
@@ -46,6 +46,13 @@ export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText }) {
       >
         Alt
       </button>
+      {marqueePolygonOpen && <span className="ze-touch-sep" aria-hidden="true" />}
+      {marqueePolygonOpen && (
+        <button type="button" className="ze-touch-btn ze-touch-key" title="Close the polygon (Enter)" aria-label="Close the polygon" onMouseDown={keep} onClick={() => pressKey("Enter")}>Close</button>
+      )}
+      {marqueePolygonOpen && (
+        <button type="button" className="ze-touch-btn ze-touch-key" title="Take the last point back (Backspace)" aria-label="Undo the last point" onMouseDown={keep} onClick={() => pressKey("Backspace")}>Undo point</button>
+      )}
       {hasSelection && <span className="ze-touch-sep" aria-hidden="true" />}
       {hasSelection && selectedAnn && selectedAnn.type === "text" && (
         <button type="button" className="ze-touch-btn" title="Edit text" aria-label="Edit text" onMouseDown={keep} onClick={() => onEditText(selectedAnn.id)}>
@@ -59,6 +66,15 @@ export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText }) {
           onClick={() => pressKey("c")}
         >
           <Icon><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M2 6h14a2 2 0 0 1 2 2v14" /></Icon>
+        </button>
+      )}
+      {hasSelection && selectedAnn && selectedAnn.type === "image" && (
+        <button
+          type="button" className={"ze-touch-btn" + (selectedAnn.clipToBelow ? " is-on" : "")} aria-pressed={Boolean(selectedAnn.clipToBelow)} onMouseDown={keep}
+          title="Clipping mask: show this image only inside the layer below it" aria-label="Clipping mask"
+          onClick={() => pressKey("g", { ctrlKey: true, altKey: true })}
+        >
+          <Icon><path d="M5 4v8a3 3 0 0 0 3 3h11" /><path d="M15 11l4 4-4 4" /></Icon>
         </button>
       )}
       {hasSelection && selectedAnn && (

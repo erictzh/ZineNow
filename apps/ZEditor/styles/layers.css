@@ -122,3 +122,6 @@
 }
 .ze-layer-icon-btn.active { color: var(--ui-accent-text); }
 
+
+/* A clipped image's row is set in a little, like Photoshop's clipped layers. */
+.ze-layer-row.is-clipped { padding-left: 24px; }

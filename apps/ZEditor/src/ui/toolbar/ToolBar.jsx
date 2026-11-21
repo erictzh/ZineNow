@@ -53,8 +53,13 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
             <path d="M9.5 5.5l6 6" />
           </svg>
         </button>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "marquee" ? " active" : "")} title="Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)" onClick={() => selectTool("marquee")}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="4" y="5.5" width="16" height="13" strokeDasharray="2.6 2.6" />
+          </svg>
+        </button>
         <span className="ze-tool-bar-divider" role="separator" aria-orientation="vertical" />
-        <button type="button" className={"ze-tool-icon-btn" + (tool === "measure" ? " active" : "")} title="Measure (M): click two points; a third click clears" onClick={() => selectTool("measure")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "measure" ? " active" : "")} title="Measure (U): click two points; a third click clears" onClick={() => selectTool("measure")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="2.5" y="8" width="19" height="8" rx="1" transform="rotate(-30 12 12)" />
             <path d="M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" />

@@ -1,22 +1,34 @@
 // The right-hand Format panel: picks the panel for the selected item, or for the current tool when nothing is selected.
 
+import { canClipAt, clipBaseIndex } from "../../model/clipping.js";
+import { layerName } from "../../model/layerNames.js";
 import { ImageFormat } from "./format/ImageFormat.jsx";
 import { FormatPanelShell } from "./format/FormatPanelShell.jsx";
 import { ShapeFormat } from "./format/ShapeFormat.jsx";
 import { StrokeFormat } from "./format/StrokeFormat.jsx";
 import { TextFormat } from "./format/TextFormat.jsx";
-import { EraserToolPanel, ShapeToolPanel, StrokeToolPanel, TextToolPanel } from "./format/ToolPanels.jsx";
+import { EraserToolPanel, MarqueeToolPanel, ShapeToolPanel, StrokeToolPanel, TextToolPanel } from "./format/ToolPanels.jsx";
 
 // `toolDefaults` is the useToolDefaults hook object (fonts, text styles and
-// each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js).
+// each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js);
+// `marquee` is the Marquee tool's state (state/useMarquee.js) and `targetLayer` the selected layer it can work on.
 export function FormatPanel({
   tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
-  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, styleActions,
+  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, marquee, targetLayer, styleActions,
+  annotations, onToggleClip,
 }) {
   const ann = selectedAnn;
+  // The Marquee tool keeps its own panel even with a layer selected (that layer is what it works on).
+  if (tool === "marquee") return <MarqueeToolPanel toolDefaults={toolDefaults} marquee={marquee} targetLayer={targetLayer} />;
   if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} styleActions={styleActions} />;
   if (ann && ann.type === "stroke") return <StrokeFormat key={ann.id} ann={ann} onUpdate={onUpdate} />;
-  if (ann && ann.type === "image") return <ImageFormat key={ann.id} ann={ann} onUpdate={onUpdate} croppingAnnId={croppingAnnId} onToggleCrop={onToggleCrop} onFlattenImage={onFlattenImage} />;
+  if (ann && ann.type === "image") {
+    // What the image could be (or is) clipped to: the nearest layer below that isn't a clipped image.
+    const index = (annotations || []).findIndex((a) => a.id === ann.id);
+    const baseIndex = index >= 0 ? clipBaseIndex(annotations, index) : -1;
+    const clip = { canClip: index >= 0 && canClipAt(annotations, index), baseName: baseIndex >= 0 ? layerName(annotations[baseIndex]) : null };
+    return <ImageFormat key={ann.id} ann={ann} onUpdate={onUpdate} croppingAnnId={croppingAnnId} onToggleCrop={onToggleCrop} onFlattenImage={onFlattenImage} clip={clip} onToggleClip={onToggleClip} />;
+  }
   if (ann && ann.type === "rect") return <ShapeFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeRect={onRasterizeRect} />;
 
   if (tool === "rect" || tool === "ellipse") return <ShapeToolPanel tool={tool} toolDefaults={toolDefaults} />;
