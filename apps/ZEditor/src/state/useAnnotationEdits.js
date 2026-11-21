@@ -40,6 +40,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     selectedAnnotationIds, currentAnnotations, handleSelectAnnotation,
   } = selection;
   const imageInputRef = useRef(null);
+  const svgInputRef = useRef(null); // the tool bar's SVG button: any file, so Android opens Files
 
   function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
     recordUndoCheckpoint(coalesceKey);
@@ -275,6 +276,28 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     }
   }
 
+  // The SVG button. Its file input names no types on purpose: on Android, Chrome opens the photo
+  // picker for any image-only `accept` (SVG included), and that never lists .svg files; with no
+  // types it opens the Files browser. So any file can come back: an SVG is inserted, another
+  // picture is too, anything else gets a message.
+  function handleSvgToolClick() {
+    if (selectedIdx === null) return;
+    svgInputRef.current && svgInputRef.current.click();
+  }
+  async function handleSvgFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (isSvgFile(file) || (file.type.startsWith("image/") && file.type !== "image/svg+xml")) {
+      addImageAnnotationFromFile(file, selectedIdx);
+      return;
+    }
+    // No .svg name or type (some file browsers drop them): look inside.
+    const head = await file.slice(0, 4096).text().catch(() => "");
+    if (/<svg[\s>]/i.test(head)) addImageAnnotationFromFile(new File([file], (file.name || "image") + ".svg", { type: "image/svg+xml" }), selectedIdx);
+    else window.alert("That isn't an SVG or picture file. Choose a file ending in .svg.");
+  }
+
   function handleImageFileChosen(e) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -405,6 +428,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
+    svgInputRef, handleSvgToolClick, handleSvgFileChosen,
     handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },

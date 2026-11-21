@@ -94,6 +94,7 @@
 .ze-tool-icon-btn:disabled:hover { color: var(--ui-fg-muted); background-color: var(--ui-bg-card); }
 
 .ze-tool-icon-text { font-size: 15px; font-weight: 700; line-height: 1; }
+.ze-tool-icon-svg { font-size: 9.5px; letter-spacing: 0.02em; } /* the SVG button's label, three letters in an icon's room */
 
 /* ---- Annotation layer (Compose mode) ------------------------------------
    Sits absolutely positioned directly on top of the rendered page canvas,
