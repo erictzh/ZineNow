@@ -19,3 +19,12 @@ export function clipBaseIndex(items, index) {
 export function canClipAt(items, index) {
   return Boolean(items[index]) && clipBaseIndex(items, index) >= 0;
 }
+
+// The ids that "Clip to below" clips for a selection, in one go. One layer: itself, if it can be clipped.
+// Several: the bottom-most selected layer stays as the base and every other selected layer above it is
+// clipped (as in Photoshop), skipping ones already clipped.
+export function clipTargets(items, ids) {
+  const rows = items.map((a, i) => (ids.includes(a.id) ? i : -1)).filter((i) => i >= 0);
+  const candidates = rows.length > 1 ? rows.slice(1) : rows;
+  return candidates.filter((i) => !isClipped(items[i]) && canClipAt(items, i)).map((i) => items[i].id);
+}

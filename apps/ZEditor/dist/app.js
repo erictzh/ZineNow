@@ -6185,6 +6185,11 @@
   function canClipAt(items, index) {
     return Boolean(items[index]) && clipBaseIndex(items, index) >= 0;
   }
+  function clipTargets(items, ids) {
+    const rows = items.map((a, i) => ids.includes(a.id) ? i : -1).filter((i) => i >= 0);
+    const candidates = rows.length > 1 ? rows.slice(1) : rows;
+    return candidates.filter((i) => !isClipped(items[i]) && canClipAt(items, i)).map((i) => items[i].id);
+  }
 
   // apps/ZEditor/src/model/pageFilters.js
   var PAGE_FILTER_OPTIONS = [
@@ -7815,10 +7820,7 @@
     function handleSetClip(ids, on) {
       if (selectedIdx === null) return;
       const items = currentAnnotations();
-      const targets = new Set(ids.filter((id) => {
-        const index = items.findIndex((a) => a.id === id);
-        return index >= 0 && (on ? !items[index].clipToBelow && canClipAt(items, index) : items[index].clipToBelow);
-      }));
+      const targets = new Set(on ? clipTargets(items, ids) : ids.filter((id) => (items.find((a) => a.id === id) || {}).clipToBelow));
       if (targets.size === 0) return;
       updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => targets.has(a.id) ? { ...a, clipToBelow: on ? true : void 0 } : a));
     }
@@ -7828,12 +7830,7 @@
     }
     function handleClipSelection() {
       const ids = selectedAnnotationIds();
-      const items = currentAnnotations();
-      const clippable = ids.some((id) => {
-        const i = items.findIndex((a) => a.id === id);
-        return i >= 0 && !items[i].clipToBelow && canClipAt(items, i);
-      });
-      handleSetClip(ids, clippable);
+      handleSetClip(ids, clipTargets(currentAnnotations(), ids).length > 0);
     }
     function handleRenameGroup(groupId, name) {
       if (selectedIdx === null) return;
@@ -13929,7 +13926,7 @@
     const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!polygon ? " active" : ""), onClick: () => change({ shape: "rect" }) }, "Rectangle"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (polygon ? " active" : ""), onClick: () => change({ shape: "polygon" }) }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")));
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")));
   }
   function TextToolPanel({ toolDefaults: t }) {
     const setters = {
@@ -14438,6 +14435,7 @@
     { key: "se", right: true, bottom: true }
   ];
   var clamp2 = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  var MoreIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }));
   var GroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "19", height: "19", rx: "2", strokeDasharray: "3 3" }), /* @__PURE__ */ React.createElement("rect", { x: "6.5", y: "6.5", width: "7", height: "7", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "10.5", y: "10.5", width: "7", height: "7", rx: "1" }));
   var UngroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "13.5", y: "13.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M14 4h6v6M4 14v6h6", strokeDasharray: "2 2.5" }));
   function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }) {
@@ -14464,23 +14462,48 @@
     const headRef = useRef22(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
-    const canClip = annotations.some((a, i) => selectedIds.includes(a.id) && !a.clipToBelow && canClipAt(annotations, i));
+    const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
+    const [rowMenu, setRowMenu] = useState30(null);
+    const rowMenuRef = useRef22(null);
     useEffect22(() => {
-      if (!menuOpen) return;
+      if (!menuOpen && !rowMenu) return;
+      const close = () => {
+        setMenuOpen(false);
+        setRowMenu(null);
+      };
       const outside = (e) => {
-        if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+        if (menuOpen && menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+        if (rowMenu && rowMenuRef.current && !rowMenuRef.current.contains(e.target) && !e.target.closest(".ze-layer-more-btn")) setRowMenu(null);
       };
       const escape = (e) => {
-        if (e.key === "Escape") setMenuOpen(false);
+        if (e.key === "Escape") close();
       };
+      const list = listRef.current;
       document.addEventListener("mousedown", outside);
       document.addEventListener("keydown", escape);
+      if (rowMenu && list) list.addEventListener("scroll", close);
       return () => {
         document.removeEventListener("mousedown", outside);
         document.removeEventListener("keydown", escape);
+        if (list) list.removeEventListener("scroll", close);
       };
-    }, [menuOpen]);
+    }, [menuOpen, rowMenu]);
+    function toggleRowMenu(e, id) {
+      e.stopPropagation();
+      if (rowMenu && rowMenu.id === id) {
+        setRowMenu(null);
+        return;
+      }
+      const box = e.currentTarget.getBoundingClientRect();
+      const MENU_W = 200, MENU_H = 84;
+      const x = Math.max(4, Math.min(box.right - MENU_W, window.innerWidth - MENU_W - 4));
+      const y = box.bottom + 4 + MENU_H > window.innerHeight ? box.top - 4 - MENU_H : box.bottom + 4;
+      setMenuOpen(false);
+      setRowMenu({ id, x, y });
+    }
+    const rowMenuAnn = rowMenu ? annotations.find((a) => a.id === rowMenu.id) : null;
+    const rowMenuIndex = rowMenuAnn ? annotations.indexOf(rowMenuAnn) : -1;
     function toggleCollapsed(groupId) {
       if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
       else collapsedGroups.add(groupId);
@@ -14636,6 +14659,20 @@
             onDoubleClick: (e) => e.stopPropagation()
           },
           /* @__PURE__ */ React.createElement(EyeIcon, { hidden: ann.hidden })
+        ),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === ann.id ? " is-open" : ""),
+            title: "Layer actions",
+            "aria-label": "Actions for " + layerName(ann),
+            "aria-haspopup": "menu",
+            "aria-expanded": Boolean(rowMenu && rowMenu.id === ann.id),
+            onClick: (e) => toggleRowMenu(e, ann.id),
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(MoreIcon, null)
         )
       ), dropLine(ann.id, false));
     }
@@ -14732,20 +14769,42 @@
         {
           type: "button",
           className: "ze-guides-settings-btn" + (menuOpen ? " is-open" : ""),
-          title: "Clipping mask",
+          title: "Group, ungroup and clipping mask",
           "aria-label": "More layer actions",
           "aria-haspopup": "menu",
           "aria-expanded": menuOpen,
-          onClick: () => setMenuOpen((open) => !open)
+          onClick: () => {
+            setRowMenu(null);
+            setMenuOpen((open) => !open);
+          }
         },
         /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }))
-      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to layer below", shortcut: "Ctrl+Alt+G", hint: "Shows the selected layer only where the layer directly below it has pixels", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Group", shortcut: "Ctrl+G", hint: "Group the selected layers (select two or more)", disabled: selectedIds.length < 2, onClick: onGroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Ungroup", shortcut: "Ctrl+Shift+G", disabled: !canUngroup, onClick: onUngroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to below (multiple)", shortcut: "Ctrl+Alt+G", hint: "Clips the selected layers in one go: the bottom-most selected layer stays as the base and the others show only where it has pixels. With one layer selected, clips it to the layer below.", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
       /* @__PURE__ */ React.createElement(LayerLook, { annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }),
       /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
         if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
         if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
         return groupBlock(block, groupNumbers.get(block.groupId));
       }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page"))),
+      rowMenuAnn && // Fixed to the screen, so the panel's edge and the list's scrolling can't cut it off.
+      /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layer-row-menu", role: "menu", ref: rowMenuRef, style: { left: rowMenu.x, top: rowMenu.y } }, /* @__PURE__ */ React.createElement(
+        MenuItem,
+        {
+          label: "Clip to layer below",
+          hint: "Shows this layer only where the layer below it has pixels",
+          disabled: rowMenuAnn.clipToBelow || !canClipAt(annotations, rowMenuIndex),
+          onClick: () => onToggleClip(rowMenuAnn.id),
+          close: () => setRowMenu(null)
+        }
+      ), /* @__PURE__ */ React.createElement(
+        MenuItem,
+        {
+          label: "Release clipping mask",
+          disabled: !rowMenuAnn.clipToBelow,
+          onClick: () => onToggleClip(rowMenuAnn.id),
+          close: () => setRowMenu(null)
+        }
+      )),
       RESIZE_EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     );
   }
@@ -15218,7 +15277,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "87baac9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "8265e0a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

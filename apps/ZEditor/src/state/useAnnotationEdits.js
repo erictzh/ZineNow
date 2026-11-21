@@ -2,7 +2,7 @@
 
 import { MAIN_SCALE } from "../constants.js";
 import { orderAfterMove, translatedAnnotation, withGroupMates } from "../model/annotations.js";
-import { canClipAt } from "../model/clipping.js";
+import { clipTargets } from "../model/clipping.js";
 import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { MIN_RECT_SIZE } from "../model/rect.js";
 import { captureTextStyle, relinkPatch, resolvedStyleProps, styleDiff, textStylePatch, withStyleOverrides } from "../model/text/textStyles.js";
@@ -123,16 +123,13 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined, groupName: undefined } : a)));
   }
 
-  // Clipping masks (model/clipping.js), each its own undo step. `handleSetClip(ids, true)` clips the layers
-  // that can be (they need a layer below to clip to and must not be clipped already); `false` releases
-  // those that are clipped.
+  // Clipping masks (model/clipping.js), each its own undo step. `handleSetClip(ids, true)` clips them as
+  // `clipTargets` says (one layer: to the layer below; several: all but the bottom-most, which becomes their
+  // base); `false` releases those that are clipped.
   function handleSetClip(ids, on) {
     if (selectedIdx === null) return;
     const items = currentAnnotations();
-    const targets = new Set(ids.filter((id) => {
-      const index = items.findIndex((a) => a.id === id);
-      return index >= 0 && (on ? !items[index].clipToBelow && canClipAt(items, index) : items[index].clipToBelow);
-    }));
+    const targets = new Set(on ? clipTargets(items, ids) : ids.filter((id) => (items.find((a) => a.id === id) || {}).clipToBelow));
     if (targets.size === 0) return;
     updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (targets.has(a.id) ? { ...a, clipToBelow: on ? true : undefined } : a)));
   }
@@ -141,12 +138,11 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const item = currentAnnotations().find((a) => a.id === id);
     if (item) handleSetClip([id], !item.clipToBelow);
   }
-  // Ctrl+Alt+G and the touch bar: clips the selected layers that can be, or releases them all when none can.
+  // Ctrl+Alt+G and the touch bar: clips the selection (as the Layers panel's "Clip to below (multiple)"
+  // does), or releases it when there's nothing left to clip.
   function handleClipSelection() {
     const ids = selectedAnnotationIds();
-    const items = currentAnnotations();
-    const clippable = ids.some((id) => { const i = items.findIndex((a) => a.id === id); return i >= 0 && !items[i].clipToBelow && canClipAt(items, i); });
-    handleSetClip(ids, clippable);
+    handleSetClip(ids, clipTargets(currentAnnotations(), ids).length > 0);
   }
 
   // A group's name lives on each of its members (`groupName`), so it travels with them in saved projects.

@@ -1,5 +1,5 @@
 // Clipping masks: which layer a layer is clipped to (model/clipping.js).
-import { canClipAt, clipBaseIndex, isClipped } from "../apps/ZEditor/src/model/clipping.js";
+import { canClipAt, clipBaseIndex, clipTargets, isClipped } from "../apps/ZEditor/src/model/clipping.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -22,6 +22,15 @@ ok(canClipAt([shield, { id: 7, type: "image" }], 1), "an unclipped layer above a
 ok(canClipAt([shield, label], 1) && canClipAt([shield, box], 1) && canClipAt([shield, scribble], 1), "text, shapes and strokes can be clipped");
 ok(!canClipAt([{ id: 7, type: "image" }], 0), "the bottom layer has nothing to clip to");
 ok(!canClipAt([flag, { id: 8, type: "text" }], 1), "layers above only a clipped one have no base");
+
+// clipTargets: what "Clip to below" clips for a selection.
+const under = { id: 10, type: "image" }, a = { id: 11, type: "image" }, b = { id: 12, type: "text" }, c = { id: 13, type: "rect" };
+const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+ok(same(clipTargets([under, a], [11]), [11]), "one selected layer clips to the layer below it");
+ok(same(clipTargets([a], [11]), []), "one bottom layer has nothing to clip to");
+ok(same(clipTargets([under, a, b, c], [11, 12, 13]), [12, 13]), "several selected: the bottom one stays the base, the rest clip in one go");
+ok(same(clipTargets([under, a, b, c], [13, 11]), [13]), "the selection's order doesn't matter, and layers between are left alone");
+ok(same(clipTargets([under, a, { ...b, clipToBelow: true }, c], [11, 12, 13]), [13]), "already clipped layers are skipped");
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall clipping checks passed");

@@ -1,7 +1,7 @@
 // Floating layers list: select, lock, hide, group (collapsible, renamable) and reorder items.
 
 import { groupColor } from "../../model/annotations.js";
-import { canClipAt } from "../../model/clipping.js";
+import { canClipAt, clipTargets } from "../../model/clipping.js";
 import { BLEND_CONTROL, OPACITY_CONTROL, blendOf, controlValues } from "../../model/controls.js";
 import { layerName } from "../../model/layerNames.js";
 import { isEllipse } from "../../model/outlines.js";
@@ -95,6 +95,14 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
 
 // Opacity and blend of the selected layers. With several selected, opacity shows the first one's
 // and blend shows "Mixed" when they differ; changing either sets it on all of them.
+const MoreIcon = () => (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+    <circle cx="12" cy="5" r="1.9" />
+    <circle cx="12" cy="12" r="1.9" />
+    <circle cx="12" cy="19" r="1.9" />
+  </svg>
+);
+
 // Group: two layers inside a dashed frame. Ungroup: the same two layers with the frame gone, pulled apart.
 const GroupIcon = () => (
   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -145,7 +153,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // until an edge is dragged, which leaves the stylesheet's size.
 export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
-  const [menuOpen, setMenuOpen] = useState(false); // the ... menu: clipping mask
+  const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
   const [dropInfo, setDropInfo] = useState(null); // { key, row, before }: the line shown above/below row `key`
   const [, setCollapseTick] = useState(0);
@@ -155,19 +163,47 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
   const headRef = useRef(null);
   const topFirst = annotations.slice().reverse();
   const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
-  // Clipping mask: the selected layers that can be clipped (they need a layer below and no clip yet), and those that are.
-  const canClip = annotations.some((a, i) => selectedIds.includes(a.id) && !a.clipToBelow && canClipAt(annotations, i));
+  // Clipping mask for the selection: whether "Clip to below (multiple)" would clip anything, and whether any selected layer is clipped.
+  const canClip = clipTargets(annotations, selectedIds).length > 0;
   const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
+  // One layer's own ⋮ menu: { id, x, y } (where it opens on screen), or null. It acts on that layer only,
+  // whatever is selected.
+  const [rowMenu, setRowMenu] = useState(null);
+  const rowMenuRef = useRef(null);
 
-  // The menu closes on a press outside it or Escape.
+  // The menus close on a press outside them or Escape (the layer menu also when the list scrolls).
   useEffect(() => {
-    if (!menuOpen) return;
-    const outside = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
-    const escape = (e) => { if (e.key === "Escape") setMenuOpen(false); };
+    if (!menuOpen && !rowMenu) return;
+    const close = () => { setMenuOpen(false); setRowMenu(null); };
+    const outside = (e) => {
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      if (rowMenu && rowMenuRef.current && !rowMenuRef.current.contains(e.target) && !e.target.closest(".ze-layer-more-btn")) setRowMenu(null);
+    };
+    const escape = (e) => { if (e.key === "Escape") close(); };
+    const list = listRef.current;
     document.addEventListener("mousedown", outside);
     document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", escape); };
-  }, [menuOpen]);
+    if (rowMenu && list) list.addEventListener("scroll", close);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+      if (list) list.removeEventListener("scroll", close);
+    };
+  }, [menuOpen, rowMenu]);
+
+  // Opens (or closes, on a second click) a layer's ⋮ menu just under its button, kept on screen.
+  function toggleRowMenu(e, id) {
+    e.stopPropagation();
+    if (rowMenu && rowMenu.id === id) { setRowMenu(null); return; }
+    const box = e.currentTarget.getBoundingClientRect();
+    const MENU_W = 200, MENU_H = 84;
+    const x = Math.max(4, Math.min(box.right - MENU_W, window.innerWidth - MENU_W - 4));
+    const y = box.bottom + 4 + MENU_H > window.innerHeight ? box.top - 4 - MENU_H : box.bottom + 4;
+    setMenuOpen(false);
+    setRowMenu({ id, x, y });
+  }
+  const rowMenuAnn = rowMenu ? annotations.find((a) => a.id === rowMenu.id) : null;
+  const rowMenuIndex = rowMenuAnn ? annotations.indexOf(rowMenuAnn) : -1;
 
   function toggleCollapsed(groupId) {
     if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId); else collapsedGroups.add(groupId);
@@ -309,6 +345,14 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           >
             <EyeIcon hidden={ann.hidden} />
           </button>
+          <button
+            type="button" className={"ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === ann.id ? " is-open" : "")}
+            title="Layer actions" aria-label={"Actions for " + layerName(ann)} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === ann.id)}
+            onClick={(e) => toggleRowMenu(e, ann.id)}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <MoreIcon />
+          </button>
         </div>
         {dropLine(ann.id, false)}
       </React.Fragment>
@@ -393,8 +437,8 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
         <span className="ze-layers-head-actions" onMouseDown={(e) => e.stopPropagation()}>
           <span className="ze-layers-menu-wrap" ref={menuRef}>
             <button
-              type="button" className={"ze-guides-settings-btn" + (menuOpen ? " is-open" : "")} title="Clipping mask" aria-label="More layer actions"
-              aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
+              type="button" className={"ze-guides-settings-btn" + (menuOpen ? " is-open" : "")} title="Group, ungroup and clipping mask" aria-label="More layer actions"
+              aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => { setRowMenu(null); setMenuOpen((open) => !open); }}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
                 <circle cx="12" cy="5" r="1.9" />
@@ -404,7 +448,9 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
             </button>
             {menuOpen && (
               <div className="ze-menu ze-layers-menu" role="menu">
-                <MenuItem label="Clip to layer below" shortcut="Ctrl+Alt+G" hint="Shows the selected layer only where the layer directly below it has pixels" disabled={!canClip} onClick={onClip} close={() => setMenuOpen(false)} />
+                <MenuItem label="Group" shortcut="Ctrl+G" hint="Group the selected layers (select two or more)" disabled={selectedIds.length < 2} onClick={onGroup} close={() => setMenuOpen(false)} />
+                <MenuItem label="Ungroup" shortcut="Ctrl+Shift+G" disabled={!canUngroup} onClick={onUngroup} close={() => setMenuOpen(false)} />
+                <MenuItem label="Clip to below (multiple)" shortcut="Ctrl+Alt+G" hint="Clips the selected layers in one go: the bottom-most selected layer stays as the base and the others show only where it has pixels. With one layer selected, clips it to the layer below." disabled={!canClip} onClick={onClip} close={() => setMenuOpen(false)} />
                 <MenuItem label="Release clipping mask" disabled={!canRelease} onClick={onRelease} close={() => setMenuOpen(false)} />
               </div>
             )}
@@ -437,6 +483,20 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
             <span className="ze-layer-name">Page</span>
           </div>
       </div>
+      {rowMenuAnn && (
+        // Fixed to the screen, so the panel's edge and the list's scrolling can't cut it off.
+        <div className="ze-menu ze-layer-row-menu" role="menu" ref={rowMenuRef} style={{ left: rowMenu.x, top: rowMenu.y }}>
+          <MenuItem
+            label="Clip to layer below" hint="Shows this layer only where the layer below it has pixels"
+            disabled={rowMenuAnn.clipToBelow || !canClipAt(annotations, rowMenuIndex)}
+            onClick={() => onToggleClip(rowMenuAnn.id)} close={() => setRowMenu(null)}
+          />
+          <MenuItem
+            label="Release clipping mask" disabled={!rowMenuAnn.clipToBelow}
+            onClick={() => onToggleClip(rowMenuAnn.id)} close={() => setRowMenu(null)}
+          />
+        </div>
+      )}
       {RESIZE_EDGES.map((edge) => (
         <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />
       ))}
