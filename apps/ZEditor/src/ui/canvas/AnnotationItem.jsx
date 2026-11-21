@@ -1,6 +1,6 @@
 // One item on the page: picks the component for its type (image, shape, text or stroke).
 
-import { blendOf } from "../../model/controls.js";
+import { blendOf, opacityOf } from "../../model/controls.js";
 import { AnnotationImage } from "./AnnotationImage.jsx";
 import { AnnotationRect } from "./AnnotationRect.jsx";
 import { AnnotationText } from "./AnnotationText.jsx";
@@ -58,9 +58,14 @@ export function AnnotationItem({
       />
     );
   }
-  // A stroke: its own page-sized SVG, so its blend mode mixes with what's below.
+  // A stroke: its own page-sized SVG, so its blend mode mixes with what's below and its
+  // opacity fades the whole stroke as one piece (overlapping parts don't darken).
+  const strokeStyle = {
+    mixBlendMode: blendOf(a) !== "normal" ? blendOf(a) : undefined,
+    opacity: opacityOf(a) < 1 ? opacityOf(a) : undefined,
+  };
   return (
-    <svg className="ze-stroke-svg" width={pageSize.width} height={pageSize.height} style={blendOf(a) !== "normal" ? { mixBlendMode: blendOf(a) } : undefined}>
+    <svg className="ze-stroke-svg" width={pageSize.width} height={pageSize.height} style={strokeStyle}>
       <StrokeShape ann={a} tool={tool} isSelected={isSelected} onPress={onPress} />
     </svg>
   );

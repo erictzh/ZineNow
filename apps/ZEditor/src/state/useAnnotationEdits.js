@@ -281,6 +281,15 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
   }
 
+  // The Layers panel's Opacity and Blend: `patch` ({ opacity } or { blend }) goes on every selected
+  // layer. Coalesced per selection and setting, so a slider drag is one undo step.
+  function handleSetLayerLook(ids, patch) {
+    if (selectedIdx === null || ids.length === 0) return;
+    const merge = (a, p) => ({ ...a, ...withStyleOverrides(a, p) });
+    const key = "look:" + Object.keys(patch).join() + ":" + ids.join();
+    updateAnnotationsFor(selectedIdx, (anns) => ids.reduce((list, id) => patchedAnnotations(list, id, patch, merge), anns), key);
+  }
+
   // ---- Linked text styles (model/text/textStyles.js). Each is its own undo step.
   // (The style list itself isn't part of undo: undoing a redefine puts the boxes back, not the style.)
   const patchBox = (id, patch) => updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...p })));
@@ -387,7 +396,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
-    handleUpdateAnnotation, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
+    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
   };

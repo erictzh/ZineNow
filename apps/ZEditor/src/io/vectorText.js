@@ -14,7 +14,7 @@
 import { EXPORT_SCALE, MAIN_SCALE } from "../constants.js";
 import { hexToRgb } from "../model/color.js";
 import { bboxOf } from "../model/annotations.js";
-import { angleOf, blendOf } from "../model/controls.js";
+import { angleOf, blendOf, opacityOf } from "../model/controls.js";
 import { caseText, textLook } from "../model/text/textLook.js";
 import { layoutText, measureTextBox } from "../render/textLayout.js";
 import { columnRules, layoutPlainRuns } from "../render/textRuns.js";
@@ -31,6 +31,7 @@ function blockerFor(ann) {
   if (look.textCase === "small") return "small caps";
   if (look.label && look.label.labelRadius > 0) return "rounded label";
   if (blendOf(ann) !== "normal") return "blend";
+  if (opacityOf(ann) < 1) return "opacity";
   if (COMPLEX_SCRIPT.test(ann.text)) return "script";
   // Custom text spans in another font, bold or italic need a second embedded face (not done yet).
   if ((ann.colorRuns || []).some((r) => r.fontFamily != null || r.fontSize != null || r.bold != null || r.italic != null)) return "mixed fonts";
@@ -67,6 +68,7 @@ const REASON_TEXT = {
   "small caps": "small caps",
   "rounded label": "a rounded label",
   blend: "a blend mode",
+  opacity: "a layer opacity below 100%",
   script: "text that needs complex-script shaping",
   font: "a font whose file isn't available",
   glyphs: "characters their font doesn't have",

@@ -1,6 +1,6 @@
 // Format panel for a selected rectangle or ellipse.
 
-import { ANGLE_CONTROL, BLEND_CONTROL, OPACITY_CONTROL } from "../../../model/controls.js";
+import { ANGLE_CONTROL } from "../../../model/controls.js";
 import { isEllipse } from "../../../model/outlines.js";
 import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { ControlList } from "../../controls/ControlList.jsx";
@@ -9,7 +9,7 @@ import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 
-const TRANSFORM_CONTROLS = [ANGLE_CONTROL, OPACITY_CONTROL, BLEND_CONTROL];
+const TRANSFORM_CONTROLS = [ANGLE_CONTROL]; // opacity and blend are in the Layers panel
 
 export function ShapeFormat({ ann, onUpdate, onRasterizeRect }) {
   const patch = (p) => onUpdate(ann.id, p);
@@ -23,8 +23,8 @@ export function ShapeFormat({ ann, onUpdate, onRasterizeRect }) {
         title="Transform"
         defaultOpen
         hint={isEllipse(ann)
-          ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline."
-          : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border."}
+          ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline. Opacity and blend are in the Layers panel."
+          : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border. Opacity and blend are in the Layers panel."}
         onReset={() => patch(resetPatch(TRANSFORM_CONTROLS))}
       >
         <SizeReadout ann={ann} />

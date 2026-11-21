@@ -1,7 +1,7 @@
 // One text box on the page: typing, display, resize.
 
 import { rgbaCss } from "../../model/color.js";
-import { angleOf, blendOf, controlValues } from "../../model/controls.js";
+import { angleOf, blendOf, controlValues, opacityOf } from "../../model/controls.js";
 import { MIN_RESIZE_SIZE, resizedBox, rotatePoint } from "../../model/geometry.js";
 import { SHADOW_EFFECT } from "../../model/imageEffects.js";
 import { adjustRunsForEdit, colorSegments } from "../../model/text/colorRuns.js";
@@ -107,7 +107,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
   const liveBox = canvasMode ? measureTextBox(ann) : null;
   const canvasMargin = canvasMode ? textCanvasMargin(ann, look) : 0;
   const liveDrawKey = canvasMode
-    ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: undefined, hidden: undefined, name: undefined, blend: undefined })
+    ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: undefined, hidden: undefined, name: undefined, blend: undefined, opacity: undefined })
     : "";
   const typesetLayout = useMemo(() => (typesetEditing ? layoutTextBox(ann) : null), [typesetEditing ? liveDrawKey : ""]);
 
@@ -223,6 +223,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
     textAlign: ann.align || "left",
     padding: `${look.padY}px ${look.padX}px`,
     mixBlendMode: blendOf(ann) !== "normal" ? blendOf(ann) : undefined,
+    opacity: opacityOf(ann) < 1 ? opacityOf(ann) : undefined, // the whole box, like Export's layer (drawAnnotation.js)
     transform: rotationCss(ann),
   };
   if (look.label && !canvasMode) {

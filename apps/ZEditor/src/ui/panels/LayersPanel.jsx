@@ -2,10 +2,13 @@
 
 import { groupColor } from "../../model/annotations.js";
 import { canClipAt } from "../../model/clipping.js";
+import { BLEND_CONTROL, OPACITY_CONTROL, blendOf, controlValues } from "../../model/controls.js";
 import { layerName } from "../../model/layerNames.js";
 import { isEllipse } from "../../model/outlines.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS } from "../../model/strokes.js";
 import { rectFillCss } from "../../render/gradients.js";
+import { resolvePageText } from "../../render/pageText.js";
+import { SelectInput, SliderNumberInput } from "../controls/inputs.jsx";
 import { trackPointerDrag } from "../pointer.js";
 import { MenuItem } from "../topbar/TopMenu.jsx";
 import { withTouchModifier } from "../touchInput.js";
@@ -81,11 +84,68 @@ function RenameInput({ current, onDone }) {
   );
 }
 
+// The smallest the panel can be dragged to: room for the Opacity row and a few layers.
+const MIN_WIDTH = 200, MIN_HEIGHT = 170;
+// The panel's resize edges: which sides each one moves.
+const RESIZE_EDGES = [
+  { key: "w", left: true }, { key: "e", right: true }, { key: "s", bottom: true },
+  { key: "sw", left: true, bottom: true }, { key: "se", right: true, bottom: true },
+];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+
+// Opacity and blend of the selected layers. With several selected, opacity shows the first one's
+// and blend shows "Mixed" when they differ; changing either sets it on all of them.
+// Group: two layers inside a dashed frame. Ungroup: the same two layers with the frame gone, pulled apart.
+const GroupIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2.5" y="2.5" width="19" height="19" rx="2" strokeDasharray="3 3" />
+    <rect x="6.5" y="6.5" width="7" height="7" rx="1" />
+    <rect x="10.5" y="10.5" width="7" height="7" rx="1" />
+  </svg>
+);
+const UngroupIcon = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="2.5" y="2.5" width="8" height="8" rx="1" />
+    <rect x="13.5" y="13.5" width="8" height="8" rx="1" />
+    <path d="M14 4h6v6M4 14v6h6" strokeDasharray="2 2.5" />
+  </svg>
+);
+
+function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }) {
+  const views = resolvePageText(annotations); // a threaded text frame shows its story's look
+  const selected = views.filter((a) => selectedIds.includes(a.id));
+  const first = selected.find((a) => a.id === selectedIds[0]) || selected[0];
+  const opacity = first ? controlValues(first, [OPACITY_CONTROL]).opacity : OPACITY_CONTROL.fallback;
+  const blends = new Set(selected.map(blendOf));
+  const blend = blends.size > 1 ? "" : first ? blendOf(first) : BLEND_CONTROL.fallback;
+  const blendOptions = blend === "" ? [{ key: "", label: "Mixed" }, ...BLEND_CONTROL.options] : BLEND_CONTROL.options;
+  return (
+    <fieldset className="ze-layers-look" disabled={selected.length === 0} title={selected.length === 0 ? "Select a layer to change its opacity and blend" : undefined}>
+      <div className="ze-layers-look-row">
+        <button type="button" className="ze-layer-icon-btn ze-layers-group-btn" title="Group (Ctrl+G): select two or more layers" aria-label="Group the selected layers" disabled={selectedIds.length < 2} onClick={onGroup}>
+          <GroupIcon />
+        </button>
+        <button type="button" className="ze-layer-icon-btn ze-layers-group-btn" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup the selected layers" disabled={!canUngroup} onClick={onUngroup}>
+          <UngroupIcon />
+        </button>
+        <span className="ze-layers-look-sep" aria-hidden="true" />
+        <span className="ze-format-label">Blend</span>
+        <SelectInput options={blendOptions} value={blend} onChange={(v) => { if (v) onSetLook({ blend: v }); }} />
+      </div>
+      <div className="ze-layers-look-row">
+        <span className="ze-format-label">Opacity</span>
+        <SliderNumberInput min={OPACITY_CONTROL.min} max={OPACITY_CONTROL.max} value={opacity} onChange={(v) => onSetLook({ opacity: v })} />
+      </div>
+    </fieldset>
+  );
+}
+
 // Floats over the workspace. `position` is null until first dragged,
-// which leaves it at its default spot from the stylesheet.
-export function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
+// which leaves it at its default spot from the stylesheet; `size` is null
+// until an edge is dragged, which leaves the stylesheet's size.
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
-  const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
+  const [menuOpen, setMenuOpen] = useState(false); // the ... menu: clipping mask
   const menuRef = useRef(null);
   const [dropInfo, setDropInfo] = useState(null); // { key, row, before }: the line shown above/below row `key`
   const [, setCollapseTick] = useState(0);
@@ -138,6 +198,35 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
     const start = panelRef.current.getBoundingClientRect();
     const { clientX, clientY } = e;
     trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+  }
+
+  // Dragging an edge or bottom corner resizes the panel (pointer events, so a finger works too).
+  // The left edge keeps the right side still; the top stays put, as the title bar moves the panel.
+  function startResize(e, edge) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const start = panelRef.current.getBoundingClientRect();
+    const { clientX, clientY, pointerId } = e;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(pointerId);
+    const move = (ev) => {
+      const dx = ev.clientX - clientX, dy = ev.clientY - clientY;
+      let left = start.left, width = start.width, height = start.height;
+      if (edge.right) width = clamp(start.width + dx, MIN_WIDTH, window.innerWidth - start.left);
+      if (edge.left) { width = clamp(start.width - dx, MIN_WIDTH, start.right); left = start.right - width; }
+      if (edge.bottom) height = clamp(start.height + dy, MIN_HEIGHT, window.innerHeight - start.top);
+      onResize({ width: Math.round(width), height: Math.round(height) });
+      onMove({ x: Math.round(left), y: Math.round(start.top) }); // pins it in place (it starts anchored to the right)
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
   }
 
   useEffect(() => {
@@ -292,16 +381,19 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
   const groupNumbers = new Map(); // "Group 1", "Group 2"... for groups not given a name, top first
   return (
     <section
-      className="ze-layers-panel"
+      className={"ze-layers-panel" + (size ? " is-sized" : "")}
       ref={panelRef}
-      style={position ? { left: position.x, top: position.y, right: "auto" } : undefined}
+      style={{
+        ...(position ? { left: position.x, top: position.y, right: "auto" } : null),
+        ...(size ? { width: size.width, height: Math.min(size.height, window.innerHeight - (position ? position.y : 0)) } : null),
+      }}
     >
       <div className="ze-format-panel-head ze-layers-head" ref={headRef} onMouseDown={startPanelDrag}>
         <span>Layers{annotations.length > 0 ? " (" + annotations.length + ")" : ""}</span>
         <span className="ze-layers-head-actions" onMouseDown={(e) => e.stopPropagation()}>
           <span className="ze-layers-menu-wrap" ref={menuRef}>
             <button
-              type="button" className={"ze-guides-settings-btn" + (menuOpen ? " is-open" : "")} title="Group, ungroup and clipping mask" aria-label="More layer actions"
+              type="button" className={"ze-guides-settings-btn" + (menuOpen ? " is-open" : "")} title="Clipping mask" aria-label="More layer actions"
               aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
@@ -312,8 +404,6 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
             </button>
             {menuOpen && (
               <div className="ze-menu ze-layers-menu" role="menu">
-                <MenuItem label="Group" shortcut="Ctrl+G" hint="Group the selected layers (select two or more)" disabled={selectedIds.length < 2} onClick={onGroup} close={() => setMenuOpen(false)} />
-                <MenuItem label="Ungroup" shortcut="Ctrl+Shift+G" disabled={!canUngroup} onClick={onUngroup} close={() => setMenuOpen(false)} />
                 <MenuItem label="Clip to layer below" shortcut="Ctrl+Alt+G" hint="Shows the selected layer only where the layer directly below it has pixels" disabled={!canClip} onClick={onClip} close={() => setMenuOpen(false)} />
                 <MenuItem label="Release clipping mask" disabled={!canRelease} onClick={onRelease} close={() => setMenuOpen(false)} />
               </div>
@@ -335,6 +425,7 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
           </button>
         </span>
       </div>
+      <LayerLook annotations={annotations} selectedIds={selectedIds} onSetLook={onSetLook} onGroup={onGroup} onUngroup={onUngroup} canUngroup={canUngroup} />
       <div className="ze-layers-list" ref={listRef}>
           {layerBlocks(topFirst).map((block) => {
             if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
@@ -346,6 +437,9 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
             <span className="ze-layer-name">Page</span>
           </div>
       </div>
+      {RESIZE_EDGES.map((edge) => (
+        <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />
+      ))}
     </section>
   );
 }

@@ -207,6 +207,9 @@ export function App() {
         <LayersPanel
           position={view.layersPosition}
           onMove={view.setLayersPosition}
+          size={view.layersSize}
+          onResize={view.setLayersSize}
+          onSetLook={(patch) => edits.handleSetLayerLook(selection.selectedAnnotationIds(), patch)}
           onMinimize={() => view.setLayersOpen(false)}
           annotations={selectedPage.annotations || []}
           selectedIds={selection.selectedAnnotationIds()}

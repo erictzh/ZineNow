@@ -7545,8 +7545,8 @@
 
   // apps/ZEditor/src/render/drawAnnotation.js
   async function drawAnnotationOnCanvas(ctx, ann, scaleFactor, pageFilter) {
-    if (ann.type === "stroke") await drawWithOpacity(ctx, 1, (target) => drawStrokeOnCanvas(target, ann, scaleFactor), blendOf(ann));
-    else if (ann.type === "text") await drawWithOpacity(ctx, 1, (target) => drawTextOnCanvas(target, ann, scaleFactor), blendOf(ann));
+    if (ann.type === "stroke") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawStrokeOnCanvas(target, ann, scaleFactor), blendOf(ann));
+    else if (ann.type === "text") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawTextOnCanvas(target, ann, scaleFactor), blendOf(ann));
     else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor), blendOf(ann));
     else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter), blendOf(ann));
   }
@@ -7958,6 +7958,12 @@
       if (selectedIdx === null) return;
       updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
     }
+    function handleSetLayerLook(ids, patch) {
+      if (selectedIdx === null || ids.length === 0) return;
+      const merge = (a, p) => ({ ...a, ...withStyleOverrides(a, p) });
+      const key = "look:" + Object.keys(patch).join() + ":" + ids.join();
+      updateAnnotationsFor(selectedIdx, (anns) => ids.reduce((list, id) => patchedAnnotations(list, id, patch, merge), anns), key);
+    }
     const patchBox = (id, patch) => updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...p })));
     function handleApplyTextStyle(ann, style) {
       if (selectedIdx === null) return;
@@ -8052,6 +8058,7 @@
       addImageAnnotationFromFile,
       handleImageFileChosen,
       handleUpdateAnnotation,
+      handleSetLayerLook,
       handleFlattenImage,
       handleRasterizeText,
       handleRasterizeRect,
@@ -8481,6 +8488,7 @@
     if (look.textCase === "small") return "small caps";
     if (look.label && look.label.labelRadius > 0) return "rounded label";
     if (blendOf(ann) !== "normal") return "blend";
+    if (opacityOf(ann) < 1) return "opacity";
     if (COMPLEX_SCRIPT.test(ann.text)) return "script";
     if ((ann.colorRuns || []).some((r) => r.fontFamily != null || r.fontSize != null || r.bold != null || r.italic != null)) return "mixed fonts";
     return null;
@@ -8521,6 +8529,7 @@
     "small caps": "small caps",
     "rounded label": "a rounded label",
     blend: "a blend mode",
+    opacity: "a layer opacity below 100%",
     script: "text that needs complex-script shaping",
     font: "a font whose file isn't available",
     glyphs: "characters their font doesn't have",
@@ -10623,6 +10632,7 @@
     const [rulerGuides, setRulerGuides] = useState13([]);
     const [snapToGuidesOn, setSnapToGuidesOn] = useState13(true);
     const [layersPosition, setLayersPosition] = useState13(null);
+    const [layersSize, setLayersSize] = useState13(null);
     function settingsForSave() {
       return {
         guidesOn,
@@ -10674,6 +10684,8 @@
       setLayersOpen,
       layersPosition,
       setLayersPosition,
+      layersSize,
+      setLayersSize,
       rulersOn,
       setRulersOn,
       rulerUnit,
@@ -11282,7 +11294,7 @@
     const canvasMode = usesCanvasText(ann) && (!isEditing || typesetEditing) && (Boolean(ann.text) || typesetEditing || storyFrame);
     const liveBox = canvasMode ? measureTextBox(ann) : null;
     const canvasMargin = canvasMode ? textCanvasMargin(ann, look) : 0;
-    const liveDrawKey = canvasMode ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: void 0, hidden: void 0, name: void 0, blend: void 0 }) : "";
+    const liveDrawKey = canvasMode ? JSON.stringify({ ...ann, x: 0, y: 0, angle: 0, id: 0, locked: void 0, hidden: void 0, name: void 0, blend: void 0, opacity: void 0 }) : "";
     const typesetLayout = useMemo2(() => typesetEditing ? layoutTextBox(ann) : null, [typesetEditing ? liveDrawKey : ""]);
     function syncSel(input) {
       setSel({ start: input.selectionStart, end: input.selectionEnd, dir: input.selectionDirection || "forward" });
@@ -11392,6 +11404,8 @@
       textAlign: ann.align || "left",
       padding: `${look.padY}px ${look.padX}px`,
       mixBlendMode: blendOf(ann) !== "normal" ? blendOf(ann) : void 0,
+      opacity: opacityOf(ann) < 1 ? opacityOf(ann) : void 0,
+      // the whole box, like Export's layer (drawAnnotation.js)
       transform: rotationCss(ann)
     };
     if (look.label && !canvasMode) {
@@ -11707,7 +11721,11 @@
         }
       );
     }
-    return /* @__PURE__ */ React.createElement("svg", { className: "ze-stroke-svg", width: pageSize.width, height: pageSize.height, style: blendOf(a) !== "normal" ? { mixBlendMode: blendOf(a) } : void 0 }, /* @__PURE__ */ React.createElement(StrokeShape, { ann: a, tool, isSelected, onPress }));
+    const strokeStyle = {
+      mixBlendMode: blendOf(a) !== "normal" ? blendOf(a) : void 0,
+      opacity: opacityOf(a) < 1 ? opacityOf(a) : void 0
+    };
+    return /* @__PURE__ */ React.createElement("svg", { className: "ze-stroke-svg", width: pageSize.width, height: pageSize.height, style: strokeStyle }, /* @__PURE__ */ React.createElement(StrokeShape, { ann: a, tool, isSelected, onPress }));
   }
 
   // apps/ZEditor/src/ui/canvas/ClipWrap.jsx
@@ -13231,7 +13249,7 @@
         onReset: hasCrop ? () => patch(cropReset) : void 0
       },
       /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (isCroppingThis ? " active" : ""), onClick: () => onToggleCrop(ann.id) }, isCroppingThis ? "Done Cropping" : "Edit Crop")
-    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "image.basic", title: "Basic", defaultOpen: true, hint: "Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely.", onReset: () => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(TextWrapSection, { ann, patch }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "image.basic", title: "Basic", defaultOpen: true, hint: "Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely. Opacity and blend are in the Layers panel.", onReset: () => patch(resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(TextWrapSection, { ann, patch }), /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.filters",
@@ -13304,7 +13322,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/format/ShapeFormat.jsx
-  var TRANSFORM_CONTROLS = [ANGLE_CONTROL, OPACITY_CONTROL, BLEND_CONTROL];
+  var TRANSFORM_CONTROLS = [ANGLE_CONTROL];
   function ShapeFormat({ ann, onUpdate, onRasterizeRect }) {
     const patch = (p) => onUpdate(ann.id, p);
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: isEllipse(ann) ? "Format — Ellipse" : "Format — Rectangle" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "rect.fill", title: "Fill", defaultOpen: true, onReset: () => patch(resetPatch(RECT_FILL_CONTROLS)) }, /* @__PURE__ */ React.createElement(ControlList, { controls: RECT_FILL_CONTROLS, source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(
@@ -13313,7 +13331,7 @@
         id: "rect.transform",
         title: "Transform",
         defaultOpen: true,
-        hint: isEllipse(ann) ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline." : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border.",
+        hint: isEllipse(ann) ? "Drag a handle to resize; hold Shift to keep its proportions (a circle stays a circle). Use Stroke for an outline. Opacity and blend are in the Layers panel." : "Drag a handle to resize; hold Shift to keep its proportions. Use Rounded for corner radius and Stroke for a border. Opacity and blend are in the Layers panel.",
         onReset: () => patch(resetPatch(TRANSFORM_CONTROLS))
       },
       /* @__PURE__ */ React.createElement(SizeReadout, { ann }),
@@ -13362,7 +13380,7 @@
   function StrokeFormat({ ann, onUpdate }) {
     const isHi = ann.tool === "highlighter";
     const patch = (p) => onUpdate(ann.id, p);
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — " + (isHi ? "Highlighter" : "Draw") + " stroke" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "stroke.basic", title: "Stroke", defaultOpen: true, hint: "Drag the round knob above the stroke to rotate it." }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — " + (isHi ? "Highlighter" : "Draw") + " stroke" }, /* @__PURE__ */ React.createElement(PanelSection, { id: "stroke.basic", title: "Stroke", defaultOpen: true, hint: "Drag the round knob above the stroke to rotate it. Opacity and blend are in the Layers panel." }, /* @__PURE__ */ React.createElement(
       StrokeFormatFields,
       {
         swatches: isHi ? HIGHLIGHTER_COLOR_SWATCHES : PEN_COLOR_SWATCHES,
@@ -13375,7 +13393,7 @@
         onWidth: (w) => patch({ strokeWidth: w }),
         onTaper: (t) => patch({ taper: t })
       }
-    )), /* @__PURE__ */ React.createElement(PanelSection, { id: "stroke.blend", title: "Blend" }, /* @__PURE__ */ React.createElement(ControlList, { controls: [BLEND_CONTROL], source: ann, onPatch: patch })));
+    )));
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
@@ -13891,7 +13909,7 @@
         hint: "Changes only the letters you select (font, size, bold, italic, underline, strike-through, color), or the alignment of the paragraphs they're in. Custom fonts, sizes, bold, italic or alignment set the box with the paragraph layout, as Justify does."
       },
       /* @__PURE__ */ React.createElement(TextSpans, { ann, patch, fontOptions, setFontOptions })
-    ), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch, effects: TEXT_EFFECTS, before: /* @__PURE__ */ React.createElement(TextPhotoFill, { ann, patch }), beforeLabel: ann.fillSrc ? "Photo fill" : void 0 }), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.transform", title: "Rotation & blend", onReset: () => patch(resetPatch([ANGLE_CONTROL, BLEND_CONTROL])) }, /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL, BLEND_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.rasterize", title: "Rasterize", hint: "Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : void 0, onClick: () => onRasterizeText(ann) }, "Rasterize to Image")));
+    ), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch, effects: TEXT_EFFECTS, before: /* @__PURE__ */ React.createElement(TextPhotoFill, { ann, patch }), beforeLabel: ann.fillSrc ? "Photo fill" : void 0 }), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.transform", title: "Rotation", hint: "Opacity and blend are in the Layers panel.", onReset: () => patch(resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.rasterize", title: "Rasterize", hint: "Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : void 0, onClick: () => onRasterizeText(ann) }, "Rasterize to Image")));
   }
 
   // apps/ZEditor/src/ui/panels/format/ToolPanels.jsx
@@ -14410,7 +14428,31 @@
       }
     );
   }
-  function LayersPanel({ position, onMove, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
+  var MIN_WIDTH = 200;
+  var MIN_HEIGHT = 170;
+  var RESIZE_EDGES = [
+    { key: "w", left: true },
+    { key: "e", right: true },
+    { key: "s", bottom: true },
+    { key: "sw", left: true, bottom: true },
+    { key: "se", right: true, bottom: true }
+  ];
+  var clamp2 = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  var GroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "19", height: "19", rx: "2", strokeDasharray: "3 3" }), /* @__PURE__ */ React.createElement("rect", { x: "6.5", y: "6.5", width: "7", height: "7", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "10.5", y: "10.5", width: "7", height: "7", rx: "1" }));
+  var UngroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "13.5", y: "13.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M14 4h6v6M4 14v6h6", strokeDasharray: "2 2.5" }));
+  function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }) {
+    const views = resolvePageText(annotations);
+    const selected = views.filter((a) => selectedIds.includes(a.id));
+    const first = selected.find((a) => a.id === selectedIds[0]) || selected[0];
+    const opacity = first ? controlValues(first, [OPACITY_CONTROL]).opacity : OPACITY_CONTROL.fallback;
+    const blends = new Set(selected.map(blendOf));
+    const blend = blends.size > 1 ? "" : first ? blendOf(first) : BLEND_CONTROL.fallback;
+    const blendOptions = blend === "" ? [{ key: "", label: "Mixed" }, ...BLEND_CONTROL.options] : BLEND_CONTROL.options;
+    return /* @__PURE__ */ React.createElement("fieldset", { className: "ze-layers-look", disabled: selected.length === 0, title: selected.length === 0 ? "Select a layer to change its opacity and blend" : void 0 }, /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layer-icon-btn ze-layers-group-btn", title: "Group (Ctrl+G): select two or more layers", "aria-label": "Group the selected layers", disabled: selectedIds.length < 2, onClick: onGroup }, /* @__PURE__ */ React.createElement(GroupIcon, null)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layer-icon-btn ze-layers-group-btn", title: "Ungroup (Ctrl+Shift+G)", "aria-label": "Ungroup the selected layers", disabled: !canUngroup, onClick: onUngroup }, /* @__PURE__ */ React.createElement(UngroupIcon, null)), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-look-sep", "aria-hidden": "true" }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Blend"), /* @__PURE__ */ React.createElement(SelectInput, { options: blendOptions, value: blend, onChange: (v) => {
+      if (v) onSetLook({ blend: v });
+    } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
+  }
+  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
     const [renamingId, setRenamingId] = useState30(null);
     const [menuOpen, setMenuOpen] = useState30(false);
     const menuRef = useRef22(null);
@@ -14465,6 +14507,35 @@
       const start = panelRef.current.getBoundingClientRect();
       const { clientX, clientY } = e;
       trackPointerDrag((ev) => onMove(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+    }
+    function startResize(e, edge) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const start = panelRef.current.getBoundingClientRect();
+      const { clientX, clientY, pointerId } = e;
+      const handle = e.currentTarget;
+      handle.setPointerCapture(pointerId);
+      const move = (ev) => {
+        const dx = ev.clientX - clientX, dy = ev.clientY - clientY;
+        let left = start.left, width = start.width, height = start.height;
+        if (edge.right) width = clamp2(start.width + dx, MIN_WIDTH, window.innerWidth - start.left);
+        if (edge.left) {
+          width = clamp2(start.width - dx, MIN_WIDTH, start.right);
+          left = start.right - width;
+        }
+        if (edge.bottom) height = clamp2(start.height + dy, MIN_HEIGHT, window.innerHeight - start.top);
+        onResize({ width: Math.round(width), height: Math.round(height) });
+        onMove({ x: Math.round(left), y: Math.round(start.top) });
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
     }
     useEffect22(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
@@ -14649,28 +14720,33 @@
     return /* @__PURE__ */ React.createElement(
       "section",
       {
-        className: "ze-layers-panel",
+        className: "ze-layers-panel" + (size ? " is-sized" : ""),
         ref: panelRef,
-        style: position ? { left: position.x, top: position.y, right: "auto" } : void 0
+        style: {
+          ...position ? { left: position.x, top: position.y, right: "auto" } : null,
+          ...size ? { width: size.width, height: Math.min(size.height, window.innerHeight - (position ? position.y : 0)) } : null
+        }
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startPanelDrag }, /* @__PURE__ */ React.createElement("span", null, "Layers", annotations.length > 0 ? " (" + annotations.length + ")" : ""), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("span", { className: "ze-layers-menu-wrap", ref: menuRef }, /* @__PURE__ */ React.createElement(
         "button",
         {
           type: "button",
           className: "ze-guides-settings-btn" + (menuOpen ? " is-open" : ""),
-          title: "Group, ungroup and clipping mask",
+          title: "Clipping mask",
           "aria-label": "More layer actions",
           "aria-haspopup": "menu",
           "aria-expanded": menuOpen,
           onClick: () => setMenuOpen((open) => !open)
         },
         /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }))
-      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Group", shortcut: "Ctrl+G", hint: "Group the selected layers (select two or more)", disabled: selectedIds.length < 2, onClick: onGroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Ungroup", shortcut: "Ctrl+Shift+G", disabled: !canUngroup, onClick: onUngroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to layer below", shortcut: "Ctrl+Alt+G", hint: "Shows the selected layer only where the layer directly below it has pixels", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to layer below", shortcut: "Ctrl+Alt+G", hint: "Shows the selected layer only where the layer directly below it has pixels", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      /* @__PURE__ */ React.createElement(LayerLook, { annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }),
       /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
         if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
         if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
         return groupBlock(block, groupNumbers.get(block.groupId));
-      }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page")))
+      }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page"))),
+      RESIZE_EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     );
   }
 
@@ -14681,7 +14757,7 @@
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
     const widthRef = useRef23(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
-    const clamp2 = (px) => {
+    const clamp3 = (px) => {
       const body = bodyRef.current;
       const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
       return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
@@ -14696,7 +14772,7 @@
         } catch (e) {
         }
       } else {
-        widthRef.current = clamp2(px);
+        widthRef.current = clamp3(px);
         root.style.setProperty(cssVar, widthRef.current + "px");
         if (save) {
           try {
@@ -14714,7 +14790,7 @@
       }
       if (saved > 0) apply(saved, false);
       const onResize = () => {
-        if (widthRef.current != null && clamp2(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+        if (widthRef.current != null && clamp3(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
       };
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
@@ -15142,7 +15218,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "e6795cb"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "87baac9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -15706,6 +15782,9 @@
       {
         position: view.layersPosition,
         onMove: view.setLayersPosition,
+        size: view.layersSize,
+        onResize: view.setLayersSize,
+        onSetLook: (patch) => edits.handleSetLayerLook(selection.selectedAnnotationIds(), patch),
         onMinimize: () => view.setLayersOpen(false),
         annotations: selectedPage.annotations || [],
         selectedIds: selection.selectedAnnotationIds(),

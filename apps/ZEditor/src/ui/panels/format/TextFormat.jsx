@@ -1,6 +1,6 @@
 // Format panel for a selected text box.
 
-import { ANGLE_CONTROL, BLEND_CONTROL } from "../../../model/controls.js";
+import { ANGLE_CONTROL } from "../../../model/controls.js";
 import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, KERNING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, PARAGRAPH_CONTROLS, STRIKE_CONTROL, TEXT_EFFECTS, VERTICAL_CONTROL } from "../../../model/text/textControls.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
@@ -58,8 +58,8 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, style
         <TextSpans ann={ann} patch={patch} fontOptions={fontOptions} setFontOptions={setFontOptions} />
       </PanelSection>
       <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} before={<TextPhotoFill ann={ann} patch={patch} />} beforeLabel={ann.fillSrc ? "Photo fill" : undefined} />
-      <PanelSection id="text.transform" title="Rotation & blend" onReset={() => patch(resetPatch([ANGLE_CONTROL, BLEND_CONTROL]))}>
-        <ControlList controls={[ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+      <PanelSection id="text.transform" title="Rotation" hint="Opacity and blend are in the Layers panel." onReset={() => patch(resetPatch([ANGLE_CONTROL]))}>
+        <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
       <PanelSection id="text.rasterize" title="Rasterize" hint="Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.">
         <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text || ann.storyHeadId != null} title={ann.storyHeadId != null ? "Unlink the threaded frames first" : undefined} onClick={() => onRasterizeText(ann)}>

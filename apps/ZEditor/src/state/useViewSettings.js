@@ -22,6 +22,7 @@ export function useViewSettings() {
   const [rulerGuides, setRulerGuides] = useState([]);
   const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
   const [layersPosition, setLayersPosition] = useState(null);
+  const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
 
   // The part of these settings a saved project carries.
   function settingsForSave() {
@@ -52,7 +53,7 @@ export function useViewSettings() {
     guidesOn, setGuidesOn, centerGuideOn, setCenterGuideOn, guideFormat, setGuideFormat,
     guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
-    layersOpen, setLayersOpen, layersPosition, setLayersPosition,
+    layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn,
     settingsForSave, applySavedSettings,
   };

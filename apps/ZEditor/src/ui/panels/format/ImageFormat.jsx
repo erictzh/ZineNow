@@ -1,6 +1,6 @@
 // Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, flatten.
 
-import { ANGLE_CONTROL, BLEND_CONTROL, OPACITY_CONTROL, angleOf } from "../../../model/controls.js";
+import { ANGLE_CONTROL, angleOf } from "../../../model/controls.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, IMAGE_FILTER_OPTIONS } from "../../../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS, PHOTO_ADJUST_SECTIONS, isAdjusted } from "../../../model/photoAdjust.js";
 import { cropResetPatch } from "../../../render/bake.js";
@@ -39,9 +39,9 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
           {isCroppingThis ? "Done Cropping" : "Edit Crop"}
         </button>
       </PanelSection>
-      <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely." onReset={() => patch(resetPatch([OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]))}>
+      <PanelSection id="image.basic" title="Basic" defaultOpen hint="Drag the image to move it. Drag a handle to resize; hold Shift to stretch it freely. Opacity and blend are in the Layers panel." onReset={() => patch(resetPatch([ANGLE_CONTROL]))}>
         <SizeReadout ann={ann} />
-        <ControlList controls={[OPACITY_CONTROL, ANGLE_CONTROL, BLEND_CONTROL]} source={ann} onPatch={patch} />
+        <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
       <TextWrapSection ann={ann} patch={patch} />
       <PanelSection
