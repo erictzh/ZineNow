@@ -1,12 +1,11 @@
 // Typography: the table of contents (which headings, title, per-level style, page numbers).
 
 import { DEFAULTS } from "../../settings/defaults.js";
-import { AlignField, ControlField, SectionLabel, SelectInput, TextInput, TocLevelStyle, ToggleRow } from "../fields.jsx";
+import { AlignField, CollapsibleSection, ControlField, SelectInput, TextInput, TocLevelStyle, ToggleRow } from "../fields.jsx";
 
 export function TocSection({ config, updateConfig }) {
   return (
-    <React.Fragment>
-      <SectionLabel>Table of Contents</SectionLabel>
+    <CollapsibleSection label="Table of Contents">
       <p className="mb-3 text-[11px] leading-relaxed text-fg-muted opacity-70">
         {"Put "}
         <code className="text-[10px]">\toc</code>
@@ -54,6 +53,6 @@ export function TocSection({ config, updateConfig }) {
         onChange={(v) => updateConfig("tocPageBreakAfter", v)}
         label="Start a new page after the contents"
       />
-    </React.Fragment>
+    </CollapsibleSection>
   );
 }

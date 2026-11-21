@@ -1136,7 +1136,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "efbc436"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "2a30b83"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1670,7 +1670,12 @@
 
   // apps/Markdown-to-PDF/src/ui/fields.jsx
   function SectionLabel({ children }) {
-    return /* @__PURE__ */ React.createElement("h3", { className: "text-[11px] font-semibold uppercase tracking-wider text-fg-muted mt-6 mb-2 first:mt-0" }, children);
+    return /* @__PURE__ */ React.createElement("h3", { className: "md2pdf-section-label" }, children);
+  }
+  function CollapsibleSection({ label, defaultOpen = false, children }) {
+    const [open, setOpen] = React.useState(defaultOpen);
+    const bodyId = React.useId();
+    return /* @__PURE__ */ React.createElement("section", { className: "md2pdf-sec" + (open ? " is-open" : "") }, /* @__PURE__ */ React.createElement("h3", { className: "md2pdf-sec-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "md2pdf-sec-title", "aria-expanded": open, "aria-controls": bodyId, onClick: () => setOpen((o) => !o) }, /* @__PURE__ */ React.createElement("span", { className: "md2pdf-sec-name" }, label), /* @__PURE__ */ React.createElement("svg", { className: "md2pdf-sec-caret", viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" })))), /* @__PURE__ */ React.createElement("div", { id: bodyId, className: "md2pdf-sec-body", hidden: !open }, children));
   }
   function ControlField({ label, hint, children }) {
     return /* @__PURE__ */ React.createElement("label", { className: "block mb-4" }, /* @__PURE__ */ React.createElement("span", { className: "block text-xs font-medium text-fg-muted mb-1.5" }, label), children, hint ? /* @__PURE__ */ React.createElement("span", { className: "block text-[11px] text-fg-muted opacity-70 mt-1" }, hint) : null);
@@ -2069,7 +2074,7 @@
 
   // apps/Markdown-to-PDF/src/ui/typography/BodyTextSection.jsx
   function BodyTextSection({ config, updateConfig }) {
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SectionLabel, null, "Body Text"), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Body Font Size (px)", hint: `Default: ${DEFAULTS.fontSize}px` }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Body Text" }, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Body Font Size (px)", hint: `Default: ${DEFAULTS.fontSize}px` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
         value: config.fontSize,
@@ -2211,11 +2216,11 @@
 
   // apps/Markdown-to-PDF/src/ui/typography/HeadingsSection.jsx
   function HeadingsSection({ config, updateConfig }) {
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SectionLabel, null, "Headings"), /* @__PURE__ */ React.createElement(HeadingLevel, { level: 1, config, updateConfig }), /* @__PURE__ */ React.createElement(HeadingLevel, { level: 2, config, updateConfig }), /* @__PURE__ */ React.createElement(HeadingLevel, { level: 3, config, updateConfig, alignHint: "H4–H6 use the H3 setting." }));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(HeadingLevel, { level: 1, config, updateConfig }), /* @__PURE__ */ React.createElement(HeadingLevel, { level: 2, config, updateConfig }), /* @__PURE__ */ React.createElement(HeadingLevel, { level: 3, config, updateConfig, alignHint: "H4–H6 use the H3 setting." }));
   }
   function HeadingLevel({ level, config, updateConfig, alignHint }) {
     const h = "h" + level;
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: `H${level} Size (px)`, hint: `Default: ${DEFAULTS[h + "Size"]}px` }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: `H${level} Heading` }, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: `H${level} Size (px)`, hint: `Default: ${DEFAULTS[h + "Size"]}px` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
         value: config[h + "Size"],
@@ -2258,7 +2263,7 @@
 
   // apps/Markdown-to-PDF/src/ui/typography/PageSection.jsx
   function PageSection({ config, updateConfig }) {
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SectionLabel, null, "Page"), /* @__PURE__ */ React.createElement(ControlField, { label: "Paper Size" }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.paperSize, onChange: (v) => updateConfig("paperSize", v) }, PAPER_SIZE_OPTIONS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Margin — Vertical (in)", hint: `Default: ${DEFAULTS.marginVerticalIn}in` }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Page", defaultOpen: true }, /* @__PURE__ */ React.createElement(ControlField, { label: "Paper Size" }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.paperSize, onChange: (v) => updateConfig("paperSize", v) }, PAPER_SIZE_OPTIONS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Margin — Vertical (in)", hint: `Default: ${DEFAULTS.marginVerticalIn}in` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
         value: config.marginVertical,
@@ -2279,7 +2284,7 @@
 
   // apps/Markdown-to-PDF/src/ui/typography/TocSection.jsx
   function TocSection({ config, updateConfig }) {
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SectionLabel, null, "Table of Contents"), /* @__PURE__ */ React.createElement("p", { className: "mb-3 text-[11px] leading-relaxed text-fg-muted opacity-70" }, "Put ", /* @__PURE__ */ React.createElement("code", { className: "text-[10px]" }, "\\toc"), " on its own line (or use + ToC above the editor) where the list should go. Entries link to their headings in the PDF."), /* @__PURE__ */ React.createElement(ControlField, { label: "Include Headings" }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.tocLevels, onChange: (v) => updateConfig("tocLevels", v) }, /* @__PURE__ */ React.createElement("option", { value: "1" }, "H1 only"), /* @__PURE__ */ React.createElement("option", { value: "2" }, "H1 – H2"), /* @__PURE__ */ React.createElement("option", { value: "3" }, "H1 – H3"))), /* @__PURE__ */ React.createElement(ToggleRow, { checked: config.tocShowTitle, onChange: (v) => updateConfig("tocShowTitle", v), label: "Show title" }), config.tocShowTitle ? /* @__PURE__ */ React.createElement(ControlField, { label: "Title", hint: `Default: ${DEFAULTS.tocTitle || "Contents"}. Styled like H2.` }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Table of Contents" }, /* @__PURE__ */ React.createElement("p", { className: "mb-3 text-[11px] leading-relaxed text-fg-muted opacity-70" }, "Put ", /* @__PURE__ */ React.createElement("code", { className: "text-[10px]" }, "\\toc"), " on its own line (or use + ToC above the editor) where the list should go. Entries link to their headings in the PDF."), /* @__PURE__ */ React.createElement(ControlField, { label: "Include Headings" }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.tocLevels, onChange: (v) => updateConfig("tocLevels", v) }, /* @__PURE__ */ React.createElement("option", { value: "1" }, "H1 only"), /* @__PURE__ */ React.createElement("option", { value: "2" }, "H1 – H2"), /* @__PURE__ */ React.createElement("option", { value: "3" }, "H1 – H3"))), /* @__PURE__ */ React.createElement(ToggleRow, { checked: config.tocShowTitle, onChange: (v) => updateConfig("tocShowTitle", v), label: "Show title" }), config.tocShowTitle ? /* @__PURE__ */ React.createElement(ControlField, { label: "Title", hint: `Default: ${DEFAULTS.tocTitle || "Contents"}. Styled like H2.` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
         value: config.tocTitle,

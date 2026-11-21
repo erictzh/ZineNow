@@ -2,12 +2,11 @@
 
 import { DEFAULTS } from "../../settings/defaults.js";
 import { PAPER_SIZE_OPTIONS } from "../../settings/initialConfig.js";
-import { ControlField, SectionLabel, SelectInput, TextInput } from "../fields.jsx";
+import { CollapsibleSection, ControlField, SelectInput, TextInput } from "../fields.jsx";
 
 export function PageSection({ config, updateConfig }) {
   return (
-    <React.Fragment>
-      <SectionLabel>Page</SectionLabel>
+    <CollapsibleSection label="Page" defaultOpen={true}>
       <ControlField label="Paper Size">
         <SelectInput value={config.paperSize} onChange={(v) => updateConfig("paperSize", v)}>
           {PAPER_SIZE_OPTIONS.map((p) => (
@@ -35,6 +34,6 @@ export function PageSection({ config, updateConfig }) {
           />
         </ControlField>
       </div>
-    </React.Fragment>
+    </CollapsibleSection>
   );
 }

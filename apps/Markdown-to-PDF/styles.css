@@ -132,6 +132,73 @@ button {
   overflow-y: auto;
 }
 
+/* Typography tab section titles (SectionLabel / CollapsibleSection in src/ui/fields.jsx), matching
+   ZEditor's Format-panel sections (apps/ZEditor/styles/format-panel.css, .ze-sec*): 12px semi-bold
+   title-case titles; a collapsible one is a 40px row with a divider and a chevron that flips open. */
+.md2pdf-section-label {
+  margin: 24px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-fg);
+}
+.md2pdf-section-label:first-child {
+  margin-top: 0;
+}
+.md2pdf-sec {
+  border-bottom: 1px solid var(--ui-border);
+}
+/* The first of a run of sections gets the top divider and the usual gap above a section. */
+.md2pdf-sec:not(.md2pdf-sec + .md2pdf-sec) {
+  margin-top: 24px;
+  border-top: 1px solid var(--ui-border);
+}
+.md2pdf-sec + .md2pdf-section-label {
+  margin-top: 24px;
+}
+.md2pdf-sec-head {
+  margin: 0;
+}
+.md2pdf-sec-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.md2pdf-sec-title:focus-visible {
+  outline: 2px solid var(--ui-accent-text);
+  outline-offset: 2px;
+}
+.md2pdf-sec-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md2pdf-sec-caret {
+  flex: 0 0 auto;
+  color: var(--ui-fg-muted);
+  transition: transform 0.15s ease;
+}
+.md2pdf-sec-title:hover .md2pdf-sec-caret {
+  color: var(--ui-fg);
+}
+.md2pdf-sec.is-open .md2pdf-sec-caret {
+  transform: rotate(180deg);
+}
+.md2pdf-sec-body {
+  padding: 4px 0 4px;
+}
+
 /* The Editor tab's formatting toolbar (src/ui/editor/FormatToolbar.jsx): groups of small icon
    buttons split by thin dividers, wrapping onto more rows when the panel is narrow. */
 .md2ebook-fmt-bar {

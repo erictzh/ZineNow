@@ -2,12 +2,11 @@
 
 import { DEFAULTS } from "../../settings/defaults.js";
 import { BOLD_WEIGHT_OPTIONS } from "../../settings/initialConfig.js";
-import { AlignField, ControlField, SectionLabel, SelectInput, TextInput } from "../fields.jsx";
+import { AlignField, CollapsibleSection, ControlField, SelectInput, TextInput } from "../fields.jsx";
 
 export function BodyTextSection({ config, updateConfig }) {
   return (
-    <React.Fragment>
-      <SectionLabel>Body Text</SectionLabel>
+    <CollapsibleSection label="Body Text">
       <div className="grid grid-cols-2 gap-3">
         <ControlField label="Body Font Size (px)" hint={`Default: ${DEFAULTS.fontSize}px`}>
           <TextInput
@@ -55,6 +54,6 @@ export function BodyTextSection({ config, updateConfig }) {
           ))}
         </SelectInput>
       </ControlField>
-    </React.Fragment>
+    </CollapsibleSection>
   );
 }

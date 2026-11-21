@@ -5,11 +5,31 @@ import { DEFAULTS, TEXT_ALIGN_OPTIONS } from "../settings/defaults.js";
 /* ==========================================================================
    Small presentational helpers
    ========================================================================== */
+// A section title in the Typography tab. Same type as ZEditor's Format-panel section titles
+// (apps/ZEditor/src/ui/controls/PanelSection.jsx): 12px semi-bold, title case.
 export function SectionLabel({ children }) {
+  return <h3 className="md2pdf-section-label">{children}</h3>;
+}
+// A section whose title folds its controls away, styled like ZEditor's PanelSection: a full-width
+// row with a divider, a real button (aria-expanded) and a chevron that flips when open.
+// Open/closed state lives only in memory: a reload (or leaving the Typography tab) resets it.
+export function CollapsibleSection({ label, defaultOpen = false, children }) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  const bodyId = React.useId();
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted mt-6 mb-2 first:mt-0">
-      {children}
-    </h3>
+    <section className={"md2pdf-sec" + (open ? " is-open" : "")}>
+      <h3 className="md2pdf-sec-head">
+        <button type="button" className="md2pdf-sec-title" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}>
+          <span className="md2pdf-sec-name">{label}</span>
+          <svg className="md2pdf-sec-caret" viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
+          </svg>
+        </button>
+      </h3>
+      <div id={bodyId} className="md2pdf-sec-body" hidden={!open}>
+        {children}
+      </div>
+    </section>
   );
 }
 export function ControlField({ label, hint, children }) {

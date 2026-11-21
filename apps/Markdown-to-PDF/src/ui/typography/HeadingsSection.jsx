@@ -1,13 +1,12 @@
-// Typography: H1–H3 size, weight, rule lines and alignment (H4–H6 follow H3).
+// Typography: H1, H2 and H3 sections (each folds away) with size, weight, rule lines and alignment (H4–H6 follow H3).
 
 import { DEFAULTS } from "../../settings/defaults.js";
 import { BOLD_WEIGHT_OPTIONS } from "../../settings/initialConfig.js";
-import { AlignField, ControlField, HeadingLineControls, SectionLabel, SelectInput, TextInput } from "../fields.jsx";
+import { AlignField, CollapsibleSection, ControlField, HeadingLineControls, SelectInput, TextInput } from "../fields.jsx";
 
 export function HeadingsSection({ config, updateConfig }) {
   return (
     <React.Fragment>
-      <SectionLabel>Headings</SectionLabel>
       <HeadingLevel level={1} config={config} updateConfig={updateConfig} />
       <HeadingLevel level={2} config={config} updateConfig={updateConfig} />
       <HeadingLevel level={3} config={config} updateConfig={updateConfig} alignHint="H4–H6 use the H3 setting." />
@@ -15,11 +14,11 @@ export function HeadingsSection({ config, updateConfig }) {
   );
 }
 
-// One heading level's controls; its settings are h{level}Size, h{level}Weight, h{level}TextAlign.
+// One heading level's section, collapsed by default; its settings are h{level}Size, h{level}Weight, h{level}TextAlign.
 function HeadingLevel({ level, config, updateConfig, alignHint }) {
   const h = "h" + level;
   return (
-    <React.Fragment>
+    <CollapsibleSection label={`H${level} Heading`}>
       <div className="grid grid-cols-2 gap-3">
         <ControlField label={`H${level} Size (px)`} hint={`Default: ${DEFAULTS[h + "Size"]}px`}>
           <TextInput
@@ -48,6 +47,6 @@ function HeadingLevel({ level, config, updateConfig, alignHint }) {
         inheritedValue={config.textAlign || "left"}
         hint={alignHint}
       />
-    </React.Fragment>
+    </CollapsibleSection>
   );
 }
