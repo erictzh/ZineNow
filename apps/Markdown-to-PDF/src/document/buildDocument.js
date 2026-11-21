@@ -1,5 +1,6 @@
 // Assembles the document pieces (HTML body, styles, fonts, ToC) from Markdown and settings.
 
+import { highlightCodeBlocks } from "./highlight.js";
 import { escapeHtml } from "./html.js";
 import { applyPageBreakMarkers } from "./markers.js";
 import { generateStyleBlock } from "./styleBlock.js";
@@ -25,6 +26,7 @@ export function buildDocumentParts(markdownText, config, options) {
     }
     bodyHtml = markedFn(applyPageBreakMarkers(markdownText || ''));
     bodyHtml = applyToc(bodyHtml, normalized, options && options.tocPages);
+    if (normalized.codeHighlight) bodyHtml = highlightCodeBlocks(bodyHtml);
   } else {
     // Extremely defensive fallback if marked.js failed to load for any
     // reason — avoids a hard crash and shows the raw text instead. The

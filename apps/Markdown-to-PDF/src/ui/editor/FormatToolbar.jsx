@@ -1,9 +1,11 @@
-// The Editor tab's formatting toolbar: block style, inline styles, lists/quote, an Insert menu (the
-// \toc / \pagebreak / \space{N} markers and a divider), and Copy all / Clear on the right. It only
+// The Editor tab's formatting toolbar: block style, inline styles, a code block button with its
+// language menu, lists/quote, an Insert menu (the \toc / \pagebreak / \space{N} markers, a divider and
+// code blocks), and Save / Copy all / Clear on the right. It only
 // reports which button was pressed; EditorTab.jsx acts on it (see editor/format.js for what each
 // formatting action does to the text).
 
-import { DropMenu, MenuItem } from "../Menu.jsx";
+import { CODE_LANGUAGES, cleanLanguageTag, languageLabel } from "../../editor/codeLanguages.js";
+import { DropMenu, MenuItem, MenuSeparator } from "../Menu.jsx";
 import { ALT, MOD, SHIFT } from "../shortcutKeys.js";
 
 // The block-style dropdown's choices, and what it shows when the caret's line is something else.
@@ -13,7 +15,7 @@ const BLOCK_OPTIONS = [
   { value: "h2", label: "Heading 2", keys: MOD + ALT + "2" },
   { value: "h3", label: "Heading 3", keys: MOD + ALT + "3" },
 ];
-const OTHER_BLOCK_LABELS = { h4: "Heading 4", h5: "Heading 5", h6: "Heading 6", quote: "Quote", ul: "Bulleted list", ol: "Numbered list" };
+const OTHER_BLOCK_LABELS = { h4: "Heading 4", h5: "Heading 5", h6: "Heading 6", quote: "Quote", ul: "Bulleted list", ol: "Numbered list", code: "Code block" };
 
 /* Icons: 16 px, drawn in currentColor so they follow the button's state colour. */
 const Svg = ({ children, fill }) => (
@@ -28,6 +30,13 @@ const ICONS = {
   code: (
     <Svg>
       <path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" />
+    </Svg>
+  ),
+  // { } — a code block (the < > icon is inline code).
+  codeBlock: (
+    <Svg>
+      <path d="M5.5 2.5H5A1.5 1.5 0 0 0 3.5 4v2.2c0 .8-.6 1.3-1.5 1.8.9.5 1.5 1 1.5 1.8V12A1.5 1.5 0 0 0 5 13.5h.5" />
+      <path d="M10.5 2.5h.5A1.5 1.5 0 0 1 12.5 4v2.2c0 .8.6 1.3 1.5 1.8-.9.5-1.5 1-1.5 1.8V12a1.5 1.5 0 0 1-1.5 1.5h-.5" />
     </Svg>
   ),
   link: (
@@ -105,8 +114,63 @@ function ToolButton({ icon, title, onPress, active, marked, disabled }) {
 
 const Divider = () => <span className="md2ebook-fmt-divider" aria-hidden="true" />;
 
+const codeLangName = (tag) => (tag ? languageLabel(tag) : "plain text");
+
+// The code block button's language menu: the languages (the current one ticked), a box for any other
+// tag, and inserting a file as a code block.
+function CodeLanguageMenu({ codeLang, onAction }) {
+  const [other, setOther] = React.useState("");
+  return (
+    <DropMenu trigger={null} title="Code block language, or insert a file as a code block" triggerClassName="md2ebook-fmt-menu-trigger md2ebook-fmt-split-trigger" keepEditorFocus>
+      {({ close, keepEditorFocus }) => (
+        <>
+          {CODE_LANGUAGES.map((l) => (
+            <MenuItem
+              key={l.tag || "plain"}
+              label={l.label}
+              shortcut={l.tag === codeLang ? "✓" : null}
+              hint={"Code block in " + l.label + (l.tag ? " (```" + l.tag + ")" : "")}
+              onClick={() => onAction("codeBlock", l.tag)}
+              close={close}
+              keepEditorFocus={keepEditorFocus}
+            />
+          ))}
+          <div className="md2ebook-menu-other-lang">
+            <input
+              type="text"
+              value={other}
+              placeholder="Other language…"
+              aria-label="Other language tag, then Enter"
+              title="Type any language tag (e.g. ruby, sql) and press Enter"
+              onChange={(e) => setOther(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const tag = cleanLanguageTag(other);
+                if (!tag) return;
+                close();
+                setOther("");
+                onAction("codeBlock", tag);
+              }}
+            />
+          </div>
+          <MenuSeparator />
+          <MenuItem
+            label="From file…"
+            hint="Inserts a text file (.json, .php, .liquid, .js…) as a code block; the language comes from its extension"
+            onClick={() => onAction("codeFile")}
+            close={close}
+            keepEditorFocus={keepEditorFocus}
+          />
+        </>
+      )}
+    </DropMenu>
+  );
+}
+
 // `blockKind` is the caret line's kind (editor/format.js lineKind); `onAction(name, arg)` runs an edit.
-export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines }) {
+// `codeLang` is the code block language picked last (what one click on the { } button uses).
+export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines, codeLang }) {
   const isOther = !BLOCK_OPTIONS.some((o) => o.value === blockKind);
   return (
     <div className="md2ebook-fmt-bar" role="toolbar" aria-label="Formatting">
@@ -127,6 +191,15 @@ export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSp
       <ToolButton icon="italic" title={`Italic (${MOD}I)`} onPress={() => onAction("inline", "italic")} />
       <ToolButton icon="strike" title={`Strikethrough (${MOD}${SHIFT}X)`} onPress={() => onAction("inline", "strike")} />
       <ToolButton icon="code" title={`Inline code (${MOD}E)`} onPress={() => onAction("inline", "code")} />
+      <span className="md2ebook-fmt-split">
+        <ToolButton
+          icon="codeBlock"
+          title={`Code block — ${codeLangName(codeLang)} (${MOD}${SHIFT}E); the arrow picks the language`}
+          active={blockKind === "code"}
+          onPress={() => onAction("codeBlock", codeLang)}
+        />
+        <CodeLanguageMenu codeLang={codeLang} onAction={onAction} />
+      </span>
       <ToolButton icon="link" title={`Link (${MOD}K)`} onPress={() => onAction("link")} />
       <Divider />
       <ToolButton icon="ul" title={`Bulleted list (${MOD}${SHIFT}8)`} active={blockKind === "ul"} onPress={() => onAction("block", "ul")} />
@@ -141,6 +214,8 @@ export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSp
             <MenuItem label="Table of contents" hint={"Inserts \\toc — its look is set in the Typography tab"} onClick={() => onAction("line", "\\toc")} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem label="Page break" hint={"Inserts \\pagebreak — what follows starts on a new page"} onClick={() => onAction("line", "\\pagebreak")} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem label="Divider line" hint="Inserts --- (a horizontal rule)" onClick={() => onAction("line", "---")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Code block" detail={codeLangName(codeLang)} shortcut={MOD + SHIFT + "E"} hint="Inserts a fenced code block (``` … ```); pick its language with the arrow next to the { } button" onClick={() => onAction("codeBlock", codeLang)} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Code from file…" hint="Inserts a text file as a code block; the language comes from its extension" onClick={() => onAction("codeFile")} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem
               label="Blank space"
               hint={"Inserts \\space{N}: empty space N body lines tall — room to paste an image into the PDF later"}

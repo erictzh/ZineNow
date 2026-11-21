@@ -102,6 +102,18 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 
   <!--
+    Prism — syntax colours for fenced code blocks (```json …), applied in
+    src/document/highlight.js when Typography → Code Blocks is on. One
+    combined file: the core plus the languages the editor's { } menu offers
+    (src/editor/codeLanguages.js) and what they build on (clike for
+    javascript/php, markup-templating for php/liquid). `manual` stops Prism
+    colouring this page by itself. Optional, like the import libraries
+    below: without it code blocks just stay plain.
+  -->
+  <script>window.Prism = { manual: true };</script>
+  <script src="https://cdn.jsdelivr.net/combine/npm/prismjs@1.29.0/components/prism-core.min.js,npm/prismjs@1.29.0/components/prism-markup.min.js,npm/prismjs@1.29.0/components/prism-css.min.js,npm/prismjs@1.29.0/components/prism-clike.min.js,npm/prismjs@1.29.0/components/prism-javascript.min.js,npm/prismjs@1.29.0/components/prism-json.min.js,npm/prismjs@1.29.0/components/prism-markup-templating.min.js,npm/prismjs@1.29.0/components/prism-php.min.js,npm/prismjs@1.29.0/components/prism-liquid.min.js,npm/prismjs@1.29.0/components/prism-python.min.js,npm/prismjs@1.29.0/components/prism-bash.min.js,npm/prismjs@1.29.0/components/prism-yaml.min.js,npm/prismjs@1.29.0/components/prism-excel-formula.min.js,npm/prismjs@1.29.0/components/prism-markdown.min.js"></script>
+
+  <!--
     Document import libraries — used only by the sidebar's "Upload"
     button (see src/convert/docx.js and
     src/convert/epub.js). Unlike marked.js above, the app works fine

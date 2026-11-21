@@ -178,6 +178,7 @@ export function normalizeConfig(config) {
     tocPageNumbers: toBoolean(config.tocPageNumbers, DEFAULTS.tocPageNumbers),
     tocDotLeaders: toBoolean(config.tocDotLeaders, DEFAULTS.tocDotLeaders),
     tocPageBreakAfter: toBoolean(config.tocPageBreakAfter, DEFAULTS.tocPageBreakAfter),
+    codeHighlight: toBoolean(config.codeHighlight, DEFAULTS.codeHighlight),
 
     pageNumbersEnabled: Boolean(
       isBlank(config.pageNumbersEnabled) ? DEFAULTS.pageNumbersEnabled : config.pageNumbersEnabled

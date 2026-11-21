@@ -70,6 +70,7 @@ window.MD2eBookDefaultConfig = {
   "tocPageNumbers": true,
   "tocDotLeaders": true,
   "tocPageBreakAfter": true,
+  "codeHighlight": true,
   "pageNumbersEnabled": false,
   "pageStartFrom": 1
 };

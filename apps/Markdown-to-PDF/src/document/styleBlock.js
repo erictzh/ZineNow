@@ -1,5 +1,7 @@
 // The document's CSS: typography, headings, page box (@page), margins and page numbers.
 
+import { highlightCss } from "./highlight.js";
+
 /* ------------------------------------------------------------------
  * Style generation
  * ------------------------------------------------------------------
@@ -169,7 +171,10 @@ export function generateStyleBlock(normalized, paper) {
     '      background: #0f172a;\n' +
     '      color: #e2e8f0;\n' +
     '      border-radius: 8px;\n' +
-    '      overflow-x: auto;\n' +
+    // Long lines wrap rather than scroll: a PDF has no scrollbar, so they would be cut off at the
+    // box's edge. pre-wrap keeps indentation; overflow-wrap breaks a long unbroken token (a URL).
+    '      white-space: pre-wrap;\n' +
+    '      overflow-wrap: anywhere;\n' +
     '      text-align: left;\n' +
     '      page-break-inside: avoid;\n' +
     '      break-inside: avoid;\n' +
@@ -182,6 +187,7 @@ export function generateStyleBlock(normalized, paper) {
     '      color: inherit;\n' +
     '      line-height: 1.55;\n' +
     '    }\n\n' +
+    (normalized.codeHighlight ? highlightCss() + '\n' : '') +
     '    .page table {\n' +
     '      width: 100%;\n' +
     '      border-collapse: collapse;\n' +

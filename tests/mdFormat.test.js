@@ -1,5 +1,6 @@
 // Markdown-to-PDF's editor toolbar edits (Markdown-to-PDF/src/editor/format.js).
-import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertLink, setBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
+import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
+import { cleanLanguageTag, languageForFile } from "../apps/Markdown-to-PDF/src/editor/codeLanguages.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -48,5 +49,18 @@ eq(run("a |b", insertLink), "a [[link text]](url)b", "with nothing selected, the
 eq(run("one|two", insertBlockLine, "---"), "one\n\n---\n\n|two", "a divider gets blank lines either side");
 eq(run("one\n\n|", insertBlockLine, "\\toc"), "one\n\n\\toc|", "...only the ones that are missing");
 ok(clampSpaceLines("-3") === 1 && clampSpaceLines("999") === 200 && clampSpaceLines("x") === 5, "blank-space height stays within 1–200");
+
+// Fenced code blocks
+const F = "```";
+eq(run("one|", toggleCodeBlock, "json"), "one\n\n" + F + "json\n|\n" + F, "nothing selected: an empty block with the caret inside");
+eq(run("intro\n[{\"a\": 1}]\nend", toggleCodeBlock, "json"), "intro\n\n" + F + "json\n[{\"a\": 1}]\n" + F + "\n\nend", "a selection is wrapped, whole lines, and stays selected");
+eq(run("[x = `a`]", toggleCodeBlock, ""), F + "\n[x = `a`]\n" + F, "plain text: no language tag");
+eq(run(F + "json\n{|}\n" + F, toggleCodeBlock, "json"), "{|}", "the same language again takes the fences off");
+eq(run(F + "json\n{|}\n" + F, toggleCodeBlock, "php"), F + "php\n{|}\n" + F, "another language changes the block's tag");
+eq(run("[has ``` inside]", toggleCodeBlock, ""), "````\n[has ``` inside]\n````", "backticks inside get a longer fence");
+ok(blockAt("a\n" + F + "\nx\n" + F + "\nb", 6) === "code" && blockAt("a\n" + F + "\nx\n" + F + "\nb", 0) === "p", "the caret inside a fenced block reads as code");
+eq(run("one|", insertCodeBlock, "{\r\n  \"k\": 1\r\n}\r\n\r\n", "json"), "one\n\n" + F + "json\n{\n  \"k\": 1\n}\n" + F + "|", "a file's text goes in as a block, line endings cleaned");
+ok(languageForFile("theme.LIQUID") === "liquid" && languageForFile("a.json") === "json" && languageForFile("notes") === "" && languageForFile("x.zzz") === "", "file extensions pick the language");
+ok(cleanLanguageTag("  Excel Formula ") === "excel-formula" && cleanLanguageTag("a`b") === "a-b", "typed tags are cleaned");
 
 if (fails) { console.log(`${fails} failed`); process.exit(1); }

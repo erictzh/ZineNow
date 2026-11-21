@@ -30,6 +30,7 @@ export const BOOLEAN_CONFIG_KEYS = [
   "tocPageNumbers",
   "tocDotLeaders",
   "tocPageBreakAfter",
+  "codeHighlight",
   "tocL1Bold",
   "tocL1Italic",
   "tocL1Underline",
@@ -99,6 +100,7 @@ export const INITIAL_CONFIG = {
   tocPageNumbers: defaultBool(DEFAULTS.tocPageNumbers, true),
   tocDotLeaders: defaultBool(DEFAULTS.tocDotLeaders, true),
   tocPageBreakAfter: defaultBool(DEFAULTS.tocPageBreakAfter, true),
+  codeHighlight: defaultBool(DEFAULTS.codeHighlight, true),
   pageNumbersEnabled: Boolean(DEFAULTS.pageNumbersEnabled),
   pageStartFrom: "",
 };

@@ -113,6 +113,7 @@ var HARDCODED_FALLBACK_DEFAULTS = {
   tocPageNumbers: true,
   tocDotLeaders: true,
   tocPageBreakAfter: true,
+  codeHighlight: true, // colour code blocks by their language (```json …) — document/highlight.js
   pageNumbersEnabled: false, // show a page number at the bottom-center of every page
   pageStartFrom: 1, // the number shown on the first page when page numbers are on
 };

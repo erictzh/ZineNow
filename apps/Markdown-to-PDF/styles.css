@@ -390,6 +390,26 @@ button.md2ebook-menu-item:active {
   margin: 4px 6px;
   background: var(--ui-border);
 }
+/* The code block button: { } plus a narrow arrow that opens its language menu (FormatToolbar.jsx). */
+.md2ebook-fmt-split {
+  display: inline-flex;
+  align-items: center;
+}
+button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger.md2ebook-fmt-split-trigger {
+  gap: 0;
+  padding: 0 2px;
+  margin-left: -2px;
+}
+/* The language menu's "Other language…" box: type a tag, Enter. */
+.md2ebook-menu-other-lang {
+  padding: 4px 6px;
+}
+.md2ebook-menu-other-lang input[type="text"] {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 /* The Insert menu's "Blank space [N] lines" row. */
 .md2ebook-menu-space {
   display: inline-flex;

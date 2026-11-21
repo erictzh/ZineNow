@@ -114,6 +114,7 @@
     return "p";
   }
   function blockAt(text, pos) {
+    if (codeBlockAt(text, pos)) return "code";
     const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
     let lineEnd = text.indexOf("\n", pos);
     if (lineEnd === -1) lineEnd = text.length;
@@ -149,6 +150,81 @@
       return { from, to, insert, selStart: caret, selEnd: caret };
     }
     return { from, to, insert, selStart: from, selEnd: from + insert.length };
+  }
+  var FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)/;
+  function fencedBlocks(text) {
+    const blocks = [];
+    let open = null;
+    let pos = 0;
+    while (pos <= text.length) {
+      let end = text.indexOf("\n", pos);
+      if (end === -1) end = text.length;
+      const line = text.slice(pos, end);
+      if (!open) {
+        const m = FENCE_OPEN_RE.exec(line);
+        if (m) open = { open: [pos, end], close: null, lang: m[2], fence: m[1] };
+      } else {
+        const t = line.trim();
+        if (t.length >= open.fence.length && t === open.fence[0].repeat(t.length) && /^ {0,3}\S/.test(line)) {
+          open.close = [pos, end];
+          blocks.push(open);
+          open = null;
+        }
+      }
+      if (end === text.length) break;
+      pos = end + 1;
+    }
+    if (open) blocks.push(open);
+    return blocks;
+  }
+  function codeBlockAt(text, pos) {
+    return fencedBlocks(text).find((b) => pos >= b.open[0] && pos <= (b.close ? b.close[1] : text.length)) || null;
+  }
+  function fenceFor(content) {
+    const longest = (String(content).match(/`+/g) || []).reduce((n, run) => Math.max(n, run.length), 0);
+    return "`".repeat(Math.max(3, longest + 1));
+  }
+  function toggleCodeBlock(text, start, end, lang) {
+    const tag = lang || "";
+    const block = codeBlockAt(text, start);
+    if (block) {
+      const [oStart, oEnd] = block.open;
+      if (block.lang === tag) {
+        const innerStart = Math.min(oEnd + 1, text.length);
+        const innerEnd = block.close ? Math.max(innerStart, block.close[0] - 1) : text.length;
+        const to2 = block.close ? block.close[1] : text.length;
+        const insert2 = text.slice(innerStart, innerEnd);
+        if (start === end) {
+          const caret = oStart + Math.min(insert2.length, Math.max(0, start - innerStart));
+          return { from: oStart, to: to2, insert: insert2, selStart: caret, selEnd: caret };
+        }
+        return { from: oStart, to: to2, insert: insert2, selStart: oStart, selEnd: oStart + insert2.length };
+      }
+      const openLine = text.slice(oStart, oEnd);
+      const m = FENCE_OPEN_RE.exec(openLine);
+      const insert = openLine.slice(0, m.index + m[0].length - m[2].length) + tag;
+      const shift = (p) => p > oEnd ? p + insert.length - openLine.length : Math.min(p, oStart + insert.length);
+      return { from: oStart, to: oEnd, insert, selStart: shift(start), selEnd: shift(end) };
+    }
+    if (start === end) {
+      const edit2 = insertBlockLine(text, start, end, "```" + tag + "\n\n```");
+      const caret = edit2.from + edit2.insert.indexOf("```") + 3 + tag.length + 1;
+      return { ...edit2, selStart: caret, selEnd: caret };
+    }
+    const from = text.lastIndexOf("\n", start - 1) + 1;
+    const lastPos = text[end - 1] === "\n" ? end - 1 : end;
+    let to = text.indexOf("\n", lastPos);
+    if (to === -1) to = text.length;
+    const content = text.slice(from, to);
+    const fence = fenceFor(content);
+    const edit = insertBlockLine(text, from, to, fence + tag + "\n" + content + "\n" + fence);
+    const selStart = edit.from + edit.insert.indexOf(fence) + fence.length + tag.length + 1;
+    return { ...edit, selStart, selEnd: selStart + content.length };
+  }
+  function insertCodeBlock(text, start, end, content, lang) {
+    const body = String(content).replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+    const fence = fenceFor(body);
+    return insertBlockLine(text, start, end, fence + (lang || "") + "\n" + body + "\n" + fence);
   }
   function insertLink(text, start, end) {
     const label = text.slice(start, end);
@@ -451,6 +527,29 @@
     if (!ok) throw new Error("The browser blocked the copy.");
   }
 
+  // apps/Markdown-to-PDF/src/document/highlight.js
+  function unescapeHtml(s) {
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  }
+  function highlightCodeBlocks(html) {
+    const Prism = typeof window !== "undefined" ? window.Prism : null;
+    if (!Prism || typeof Prism.highlight !== "function" || !Prism.languages) return html;
+    return html.replace(/<pre><code class="language-([^"\s]+)">([\s\S]*?)<\/code><\/pre>/g, (all, lang, body) => {
+      const key = lang.toLowerCase();
+      const grammar = Prism.languages[key];
+      if (!grammar || typeof grammar !== "object") return all;
+      try {
+        const out = Prism.highlight(unescapeHtml(body), grammar, key);
+        return '<pre class="md2ebook-code-hl"><code class="language-' + lang + '">' + out + "</code></pre>";
+      } catch (e) {
+        return all;
+      }
+    });
+  }
+  function highlightCss() {
+    return "    .page pre.md2ebook-code-hl .token.comment, .page pre.md2ebook-code-hl .token.prolog, .page pre.md2ebook-code-hl .token.doctype, .page pre.md2ebook-code-hl .token.cdata { color: #94a3b8; font-style: italic; }\n    .page pre.md2ebook-code-hl .token.punctuation { color: #cbd5e1; }\n    .page pre.md2ebook-code-hl .token.property, .page pre.md2ebook-code-hl .token.tag, .page pre.md2ebook-code-hl .token.selector, .page pre.md2ebook-code-hl .token.cell, .page pre.md2ebook-code-hl .token.range, .page pre.md2ebook-code-hl .token.reference { color: #7dd3fc; }\n    .page pre.md2ebook-code-hl .token.string, .page pre.md2ebook-code-hl .token.char, .page pre.md2ebook-code-hl .token.attr-value, .page pre.md2ebook-code-hl .token.inserted { color: #86efac; }\n    .page pre.md2ebook-code-hl .token.number, .page pre.md2ebook-code-hl .token.boolean, .page pre.md2ebook-code-hl .token.constant, .page pre.md2ebook-code-hl .token.symbol { color: #fdba74; }\n    .page pre.md2ebook-code-hl .token.keyword, .page pre.md2ebook-code-hl .token.atrule, .page pre.md2ebook-code-hl .token.important, .page pre.md2ebook-code-hl .token.builtin { color: #c4b5fd; }\n    .page pre.md2ebook-code-hl .token.function, .page pre.md2ebook-code-hl .token.function-name, .page pre.md2ebook-code-hl .token.class-name, .page pre.md2ebook-code-hl .token.attr-name { color: #fde68a; }\n    .page pre.md2ebook-code-hl .token.operator, .page pre.md2ebook-code-hl .token.entity, .page pre.md2ebook-code-hl .token.url, .page pre.md2ebook-code-hl .token.delimiter, .page pre.md2ebook-code-hl .token.filter { color: #f0abfc; }\n    .page pre.md2ebook-code-hl .token.variable, .page pre.md2ebook-code-hl .token.regex, .page pre.md2ebook-code-hl .token.deleted { color: #fca5a5; }\n    .page pre.md2ebook-code-hl .token.bold { font-weight: bold; }\n    .page pre.md2ebook-code-hl .token.italic { font-style: italic; }\n    .page pre.md2ebook-code-hl { -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n";
+  }
+
   // apps/Markdown-to-PDF/src/document/html.js
   function escapeHtml(str) {
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -496,7 +595,7 @@
       "--md2ebook-page-margin-vertical: " + normalized.marginVerticalIn + "in;",
       "--md2ebook-page-margin-horizontal: " + normalized.marginHorizontalIn + "in;"
     ].join("\n      ");
-    return "\n    :root {\n      " + vars + "\n    }\n\n    * { box-sizing: border-box; }\n\n    html, body {\n      margin: 0;\n      padding: 0;\n      background: transparent;\n    }\n\n    body {\n      display: flex;\n      justify-content: center;\n    }\n\n    .page {\n      box-sizing: border-box;\n      width: var(--md2ebook-page-width);\n      min-height: var(--md2ebook-page-height);\n      padding: var(--md2ebook-page-margin-vertical) var(--md2ebook-page-margin-horizontal);\n      background: #ffffff;\n      -webkit-print-color-adjust: exact;\n      print-color-adjust: exact;\n      font-family: var(--md2ebook-font-family);\n      font-size: var(--md2ebook-font-size);\n      line-height: var(--md2ebook-line-height);\n      font-weight: var(--md2ebook-base-weight);\n      text-align: var(--md2ebook-text-align);\n      color: #1a1a1a;\n      -webkit-font-smoothing: antialiased;\n    }\n\n    .page p, .page li, .page blockquote { hyphens: none; -webkit-hyphens: none; }\n\n    .page > *:first-child { margin-top: 0; }\n    .page > *:last-child { margin-bottom: 0; }\n\n    .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {\n      font-family: var(--md2ebook-heading-font-family);\n      text-align: var(--md2ebook-h3-text-align);\n      page-break-after: avoid;\n      break-after: avoid;\n      margin-top: 1.4em;\n      margin-bottom: 0.6em;\n    }\n\n    .page h1 {\n      font-size: var(--md2ebook-h1-size);\n      font-weight: var(--md2ebook-h1-weight);\n      text-align: var(--md2ebook-h1-text-align);\n      line-height: var(--md2ebook-h1-line-height);\n" + headingRule(normalized.h1Underline) + "    }\n\n    .page h2 {\n      font-size: var(--md2ebook-h2-size);\n      font-weight: var(--md2ebook-h2-weight);\n      text-align: var(--md2ebook-h2-text-align);\n      line-height: var(--md2ebook-h2-line-height);\n" + headingRule(normalized.h2Underline) + "    }\n\n    .page h3 {\n      font-size: var(--md2ebook-h3-size);\n      font-weight: var(--md2ebook-h3-weight);\n      line-height: var(--md2ebook-h3-line-height);\n" + headingRule(normalized.h3Underline) + "    }\n\n    .page h4 { font-size: calc(var(--md2ebook-h3-size) * 0.9); font-weight: var(--md2ebook-h3-weight); }\n\n    .page p {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      orphans: 3;\n      widows: 3;\n    }\n\n    .page strong, .page b {\n      font-weight: var(--md2ebook-bold-weight);\n    }\n\n    .page em, .page i { font-style: italic; }\n\n    .page a {\n      color: #2563eb;\n      text-decoration: underline;\n      word-break: break-word;\n    }\n\n    .page ul, .page ol {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      padding-left: 1.6em;\n    }\n\n    .page li { margin-bottom: 0.35em; }\n    .page li > ul, .page li > ol { margin-top: 0.35em; margin-bottom: 0; }\n\n    .page hr {\n      border: none;\n      border-top: 1px solid #cbd5e1;\n      margin: 2em 0;\n    }\n\n    .page blockquote {\n      margin: calc(var(--md2ebook-font-size) * var(--md2ebook-line-height)) 0;\n      padding: 0.6em 1.2em;\n      border-left: 4px solid #94a3b8;\n      background: #f8fafc;\n      color: #475569;\n      font-style: italic;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page blockquote p:last-child { margin-bottom: 0; }\n\n    .page code {\n      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n      font-size: 0.88em;\n      background: #f1f5f9;\n      border: 1px solid #e2e8f0;\n      border-radius: 4px;\n      padding: 0.12em 0.4em;\n    }\n\n    .page pre {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      padding: 1em 1.2em;\n      background: #0f172a;\n      color: #e2e8f0;\n      border-radius: 8px;\n      overflow-x: auto;\n      text-align: left;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page pre code {\n      background: transparent;\n      border: none;\n      padding: 0;\n      font-size: 0.85em;\n      color: inherit;\n      line-height: 1.55;\n    }\n\n    .page table {\n      width: 100%;\n      border-collapse: collapse;\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      font-size: 0.92em;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page th, .page td {\n      border: 1px solid #cbd5e1;\n      padding: 0.5em 0.75em;\n      text-align: left;\n      vertical-align: top;\n    }\n\n    .page th {\n      background: #f1f5f9;\n      font-weight: var(--md2ebook-bold-weight);\n    }\n\n    .page tr:nth-child(even) td { background: #f8fafc; }\n\n    .page img {\n      max-width: 100%;\n      height: auto;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .md2ebook-toc { margin: 0 0 var(--md2ebook-paragraph-spacing) 0; text-align: left; }\n    .md2ebook-toc.md2ebook-toc-break { page-break-after: always; break-after: page; }\n    .md2ebook-toc-title {\n      font-family: var(--md2ebook-heading-font-family);\n      font-size: var(--md2ebook-h2-size);\n      font-weight: var(--md2ebook-h2-weight);\n      text-align: " + (normalized.tocTitleAlign || "var(--md2ebook-h2-text-align)") + ";\n      line-height: 1.3;\n      margin: 0 0 0.8em 0;\n    }\n    .md2ebook-toc ol { list-style: none; margin: 0; padding: 0; }\n    .md2ebook-toc li { margin: 0 0 0.35em 0; break-inside: avoid; page-break-inside: avoid; }\n" + normalized.tocLevelStyles.map(function(st, i) {
+    return "\n    :root {\n      " + vars + "\n    }\n\n    * { box-sizing: border-box; }\n\n    html, body {\n      margin: 0;\n      padding: 0;\n      background: transparent;\n    }\n\n    body {\n      display: flex;\n      justify-content: center;\n    }\n\n    .page {\n      box-sizing: border-box;\n      width: var(--md2ebook-page-width);\n      min-height: var(--md2ebook-page-height);\n      padding: var(--md2ebook-page-margin-vertical) var(--md2ebook-page-margin-horizontal);\n      background: #ffffff;\n      -webkit-print-color-adjust: exact;\n      print-color-adjust: exact;\n      font-family: var(--md2ebook-font-family);\n      font-size: var(--md2ebook-font-size);\n      line-height: var(--md2ebook-line-height);\n      font-weight: var(--md2ebook-base-weight);\n      text-align: var(--md2ebook-text-align);\n      color: #1a1a1a;\n      -webkit-font-smoothing: antialiased;\n    }\n\n    .page p, .page li, .page blockquote { hyphens: none; -webkit-hyphens: none; }\n\n    .page > *:first-child { margin-top: 0; }\n    .page > *:last-child { margin-bottom: 0; }\n\n    .page h1, .page h2, .page h3, .page h4, .page h5, .page h6 {\n      font-family: var(--md2ebook-heading-font-family);\n      text-align: var(--md2ebook-h3-text-align);\n      page-break-after: avoid;\n      break-after: avoid;\n      margin-top: 1.4em;\n      margin-bottom: 0.6em;\n    }\n\n    .page h1 {\n      font-size: var(--md2ebook-h1-size);\n      font-weight: var(--md2ebook-h1-weight);\n      text-align: var(--md2ebook-h1-text-align);\n      line-height: var(--md2ebook-h1-line-height);\n" + headingRule(normalized.h1Underline) + "    }\n\n    .page h2 {\n      font-size: var(--md2ebook-h2-size);\n      font-weight: var(--md2ebook-h2-weight);\n      text-align: var(--md2ebook-h2-text-align);\n      line-height: var(--md2ebook-h2-line-height);\n" + headingRule(normalized.h2Underline) + "    }\n\n    .page h3 {\n      font-size: var(--md2ebook-h3-size);\n      font-weight: var(--md2ebook-h3-weight);\n      line-height: var(--md2ebook-h3-line-height);\n" + headingRule(normalized.h3Underline) + "    }\n\n    .page h4 { font-size: calc(var(--md2ebook-h3-size) * 0.9); font-weight: var(--md2ebook-h3-weight); }\n\n    .page p {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      orphans: 3;\n      widows: 3;\n    }\n\n    .page strong, .page b {\n      font-weight: var(--md2ebook-bold-weight);\n    }\n\n    .page em, .page i { font-style: italic; }\n\n    .page a {\n      color: #2563eb;\n      text-decoration: underline;\n      word-break: break-word;\n    }\n\n    .page ul, .page ol {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      padding-left: 1.6em;\n    }\n\n    .page li { margin-bottom: 0.35em; }\n    .page li > ul, .page li > ol { margin-top: 0.35em; margin-bottom: 0; }\n\n    .page hr {\n      border: none;\n      border-top: 1px solid #cbd5e1;\n      margin: 2em 0;\n    }\n\n    .page blockquote {\n      margin: calc(var(--md2ebook-font-size) * var(--md2ebook-line-height)) 0;\n      padding: 0.6em 1.2em;\n      border-left: 4px solid #94a3b8;\n      background: #f8fafc;\n      color: #475569;\n      font-style: italic;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page blockquote p:last-child { margin-bottom: 0; }\n\n    .page code {\n      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;\n      font-size: 0.88em;\n      background: #f1f5f9;\n      border: 1px solid #e2e8f0;\n      border-radius: 4px;\n      padding: 0.12em 0.4em;\n    }\n\n    .page pre {\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      padding: 1em 1.2em;\n      background: #0f172a;\n      color: #e2e8f0;\n      border-radius: 8px;\n      white-space: pre-wrap;\n      overflow-wrap: anywhere;\n      text-align: left;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page pre code {\n      background: transparent;\n      border: none;\n      padding: 0;\n      font-size: 0.85em;\n      color: inherit;\n      line-height: 1.55;\n    }\n\n" + (normalized.codeHighlight ? highlightCss() + "\n" : "") + "    .page table {\n      width: 100%;\n      border-collapse: collapse;\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      font-size: 0.92em;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .page th, .page td {\n      border: 1px solid #cbd5e1;\n      padding: 0.5em 0.75em;\n      text-align: left;\n      vertical-align: top;\n    }\n\n    .page th {\n      background: #f1f5f9;\n      font-weight: var(--md2ebook-bold-weight);\n    }\n\n    .page tr:nth-child(even) td { background: #f8fafc; }\n\n    .page img {\n      max-width: 100%;\n      height: auto;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .md2ebook-toc { margin: 0 0 var(--md2ebook-paragraph-spacing) 0; text-align: left; }\n    .md2ebook-toc.md2ebook-toc-break { page-break-after: always; break-after: page; }\n    .md2ebook-toc-title {\n      font-family: var(--md2ebook-heading-font-family);\n      font-size: var(--md2ebook-h2-size);\n      font-weight: var(--md2ebook-h2-weight);\n      text-align: " + (normalized.tocTitleAlign || "var(--md2ebook-h2-text-align)") + ";\n      line-height: 1.3;\n      margin: 0 0 0.8em 0;\n    }\n    .md2ebook-toc ol { list-style: none; margin: 0; padding: 0; }\n    .md2ebook-toc li { margin: 0 0 0.35em 0; break-inside: avoid; page-break-inside: avoid; }\n" + normalized.tocLevelStyles.map(function(st, i) {
       var sel = "    .md2ebook-toc li.md2ebook-toc-l" + (i + 1);
       return sel + " { font-weight: " + (st.bold ? "var(--md2ebook-bold-weight)" : "var(--md2ebook-base-weight)") + "; font-style: " + (st.italic ? "italic" : "normal") + ";" + (st.size ? " font-size: " + st.size + "px;" : "") + (st.lineHeight ? " line-height: " + st.lineHeight + ";" : "") + " }\n" + (st.underline ? sel + " .md2ebook-toc-text { text-decoration: underline; text-underline-offset: 0.15em; }\n" : "");
     }).join("") + "    .md2ebook-toc li.md2ebook-toc-l1:not(:first-child) { margin-top: 0.6em; }\n    .md2ebook-toc li.md2ebook-toc-l2 { padding-left: 1.4em; }\n    .md2ebook-toc li.md2ebook-toc-l3 { padding-left: 2.8em; }\n    .page .md2ebook-toc a { display: flex; align-items: baseline; color: inherit; text-decoration: none; word-break: normal; }\n    .md2ebook-toc-text { flex: 0 1 auto; }\n    .md2ebook-toc-leader { flex: 1 1 auto; min-width: 1em; margin: 0 0.4em; }\n    .md2ebook-toc-dots .md2ebook-toc-leader { border-bottom: 1.5px dotted #94a3b8; transform: translateY(-0.3em); }\n    .md2ebook-toc-num { flex: 0 0 auto; min-width: 1.8em; text-align: right; font-variant-numeric: tabular-nums; }\n\n    .md2ebook-space {\n      display: block;\n      height: calc(var(--md2ebook-font-size) * var(--md2ebook-line-height) * var(--md2ebook-space-lines, 1));\n      margin: 0 0 var(--md2ebook-paragraph-spacing) 0;\n      padding: 0;\n      border: 0;\n      page-break-inside: avoid;\n      break-inside: avoid;\n    }\n\n    .md2ebook-pagebreak {\n      height: 0;\n      margin: 0;\n      padding: 0;\n      border: 0;\n      page-break-before: always;\n      break-before: page;\n    }\n\n    @media print {\n      html, body { background: #ffffff; }\n      .page { box-shadow: none; }\n      .page h1, .page h2, .page h3 { page-break-after: avoid; break-after: avoid; }\n      .page pre, .page blockquote, .page table, .page img { page-break-inside: avoid; break-inside: avoid; }\n      .md2ebook-pagebreak { page-break-before: always; break-before: page; }\n    }\n";
@@ -662,6 +761,8 @@
     tocPageNumbers: true,
     tocDotLeaders: true,
     tocPageBreakAfter: true,
+    codeHighlight: true,
+    // colour code blocks by their language (```json …) — document/highlight.js
     pageNumbersEnabled: false,
     // show a page number at the bottom-center of every page
     pageStartFrom: 1
@@ -821,6 +922,7 @@
       tocPageNumbers: toBoolean(config.tocPageNumbers, DEFAULTS.tocPageNumbers),
       tocDotLeaders: toBoolean(config.tocDotLeaders, DEFAULTS.tocDotLeaders),
       tocPageBreakAfter: toBoolean(config.tocPageBreakAfter, DEFAULTS.tocPageBreakAfter),
+      codeHighlight: toBoolean(config.codeHighlight, DEFAULTS.codeHighlight),
       pageNumbersEnabled: Boolean(
         isBlank(config.pageNumbersEnabled) ? DEFAULTS.pageNumbersEnabled : config.pageNumbersEnabled
       ),
@@ -845,6 +947,7 @@
       }
       bodyHtml = markedFn(applyPageBreakMarkers(markdownText || ""));
       bodyHtml = applyToc(bodyHtml, normalized, options && options.tocPages);
+      if (normalized.codeHighlight) bodyHtml = highlightCodeBlocks(bodyHtml);
     } else {
       bodyHtml = "<pre>" + escapeHtml(markdownText || "") + "</pre>";
     }
@@ -989,6 +1092,7 @@
     "tocPageNumbers",
     "tocDotLeaders",
     "tocPageBreakAfter",
+    "codeHighlight",
     "tocL1Bold",
     "tocL1Italic",
     "tocL1Underline",
@@ -1057,6 +1161,7 @@
     tocPageNumbers: defaultBool(DEFAULTS.tocPageNumbers, true),
     tocDotLeaders: defaultBool(DEFAULTS.tocDotLeaders, true),
     tocPageBreakAfter: defaultBool(DEFAULTS.tocPageBreakAfter, true),
+    codeHighlight: defaultBool(DEFAULTS.codeHighlight, true),
     pageNumbersEnabled: Boolean(DEFAULTS.pageNumbersEnabled),
     pageStartFrom: ""
   };
@@ -1136,7 +1241,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "2a30b83"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "fddd6b2"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1668,6 +1773,36 @@
     ), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), paginating ? /* @__PURE__ */ React.createElement("span", null, "Paginating…") : /* @__PURE__ */ React.createElement(PageJump, { current: currentPage, total: pageCount || 1, onGo: goToPage }), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-statusbar-divider", "aria-hidden": "true" }, "|"), /* @__PURE__ */ React.createElement(ZoomControl, { percent: Math.round(scale * 100), isFit: zoomPct == null, onZoom: setZoomPct })));
   }
 
+  // apps/Markdown-to-PDF/src/editor/codeLanguages.js
+  var CODE_LANGUAGES = [
+    { tag: "", label: "Plain text", ext: [".txt", ".log", ".csv"] },
+    { tag: "json", label: "JSON", ext: [".json"] },
+    { tag: "javascript", label: "JavaScript", ext: [".js", ".mjs", ".cjs", ".jsx"] },
+    { tag: "php", label: "PHP", ext: [".php"] },
+    { tag: "liquid", label: "Liquid (Shopify)", ext: [".liquid"] },
+    { tag: "python", label: "Python", ext: [".py"] },
+    { tag: "html", label: "HTML", ext: [".html", ".htm", ".xml", ".svg"] },
+    { tag: "css", label: "CSS", ext: [".css"] },
+    { tag: "bash", label: "Shell", ext: [".sh", ".bash", ".zsh"] },
+    { tag: "yaml", label: "YAML", ext: [".yml", ".yaml"] },
+    { tag: "excel-formula", label: "Excel formula", ext: [] },
+    { tag: "markdown", label: "Markdown", ext: [".md", ".markdown"] }
+  ];
+  function languageForFile(name) {
+    const dot = String(name || "").lastIndexOf(".");
+    if (dot < 0) return "";
+    const ext = String(name).slice(dot).toLowerCase();
+    const lang = CODE_LANGUAGES.find((l) => l.ext.includes(ext));
+    return lang ? lang.tag : "";
+  }
+  function languageLabel(tag) {
+    const lang = CODE_LANGUAGES.find((l) => l.tag === tag);
+    return lang ? lang.label : tag;
+  }
+  function cleanLanguageTag(value) {
+    return String(value || "").trim().toLowerCase().replace(/[\s`]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+  }
+
   // apps/Markdown-to-PDF/src/ui/fields.jsx
   function SectionLabel({ children }) {
     return /* @__PURE__ */ React.createElement("h3", { className: "md2pdf-section-label" }, children);
@@ -1893,13 +2028,15 @@
     { value: "h2", label: "Heading 2", keys: MOD + ALT + "2" },
     { value: "h3", label: "Heading 3", keys: MOD + ALT + "3" }
   ];
-  var OTHER_BLOCK_LABELS = { h4: "Heading 4", h5: "Heading 5", h6: "Heading 6", quote: "Quote", ul: "Bulleted list", ol: "Numbered list" };
+  var OTHER_BLOCK_LABELS = { h4: "Heading 4", h5: "Heading 5", h6: "Heading 6", quote: "Quote", ul: "Bulleted list", ol: "Numbered list", code: "Code block" };
   var Svg = ({ children, fill }) => /* @__PURE__ */ React.createElement("svg", { width: "16", height: "16", viewBox: "0 0 16 16", fill: fill || "none", stroke: fill ? "none" : "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   var ICONS = {
     bold: /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-glyph", style: { fontWeight: 800 } }, "B"),
     italic: /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-glyph", style: { fontStyle: "italic", fontFamily: "Georgia, serif" } }, "I"),
     strike: /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-glyph", style: { textDecoration: "line-through" } }, "S"),
     code: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" })),
+    // { } — a code block (the < > icon is inline code).
+    codeBlock: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M5.5 2.5H5A1.5 1.5 0 0 0 3.5 4v2.2c0 .8-.6 1.3-1.5 1.8.9.5 1.5 1 1.5 1.8V12A1.5 1.5 0 0 0 5 13.5h.5" }), /* @__PURE__ */ React.createElement("path", { d: "M10.5 2.5h.5A1.5 1.5 0 0 1 12.5 4v2.2c0 .8.6 1.3 1.5 1.8-.9.5-1.5 1-1.5 1.8V12a1.5 1.5 0 0 1-1.5 1.5h-.5" })),
     link: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9" }), /* @__PURE__ */ React.createElement("path", { d: "M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9" })),
     ul: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6 4h8M6 8h8M6 12h8" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "4", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "8", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "12", r: "0.9", fill: "currentColor", stroke: "none" })),
     ol: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6.5 4h7.5M6.5 8h7.5M6.5 12h7.5" }), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "5.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "1"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "9.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "2"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "13.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "3")),
@@ -1927,7 +2064,51 @@
     );
   }
   var Divider = () => /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-divider", "aria-hidden": "true" });
-  function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines }) {
+  var codeLangName = (tag) => tag ? languageLabel(tag) : "plain text";
+  function CodeLanguageMenu({ codeLang, onAction }) {
+    const [other, setOther] = React.useState("");
+    return /* @__PURE__ */ React.createElement(DropMenu, { trigger: null, title: "Code block language, or insert a file as a code block", triggerClassName: "md2ebook-fmt-menu-trigger md2ebook-fmt-split-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, CODE_LANGUAGES.map((l) => /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        key: l.tag || "plain",
+        label: l.label,
+        shortcut: l.tag === codeLang ? "✓" : null,
+        hint: "Code block in " + l.label + (l.tag ? " (```" + l.tag + ")" : ""),
+        onClick: () => onAction("codeBlock", l.tag),
+        close,
+        keepEditorFocus
+      }
+    )), /* @__PURE__ */ React.createElement("div", { className: "md2ebook-menu-other-lang" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        value: other,
+        placeholder: "Other language…",
+        "aria-label": "Other language tag, then Enter",
+        title: "Type any language tag (e.g. ruby, sql) and press Enter",
+        onChange: (e) => setOther(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const tag = cleanLanguageTag(other);
+          if (!tag) return;
+          close();
+          setOther("");
+          onAction("codeBlock", tag);
+        }
+      }
+    )), /* @__PURE__ */ React.createElement(MenuSeparator, null), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        label: "From file…",
+        hint: "Inserts a text file (.json, .php, .liquid, .js…) as a code block; the language comes from its extension",
+        onClick: () => onAction("codeFile"),
+        close,
+        keepEditorFocus
+      }
+    )));
+  }
+  function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSpaceLines, codeLang }) {
     const isOther = !BLOCK_OPTIONS.some((o) => o.value === blockKind);
     return /* @__PURE__ */ React.createElement("div", { className: "md2ebook-fmt-bar", role: "toolbar", "aria-label": "Formatting" }, /* @__PURE__ */ React.createElement(
       "select",
@@ -1940,7 +2121,15 @@
       },
       BLOCK_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label)),
       isOther ? /* @__PURE__ */ React.createElement("option", { value: "other", disabled: true, hidden: true }, OTHER_BLOCK_LABELS[blockKind] || "Paragraph") : null
-    ), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "bold", title: `Bold (${MOD}B)`, onPress: () => onAction("inline", "bold") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "italic", title: `Italic (${MOD}I)`, onPress: () => onAction("inline", "italic") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "strike", title: `Strikethrough (${MOD}${SHIFT}X)`, onPress: () => onAction("inline", "strike") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "code", title: `Inline code (${MOD}E)`, onPress: () => onAction("inline", "code") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(DropMenu, { trigger: "Insert", title: "Insert at the cursor", triggerClassName: "md2ebook-fmt-menu-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Table of contents", hint: "Inserts \\toc — its look is set in the Typography tab", onClick: () => onAction("line", "\\toc"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Page break", hint: "Inserts \\pagebreak — what follows starts on a new page", onClick: () => onAction("line", "\\pagebreak"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Divider line", hint: "Inserts --- (a horizontal rule)", onClick: () => onAction("line", "---"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "bold", title: `Bold (${MOD}B)`, onPress: () => onAction("inline", "bold") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "italic", title: `Italic (${MOD}I)`, onPress: () => onAction("inline", "italic") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "strike", title: `Strikethrough (${MOD}${SHIFT}X)`, onPress: () => onAction("inline", "strike") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "code", title: `Inline code (${MOD}E)`, onPress: () => onAction("inline", "code") }), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-fmt-split" }, /* @__PURE__ */ React.createElement(
+      ToolButton,
+      {
+        icon: "codeBlock",
+        title: `Code block — ${codeLangName(codeLang)} (${MOD}${SHIFT}E); the arrow picks the language`,
+        active: blockKind === "code",
+        onPress: () => onAction("codeBlock", codeLang)
+      }
+    ), /* @__PURE__ */ React.createElement(CodeLanguageMenu, { codeLang, onAction })), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(DropMenu, { trigger: "Insert", title: "Insert at the cursor", triggerClassName: "md2ebook-fmt-menu-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Table of contents", hint: "Inserts \\toc — its look is set in the Typography tab", onClick: () => onAction("line", "\\toc"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Page break", hint: "Inserts \\pagebreak — what follows starts on a new page", onClick: () => onAction("line", "\\pagebreak"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Divider line", hint: "Inserts --- (a horizontal rule)", onClick: () => onAction("line", "---"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code block", detail: codeLangName(codeLang), shortcut: MOD + SHIFT + "E", hint: "Inserts a fenced code block (``` … ```); pick its language with the arrow next to the { } button", onClick: () => onAction("codeBlock", codeLang), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code from file…", hint: "Inserts a text file as a code block; the language comes from its extension", onClick: () => onAction("codeFile"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Blank space",
@@ -1987,7 +2176,25 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/editor/EditorTab.jsx
-  var { useState: useState3 } = React;
+  var { useState: useState3, useRef: useRef4 } = React;
+  var CODE_LANG_KEY = "md2pdf.codeLang";
+  function loadCodeLang() {
+    try {
+      const v = localStorage.getItem(CODE_LANG_KEY);
+      if (v != null) return v;
+    } catch (e) {
+    }
+    return "json";
+  }
+  function saveCodeLang(tag) {
+    try {
+      localStorage.setItem(CODE_LANG_KEY, tag);
+    } catch (e) {
+    }
+  }
+  var CODE_FILE_MAX_BYTES = 512 * 1024;
+  var CODE_FILE_EXTS = CODE_LANGUAGES.flatMap((l) => l.ext);
+  var CODE_PICKER = { id: "md2pdf-code-file", description: "Code or text file", accept: { "text/plain": CODE_FILE_EXTS } };
   function shortcutFor(e) {
     if (!(e.ctrlKey || e.metaKey) || e.getModifierState && e.getModifierState("AltGraph")) return null;
     const k = e.key.toLowerCase();
@@ -1998,6 +2205,7 @@
     if (e.altKey) return null;
     if (e.shiftKey) {
       if (k === "x") return ["inline", "strike"];
+      if (k === "e") return ["codeBlock", null];
       const block = { Digit7: "ol", Digit8: "ul", Digit9: "quote" }[e.code];
       return block ? ["block", block] : null;
     }
@@ -2005,6 +2213,12 @@
   }
   function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatus, setDocStatus, spaceLines, setSpaceLines }) {
     const [blockKind, setBlockKind] = useState3("p");
+    const [codeLang, setCodeLangState] = useState3(loadCodeLang);
+    const codeFileInputRef = useRef4(null);
+    const setCodeLang = (tag) => {
+      setCodeLangState(tag);
+      saveCodeLang(tag);
+    };
     const errorText = (err) => err && err.message ? err.message : String(err);
     const refreshBlockKind = () => {
       const el = editorRef.current;
@@ -2031,7 +2245,45 @@
       applyToEditor(replaceAllEdit(el, ""));
       setDocStatus({ type: "success", message: `Cleared the editor. ${MOD}Z brings the text back.` });
     }
+    async function handleCodeFile() {
+      setDocStatus(null);
+      const file = await pickFile(CODE_PICKER);
+      if (file === "fallback") {
+        if (codeFileInputRef.current) codeFileInputRef.current.click();
+        return;
+      }
+      if (file) await insertCodeFile(file);
+    }
+    async function insertCodeFile(file) {
+      const el = editorRef.current;
+      if (!el) return;
+      if (file.size > CODE_FILE_MAX_BYTES) {
+        setDocStatus({ type: "error", message: `"${file.name}" is too big for a code block (over ${CODE_FILE_MAX_BYTES / 1024} KB).` });
+        return;
+      }
+      let content;
+      try {
+        content = await file.text();
+      } catch (err) {
+        setDocStatus({ type: "error", message: `Could not read "${file.name}": ` + errorText(err) });
+        return;
+      }
+      if (content.includes("\0")) {
+        setDocStatus({ type: "error", message: `"${file.name}" isn't a text file (a spreadsheet or image can't go in a code block).` });
+        return;
+      }
+      const lang = languageForFile(file.name);
+      applyToEditor(insertCodeBlock(el.value, el.selectionStart, el.selectionEnd, content, lang));
+      el.focus();
+      setDocStatus({ type: "success", message: `Inserted "${file.name}" as a ${lang ? languageLabel(lang) : "plain text"} code block.` });
+    }
+    function handleCodeFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) insertCodeFile(file);
+    }
     function runAction(action, arg) {
+      if (action === "codeFile") return handleCodeFile();
       if (action === "save") return fileSave.onSave();
       if (action === "saveAs") return fileSave.onSaveAs();
       if (action === "copy") return handleCopyAll();
@@ -2044,7 +2296,12 @@
       if (action === "inline") applyToEditor(toggleInline(text, s, e, arg));
       else if (action === "block") applyToEditor(setBlock(text, s, e, arg));
       else if (action === "link") applyToEditor(insertLink(text, s, e));
-      else if (action === "line") applyToEditor(insertBlockLine(text, s, e, arg));
+      else if (action === "codeBlock") {
+        const lang = arg == null ? codeLang : arg;
+        setCodeLang(lang);
+        applyToEditor(toggleCodeBlock(text, s, e, lang));
+        el.focus();
+      } else if (action === "line") applyToEditor(insertBlockLine(text, s, e, arg));
       else if (action === "space") {
         const n = clampSpaceLines(spaceLines);
         setSpaceLines(String(n));
@@ -2057,7 +2314,7 @@
       e.preventDefault();
       runAction(shortcut[0], shortcut[1]);
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, fileSave, onAction: runAction, spaceLines, setSpaceLines }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, fileSave, onAction: runAction, spaceLines, setSpaceLines, codeLang }), /* @__PURE__ */ React.createElement("input", { ref: codeFileInputRef, type: "file", accept: CODE_FILE_EXTS.join(","), onChange: handleCodeFileSelected, className: "hidden" }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
       "textarea",
       {
         ref: editorRef,
@@ -2108,6 +2365,18 @@
     )), /* @__PURE__ */ React.createElement(ControlField, { label: "Base Font Weight (Regular)", hint: `Default: ${DEFAULTS.baseWeight}` }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.baseWeight, onChange: (v) => updateConfig("baseWeight", v) }, /* @__PURE__ */ React.createElement("option", { value: "300" }, "300 — Light"), /* @__PURE__ */ React.createElement("option", { value: "400" }, "400 — Regular"), /* @__PURE__ */ React.createElement("option", { value: "500" }, "500 — Medium"))), /* @__PURE__ */ React.createElement(ControlField, { label: "Bold Text Weight (Strong tags)", hint: `Default: ${DEFAULTS.boldWeight}` }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.boldWeight, onChange: (v) => updateConfig("boldWeight", v) }, BOLD_WEIGHT_OPTIONS.map((w) => /* @__PURE__ */ React.createElement("option", { key: w, value: w }, w)))));
   }
 
+  // apps/Markdown-to-PDF/src/ui/typography/CodeBlocksSection.jsx
+  function CodeBlocksSection({ config, updateConfig }) {
+    return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Code Blocks" }, /* @__PURE__ */ React.createElement(
+      ToggleRow,
+      {
+        checked: config.codeHighlight,
+        onChange: (v) => updateConfig("codeHighlight", v),
+        label: "Colour code by its language"
+      }
+    ), /* @__PURE__ */ React.createElement("p", { className: "mb-3text-[11px] leading-relaxed text-fg-muted opacity-70" }, "Uses the language after the opening ``` (json, php, liquid, excel-formula…), set with the ", "{ }", " button's arrow in the Editor tab. Blocks without a language stay plain."));
+  }
+
   // apps/Markdown-to-PDF/src/settings/configFile.js
   function readConfigFile(file) {
     return new Promise((resolve, reject) => {
@@ -2145,11 +2414,11 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/typography/ConfigFiles.jsx
-  var { useRef: useRef4, useMemo: useMemo2 } = React;
+  var { useRef: useRef5, useMemo: useMemo2 } = React;
   var CONFIG_PICKER_ID = "md2ebook-config";
   var CONFIG_PICKER_TYPES = { description: "JSON config file", accept: { "application/json": [".json"] } };
   function ConfigFiles({ config, applyConfig, configFilename, setConfigFilename, configStatus, setConfigStatus }) {
-    const configFileInputRef = useRef4(null);
+    const configFileInputRef = useRef5(null);
     const appFolderHint = useMemo2(appConfigFolderHint, []);
     async function loadConfigFromFile(file) {
       try {
@@ -2312,13 +2581,13 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/FontCombobox.jsx
-  var { useState: useState4, useEffect: useEffect3, useRef: useRef5, useMemo: useMemo3 } = React;
+  var { useState: useState4, useEffect: useEffect3, useRef: useRef6, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState4(value || "");
     const [open, setOpen] = useState4(false);
     const [status, setStatus] = useState4(null);
     const [loadingFonts, setLoadingFonts] = useState4(false);
-    const containerRef = useRef5(null);
+    const containerRef = useRef6(null);
     useEffect3(() => {
       setQuery(value || "");
     }, [value]);
@@ -2483,11 +2752,11 @@
         configStatus,
         setConfigStatus
       }
-    ), /* @__PURE__ */ React.createElement(TypefaceSection, { ...sectionProps, fontOptions, setFontOptions }), /* @__PURE__ */ React.createElement(PageSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(BodyTextSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(HeadingsSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(TocSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(PageNumbersSection, { ...sectionProps }))));
+    ), /* @__PURE__ */ React.createElement(TypefaceSection, { ...sectionProps, fontOptions, setFontOptions }), /* @__PURE__ */ React.createElement(PageSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(BodyTextSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(HeadingsSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(CodeBlocksSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(TocSection, { ...sectionProps }), /* @__PURE__ */ React.createElement(PageNumbersSection, { ...sectionProps }))));
   }
 
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect4, useState: useState6, useRef: useRef6, useCallback } = React;
+  var { useEffect: useEffect4, useState: useState6, useRef: useRef7, useCallback } = React;
   var DOCUMENT_PICKER_ID = "md2ebook-document";
   function App() {
     const [markdown, setMarkdown] = useState6(SAMPLE_MARKDOWN);
@@ -2497,13 +2766,13 @@
     const [isExporting, setIsExporting] = useState6(false);
     const [exportError, setExportError] = useState6(null);
     const [isSendingToArranger, setIsSendingToArranger] = useState6(false);
-    const bodyRef = useRef6(null);
-    const markdownRef = useRef6(markdown);
+    const bodyRef = useRef7(null);
+    const markdownRef = useRef7(markdown);
     markdownRef.current = markdown;
     useEffect4(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
-    const tocPagesRef = useRef6(null);
+    const tocPagesRef = useRef7(null);
     const handleTocPages = useCallback((map) => {
       tocPagesRef.current = map;
     }, []);
@@ -2539,8 +2808,8 @@
       });
     }, []);
     const [docStatus, setDocStatus] = useState6(null);
-    const editorRef = useRef6(null);
-    const documentFileInputRef = useRef6(null);
+    const editorRef = useRef7(null);
+    const documentFileInputRef = useRef7(null);
     const errorText = (err) => err && err.message ? err.message : String(err);
     function replaceAllText(text) {
       if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
@@ -2617,7 +2886,7 @@
         setDocStatus({ type: "error", message: `Could not save "${savedFile.name}": ${errorText(err)} Use File → Save as Markdown… to pick the file again.` });
       }
     }
-    const fileShortcutsRef = useRef6(null);
+    const fileShortcutsRef = useRef7(null);
     fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
     useEffect4(() => {
       function onKeyDown(e) {

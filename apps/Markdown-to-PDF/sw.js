@@ -5,7 +5,7 @@
 // HTML/JS/CSS are served network-first, so ordinary deploys reach users without touching
 // this file. Bump CACHE_VERSION when FILES or CDN change (a file added, renamed or
 // removed), so the old cache is dropped and the new list is precached.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 // Must all exist: install fails if any of these 404s.
 const FILES = [
@@ -37,6 +37,7 @@ const CDN = [
   "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js",
   "https://cdn.tailwindcss.com/",
   "https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js",
+  "https://cdn.jsdelivr.net/combine/npm/prismjs@1.29.0/components/prism-core.min.js,npm/prismjs@1.29.0/components/prism-markup.min.js,npm/prismjs@1.29.0/components/prism-css.min.js,npm/prismjs@1.29.0/components/prism-clike.min.js,npm/prismjs@1.29.0/components/prism-javascript.min.js,npm/prismjs@1.29.0/components/prism-json.min.js,npm/prismjs@1.29.0/components/prism-markup-templating.min.js,npm/prismjs@1.29.0/components/prism-php.min.js,npm/prismjs@1.29.0/components/prism-liquid.min.js,npm/prismjs@1.29.0/components/prism-python.min.js,npm/prismjs@1.29.0/components/prism-bash.min.js,npm/prismjs@1.29.0/components/prism-yaml.min.js,npm/prismjs@1.29.0/components/prism-excel-formula.min.js,npm/prismjs@1.29.0/components/prism-markdown.min.js",
   "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js",
   "https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js",
   "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",

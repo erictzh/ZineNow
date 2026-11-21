@@ -88,8 +88,10 @@ export function lineKind(line) {
   return "p";
 }
 
-// The kind of the line the caret is on (for the toolbar's dropdown and button states).
+// The kind of the line the caret is on (for the toolbar's dropdown and button states); "code" inside
+// a fenced code block.
 export function blockAt(text, pos) {
+  if (codeBlockAt(text, pos)) return "code";
   const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
   let lineEnd = text.indexOf("\n", pos);
   if (lineEnd === -1) lineEnd = text.length;
@@ -133,6 +135,101 @@ export function setBlock(text, start, end, kind) {
     return { from, to, insert, selStart: caret, selEnd: caret };
   }
   return { from, to, insert, selStart: from, selEnd: from + insert.length };
+}
+
+/* --------------------------------------------------------------------------
+   Fenced code blocks: ```lang … ```
+   -------------------------------------------------------------------------- */
+
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)/;
+
+// Every fenced block in the text: { open: [start, end), close: [start, end) or null when it runs to the
+// end of the text unclosed, lang, fence }. Line ranges leave out the line's "\n".
+function fencedBlocks(text) {
+  const blocks = [];
+  let open = null;
+  let pos = 0;
+  while (pos <= text.length) {
+    let end = text.indexOf("\n", pos);
+    if (end === -1) end = text.length;
+    const line = text.slice(pos, end);
+    if (!open) {
+      const m = FENCE_OPEN_RE.exec(line);
+      if (m) open = { open: [pos, end], close: null, lang: m[2], fence: m[1] };
+    } else {
+      const t = line.trim();
+      if (t.length >= open.fence.length && t === open.fence[0].repeat(t.length) && /^ {0,3}\S/.test(line)) {
+        open.close = [pos, end];
+        blocks.push(open);
+        open = null;
+      }
+    }
+    if (end === text.length) break;
+    pos = end + 1;
+  }
+  if (open) blocks.push(open);
+  return blocks;
+}
+
+// The fenced block the position sits in (its fence lines count), or null.
+export function codeBlockAt(text, pos) {
+  return fencedBlocks(text).find((b) => pos >= b.open[0] && pos <= (b.close ? b.close[1] : text.length)) || null;
+}
+
+// A fence long enough not to be closed by any run of backticks inside `content`.
+function fenceFor(content) {
+  const longest = (String(content).match(/`+/g) || []).reduce((n, run) => Math.max(n, run.length), 0);
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+// The toolbar's code block button with language `lang` ("" = plain). Inside a block already: the same
+// language takes the fences off; another one changes the block's language. Elsewhere: the selected
+// lines are wrapped in a block (and stay selected), or with nothing selected an empty block goes in on
+// its own lines with the caret inside it.
+export function toggleCodeBlock(text, start, end, lang) {
+  const tag = lang || "";
+  const block = codeBlockAt(text, start);
+  if (block) {
+    const [oStart, oEnd] = block.open;
+    if (block.lang === tag) {
+      const innerStart = Math.min(oEnd + 1, text.length);
+      const innerEnd = block.close ? Math.max(innerStart, block.close[0] - 1) : text.length;
+      const to = block.close ? block.close[1] : text.length;
+      const insert = text.slice(innerStart, innerEnd);
+      if (start === end) {
+        const caret = oStart + Math.min(insert.length, Math.max(0, start - innerStart));
+        return { from: oStart, to, insert, selStart: caret, selEnd: caret };
+      }
+      return { from: oStart, to, insert, selStart: oStart, selEnd: oStart + insert.length };
+    }
+    const openLine = text.slice(oStart, oEnd);
+    const m = FENCE_OPEN_RE.exec(openLine);
+    const insert = openLine.slice(0, m.index + m[0].length - m[2].length) + tag;
+    const shift = (p) => (p > oEnd ? p + insert.length - openLine.length : Math.min(p, oStart + insert.length));
+    return { from: oStart, to: oEnd, insert, selStart: shift(start), selEnd: shift(end) };
+  }
+  if (start === end) {
+    const edit = insertBlockLine(text, start, end, "```" + tag + "\n\n```");
+    const caret = edit.from + edit.insert.indexOf("```") + 3 + tag.length + 1;
+    return { ...edit, selStart: caret, selEnd: caret };
+  }
+  const from = text.lastIndexOf("\n", start - 1) + 1;
+  const lastPos = text[end - 1] === "\n" ? end - 1 : end;
+  let to = text.indexOf("\n", lastPos);
+  if (to === -1) to = text.length;
+  const content = text.slice(from, to);
+  const fence = fenceFor(content);
+  const edit = insertBlockLine(text, from, to, fence + tag + "\n" + content + "\n" + fence);
+  const selStart = edit.from + edit.insert.indexOf(fence) + fence.length + tag.length + 1;
+  return { ...edit, selStart, selEnd: selStart + content.length };
+}
+
+// A whole file's text as a code block on its own lines at the caret (replacing any selection), with
+// the caret after it. Line endings become "\n" and trailing blank lines are dropped.
+export function insertCodeBlock(text, start, end, content, lang) {
+  const body = String(content).replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+  const fence = fenceFor(body);
+  return insertBlockLine(text, start, end, fence + (lang || "") + "\n" + body + "\n" + fence);
 }
 
 /* --------------------------------------------------------------------------

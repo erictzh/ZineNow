@@ -2,6 +2,7 @@
 
 import { EditorTab } from "./editor/EditorTab.jsx";
 import { BodyTextSection } from "./typography/BodyTextSection.jsx";
+import { CodeBlocksSection } from "./typography/CodeBlocksSection.jsx";
 import { ConfigFiles } from "./typography/ConfigFiles.jsx";
 import { HeadingsSection } from "./typography/HeadingsSection.jsx";
 import { PageNumbersSection } from "./typography/PageNumbersSection.jsx";
@@ -57,6 +58,7 @@ export function Sidebar({ activeTab, setActiveTab, markdown, setMarkdown, editor
             <PageSection {...sectionProps} />
             <BodyTextSection {...sectionProps} />
             <HeadingsSection {...sectionProps} />
+            <CodeBlocksSection {...sectionProps} />
             <TocSection {...sectionProps} />
             <PageNumbersSection {...sectionProps} />
           </div>
