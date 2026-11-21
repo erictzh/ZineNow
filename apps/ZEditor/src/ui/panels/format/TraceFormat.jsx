@@ -1,4 +1,4 @@
-// Format panel for an Image Trace layer, laid out like Illustrator's Image Trace panel: presets, view, mode, Advanced, Create, colours.
+// Format panel for a vectorized layer, laid out like Illustrator's Image Trace panel: presets, view, mode, Advanced, Create, colours.
 
 import { ANGLE_CONTROL } from "../../../model/controls.js";
 import { isLiveTrace, traceColorOf } from "../../../model/trace/traceLayer.js";
@@ -25,7 +25,7 @@ const METHODS = [
   { key: "overlap", label: "Overlapping", hint: "Each shape also runs under the colours above it, so no gaps show between colours.", icon: <g><path d="M4 4h12v16H4Z" fill="currentColor" opacity="0.55" /><path d="M10 4h10v16H10Z" fill="none" stroke="currentColor" strokeWidth="1.6" /></g> },
 ];
 
-export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
+export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize, onExportSvg }) {
   const s = normalizeTraceSettings(ann.trace);
   const live = isLiveTrace(ann);
   const change = (patch) => imageTrace.change(ann, patch);
@@ -39,7 +39,7 @@ export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
   const advancedChanged = TRACE_ADVANCED_PROPS.some((k) => s[k] !== presetSettings(s.preset)[k]);
   const pathCount = (ann.paths || []).length;
   return (
-    <FormatPanelShell title="Format — Image Trace">
+    <FormatPanelShell title="Format — Vectorize">
       <div className="ze-trace-head">
         {live ? (
           <React.Fragment>
@@ -64,7 +64,7 @@ export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
         </div>
         {live && <ControlList controls={TRACE_MAIN_CONTROLS} source={s} onPatch={change} />}
         <span className="ze-trace-status" aria-live="polite">
-          {busy ? "Tracing…" : `${pathCount} ${pathCount === 1 ? "colour" : "colours"} · ${Math.max(1, Math.round((ann.paths || []).reduce((n, p) => n + p.d.length, 0) / 1024))} KB of paths`}
+          {busy ? "Vectorizing…" : `${pathCount} ${pathCount === 1 ? "colour" : "colours"} · ${Math.max(1, Math.round((ann.paths || []).reduce((n, p) => n + p.d.length, 0) / 1024))} KB of paths`}
         </span>
         {imageTrace.error && <span className="ze-format-hint ze-trace-error">{imageTrace.error}</span>}
       </div>
@@ -72,7 +72,7 @@ export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
       {live && (
         <PanelSection
           id="trace.advanced" title="Advanced"
-          hint="Paths: how closely outlines follow the pixels (higher = more detail, less smoothing). Corners: how readily a bend becomes a sharp corner. Noise: specks smaller than this many pixels are left out."
+          hint="Paths: how closely outlines follow the pixels (higher = more detail, less smoothing). Corners: how readily a bend becomes a sharp corner. Noise: specks smaller than this are left out."
           summary={advancedChanged ? "changed" : undefined}
           onReset={advancedChanged ? () => change(advancedOf(presetSettings(s.preset))) : undefined}
         >
@@ -109,6 +109,13 @@ export function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
       </PanelSection>
 
       <TraceColors ann={ann} imageTrace={imageTrace} />
+
+      <PanelSection
+        id="trace.svg" title="Save as SVG" defaultOpen
+        hint="Saves just this layer as an SVG file: editable vector shapes in the colours above, cropped to the shapes, on a see-through background. Nothing else on the page goes in. Opens in Illustrator, Inkscape, Affinity, Figma, Canva, Cricut and laser-cutter software. To save several layers together, select them and use Export → Export selection as SVG."
+      >
+        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={busy} onClick={() => onExportSvg([ann.id])}>Save as SVG…</button>
+      </PanelSection>
 
       <PanelSection id="trace.transform" title="Transform" hint="Drag a corner to resize (it keeps its proportions; hold Shift to stretch). Opacity and blend are in the Layers panel." onReset={() => onUpdate(ann.id, resetPatch([ANGLE_CONTROL]))}>
         <SizeReadout ann={ann} />

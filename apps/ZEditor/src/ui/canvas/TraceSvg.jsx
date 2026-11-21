@@ -1,4 +1,4 @@
-// An Image Trace layer's shapes as an SVG filling its box, in one of the View modes (result, outlines, source).
+// A vectorized layer's shapes as an SVG filling its box, in one of the View modes (result, outlines, source).
 
 import { normalizeTraceSettings } from "../../model/trace/traceSettings.js";
 import { traceDrawList } from "../../model/trace/traceLayer.js";

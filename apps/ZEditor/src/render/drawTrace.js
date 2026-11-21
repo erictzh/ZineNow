@@ -1,4 +1,4 @@
-// Draws an Image Trace layer (its traced shapes) on a canvas, for Export, thumbnails and baking.
+// Draws a vectorized layer (its traced shapes) on a canvas, for Export, thumbnails and baking.
 
 import { traceDrawList } from "../model/trace/traceLayer.js";
 import { drawBoxWithEffects } from "./boxEffects.js";

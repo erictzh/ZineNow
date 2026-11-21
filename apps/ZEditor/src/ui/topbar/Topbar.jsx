@@ -215,6 +215,13 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
               />
               <MenuItem
                 close={close}
+                label="Export selection as SVG"
+                disabled={exporting || !exporter.canExportSvg()}
+                onClick={() => exporter.handleExportSvg()}
+                hint="Only the selected layers, cropped to them, on a see-through background. Vectorized images, shapes and pen strokes stay editable vectors"
+              />
+              <MenuItem
+                close={close}
                 label="Send to ZineArranger"
                 disabled={pages.length === 0 || exporting || sendingToArranger}
                 onClick={exporter.handleSendToZineArranger}

@@ -1,4 +1,4 @@
-// Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, Image Trace, flatten.
+// Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, Vectorize, flatten.
 
 import { ANGLE_CONTROL, angleOf } from "../../../model/controls.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, IMAGE_FILTER_OPTIONS } from "../../../model/pageFilters.js";
@@ -85,7 +85,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
   );
 }
 
-// Image Trace: makes a new layer of filled shapes from this image (it is hidden, not deleted). The
+// Vectorize: makes a new layer of filled shapes from this image (it is hidden, not deleted). The
 // trace layer's own panel then has every setting, and changes there re-trace live.
 function ImageTraceSection({ ann, imageTrace, disabled }) {
   const [preset, setPreset] = useState(DEFAULT_TRACE_PRESET);
@@ -93,15 +93,15 @@ function ImageTraceSection({ ann, imageTrace, disabled }) {
   return (
     <PanelSection
       id="image.trace"
-      title="Image Trace"
-      hint="Traces the image into filled shapes, like Illustrator's Image Trace: a new layer goes above it and the image is hidden (show it again in the Layers panel). The new layer's panel has the full trace settings, and changes there re-trace live. The trace follows the crop, adjustments and filter."
+      title="Vectorize"
+      hint="Turns the image into vector shapes, like Illustrator's Image Trace: a new Vectorized layer goes above it and the image is hidden (show it again in the Layers panel). That layer's panel has all the settings, and changes there update it live. It follows the crop, adjustments and filter. Save it on its own with Save as SVG."
     >
       <div className="ze-format-field">
         <span className="ze-format-label">Preset</span>
         <SelectInput options={TRACE_PRESETS.map((p) => ({ key: p.key, label: p.label }))} value={preset} onChange={setPreset} />
       </div>
       <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={disabled || busy} onClick={() => imageTrace.trace(ann, preset)}>
-        {busy ? "Tracing…" : "Trace"}
+        {busy ? "Vectorizing…" : "Vectorize"}
       </button>
       {imageTrace.error && <span className="ze-format-hint ze-trace-error">{imageTrace.error}</span>}
     </PanelSection>

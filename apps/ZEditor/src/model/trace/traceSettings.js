@@ -1,4 +1,4 @@
-// Image Trace settings: the presets, the controls the Format panel shows, and how a slider maps onto the tracer.
+// Vectorize settings: the presets, the controls the Format panel shows, and how a slider maps onto the tracer.
 
 // A trace layer keeps its settings in `ann.trace`:
 //   mode:        "bw" (black & white by a threshold), "gray" (shades of grey) or "color"

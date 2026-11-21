@@ -348,7 +348,7 @@
 .ze-format-radio .ze-format-hint, .ze-format-check .ze-format-hint { grid-column: 2; margin-top: 2px; }
 .ze-format-radio:has(input:disabled) { opacity: 0.5; cursor: default; }
 
-/* ---- Image Trace panel (ui/panels/format/TraceFormat.jsx), after Illustrator's ---- */
+/* ---- Vectorize panel (ui/panels/format/TraceFormat.jsx), after Illustrator's ---- */
 .ze-trace-head { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--ui-border); }
 .ze-trace-head .ze-format-field { margin: 0; }
 .ze-trace-presets { display: flex; flex-wrap: wrap; gap: 4px; }

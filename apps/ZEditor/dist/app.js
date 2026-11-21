@@ -6541,6 +6541,37 @@
     const paths = (ann.paths || []).map((p) => ({ ...p, color: traceColorOf(ann, p.color) })).filter((p) => p.color !== "none");
     return { paths, recolor: void 0, traceSource: void 0, trace: { ...normalizeTraceSettings(ann.trace), view: "result" } };
   }
+  function traceContentBounds(ann) {
+    const list = traceDrawList(ann);
+    if (!list.length || !ann.traceW || !ann.traceH) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const item of list) {
+      const nums = item.d.match(/-?\d+(?:\.\d+)?/g) || [];
+      for (let i = 0; i + 1 < nums.length; i += 2) {
+        const px = Number(nums[i]), py = Number(nums[i + 1]);
+        if (px < x0) x0 = px;
+        if (px > x1) x1 = px;
+        if (py < y0) y0 = py;
+        if (py > y1) y1 = py;
+      }
+      const pad = item.stroke ? item.strokeWidth / 2 : 0;
+      x0 -= pad;
+      y0 -= pad;
+      x1 += pad;
+      y1 += pad;
+    }
+    if (!(x1 > x0 && y1 > y0)) return null;
+    const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
+    const cx = ann.width / 2, cy = ann.height / 2;
+    const rad = (ann.angle || 0) * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+    const xs = [], ys = [];
+    for (const [px, py] of [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]) {
+      const lx = px * sx - cx, ly = py * sy - cy;
+      xs.push(ann.x + cx + lx * cos - ly * sin);
+      ys.push(ann.y + cy + lx * sin + ly * cos);
+    }
+    return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+  }
 
   // apps/ZEditor/src/render/boxEffects.js
   function drawTextureMarks(ctx, ann) {
@@ -8901,6 +8932,165 @@
     return outDoc.save();
   }
 
+  // apps/ZEditor/src/io/svgExport.js
+  var num = (v) => String(Math.round(v * 100) / 100);
+  var escapeXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function svgColor(css) {
+    const m = /^rgba?\(([^)]+)\)$/.exec(css || "");
+    if (!m) return { color: css || "#000000", opacity: 1 };
+    const [r, g, b, a = 1] = m[1].split(",").map(Number);
+    return { color: `rgb(${r},${g},${b})`, opacity: a };
+  }
+  function wrapItem(ann, inner, box) {
+    const attrs = [];
+    const angle = angleOf(ann);
+    if (angle && box) attrs.push(`transform="rotate(${num(angle)} ${num(box.x + box.width / 2)} ${num(box.y + box.height / 2)})"`);
+    if (opacityOf(ann) < 1) attrs.push(`opacity="${num(opacityOf(ann))}"`);
+    if (blendOf(ann) !== "normal") attrs.push(`style="mix-blend-mode:${blendOf(ann)}"`);
+    return attrs.length ? `<g ${attrs.join(" ")}>${inner}</g>` : inner;
+  }
+  function traceSvg(ann) {
+    if (!ann.traceW || !ann.traceH) return "";
+    const paths = traceDrawList(ann).map((p) => {
+      const fill = p.fill ? `fill="${p.fill}"` : `fill="none"`;
+      const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${num(p.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"` : "";
+      return `<path d="${p.d}" ${fill}${stroke}/>`;
+    }).join("");
+    const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
+    return `<g transform="translate(${num(ann.x)} ${num(ann.y)}) scale(${+sx.toFixed(6)} ${+sy.toFixed(6)})">${paths}</g>`;
+  }
+  function rectSvg(ann, defs, nextId) {
+    const v = controlValues(ann, RECT_CONTROLS);
+    const w = ann.width, h = ann.height;
+    let fill;
+    if (v.fillType === "solid") {
+      const { r, g, b } = hexToRgb(v.fillColor);
+      fill = `fill="rgb(${r},${g},${b})"${v.fillAlpha < 100 ? ` fill-opacity="${num(v.fillAlpha / 100)}"` : ""}`;
+    } else {
+      const id = nextId("grad");
+      const stops = rectGradientStops(ann).map((s) => {
+        const c = svgColor(s.color);
+        return `<stop offset="${num(s.percent)}%" stop-color="${c.color}"${c.opacity < 1 ? ` stop-opacity="${num(c.opacity)}"` : ""}/>`;
+      }).join("");
+      if (v.fillType === "linear") {
+        const rad = v.gradientAngle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
+        const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(w / 2 - dx * half)}" y1="${num(h / 2 - dy * half)}" x2="${num(w / 2 + dx * half)}" y2="${num(h / 2 + dy * half)}">${stops}</linearGradient>`);
+      } else {
+        defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${num(w / 2)} ${num(h / 2)}) scale(${num(w / 2 * Math.SQRT2)} ${num(h / 2 * Math.SQRT2)})">${stops}</radialGradient>`);
+      }
+      fill = `fill="url(#${id})"`;
+    }
+    const outline = imageEdgeOutline(ann);
+    const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num(w)}" height="${num(h)}" ${fill}/>`;
+    let stroke = "";
+    if (ann.stroke) {
+      const s = effectSettings(ann, STROKE_EFFECT);
+      stroke = `<path d="${outline || rectOutline(ann)}" fill="none" stroke="${s.strokeColor}" stroke-width="${num(s.strokeThickness)}" stroke-miterlimit="4"/>`;
+    }
+    return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
+  }
+  function strokeSvg(ann) {
+    const isHi = ann.tool === "highlighter";
+    const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
+    const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
+    const alpha = isHi ? ` opacity="0.45"` : "";
+    if (ann.taper > 0) return `<path d="${taperedPathD(ann.points, width, ann.taper)}" fill="${color}"${alpha}/>`;
+    return `<path d="${smoothPathD(ann.points)}" fill="none" stroke="${color}" stroke-width="${num(width)}" stroke-linecap="round" stroke-linejoin="round"${alpha}/>`;
+  }
+  function plainTextLook(ann) {
+    const look = textLook(ann);
+    return !(look.stroke || look.shadow || look.gradient || look.photo || look.ransom || look.curve || look.distress || look.stacked);
+  }
+  function textSvg(ann, fonts) {
+    const ctx = document.createElement("canvas").getContext("2d");
+    const layout = layoutText(ctx, ann, 1);
+    const { runs, lineExtents } = layoutPlainRuns(layout, ann);
+    const { look, fontSize, x, y, boxWidth, boxHeight } = layout;
+    const family = ann.fontFamily || "sans-serif";
+    fonts.add(family);
+    let out = "";
+    if (look.label) {
+      const c = hexToRgb(look.label.labelColor);
+      out += `<rect x="${num(x)}" y="${num(y)}" width="${num(boxWidth)}" height="${num(boxHeight)}" rx="${num(look.label.labelRadius || 0)}" fill="rgb(${c.r},${c.g},${c.b})"${look.label.labelAlpha < 100 ? ` fill-opacity="${num(look.label.labelAlpha / 100)}"` : ""}/>`;
+    }
+    for (const rule of columnRules(layout, ann)) {
+      out += `<line x1="${num(rule.x)}" y1="${num(rule.y0)}" x2="${num(rule.x)}" y2="${num(rule.y1)}" stroke="${rule.color}" stroke-width="${num(rule.width)}"/>`;
+    }
+    const base = `font-family="${escapeXml(family)}, sans-serif" font-size="${num(fontSize)}"${ann.bold ? ` font-weight="bold"` : ""}${ann.italic ? ` font-style="italic"` : ""}` + (look.letterSpacingPx ? ` letter-spacing="${num(look.letterSpacingPx)}"` : "") + (look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "");
+    const tspans = runs.filter((r) => r.text.trim()).map((r) => {
+      const font = r.font ? ` style="font:${escapeXml(r.font)}"` : "";
+      return `<tspan x="${num(r.x)}" y="${num(r.baselineY)}" fill="${r.color || look.color}"${font}>${escapeXml(r.text)}</tspan>`;
+    }).join("");
+    out += `<text ${base} xml:space="preserve">${tspans}</text>`;
+    for (const ext of lineExtents) {
+      for (const seg of ext.segments) {
+        const lines = [];
+        const underlined = seg.underline != null ? seg.underline : ann.underline;
+        const struck = seg.strike != null ? seg.strike : look.strike !== "none";
+        if (underlined) lines.push(ext.baselineY + fontSize * 0.12);
+        if (struck) lines.push(ext.baselineY - fontSize * 0.3);
+        for (const ly of lines) out += `<line x1="${num(seg.x0)}" y1="${num(ly)}" x2="${num(seg.x1)}" y2="${num(ly)}" stroke="${seg.color || look.color}" stroke-width="${num(Math.max(1, fontSize / 15))}"/>`;
+      }
+    }
+    return { svg: out, box: { x, y, width: boxWidth, height: boxHeight } };
+  }
+  function imageTag(patch) {
+    return `<image href="${patch.src}" x="${num(patch.x)}" y="${num(patch.y)}" width="${num(patch.width)}" height="${num(patch.height)}" preserveAspectRatio="none"/>`;
+  }
+  async function layersToSvg(items, pageFilter) {
+    if (!items.length) return null;
+    const defs = [];
+    let counter = 0;
+    const nextId = (prefix) => `${prefix}${++counter}`;
+    const fonts = /* @__PURE__ */ new Set();
+    let pictures = 0, clipped = 0;
+    const parts = [];
+    for (const ann of items) {
+      if (isClipped(ann)) clipped++;
+      const box = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+      const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture);
+      if (ann.type === "trace" && !hasLookOnly) parts.push(wrapItem(ann, traceSvg(ann), box));
+      else if (ann.type === "rect" && !hasLookOnly) parts.push(wrapItem(ann, rectSvg(ann, defs, nextId), box));
+      else if (ann.type === "stroke") parts.push(wrapItem(ann, strokeSvg(ann), null));
+      else if (ann.type === "text" && plainTextLook(ann)) {
+        if (!ann.text || !ann.text.trim()) continue;
+        const t = textSvg(ann, fonts);
+        parts.push(wrapItem(ann, t.svg, t.box));
+      } else {
+        const patch = ann.type === "image" ? await flattenedImagePatch(ann, pageFilter) : ann.type === "text" ? await rasterizedTextPatch(ann) : ann.type === "rect" ? await rasterizedRectPatch(ann) : null;
+        if (!patch) continue;
+        pictures++;
+        parts.push(wrapItem({ ...ann, angle: void 0 }, imageTag(patch), null));
+      }
+    }
+    if (!parts.length) return null;
+    const boundsOf = (ann) => ann.type === "trace" && traceContentBounds(ann) || annotationBounds(ann);
+    const bounds = items.map(boundsOf).reduce((u, b) => ({
+      x0: Math.min(u.x0, b.x),
+      y0: Math.min(u.y0, b.y),
+      x1: Math.max(u.x1, b.x + b.width),
+      y1: Math.max(u.y1, b.y + b.height)
+    }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+    const pad = 1;
+    const vb = { x: bounds.x0 - pad, y: bounds.y0 - pad, w: bounds.x1 - bounds.x0 + pad * 2, h: bounds.y1 - bounds.y0 + pad * 2 };
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(vb.w / MAIN_SCALE)}pt" height="${num(vb.h / MAIN_SCALE)}pt" viewBox="${num(vb.x)} ${num(vb.y)} ${num(vb.w)} ${num(vb.h)}">
+` + (defs.length ? `<defs>${defs.join("")}</defs>
+` : "") + parts.join("\n") + "\n</svg>\n";
+    return { svg, pictures, clipped, fonts: [...fonts] };
+  }
+
+  // apps/ZEditor/src/model/layerNames.js
+  function layerName(ann) {
+    if (ann.name) return ann.name;
+    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
+    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+    if (ann.type === "trace") return "Vectorized";
+    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
+    return "Image";
+  }
+
   // shared/js/zineArrangerHandoff.js
   var ARRANGER_READY_MESSAGE = "zinearranger-ready";
   var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
@@ -8928,7 +9118,7 @@
 
   // apps/ZEditor/src/state/useExport.js
   var { useState: useState4 } = React;
-  function useExport({ doc, status, view, project }) {
+  function useExport({ doc, status, view, project, selection }) {
     const { pages, pdfDocsRef } = doc;
     const { setErrorMsg, setNotice } = status;
     const [exporting, setExporting] = useState4(false);
@@ -8998,6 +9188,38 @@
         setExporting(false);
       }
     }
+    function svgLayersFor(ids) {
+      const page = pages[doc.selectedIdx];
+      if (!page) return [];
+      const wanted = new Set(ids || selection.selectedAnnotationIds());
+      return resolvePageText(page.annotations || []).filter((a) => wanted.has(a.id) && !a.hidden);
+    }
+    async function handleExportSvg(ids) {
+      const items = svgLayersFor(ids);
+      if (!items.length || exporting) return;
+      setErrorMsg(null);
+      setNotice(null);
+      setExporting(true);
+      try {
+        const result = await layersToSvg(items, doc.pageFilter);
+        if (!result) {
+          setNotice("Nothing visible to save as SVG.");
+          return;
+        }
+        const name = items.length === 1 ? layerName(items[0]) : project.docTitle;
+        const saved = await saveFile(result.svg, titleToFileName(name, ".svg"), "image/svg+xml", "SVG image", [".svg"]);
+        if (saved === "cancelled") return;
+        const notes = [];
+        if (result.pictures) notes.push(`${result.pictures} layer${result.pictures === 1 ? " went" : "s went"} in as a picture (photos, and text or shapes with effects SVG can't hold)`);
+        if (result.fonts.length) notes.push(`text uses ${result.fonts.join(", ")}: it looks right where ${result.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
+        if (result.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+        setNotice(notes.length ? "Saved SVG. Note: " + notes.join("; ") + "." : `Saved SVG (${items.length} layer${items.length === 1 ? "" : "s"}, all vector).`);
+      } catch (err) {
+        setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setExporting(false);
+      }
+    }
     async function handleSendToZineArranger() {
       if (pages.length === 0 || exporting || sendingToArranger) return;
       setErrorMsg(null);
@@ -9010,7 +9232,16 @@
         setSendingToArranger(false);
       }
     }
-    return { exporting, sendingToArranger, handleExportPdf, handleExportImage, handleExportAllImages, handleSendToZineArranger };
+    return {
+      exporting,
+      sendingToArranger,
+      handleExportPdf,
+      handleExportImage,
+      handleExportAllImages,
+      handleSendToZineArranger,
+      handleExportSvg,
+      canExportSvg: () => svgLayersFor().length > 0
+    };
   }
 
   // apps/ZEditor/src/model/history.js
@@ -9362,7 +9593,7 @@
     const cos = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv)));
     return Math.acos(cos) * 180 / Math.PI;
   }
-  var num = (v) => String(Math.round(v * 10) / 10);
+  var num2 = (v) => String(Math.round(v * 10) / 10);
   function smoothPathD2(poly, cornerAngle, tolerance = 1) {
     const n = poly.length;
     if (n < 3) return "";
@@ -9378,7 +9609,7 @@
       const arm = (q) => Math.min(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2, reach);
       return { corner: false, a: at(p, prev, arm(prev)), b: at(p, next, arm(next)) };
     });
-    const xy = (q) => num(q[0]) + " " + num(q[1]);
+    const xy = (q) => num2(q[0]) + " " + num2(q[1]);
     let d = "M" + xy(joins[n - 1].b);
     for (let i = 0; i < n; i++) {
       const j = joins[i];
@@ -9568,7 +9799,7 @@
         selection.setSelectedAnnIds([]);
         selection.setSelectedAnnId(id);
       } catch (err) {
-        setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+        setError("Couldn't vectorize this image: " + (err && err.message ? err.message : err));
       } finally {
         setBusyId(null);
       }
@@ -9586,7 +9817,7 @@
           const result = await runTrace(ann.traceSource, settings);
           if (token === tokenRef.current) edits.handleUpdateAnnotation(ann.id, result);
         } catch (err) {
-          setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+          setError("Couldn't vectorize this image: " + (err && err.message ? err.message : err));
         } finally {
           if (token === tokenRef.current) setBusyId(null);
         }
@@ -13888,11 +14119,11 @@
       PanelSection,
       {
         id: "image.trace",
-        title: "Image Trace",
-        hint: "Traces the image into filled shapes, like Illustrator's Image Trace: a new layer goes above it and the image is hidden (show it again in the Layers panel). The new layer's panel has the full trace settings, and changes there re-trace live. The trace follows the crop, adjustments and filter."
+        title: "Vectorize",
+        hint: "Turns the image into vector shapes, like Illustrator's Image Trace: a new Vectorized layer goes above it and the image is hidden (show it again in the Layers panel). That layer's panel has all the settings, and changes there update it live. It follows the crop, adjustments and filter. Save it on its own with Save as SVG."
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(SelectInput, { options: TRACE_PRESETS.map((p) => ({ key: p.key, label: p.label })), value: preset, onChange: setPreset })),
-      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: disabled || busy, onClick: () => imageTrace.trace(ann, preset) }, busy ? "Tracing…" : "Trace"),
+      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: disabled || busy, onClick: () => imageTrace.trace(ann, preset) }, busy ? "Vectorizing…" : "Vectorize"),
       imageTrace.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint ze-trace-error" }, imageTrace.error)
     );
   }
@@ -14540,7 +14771,7 @@
     { key: "abut", label: "Abutting", hint: "Each shape is exactly its own colour's area. Thin gaps can show where colours meet.", icon: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("path", { d: "M4 4h8v16H4Z", fill: "currentColor" }), /* @__PURE__ */ React.createElement("path", { d: "M12 4h8v16h-8Z", fill: "none", stroke: "currentColor", strokeWidth: "1.6" })) },
     { key: "overlap", label: "Overlapping", hint: "Each shape also runs under the colours above it, so no gaps show between colours.", icon: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("path", { d: "M4 4h12v16H4Z", fill: "currentColor", opacity: "0.55" }), /* @__PURE__ */ React.createElement("path", { d: "M10 4h10v16H10Z", fill: "none", stroke: "currentColor", strokeWidth: "1.6" })) }
   ];
-  function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
+  function TraceFormat({ ann, imageTrace, onUpdate, onRasterize, onExportSvg }) {
     const s = normalizeTraceSettings(ann.trace);
     const live = isLiveTrace(ann);
     const change = (patch) => imageTrace.change(ann, patch);
@@ -14554,18 +14785,27 @@
     const advancedOf = (src) => Object.fromEntries(TRACE_ADVANCED_PROPS.map((k) => [k, src[k]]));
     const advancedChanged = TRACE_ADVANCED_PROPS.some((k) => s[k] !== presetSettings(s.preset)[k]);
     const pathCount = (ann.paths || []).length;
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — Image Trace" }, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-head" }, live ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-presets", role: "group", "aria-label": "Presets" }, TRACE_PRESETS.map((p) => /* @__PURE__ */ React.createElement("button", { key: p.key, type: "button", className: "ze-trace-preset" + (s.preset === p.key && !custom ? " active" : ""), title: p.label, "aria-label": p.label, onClick: () => pickPreset(p.key) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" }, PRESET_ICONS[p.key])))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(SelectInput, { options: presetOptions, value: custom ? "custom" : s.preset, onChange: pickPreset }))) : /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Expanded: these shapes no longer follow the trace settings. Undo brings them back."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "View"), /* @__PURE__ */ React.createElement(SelectInput, { options: live ? TRACE_VIEW_OPTIONS : TRACE_VIEW_OPTIONS.filter((o) => !o.key.toLowerCase().includes("source")), value: s.view, onChange: (view) => change({ view }) })), live && /* @__PURE__ */ React.createElement(ControlList, { controls: TRACE_MAIN_CONTROLS, source: s, onPatch: change }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-status", "aria-live": "polite" }, busy ? "Tracing…" : `${pathCount} ${pathCount === 1 ? "colour" : "colours"} · ${Math.max(1, Math.round((ann.paths || []).reduce((n, p) => n + p.d.length, 0) / 1024))} KB of paths`), imageTrace.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint ze-trace-error" }, imageTrace.error)), live && /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — Vectorize" }, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-head" }, live ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-presets", role: "group", "aria-label": "Presets" }, TRACE_PRESETS.map((p) => /* @__PURE__ */ React.createElement("button", { key: p.key, type: "button", className: "ze-trace-preset" + (s.preset === p.key && !custom ? " active" : ""), title: p.label, "aria-label": p.label, onClick: () => pickPreset(p.key) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" }, PRESET_ICONS[p.key])))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(SelectInput, { options: presetOptions, value: custom ? "custom" : s.preset, onChange: pickPreset }))) : /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Expanded: these shapes no longer follow the trace settings. Undo brings them back."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "View"), /* @__PURE__ */ React.createElement(SelectInput, { options: live ? TRACE_VIEW_OPTIONS : TRACE_VIEW_OPTIONS.filter((o) => !o.key.toLowerCase().includes("source")), value: s.view, onChange: (view) => change({ view }) })), live && /* @__PURE__ */ React.createElement(ControlList, { controls: TRACE_MAIN_CONTROLS, source: s, onPatch: change }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-status", "aria-live": "polite" }, busy ? "Vectorizing…" : `${pathCount} ${pathCount === 1 ? "colour" : "colours"} · ${Math.max(1, Math.round((ann.paths || []).reduce((n, p) => n + p.d.length, 0) / 1024))} KB of paths`), imageTrace.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint ze-trace-error" }, imageTrace.error)), live && /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "trace.advanced",
         title: "Advanced",
-        hint: "Paths: how closely outlines follow the pixels (higher = more detail, less smoothing). Corners: how readily a bend becomes a sharp corner. Noise: specks smaller than this many pixels are left out.",
+        hint: "Paths: how closely outlines follow the pixels (higher = more detail, less smoothing). Corners: how readily a bend becomes a sharp corner. Noise: specks smaller than this are left out.",
         summary: advancedChanged ? "changed" : void 0,
         onReset: advancedChanged ? () => change(advancedOf(presetSettings(s.preset))) : void 0
       },
       /* @__PURE__ */ React.createElement(ControlList, { controls: TRACE_ADVANCED_CONTROLS, source: s, onPatch: change }),
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Method"), /* @__PURE__ */ React.createElement("div", { className: "ze-trace-methods", role: "radiogroup", "aria-label": "Method" }, METHODS.map((m) => /* @__PURE__ */ React.createElement("button", { key: m.key, type: "button", role: "radio", "aria-checked": s.method === m.key, className: "ze-trace-preset" + (s.method === m.key ? " active" : ""), title: m.label + ": " + m.hint, onClick: () => change({ method: m.key }) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" }, m.icon))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, METHODS.find((m) => m.key === s.method).label)))
-    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.create", title: "Create", defaultOpen: true, summary: [s.fills === "on" && "Fills", s.strokes === "on" && "Strokes"].filter(Boolean).join(" + ") || "Nothing" }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.fills === "on", onChange: (e) => change({ fills: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Fills")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.strokes === "on", onChange: (e) => change({ strokes: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Strokes")), s.strokes === "on" && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stroke width (px)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 20, value: s.strokeWidth, onChange: (strokeWidth) => change({ strokeWidth }) }))), /* @__PURE__ */ React.createElement(TraceColors, { ann, imageTrace }), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.transform", title: "Transform", hint: "Drag a corner to resize (it keeps its proportions; hold Shift to stretch). Opacity and blend are in the Layers panel.", onReset: () => onUpdate(ann.id, resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: (p) => onUpdate(ann.id, p) })), live && /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.expand", title: "Expand", hint: "Fixes the shapes as they are now and drops the copy of the source picture the layer keeps for re-tracing, so the project file gets smaller. The settings above go away; Undo brings them back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => imageTrace.expand(ann) }, "Expand")), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.rasterize", title: "Rasterize", hint: "Turns the traced shapes into an ordinary image, so image filters and effects can be used on it. Undo brings the trace back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => onRasterize(ann) }, "Rasterize to Image")));
+    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.create", title: "Create", defaultOpen: true, summary: [s.fills === "on" && "Fills", s.strokes === "on" && "Strokes"].filter(Boolean).join(" + ") || "Nothing" }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.fills === "on", onChange: (e) => change({ fills: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Fills")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.strokes === "on", onChange: (e) => change({ strokes: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Strokes")), s.strokes === "on" && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stroke width (px)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 20, value: s.strokeWidth, onChange: (strokeWidth) => change({ strokeWidth }) }))), /* @__PURE__ */ React.createElement(TraceColors, { ann, imageTrace }), /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "trace.svg",
+        title: "Save as SVG",
+        defaultOpen: true,
+        hint: "Saves just this layer as an SVG file: editable vector shapes in the colours above, cropped to the shapes, on a see-through background. Nothing else on the page goes in. Opens in Illustrator, Inkscape, Affinity, Figma, Canva, Cricut and laser-cutter software. To save several layers together, select them and use Export → Export selection as SVG."
+      },
+      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => onExportSvg([ann.id]) }, "Save as SVG…")
+    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.transform", title: "Transform", hint: "Drag a corner to resize (it keeps its proportions; hold Shift to stretch). Opacity and blend are in the Layers panel.", onReset: () => onUpdate(ann.id, resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: (p) => onUpdate(ann.id, p) })), live && /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.expand", title: "Expand", hint: "Fixes the shapes as they are now and drops the copy of the source picture the layer keeps for re-tracing, so the project file gets smaller. The settings above go away; Undo brings them back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => imageTrace.expand(ann) }, "Expand")), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.rasterize", title: "Rasterize", hint: "Turns the traced shapes into an ordinary image, so image filters and effects can be used on it. Undo brings the trace back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => onRasterize(ann) }, "Rasterize to Image")));
   }
   function TraceColors({ ann, imageTrace }) {
     const paths = (ann.paths || []).slice().reverse();
@@ -14602,7 +14842,7 @@
     const fills = settings.cutLeaves === "fill" || !fromLayer;
     const needsLayer = fromLayer && !targetLayer;
     const radio = (name, value, label, current, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
-    const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Image Trace" : "Image") : null;
+    const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Vectorized" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")));
@@ -14741,14 +14981,15 @@
     marquee,
     targetLayer,
     styleActions,
-    imageTrace
+    imageTrace,
+    onExportSvg
   }) {
     const ann = selectedAnn;
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
     if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace });
-    if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize });
+    if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize, onExportSvg });
     if (ann && ann.type === "rect") return /* @__PURE__ */ React.createElement(ShapeFormat, { key: ann.id, ann, onUpdate, onRasterizeRect });
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
     if (tool === "text") return /* @__PURE__ */ React.createElement(TextToolPanel, { toolDefaults });
@@ -14757,17 +14998,7 @@
     if (tool === "measure") {
       return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Measure", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Click one point, then another, to see the distance between them in the ruler's unit. A third click clears it. Dragging from one point to the other works too. Once the line is shown, drag either end to adjust. Hold Shift for 45° steps; ends land on ruler guides unless you hold Alt."));
     }
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, Image Trace or stroke to edit it, or pick a tool to set defaults for the next one you add."));
-  }
-
-  // apps/ZEditor/src/model/layerNames.js
-  function layerName(ann) {
-    if (ann.name) return ann.name;
-    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-    if (ann.type === "trace") return "Image Trace";
-    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
-    return "Image";
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, vectorized image or stroke to edit it, or pick a tool to set defaults for the next one you add."));
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
@@ -15960,7 +16191,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2f6840a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "a373e45"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -16136,6 +16367,15 @@
         disabled: doc.selectedIdx === null || exporting,
         onClick: () => exporter.handleExportImage("jpg"),
         hint: "The page you're on, as a picture on white"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
+        label: "Export selection as SVG",
+        disabled: exporting || !exporter.canExportSvg(),
+        onClick: () => exporter.handleExportSvg(),
+        hint: "Only the selected layers, cropped to them, on a see-through background. Vectorized images, shapes and pen strokes stay editable vectors"
       }
     ), /* @__PURE__ */ React.createElement(
       MenuItem,
@@ -16381,7 +16621,7 @@
     const project = useProject({ doc, history, status, view, toolDefaults });
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
-    const exporter = useExport({ doc, status, view, project });
+    const exporter = useExport({ doc, status, view, project, selection });
     const zoom = useZoom();
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
     const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
@@ -16517,6 +16757,7 @@
         toolDefaults,
         styleActions: edits.styleActions,
         imageTrace,
+        onExportSvg: exporter.handleExportSvg,
         magicErase: magic,
         marquee,
         targetLayer: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null

@@ -82,7 +82,7 @@ export async function rasterizedRectPatch(ann) {
   return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
 }
 
-// Turns an Image Trace layer into an ordinary image of its shapes as they look now.
+// Turns a vectorized layer into an ordinary image of its shapes as they look now.
 export async function rasterizedTracePatch(ann) {
   const scale = EXPORT_SCALE / MAIN_SCALE;
   const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawTraceOnCanvas(ctx, box, scale));

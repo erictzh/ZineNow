@@ -1,4 +1,4 @@
-// One item on the page: picks the component for its type (image, shape, Image Trace, text or stroke).
+// One item on the page: picks the component for its type (image, shape, vectorized image, text or stroke).
 
 import { blendOf, opacityOf } from "../../model/controls.js";
 import { AnnotationImage } from "./AnnotationImage.jsx";

@@ -57,7 +57,7 @@ export function App() {
   const project = useProject({ doc, history, status, view, toolDefaults });
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
-  const exporter = useExport({ doc, status, view, project });
+  const exporter = useExport({ doc, status, view, project, selection });
   const zoom = useZoom();
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
   const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
@@ -199,6 +199,7 @@ export function App() {
             toolDefaults={toolDefaults}
             styleActions={edits.styleActions}
             imageTrace={imageTrace}
+            onExportSvg={exporter.handleExportSvg}
             magicErase={magic}
             marquee={marquee}
             targetLayer={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}

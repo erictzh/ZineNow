@@ -1,4 +1,4 @@
-// Image Trace, step 3: turns a stair-stepped pixel outline into a smooth SVG path.
+// Vectorize, step 3: turns a stair-stepped pixel outline into a smooth SVG path.
 
 // A loop from traceMaskLoops (grid points where it turns) → the middle of every unit pixel edge
 // along it. Taking the middles turns one-pixel steps into diagonals, so the stairs smooth out.

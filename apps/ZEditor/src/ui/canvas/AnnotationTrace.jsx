@@ -1,4 +1,4 @@
-// One Image Trace layer on the page: its traced shapes in a box that moves, resizes and turns like an image.
+// One vectorized layer on the page: its traced shapes in a box that moves, resizes and turns like an image.
 
 import { angleOf } from "../../model/controls.js";
 import { MIN_RESIZE_SIZE, resizedBox } from "../../model/geometry.js";

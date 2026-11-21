@@ -140,7 +140,7 @@
 }
 .ze-layer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ze-layer-thumb-fill { width: 100%; height: 100%; }
-.ze-layer-thumb-trace { position: relative; background-color: #fff; } /* an Image Trace layer's shapes, on white */
+.ze-layer-thumb-trace { position: relative; background-color: #fff; } /* a vectorized layer's shapes, on white */
 .ze-layer-thumb-text { font-size: 14px; font-weight: 700; color: #1a1a1a; }
 .ze-layer-name {
     flex: 1 1 auto;

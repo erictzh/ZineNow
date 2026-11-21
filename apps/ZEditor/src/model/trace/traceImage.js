@@ -1,4 +1,4 @@
-// Image Trace: a picture's pixels → filled shapes (one SVG path per colour), like Illustrator's Image Trace.
+// Vectorize: a picture's pixels → filled shapes (one SVG path per colour), like Illustrator's Image Trace.
 //
 // 1. quantize.js reduces the picture to a few colours (black & white, greys or colours).
 // 2. contours.js follows the pixel edges of each colour's area into closed loops.

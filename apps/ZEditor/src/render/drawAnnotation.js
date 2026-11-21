@@ -1,4 +1,4 @@
-// Draws any item by picking the right drawer for its type (image, shape, Image Trace, text or stroke).
+// Draws any item by picking the right drawer for its type (image, shape, vectorized image, text or stroke).
 
 import { blendOf, opacityOf } from "../model/controls.js";
 import { drawWithOpacity } from "./boxEffects.js";

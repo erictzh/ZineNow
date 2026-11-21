@@ -1,4 +1,4 @@
-// Image Trace: making a trace layer from an image, re-tracing it live as its panel settings change, recolouring and Expand.
+// Vectorize: making a trace layer from an image, re-tracing it live as its panel settings change, recolouring and Expand.
 
 import { expandedTracePatch, newTraceLayer, patchedTraceSettings } from "../model/trace/traceLayer.js";
 import { TRACE_DRAW_PROPS, presetSettings } from "../model/trace/traceSettings.js";
@@ -16,7 +16,7 @@ const RETRACE_DELAY_MS = 120;
 //   so a slider drag is one undo step); anything that changes the tracing re-traces in the background.
 // - recolor(ann, color, value), expand(ann), rasterize(ann).
 export function useImageTrace({ doc, selection, edits }) {
-  const [busyId, setBusyId] = useState(null); // the layer being traced right now (the panel says "Tracing…")
+  const [busyId, setBusyId] = useState(null); // the layer being traced right now (the panel says "Vectorizing…")
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
   const tokenRef = useRef(0);
@@ -36,7 +36,7 @@ export function useImageTrace({ doc, selection, edits }) {
       selection.setSelectedAnnIds([]);
       selection.setSelectedAnnId(id);
     } catch (err) {
-      setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+      setError("Couldn't vectorize this image: " + (err && err.message ? err.message : err));
     } finally {
       setBusyId(null);
     }
@@ -55,7 +55,7 @@ export function useImageTrace({ doc, selection, edits }) {
         const result = await runTrace(ann.traceSource, settings);
         if (token === tokenRef.current) edits.handleUpdateAnnotation(ann.id, result);
       } catch (err) {
-        setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+        setError("Couldn't vectorize this image: " + (err && err.message ? err.message : err));
       } finally {
         if (token === tokenRef.current) setBusyId(null);
       }

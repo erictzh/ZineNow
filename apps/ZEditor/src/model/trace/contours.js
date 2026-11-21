@@ -1,4 +1,4 @@
-// Image Trace, step 2: the outlines of a pixel mask, as closed loops along the pixel edges.
+// Vectorize, step 2: the outlines of a pixel mask, as closed loops along the pixel edges.
 
 // Directions on the vertex grid, clockwise on screen (y points down).
 const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1]; // R, D, L, U

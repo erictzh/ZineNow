@@ -1,4 +1,4 @@
-// Image Trace, step 1: reduces a picture's pixels to a few colours (a label per pixel and a palette).
+// Vectorize, step 1: reduces a picture's pixels to a few colours (a label per pixel and a palette).
 
 // `pixels` is { width, height, data } with RGBA bytes, like ImageData. Returns
 //   { labels: Int16Array (one per pixel; -1 = see-through), palette: [[r, g, b], ...] }

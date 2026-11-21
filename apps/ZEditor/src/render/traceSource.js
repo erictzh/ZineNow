@@ -1,4 +1,4 @@
-// Image Trace's pixels: the picture a trace starts from (an image as it looks, at trace size) and running the tracer on it.
+// Vectorize's pixels: the picture a trace starts from (an image as it looks, at trace size) and running the tracer on it.
 
 import { IMAGE_EFFECTS } from "../model/imageEffects.js";
 import { TRACE_MAX_SIDE } from "../model/trace/traceSettings.js";

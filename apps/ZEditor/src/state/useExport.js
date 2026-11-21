@@ -1,15 +1,18 @@
-// Export PDF, page pictures (JPG / transparent PNG) and Send to ZineArranger, with their busy flags.
+// Export PDF, page pictures (JPG / transparent PNG), selected layers as SVG and Send to ZineArranger, with their busy flags.
 
 import { pageImageFileName, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, savePdfBytes, writeFileHandle } from "../io/fileSave.js";
 import { IMAGE_FORMATS, renderPageImageBlob } from "../io/imageExport.js";
 import { buildExportPdfBytes } from "../io/pdfExport.js";
+import { layersToSvg } from "../io/svgExport.js";
+import { layerName } from "../model/layerNames.js";
+import { resolvePageText } from "../render/pageText.js";
 import { downloadBlob } from "../../../../shared/js/download.js";
 import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
 
 const { useState } = React;
 
-export function useExport({ doc, status, view, project }) {
+export function useExport({ doc, status, view, project, selection }) {
   const { pages, pdfDocsRef } = doc;
   const { setErrorMsg, setNotice } = status;
   const [exporting, setExporting] = useState(false);
@@ -87,6 +90,38 @@ export function useExport({ doc, status, view, project }) {
     }
   }
 
+  // Layers as an SVG file: `ids` (default: the selection), cropped to them, with a see-through
+  // background. Nothing else on the page goes in. Says afterwards what went in as pictures.
+  function svgLayersFor(ids) {
+    const page = pages[doc.selectedIdx];
+    if (!page) return [];
+    const wanted = new Set(ids || selection.selectedAnnotationIds());
+    return resolvePageText(page.annotations || []).filter((a) => wanted.has(a.id) && !a.hidden);
+  }
+  async function handleExportSvg(ids) {
+    const items = svgLayersFor(ids);
+    if (!items.length || exporting) return;
+    setErrorMsg(null);
+    setNotice(null);
+    setExporting(true);
+    try {
+      const result = await layersToSvg(items, doc.pageFilter);
+      if (!result) { setNotice("Nothing visible to save as SVG."); return; }
+      const name = items.length === 1 ? layerName(items[0]) : project.docTitle;
+      const saved = await saveFile(result.svg, titleToFileName(name, ".svg"), "image/svg+xml", "SVG image", [".svg"]);
+      if (saved === "cancelled") return;
+      const notes = [];
+      if (result.pictures) notes.push(`${result.pictures} layer${result.pictures === 1 ? " went" : "s went"} in as a picture (photos, and text or shapes with effects SVG can't hold)`);
+      if (result.fonts.length) notes.push(`text uses ${result.fonts.join(", ")}: it looks right where ${result.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
+      if (result.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+      setNotice(notes.length ? "Saved SVG. Note: " + notes.join("; ") + "." : `Saved SVG (${items.length} layer${items.length === 1 ? "" : "s"}, all vector).`);
+    } catch (err) {
+      setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleSendToZineArranger() {
     if (pages.length === 0 || exporting || sendingToArranger) return;
     setErrorMsg(null);
@@ -100,5 +135,8 @@ export function useExport({ doc, status, view, project }) {
     }
   }
 
-  return { exporting, sendingToArranger, handleExportPdf, handleExportImage, handleExportAllImages, handleSendToZineArranger };
+  return {
+    exporting, sendingToArranger, handleExportPdf, handleExportImage, handleExportAllImages, handleSendToZineArranger,
+    handleExportSvg, canExportSvg: () => svgLayersFor().length > 0,
+  };
 }
