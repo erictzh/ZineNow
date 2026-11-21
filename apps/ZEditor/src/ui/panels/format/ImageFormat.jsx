@@ -1,8 +1,9 @@
-// Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, flatten.
+// Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, Image Trace, flatten.
 
 import { ANGLE_CONTROL, angleOf } from "../../../model/controls.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, IMAGE_FILTER_OPTIONS } from "../../../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS, PHOTO_ADJUST_SECTIONS, isAdjusted } from "../../../model/photoAdjust.js";
+import { DEFAULT_TRACE_PRESET, TRACE_PRESETS } from "../../../model/trace/traceSettings.js";
 import { cropResetPatch } from "../../../render/bake.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { SelectInput } from "../../controls/inputs.jsx";
@@ -10,8 +11,9 @@ import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
+const { useState } = React;
 
-export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage }) {
+export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace }) {
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
   const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -68,6 +70,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       </PanelSection>
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
+      <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
       <PanelSection
         id="image.flatten"
         title="Flatten"
@@ -79,6 +82,29 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
         </button>
       </PanelSection>
     </FormatPanelShell>
+  );
+}
+
+// Image Trace: makes a new layer of filled shapes from this image (it is hidden, not deleted). The
+// trace layer's own panel then has every setting, and changes there re-trace live.
+function ImageTraceSection({ ann, imageTrace, disabled }) {
+  const [preset, setPreset] = useState(DEFAULT_TRACE_PRESET);
+  const busy = imageTrace.busyId === ann.id;
+  return (
+    <PanelSection
+      id="image.trace"
+      title="Image Trace"
+      hint="Traces the image into filled shapes, like Illustrator's Image Trace: a new layer goes above it and the image is hidden (show it again in the Layers panel). The new layer's panel has the full trace settings, and changes there re-trace live. The trace follows the crop, adjustments and filter."
+    >
+      <div className="ze-format-field">
+        <span className="ze-format-label">Preset</span>
+        <SelectInput options={TRACE_PRESETS.map((p) => ({ key: p.key, label: p.label }))} value={preset} onChange={setPreset} />
+      </div>
+      <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={disabled || busy} onClick={() => imageTrace.trace(ann, preset)}>
+        {busy ? "Tracing…" : "Trace"}
+      </button>
+      {imageTrace.error && <span className="ze-format-hint ze-trace-error">{imageTrace.error}</span>}
+    </PanelSection>
   );
 }
 

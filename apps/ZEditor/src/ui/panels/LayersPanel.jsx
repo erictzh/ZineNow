@@ -10,6 +10,7 @@ import { rectFillCss } from "../../render/gradients.js";
 import { resolvePageText } from "../../render/pageText.js";
 import { SelectInput, SliderNumberInput } from "../controls/inputs.jsx";
 import { trackPointerDrag } from "../pointer.js";
+import { TraceSvg } from "../canvas/TraceSvg.jsx";
 import { MenuItem } from "../topbar/TopMenu.jsx";
 import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
@@ -19,6 +20,7 @@ function LayerThumb({ ann }) {
   if (ann.type === "image") return <span className="ze-layer-thumb"><img src={ann.src} alt="" draggable="false" /></span>;
   if (ann.type === "rect") return <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : undefined }} /></span>;
   if (ann.type === "text") return <span className="ze-layer-thumb ze-layer-thumb-text">T</span>;
+  if (ann.type === "trace") return <span className="ze-layer-thumb ze-layer-thumb-trace"><TraceSvg ann={ann} view="result" /></span>;
   const isHi = ann.tool === "highlighter";
   return (
     <span className="ze-layer-thumb">

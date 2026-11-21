@@ -1,9 +1,10 @@
-// One item on the page: picks the component for its type (image, shape, text or stroke).
+// One item on the page: picks the component for its type (image, shape, Image Trace, text or stroke).
 
 import { blendOf, opacityOf } from "../../model/controls.js";
 import { AnnotationImage } from "./AnnotationImage.jsx";
 import { AnnotationRect } from "./AnnotationRect.jsx";
 import { AnnotationText } from "./AnnotationText.jsx";
+import { AnnotationTrace } from "./AnnotationTrace.jsx";
 import { StrokeShape } from "./StrokeShape.jsx";
 
 export function AnnotationItem({
@@ -40,6 +41,9 @@ export function AnnotationItem({
         zoom={zoom}
       />
     );
+  }
+  if (a.type === "trace") {
+    return <AnnotationTrace ann={a} tool={tool} isSelected={isSelected} showHandles={showHandles} onPress={onPress} onUpdate={onUpdate} zoom={zoom} />;
   }
   if (a.type === "text") {
     return (

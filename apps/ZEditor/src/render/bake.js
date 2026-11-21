@@ -7,9 +7,11 @@ import { effectiveImageFilter } from "../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS } from "../model/photoAdjust.js";
 import { RECT_FILL_PROPS } from "../model/rect.js";
 import { TEXT_EFFECTS, TEXT_PHOTO_PROPS } from "../model/text/textControls.js";
+import { TRACE_LAYER_PROPS } from "../model/trace/traceLayer.js";
 import { drawImageOnCanvas } from "./drawImage.js";
 import { drawRectOnCanvas } from "./drawShapes.js";
 import { drawTextOnCanvas } from "./drawText.js";
+import { drawTraceOnCanvas } from "./drawTrace.js";
 import { measureTextBox } from "./textLayout.js";
 
 // Bakes an image's crop, filter and effects into one new image and
@@ -77,6 +79,18 @@ export async function rasterizedRectPatch(ann) {
     ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
   ].map((prop) => [prop, undefined]));
   // A rectangle never followed the page filter, so neither should the image.
+  return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
+}
+
+// Turns an Image Trace layer into an ordinary image of its shapes as they look now.
+export async function rasterizedTracePatch(ann) {
+  const scale = EXPORT_SCALE / MAIN_SCALE;
+  const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawTraceOnCanvas(ctx, box, scale));
+  if (!baked) return null;
+  const cleared = Object.fromEntries([
+    ...TRACE_LAYER_PROPS,
+    ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+  ].map((prop) => [prop, undefined]));
   return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
 }
 

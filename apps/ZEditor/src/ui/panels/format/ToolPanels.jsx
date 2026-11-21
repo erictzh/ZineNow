@@ -46,7 +46,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
       {hint && <span className="ze-format-hint">{hint}</span>}
     </label>
   );
-  const layerName = targetLayer ? (targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : "Image")) : null;
+  const layerName = targetLayer ? (targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Image Trace" : "Image")) : null;
   const ready = Boolean(marquee && isUsableMarquee(marquee.region));
   const polygon = settings.shape === "polygon";
   return (

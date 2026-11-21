@@ -6411,6 +6411,134 @@
   var isAdjusted = (ann, control) => ann[control.prop] != null && ann[control.prop] !== control.fallback;
   var hasPhotoAdjust = (ann) => PHOTO_ADJUST_CONTROLS.some((c) => isAdjusted(ann, c));
 
+  // apps/ZEditor/src/model/trace/traceSettings.js
+  var TRACE_PRESETS = [
+    { key: "bw", label: "Black & White", settings: { mode: "bw", threshold: 128, detail: 50, corners: 50, noise: 8, ignoreWhite: "drop" } },
+    { key: "lineart", label: "Line Art", settings: { mode: "bw", threshold: 160, detail: 75, corners: 40, noise: 4, ignoreWhite: "drop" } },
+    { key: "silhouette", label: "Silhouette", settings: { mode: "bw", threshold: 235, detail: 30, corners: 50, noise: 25, ignoreWhite: "drop" } },
+    { key: "outline", label: "Outline", settings: { mode: "bw", threshold: 128, detail: 60, corners: 50, noise: 8, ignoreWhite: "drop", fills: "off", strokes: "on", strokeWidth: 2 } },
+    { key: "gray", label: "Shades of Grey", settings: { mode: "gray", colors: 4, detail: 50, corners: 50, noise: 10, ignoreWhite: "keep" } },
+    { key: "color3", label: "3 Colours", settings: { mode: "color", colors: 3, detail: 45, corners: 50, noise: 16, ignoreWhite: "keep" } },
+    { key: "color6", label: "6 Colours", settings: { mode: "color", colors: 6, detail: 55, corners: 50, noise: 12, ignoreWhite: "keep" } },
+    { key: "color16", label: "16 Colours", settings: { mode: "color", colors: 16, detail: 65, corners: 50, noise: 8, ignoreWhite: "keep" } }
+  ];
+  var DEFAULT_TRACE_PRESET = "bw";
+  var COMMON = { method: "overlap", fills: "on", strokes: "off", strokeWidth: 2, view: "result" };
+  var TRACE_MAX_SIDE = 900;
+  var isBw = (v) => v.mode === "bw";
+  var TRACE_VIEW_OPTIONS = [
+    { key: "result", label: "Tracing result" },
+    { key: "outlines", label: "Outlines" },
+    { key: "outlinesSource", label: "Outlines with source image" },
+    { key: "source", label: "Source image" }
+  ];
+  var TRACE_MAIN_CONTROLS = [
+    {
+      kind: "select",
+      prop: "mode",
+      label: "Mode",
+      fallback: "bw",
+      options: [{ key: "bw", label: "Black & white" }, { key: "gray", label: "Shades of grey" }, { key: "color", label: "Colour" }]
+    },
+    { kind: "slider", prop: "threshold", label: "Threshold", min: 0, max: 255, fallback: 128, showIf: isBw },
+    { kind: "slider", prop: "colors", label: "Colours", min: 2, max: 16, fallback: 6, showIf: (v) => !isBw(v) }
+  ];
+  var TRACE_ADVANCED_CONTROLS = [
+    { kind: "slider", prop: "detail", label: "Paths (%)", min: 0, max: 100, fallback: 50 },
+    { kind: "slider", prop: "corners", label: "Corners (%)", min: 0, max: 100, fallback: 50 },
+    { kind: "slider", prop: "noise", label: "Noise (px)", min: 0, max: 100, fallback: 8 },
+    {
+      kind: "select",
+      prop: "ignoreWhite",
+      label: "White areas",
+      fallback: "keep",
+      options: [{ key: "keep", label: "Keep as shapes" }, { key: "drop", label: "Leave see-through" }]
+    }
+  ];
+  var TRACE_DRAW_PROPS = ["fills", "strokes", "strokeWidth", "view"];
+  function presetSettings(key) {
+    const preset = TRACE_PRESETS.find((p) => p.key === key) || TRACE_PRESETS[0];
+    return { preset: preset.key, colors: 6, threshold: 128, ...COMMON, ...preset.settings };
+  }
+  var TRACE_SHAPE_PROPS = ["mode", "threshold", "colors", "detail", "corners", "noise", "ignoreWhite", "method"];
+  var TRACE_ADVANCED_PROPS = ["detail", "corners", "noise", "ignoreWhite", "method"];
+  function matchesPreset(settings) {
+    const s = normalizeTraceSettings(settings);
+    const p = presetSettings(s.preset);
+    return TRACE_SHAPE_PROPS.every((k) => k === "threshold" && s.mode !== "bw" || k === "colors" && s.mode === "bw" || s[k] === p[k]);
+  }
+  function normalizeTraceSettings(s = {}) {
+    const base = presetSettings(s.preset || DEFAULT_TRACE_PRESET);
+    const v = { ...base, ...s };
+    const clamp3 = (x, lo, hi, fb) => Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Math.round(Number(x)))) : fb;
+    return {
+      preset: v.preset,
+      mode: ["bw", "gray", "color"].includes(v.mode) ? v.mode : "bw",
+      threshold: clamp3(v.threshold, 0, 255, 128),
+      colors: clamp3(v.colors, 2, 16, 6),
+      detail: clamp3(v.detail, 0, 100, 50),
+      corners: clamp3(v.corners, 0, 100, 50),
+      noise: clamp3(v.noise, 0, 100, 8),
+      ignoreWhite: v.ignoreWhite === "drop" ? "drop" : "keep",
+      method: v.method === "abut" ? "abut" : "overlap",
+      fills: v.fills === "off" ? "off" : "on",
+      strokes: v.strokes === "on" ? "on" : "off",
+      strokeWidth: clamp3(v.strokeWidth, 1, 20, 2),
+      view: TRACE_VIEW_OPTIONS.some((o) => o.key === v.view) ? v.view : "result"
+    };
+  }
+  function tracerParams(settings) {
+    const s = normalizeTraceSettings(settings);
+    return {
+      tolerance: 2.2 - s.detail / 100 * 1.8,
+      cornerAngle: 150 - s.corners / 100 * 120,
+      minArea: s.noise
+    };
+  }
+
+  // apps/ZEditor/src/model/trace/traceLayer.js
+  var TRACE_LAYER_PROPS = ["trace", "traceSource", "traceW", "traceH", "paths", "recolor"];
+  var isLiveTrace = (ann) => ann.type === "trace" && Boolean(ann.traceSource);
+  function traceColorOf(ann, color) {
+    const changed = ann.recolor && ann.recolor[color];
+    return changed || color;
+  }
+  function traceDrawList(ann) {
+    const s = normalizeTraceSettings(ann.trace);
+    const list = [];
+    for (const p of ann.paths || []) {
+      const color = traceColorOf(ann, p.color);
+      if (color === "none") continue;
+      const fill = s.fills === "on" ? color : null;
+      const stroke = s.strokes === "on" ? color : null;
+      if (fill || stroke) list.push({ d: p.d, fill, stroke, strokeWidth: s.strokeWidth });
+    }
+    return list;
+  }
+  function newTraceLayer(id, image, traceSource, settings, result) {
+    return {
+      id,
+      type: "trace",
+      x: image.x,
+      y: image.y,
+      width: image.width,
+      height: image.height,
+      angle: image.angle,
+      trace: normalizeTraceSettings(settings),
+      traceSource,
+      ...result
+    };
+  }
+  function patchedTraceSettings(current, patch, presetSettings2) {
+    const now = normalizeTraceSettings(current);
+    if (patch.preset && patch.preset !== now.preset) return normalizeTraceSettings({ ...presetSettings2(patch.preset), view: now.view });
+    return normalizeTraceSettings({ ...now, ...patch });
+  }
+  function expandedTracePatch(ann) {
+    const paths = (ann.paths || []).map((p) => ({ ...p, color: traceColorOf(ann, p.color) })).filter((p) => p.color !== "none");
+    return { paths, recolor: void 0, traceSource: void 0, trace: { ...normalizeTraceSettings(ann.trace), view: "result" } };
+  }
+
   // apps/ZEditor/src/render/boxEffects.js
   function drawTextureMarks(ctx, ann) {
     const { width: w, height: h } = ann;
@@ -6538,12 +6666,12 @@
   }
 
   // apps/ZEditor/src/model/color.js
-  function rgbaCss(hex, alphaPercent) {
-    const { r, g, b } = hexToRgb(hex);
+  function rgbaCss(hex2, alphaPercent) {
+    const { r, g, b } = hexToRgb(hex2);
     return `rgba(${r},${g},${b},${alphaPercent / 100})`;
   }
-  function hexToRgb(hex) {
-    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+  function hexToRgb(hex2) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex2 || "");
     return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
   }
 
@@ -7360,6 +7488,30 @@
     ctx.restore();
   }
 
+  // apps/ZEditor/src/render/drawTrace.js
+  function drawTraceOnCanvas(ctx, ann, scaleFactor) {
+    drawBoxWithEffects(ctx, ann, scaleFactor, (target) => {
+      if (!ann.traceW || !ann.traceH) return;
+      target.save();
+      target.scale(ann.width / ann.traceW, ann.height / ann.traceH);
+      target.lineJoin = "round";
+      target.lineCap = "round";
+      for (const item of traceDrawList(ann)) {
+        const path = new Path2D(item.d);
+        if (item.fill) {
+          target.fillStyle = item.fill;
+          target.fill(path);
+        }
+        if (item.stroke) {
+          target.strokeStyle = item.stroke;
+          target.lineWidth = item.strokeWidth;
+          target.stroke(path);
+        }
+      }
+      target.restore();
+    });
+  }
+
   // apps/ZEditor/src/render/bake.js
   async function flattenedImagePatch(ann, pageFilter) {
     const filter = effectiveImageFilter(ann, pageFilter);
@@ -7406,6 +7558,16 @@
     const cleared = Object.fromEntries([
       "shape",
       ...RECT_FILL_PROPS,
+      ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
+    ].map((prop) => [prop, void 0]));
+    return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
+  }
+  async function rasterizedTracePatch(ann) {
+    const scale = EXPORT_SCALE / MAIN_SCALE;
+    const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawTraceOnCanvas(ctx, box, scale));
+    if (!baked) return null;
+    const cleared = Object.fromEntries([
+      ...TRACE_LAYER_PROPS,
       ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
     ].map((prop) => [prop, void 0]));
     return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
@@ -7564,6 +7726,7 @@
     if (ann.type === "stroke") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawStrokeOnCanvas(target, ann, scaleFactor), blendOf(ann));
     else if (ann.type === "text") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawTextOnCanvas(target, ann, scaleFactor), blendOf(ann));
     else if (ann.type === "rect") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawRectOnCanvas(target, ann, scaleFactor), blendOf(ann));
+    else if (ann.type === "trace") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawTraceOnCanvas(target, ann, scaleFactor), blendOf(ann));
     else await drawWithOpacity(ctx, opacityOf(ann), (target) => drawImageOnCanvas(target, ann, scaleFactor, pageFilter), blendOf(ann));
   }
 
@@ -8624,8 +8787,8 @@
       const toPt = 1 / EXPORT_SCALE;
       const pdfY = (canvasY) => pageHeightPts - canvasY * toPt;
       const sizePt = fontSize * toPt;
-      const colorOf = (hex) => {
-        const c = hexToRgb(hex || look.color);
+      const colorOf = (hex2) => {
+        const c = hexToRgb(hex2 || look.color);
         return PDF.rgb(c.r / 255, c.g / 255, c.b / 255);
       };
       const opacity = look.fillAlpha / 100;
@@ -9079,6 +9242,380 @@
     }, []);
   }
 
+  // apps/ZEditor/src/model/trace/contours.js
+  var DX = [1, 0, -1, 0];
+  var DY = [0, 1, 0, -1];
+  var BIT = [1, 2, 4, 8];
+  function traceMaskLoops(mask, width, height) {
+    const gw = width + 1;
+    const out = new Uint8Array(gw * (height + 1));
+    const inside = (x, y) => x >= 0 && y >= 0 && x < width && y < height && mask[y * width + x] !== 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!mask[y * width + x]) continue;
+        if (!inside(x, y - 1)) out[y * gw + x] |= 1;
+        if (!inside(x + 1, y)) out[y * gw + x + 1] |= 2;
+        if (!inside(x, y + 1)) out[(y + 1) * gw + x + 1] |= 4;
+        if (!inside(x - 1, y)) out[(y + 1) * gw + x] |= 8;
+      }
+    }
+    const all = out.slice();
+    const nextDir = (here, dir) => {
+      const right = (dir + 1) % 4, left = (dir + 3) % 4;
+      return here & BIT[right] ? right : here & BIT[dir] ? dir : here & BIT[left] ? left : -1;
+    };
+    const loops = [];
+    for (let start = 0; start < out.length; start++) {
+      while (out[start]) {
+        const sx = start % gw, sy = (start - sx) / gw;
+        const startDir = out[start] & 1 ? 0 : out[start] & 2 ? 1 : out[start] & 4 ? 2 : 3;
+        let x = sx, y = sy, dir = startDir;
+        const points = [];
+        let prevDir = -1;
+        for (let guard = 0; guard < all.length * 4; guard++) {
+          out[y * gw + x] &= ~BIT[dir];
+          if (dir !== prevDir) points.push(x, y);
+          prevDir = dir;
+          x += DX[dir];
+          y += DY[dir];
+          dir = nextDir(all[y * gw + x], dir);
+          if (dir < 0 || x === sx && y === sy && dir === startDir) break;
+        }
+        if (prevDir === startDir) points.splice(0, 2);
+        if (points.length >= 6) loops.push(points);
+      }
+    }
+    return loops;
+  }
+  function loopArea(points) {
+    let sum = 0;
+    const n = points.length;
+    for (let i = 0; i < n; i += 2) {
+      const j = (i + 2) % n;
+      sum += points[i] * points[j + 1] - points[j] * points[i + 1];
+    }
+    return sum / 2;
+  }
+
+  // apps/ZEditor/src/model/trace/curves.js
+  function edgeMidpoints(corners) {
+    const pts = [];
+    const n = corners.length;
+    for (let i = 0; i < n; i += 2) {
+      const x0 = corners[i], y0 = corners[i + 1];
+      const x1 = corners[(i + 2) % n], y1 = corners[(i + 3) % n];
+      const len = Math.abs(x1 - x0) + Math.abs(y1 - y0);
+      const sx = Math.sign(x1 - x0), sy = Math.sign(y1 - y0);
+      for (let t = 0; t < len; t++) pts.push([x0 + sx * (t + 0.5), y0 + sy * (t + 0.5)]);
+    }
+    return pts;
+  }
+  function segmentDistance(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  }
+  function simplifyOpen(pts, tolerance) {
+    const keep = new Uint8Array(pts.length);
+    keep[0] = keep[pts.length - 1] = 1;
+    const stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      const [a, b] = stack.pop();
+      let worst = -1, worstD = tolerance;
+      for (let i = a + 1; i < b; i++) {
+        const d = segmentDistance(pts[i], pts[a], pts[b]);
+        if (d > worstD) {
+          worstD = d;
+          worst = i;
+        }
+      }
+      if (worst >= 0) {
+        keep[worst] = 1;
+        stack.push([a, worst], [worst, b]);
+      }
+    }
+    return pts.filter((_, i) => keep[i]);
+  }
+  function simplifyClosed(pts, tolerance) {
+    if (pts.length <= 4) return pts.slice();
+    let far = 0, farD = -1;
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i][0] - pts[0][0], pts[i][1] - pts[0][1]);
+      if (d > farD) {
+        farD = d;
+        far = i;
+      }
+    }
+    const first = simplifyOpen(pts.slice(0, far + 1), tolerance);
+    const second = simplifyOpen([...pts.slice(far), pts[0]], tolerance);
+    const out = [...first, ...second.slice(1, -1)];
+    return out.length >= 3 ? out : pts.slice();
+  }
+  function turnAngle(a, b, c) {
+    const ux = b[0] - a[0], uy = b[1] - a[1], vx = c[0] - b[0], vy = c[1] - b[1];
+    const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+    if (!lu || !lv) return 0;
+    const cos = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv)));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+  var num = (v) => String(Math.round(v * 10) / 10);
+  function smoothPathD2(poly, cornerAngle, tolerance = 1) {
+    const n = poly.length;
+    if (n < 3) return "";
+    const at = (p, q, len) => {
+      const l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      return [p[0] + (q[0] - p[0]) * len / l, p[1] + (q[1] - p[1]) * len / l];
+    };
+    const joins = poly.map((p, i) => {
+      const prev = poly[(i + n - 1) % n], next = poly[(i + 1) % n];
+      const bend = turnAngle(prev, p, next);
+      if (bend > cornerAngle || bend === 0) return { corner: true, a: p, b: p };
+      const reach = 2 * tolerance / Math.tan(bend * Math.PI / 180 / 4);
+      const arm = (q) => Math.min(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2, reach);
+      return { corner: false, a: at(p, prev, arm(prev)), b: at(p, next, arm(next)) };
+    });
+    const xy = (q) => num(q[0]) + " " + num(q[1]);
+    let d = "M" + xy(joins[n - 1].b);
+    for (let i = 0; i < n; i++) {
+      const j = joins[i];
+      d += "L" + xy(j.a);
+      if (!j.corner) d += "Q" + xy(poly[i]) + " " + xy(j.b);
+    }
+    return d + "Z";
+  }
+
+  // apps/ZEditor/src/model/trace/quantize.js
+  function quantizePixels(pixels, settings) {
+    const { width, height, data } = pixels;
+    const count = width * height;
+    const labels = new Int16Array(count).fill(-1);
+    const opaque = (i) => data[i * 4 + 3] >= 128;
+    const lum = (i) => 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    let palette;
+    if (settings.mode === "bw") {
+      palette = [[0, 0, 0], [255, 255, 255]];
+      for (let i = 0; i < count; i++) if (opaque(i)) labels[i] = lum(i) < settings.threshold ? 0 : 1;
+    } else {
+      const gray = settings.mode === "gray";
+      const colorOf = gray ? (i) => {
+        const l = lum(i);
+        return [l, l, l];
+      } : (i) => [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
+      const centers = kMeans(samplePixels(count, opaque, colorOf), settings.colors);
+      palette = centers.map((c) => c.map((x) => Math.round(x)));
+      for (let i = 0; i < count; i++) if (opaque(i)) labels[i] = nearest(palette, colorOf(i));
+    }
+    if (settings.ignoreWhite === "drop") {
+      const white = palette.map(([r, g, b]) => r > 225 && g > 225 && b > 225);
+      for (let i = 0; i < count; i++) if (labels[i] >= 0 && white[labels[i]]) labels[i] = -1;
+    }
+    return sortedByUse(labels, palette);
+  }
+  function samplePixels(count, opaque, colorOf) {
+    const step = Math.max(1, Math.floor(count / 2e4));
+    const samples = [];
+    for (let i = 0; i < count; i += step) if (opaque(i)) samples.push(colorOf(i));
+    return samples;
+  }
+  var dist2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  function nearest(centers, c) {
+    let best = 0, bestD = Infinity;
+    for (let k = 0; k < centers.length; k++) {
+      const d = dist2(centers[k], c);
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
+    }
+    return best;
+  }
+  function kMeans(samples, k) {
+    if (!samples.length) return [[0, 0, 0]];
+    const byLum = samples.slice().sort((a, b) => a[0] + a[1] + a[2] - (b[0] + b[1] + b[2]));
+    const n = Math.min(k, samples.length);
+    let centers = Array.from({ length: n }, (_, j) => byLum[Math.floor((j + 0.5) / n * byLum.length)].slice());
+    for (let iter = 0; iter < 12; iter++) {
+      const sums = centers.map(() => [0, 0, 0, 0]);
+      let far = null, farD = -1;
+      for (const s of samples) {
+        const k2 = nearest(centers, s);
+        const d = dist2(centers[k2], s);
+        if (d > farD) {
+          farD = d;
+          far = s;
+        }
+        const sum = sums[k2];
+        sum[0] += s[0];
+        sum[1] += s[1];
+        sum[2] += s[2];
+        sum[3]++;
+      }
+      let moved = 0;
+      centers = centers.map((c, j) => {
+        const [r, g, b, m] = sums[j];
+        const next = m ? [r / m, g / m, b / m] : far.slice();
+        moved = Math.max(moved, dist2(c, next));
+        return next;
+      });
+      if (moved < 0.25) break;
+    }
+    return centers;
+  }
+  function sortedByUse(labels, palette) {
+    const keyOf = (c) => c.join(",");
+    const merged = /* @__PURE__ */ new Map();
+    const remap = palette.map((c, i) => {
+      const key = keyOf(c);
+      if (!merged.has(key)) merged.set(key, i);
+      return merged.get(key);
+    });
+    const uses = new Array(palette.length).fill(0);
+    for (let i = 0; i < labels.length; i++) if (labels[i] >= 0) uses[remap[labels[i]]]++;
+    const order = palette.map((_, i) => i).filter((i) => uses[i] > 0).sort((a, b) => uses[b] - uses[a] || a - b);
+    const rank = new Int16Array(palette.length).fill(-1);
+    order.forEach((i, r) => {
+      rank[i] = r;
+    });
+    const out = new Int16Array(labels.length);
+    for (let i = 0; i < labels.length; i++) out[i] = labels[i] >= 0 ? rank[remap[labels[i]]] : -1;
+    return { labels: out, palette: order.map((i) => palette[i]) };
+  }
+
+  // apps/ZEditor/src/model/trace/traceImage.js
+  var hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+  function traceImage(pixels, settings) {
+    const s = normalizeTraceSettings(settings);
+    const { tolerance, cornerAngle, minArea } = tracerParams(s);
+    const { width, height } = pixels;
+    const { labels, palette } = quantizePixels(pixels, s);
+    const mask = new Uint8Array(width * height);
+    const paths = [];
+    for (let rank = 0; rank < palette.length; rank++) {
+      for (let i = 0; i < mask.length; i++) mask[i] = s.method === "abut" ? labels[i] === rank : labels[i] >= rank;
+      let d = "";
+      for (const loop of traceMaskLoops(mask, width, height)) {
+        if (Math.abs(loopArea(loop)) < Math.max(1, minArea)) continue;
+        d += smoothPathD2(simplifyClosed(edgeMidpoints(loop), tolerance), cornerAngle, tolerance);
+      }
+      if (d) paths.push({ color: hex(palette[rank]), d });
+    }
+    return { width, height, paths };
+  }
+
+  // apps/ZEditor/src/render/traceSource.js
+  async function traceSourceFromImage(ann, pageFilter) {
+    const natural = Math.max(ann.cropW || ann.naturalWidth || ann.width, ann.cropH || ann.naturalHeight || ann.height);
+    const long = Math.min(TRACE_MAX_SIDE, natural);
+    const scale = long / Math.max(ann.width, ann.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(ann.width * scale));
+    canvas.height = Math.max(1, Math.round(ann.height * scale));
+    const plain = {
+      ...ann,
+      x: 0,
+      y: 0,
+      angle: void 0,
+      opacity: void 0,
+      blend: void 0,
+      ...Object.fromEntries(IMAGE_EFFECTS.map((effect) => [effect.key, void 0]))
+    };
+    await drawImageOnCanvas(canvas.getContext("2d"), plain, scale, pageFilter);
+    return canvas.toDataURL("image/png");
+  }
+  var pixelCache = /* @__PURE__ */ new Map();
+  async function pixelsOf(src) {
+    if (pixelCache.has(src)) return pixelCache.get(src);
+    const img = await loadImageElement(src);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    pixelCache.set(src, pixels);
+    if (pixelCache.size > 3) pixelCache.delete(pixelCache.keys().next().value);
+    return pixels;
+  }
+  async function runTrace(src, settings) {
+    const result = traceImage(await pixelsOf(src), settings);
+    return { traceW: result.width, traceH: result.height, paths: result.paths };
+  }
+
+  // apps/ZEditor/src/state/useImageTrace.js
+  var { useState: useState6, useRef: useRef6 } = React;
+  var RETRACE_DELAY_MS = 120;
+  function useImageTrace({ doc, selection, edits }) {
+    const [busyId, setBusyId] = useState6(null);
+    const [error, setError] = useState6(null);
+    const timerRef = useRef6(null);
+    const tokenRef = useRef6(0);
+    async function trace(image, preset) {
+      const pageIdx = doc.selectedIdx;
+      if (pageIdx === null || !image) return;
+      const id = doc.nextAnnIdRef.current++;
+      setBusyId(image.id);
+      setError(null);
+      try {
+        const settings = presetSettings(preset);
+        const source = await traceSourceFromImage(image, doc.pageFilter);
+        const result = await runTrace(source, settings);
+        const layer = newTraceLayer(id, image, source, settings, result);
+        edits.updateAnnotationsFor(pageIdx, (anns) => anns.flatMap((a) => a.id === image.id ? [{ ...a, hidden: true }, { ...layer, groupId: a.groupId }] : [a]));
+        selection.setSelectedAnnIds([]);
+        selection.setSelectedAnnId(id);
+      } catch (err) {
+        setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+      } finally {
+        setBusyId(null);
+      }
+    }
+    function change(ann, patch) {
+      const settings = patchedTraceSettings(ann.trace, patch, presetSettings);
+      edits.handleUpdateAnnotation(ann.id, { trace: settings });
+      const needsTrace = ann.traceSource && Object.keys(patch).some((k) => !TRACE_DRAW_PROPS.includes(k));
+      if (!needsTrace) return;
+      const token = ++tokenRef.current;
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(async () => {
+        setBusyId(ann.id);
+        try {
+          const result = await runTrace(ann.traceSource, settings);
+          if (token === tokenRef.current) edits.handleUpdateAnnotation(ann.id, result);
+        } catch (err) {
+          setError("Couldn't trace this image: " + (err && err.message ? err.message : err));
+        } finally {
+          if (token === tokenRef.current) setBusyId(null);
+        }
+      }, RETRACE_DELAY_MS);
+    }
+    function recolor(ann, color, value) {
+      if (color == null) {
+        edits.handleUpdateAnnotation(ann.id, { recolor: void 0 });
+        return;
+      }
+      const next = { ...ann.recolor || {} };
+      if (value == null) delete next[color];
+      else next[color] = value;
+      edits.handleUpdateAnnotation(ann.id, { recolor: Object.keys(next).length ? next : void 0 });
+    }
+    function expand(ann) {
+      const pageIdx = doc.selectedIdx;
+      if (pageIdx === null) return;
+      tokenRef.current++;
+      clearTimeout(timerRef.current);
+      edits.updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...expandedTracePatch(a) } : a));
+    }
+    async function rasterize(ann) {
+      const pageIdx = doc.selectedIdx;
+      tokenRef.current++;
+      clearTimeout(timerRef.current);
+      const patch = await rasterizedTracePatch(ann);
+      if (patch && pageIdx !== null) edits.updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
+    }
+    return { busyId, error, trace, change, recolor, expand, rasterize };
+  }
+
   // apps/ZEditor/src/render/magicErase.js
   var COLOR_SCALE = 1.5;
   function magicMatchKey(s) {
@@ -9325,18 +9862,18 @@
   }
 
   // apps/ZEditor/src/state/useMagicErase.js
-  var { useState: useState6, useRef: useRef6, useEffect: useEffect3 } = React;
+  var { useState: useState7, useRef: useRef7, useEffect: useEffect3 } = React;
   var RECOMPUTE_DELAY_MS = 60;
   var NO_EDGE_REFINING = { feather: 0, edgeShift: 0, specks: 0, defringe: 0 };
   function useMagicErase({ doc, selection, edits, toolDefaults }) {
-    const [active, setActive] = useState6(false);
-    const [preview, setPreview] = useState6(null);
-    const [notice, setNotice] = useState6(null);
-    const noticeTimerRef = useRef6(null);
-    const sessionRef = useRef6(null);
-    const loadTokenRef = useRef6(0);
+    const [active, setActive] = useState7(false);
+    const [preview, setPreview] = useState7(null);
+    const [notice, setNotice] = useState7(null);
+    const noticeTimerRef = useRef7(null);
+    const sessionRef = useRef7(null);
+    const loadTokenRef = useRef7(0);
     const settings = toolDefaults.magicEraser;
-    const latest = useRef6(null);
+    const latest = useRef7(null);
     latest.current = { settings, edits, doc };
     function compute(s) {
       const st = { ...latest.current.settings, clickMode: s.mode };
@@ -9649,7 +10186,7 @@
       let rasterized = null;
       if (target.type !== "image") {
         const view = resolvePageText(annotations).find((a) => a.id === target.id);
-        rasterized = target.type === "text" ? await rasterizedTextPatch(view) : await rasterizedRectPatch(target);
+        rasterized = target.type === "text" ? await rasterizedTextPatch(view) : target.type === "trace" ? await rasterizedTracePatch(target) : await rasterizedRectPatch(target);
         if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
         base = { ...target, ...rasterized };
       }
@@ -9785,12 +10322,12 @@
   }
 
   // apps/ZEditor/src/state/useMarquee.js
-  var { useState: useState7, useRef: useRef7, useEffect: useEffect4 } = React;
+  var { useState: useState8, useRef: useRef8, useEffect: useEffect4 } = React;
   function useMarquee({ doc, selection, edits, toolDefaults, status }) {
-    const [region, setRegion] = useState7(null);
-    const [busy, setBusy] = useState7(false);
-    const busyRef = useRef7(false);
-    const latest = useRef7(null);
+    const [region, setRegion] = useState8(null);
+    const [busy, setBusy] = useState8(false);
+    const busyRef = useRef8(false);
+    const latest = useRef8(null);
     latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee };
     useEffect4(() => {
       setRegion(null);
@@ -9860,9 +10397,9 @@
   }
 
   // apps/ZEditor/src/state/useOnionGhost.js
-  var { useState: useState8, useEffect: useEffect5 } = React;
+  var { useState: useState9, useEffect: useEffect5 } = React;
   function useOnionGhost({ onionSkinOn, pages, selectedIdx, pdfDocsRef }) {
-    const [onionGhostSrc, setOnionGhostSrc] = useState8(null);
+    const [onionGhostSrc, setOnionGhostSrc] = useState9(null);
     useEffect5(() => {
       if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) {
         setOnionGhostSrc(null);
@@ -10118,16 +10655,16 @@
   }
 
   // apps/ZEditor/src/state/useProject.js
-  var { useEffect: useEffect6, useState: useState9, useRef: useRef8 } = React;
+  var { useEffect: useEffect6, useState: useState10, useRef: useRef9 } = React;
   function useProject({ doc, history, status, view, toolDefaults }) {
     const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
     const { setLoading, setErrorMsg } = status;
-    const projectInputRef = useRef8(null);
-    const [savingProject, setSavingProject] = useState9(false);
-    const [projectFile, setProjectFile] = useState9(null);
-    const [docTitle, setDocTitle] = useState9("");
-    const [justSaved, setJustSaved] = useState9(false);
-    const justSavedTimerRef = useRef8(null);
+    const projectInputRef = useRef9(null);
+    const [savingProject, setSavingProject] = useState10(false);
+    const [projectFile, setProjectFile] = useState10(null);
+    const [docTitle, setDocTitle] = useState10("");
+    const [justSaved, setJustSaved] = useState10(false);
+    const justSavedTimerRef = useRef9(null);
     function flashSaved() {
       setJustSaved(true);
       clearTimeout(justSavedTimerRef.current);
@@ -10185,8 +10722,8 @@
       e.target.value = "";
       if (file) handleLoadProjectFile(file);
     }
-    const [reloading, setReloading] = useState9(false);
-    const [startupChecked, setStartupChecked] = useState9(false);
+    const [reloading, setReloading] = useState10(false);
+    const [startupChecked, setStartupChecked] = useState10(false);
     async function reloadKeepingWork() {
       if (reloading) return;
       setReloading(true);
@@ -10208,7 +10745,7 @@
         setErrorMsg("Couldn't keep the work for the reload, so the page wasn't reloaded — " + (err && err.message ? err.message : "unknown error"));
       }
     }
-    const hasPagesRef = useRef8(false);
+    const hasPagesRef = useRef9(false);
     hasPagesRef.current = pages.length > 0;
     useEffect6(() => {
       warnBeforeLeaving(() => hasPagesRef.current);
@@ -10270,14 +10807,14 @@
   }
 
   // apps/ZEditor/src/state/useSelection.js
-  var { useState: useState10, useEffect: useEffect7, useRef: useRef9 } = React;
+  var { useState: useState11, useEffect: useEffect7, useRef: useRef10 } = React;
   function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
-    const [tool, setTool] = useState10("select");
-    const [selectedAnnId, setSelectedAnnId] = useState10(null);
-    const [selectedAnnIds, setSelectedAnnIds] = useState10([]);
-    const [editingAnnId, setEditingAnnId] = useState10(null);
-    const [croppingAnnId, setCroppingAnnId] = useState10(null);
-    const panelPickRef = useRef9(null);
+    const [tool, setTool] = useState11("select");
+    const [selectedAnnId, setSelectedAnnId] = useState11(null);
+    const [selectedAnnIds, setSelectedAnnIds] = useState11([]);
+    const [editingAnnId, setEditingAnnId] = useState11(null);
+    const [croppingAnnId, setCroppingAnnId] = useState11(null);
+    const panelPickRef = useRef10(null);
     function selectTool(t) {
       setTool(t);
       setEditingAnnId(null);
@@ -10384,11 +10921,11 @@
   }
 
   // apps/ZEditor/src/state/useStatus.js
-  var { useState: useState11 } = React;
+  var { useState: useState12 } = React;
   function useStatus() {
-    const [loading, setLoading] = useState11(false);
-    const [errorMsg, setErrorMsg] = useState11(null);
-    const [notice, setNotice] = useState11(null);
+    const [loading, setLoading] = useState12(false);
+    const [errorMsg, setErrorMsg] = useState12(null);
+    const [notice, setNotice] = useState12(null);
     return { loading, setLoading, errorMsg, setErrorMsg, notice, setNotice };
   }
 
@@ -10418,10 +10955,10 @@
   var SOFT_ERASER_DABS_PER_RADIUS = 4;
 
   // apps/ZEditor/src/state/useToolDefaults.js
-  var { useState: useState12, useEffect: useEffect8 } = React;
+  var { useState: useState13, useEffect: useEffect8 } = React;
   function useToolDefaults() {
-    const [fontOptions, setFontOptions] = useState12(DEFAULT_FONT_OPTIONS);
-    const [textStyles, setTextStyles] = useState12(readStoredTextStyles);
+    const [fontOptions, setFontOptions] = useState13(DEFAULT_FONT_OPTIONS);
+    const [textStyles, setTextStyles] = useState13(readStoredTextStyles);
     useEffect8(() => {
       try {
         localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles));
@@ -10447,24 +10984,24 @@
       if (!families.length) return;
       setFontOptions((prev) => Array.from(/* @__PURE__ */ new Set([...prev, ...families])).sort((a, b) => a.localeCompare(b)));
     }
-    const [penColor, setPenColor] = useState12(PEN_DEFAULTS.color);
-    const [penWidth, setPenWidth] = useState12(PEN_DEFAULTS.width);
-    const [penTaper, setPenTaper] = useState12(0);
-    const [eraserMode, setEraserMode] = useState12("soft");
-    const [softEraser, setSoftEraser] = useState12(SOFT_ERASER_DEFAULTS);
-    const [magicEraser, setMagicEraser] = useState12(MAGIC_ERASER_DEFAULTS);
-    const [marquee, setMarquee] = useState12(MARQUEE_DEFAULTS);
-    const [highlighterColor, setHighlighterColor] = useState12(HIGHLIGHTER_DEFAULTS.color);
-    const [highlighterWidth, setHighlighterWidth] = useState12(HIGHLIGHTER_DEFAULTS.width);
-    const [highlighterTaper, setHighlighterTaper] = useState12(0);
-    const [textFontFamily, setTextFontFamily] = useState12(DEFAULT_FONT_OPTIONS[0]);
-    const [textFontSize, setTextFontSize] = useState12(13.2);
-    const [textBold, setTextBold] = useState12(false);
-    const [textItalic, setTextItalic] = useState12(false);
-    const [textUnderline, setTextUnderline] = useState12(false);
-    const [textColor, setTextColor] = useState12("#1a1a1a");
-    const [textAlign, setTextAlign] = useState12("left");
-    const [rectDefaults, setRectDefaults] = useState12(() => controlValues({}, RECT_CONTROLS));
+    const [penColor, setPenColor] = useState13(PEN_DEFAULTS.color);
+    const [penWidth, setPenWidth] = useState13(PEN_DEFAULTS.width);
+    const [penTaper, setPenTaper] = useState13(0);
+    const [eraserMode, setEraserMode] = useState13("soft");
+    const [softEraser, setSoftEraser] = useState13(SOFT_ERASER_DEFAULTS);
+    const [magicEraser, setMagicEraser] = useState13(MAGIC_ERASER_DEFAULTS);
+    const [marquee, setMarquee] = useState13(MARQUEE_DEFAULTS);
+    const [highlighterColor, setHighlighterColor] = useState13(HIGHLIGHTER_DEFAULTS.color);
+    const [highlighterWidth, setHighlighterWidth] = useState13(HIGHLIGHTER_DEFAULTS.width);
+    const [highlighterTaper, setHighlighterTaper] = useState13(0);
+    const [textFontFamily, setTextFontFamily] = useState13(DEFAULT_FONT_OPTIONS[0]);
+    const [textFontSize, setTextFontSize] = useState13(13.2);
+    const [textBold, setTextBold] = useState13(false);
+    const [textItalic, setTextItalic] = useState13(false);
+    const [textUnderline, setTextUnderline] = useState13(false);
+    const [textColor, setTextColor] = useState13("#1a1a1a");
+    const [textAlign, setTextAlign] = useState13("left");
+    const [rectDefaults, setRectDefaults] = useState13(() => controlValues({}, RECT_CONTROLS));
     return {
       fontOptions,
       setFontOptions,
@@ -10595,7 +11132,7 @@
     return ticks;
   }
   function snapToGuides(box, guides, threshold) {
-    const nearest = (edges, lines) => {
+    const nearest2 = (edges, lines) => {
       let best = 0, bestDist = threshold;
       for (const edge of edges) for (const line of lines) {
         const d = Math.abs(line - edge);
@@ -10607,29 +11144,29 @@
       return best;
     };
     return {
-      dx: nearest([box.x0, (box.x0 + box.x1) / 2, box.x1], guides.x || []),
-      dy: nearest([box.y0, (box.y0 + box.y1) / 2, box.y1], guides.y || [])
+      dx: nearest2([box.x0, (box.x0 + box.x1) / 2, box.x1], guides.x || []),
+      dy: nearest2([box.y0, (box.y0 + box.y1) / 2, box.y1], guides.y || [])
     };
   }
 
   // apps/ZEditor/src/state/useViewSettings.js
-  var { useState: useState13 } = React;
+  var { useState: useState14 } = React;
   function useViewSettings() {
-    const [guidesOn, setGuidesOn] = useState13(false);
-    const [centerGuideOn, setCenterGuideOn] = useState13(false);
-    const [guideFormat, setGuideFormat] = useState13("match");
-    const [guideMarginIn, setGuideMarginIn] = useState13(DEFAULT_GUIDE_MARGIN_IN);
-    const [guideBleedIn, setGuideBleedIn] = useState13(DEFAULT_GUIDE_BLEED_IN);
-    const [pageNumbers, setPageNumbers] = useState13(DEFAULT_PAGE_NUMBERS);
-    const [onionSkinOn, setOnionSkinOn] = useState13(false);
-    const [onionSkinOpacity, setOnionSkinOpacity] = useState13(0.3);
-    const [layersOpen, setLayersOpen] = useState13(true);
-    const [rulersOn, setRulersOn] = useState13(true);
-    const [rulerUnit, setRulerUnit] = useState13(DEFAULT_RULER_UNIT);
-    const [rulerGuides, setRulerGuides] = useState13([]);
-    const [snapToGuidesOn, setSnapToGuidesOn] = useState13(true);
-    const [layersPosition, setLayersPosition] = useState13(null);
-    const [layersSize, setLayersSize] = useState13(null);
+    const [guidesOn, setGuidesOn] = useState14(false);
+    const [centerGuideOn, setCenterGuideOn] = useState14(false);
+    const [guideFormat, setGuideFormat] = useState14("match");
+    const [guideMarginIn, setGuideMarginIn] = useState14(DEFAULT_GUIDE_MARGIN_IN);
+    const [guideBleedIn, setGuideBleedIn] = useState14(DEFAULT_GUIDE_BLEED_IN);
+    const [pageNumbers, setPageNumbers] = useState14(DEFAULT_PAGE_NUMBERS);
+    const [onionSkinOn, setOnionSkinOn] = useState14(false);
+    const [onionSkinOpacity, setOnionSkinOpacity] = useState14(0.3);
+    const [layersOpen, setLayersOpen] = useState14(true);
+    const [rulersOn, setRulersOn] = useState14(true);
+    const [rulerUnit, setRulerUnit] = useState14(DEFAULT_RULER_UNIT);
+    const [rulerGuides, setRulerGuides] = useState14([]);
+    const [snapToGuidesOn, setSnapToGuidesOn] = useState14(true);
+    const [layersPosition, setLayersPosition] = useState14(null);
+    const [layersSize, setLayersSize] = useState14(null);
     function settingsForSave() {
       return {
         guidesOn,
@@ -10710,7 +11247,7 @@
   }
 
   // apps/ZEditor/src/state/useZoom.js
-  var { useState: useState14, useRef: useRef10, useLayoutEffect, useEffect: useEffect9 } = React;
+  var { useState: useState15, useRef: useRef11, useLayoutEffect, useEffect: useEffect9 } = React;
   var PINCH_EVENT = "ze-pinch";
   var TOP_GAP = 40;
   function centerArtboard(board) {
@@ -10721,10 +11258,10 @@
     pane.scrollTop = h + 2 * TOP_GAP <= pane.clientHeight ? board.offsetTop + h / 2 - pane.clientHeight / 2 : board.offsetTop - TOP_GAP;
   }
   function useZoom() {
-    const [zoomPercent, setZoomPercent] = useState14(ZOOM_PERCENT.initial);
-    const previewPaneRef = useRef10(null);
-    const zoomAnchorRef = useRef10(null);
-    const zoomRef = useRef10(zoomPercent);
+    const [zoomPercent, setZoomPercent] = useState15(ZOOM_PERCENT.initial);
+    const previewPaneRef = useRef11(null);
+    const zoomAnchorRef = useRef11(null);
+    const zoomRef = useRef11(zoomPercent);
     zoomRef.current = zoomPercent;
     function artboardElement() {
       return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
@@ -10851,9 +11388,9 @@
   }
 
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef: useRef11, useEffect: useEffect10 } = React;
+  var { useRef: useRef12, useEffect: useEffect10 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
-    const textureCanvasRef = useRef11(null);
+    const textureCanvasRef = useRef12(null);
     const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
     const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
     useEffect10(() => {
@@ -10933,9 +11470,9 @@
   }
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
-  var { useRef: useRef12, useEffect: useEffect11 } = React;
+  var { useRef: useRef13, useEffect: useEffect11 } = React;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
-    const halftoneCanvasRef = useRef12(null);
+    const halftoneCanvasRef = useRef13(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
     const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
@@ -11218,7 +11755,7 @@
   var textSelectionStore = { annId: null, start: 0, end: 0 };
 
   // apps/ZEditor/src/ui/canvas/AnnotationText.jsx
-  var { useRef: useRef13, useState: useState15, useMemo: useMemo2, useEffect: useEffect12, useLayoutEffect: useLayoutEffect2 } = React;
+  var { useRef: useRef14, useState: useState16, useMemo: useMemo2, useEffect: useEffect12, useLayoutEffect: useLayoutEffect2 } = React;
   function spanCss(seg) {
     const span = seg.span || {};
     if (!seg.color && span.underline == null && span.strike == null) return void 0;
@@ -11226,13 +11763,13 @@
     return { color: seg.color || void 0, textDecorationLine: span.underline != null || span.strike != null ? lines.join(" ") || "none" : void 0 };
   }
   function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate, onLinkNext }) {
-    const boxRef = useRef13(null);
-    const inputRef = useRef13(null);
-    const pendingCaretRef = useRef13(null);
-    const liveCanvasRef = useRef13(null);
-    const dragRef = useRef13(null);
-    const goalXRef = useRef13(null);
-    const [sel, setSel] = useState15({ start: 0, end: 0, dir: "forward" });
+    const boxRef = useRef14(null);
+    const inputRef = useRef14(null);
+    const pendingCaretRef = useRef14(null);
+    const liveCanvasRef = useRef14(null);
+    const dragRef = useRef14(null);
+    const goalXRef = useRef14(null);
+    const [sel, setSel] = useState16({ start: 0, end: 0, dir: "forward" });
     useLayoutEffect2(() => {
       if (!isEditing || !inputRef.current) return;
       const caret = pendingCaretRef.current != null ? pendingCaretRef.current : ann.text.length;
@@ -11596,6 +12133,53 @@
     );
   }
 
+  // apps/ZEditor/src/ui/canvas/TraceSvg.jsx
+  var OUTLINE_COLOR = "#2b7fff";
+  function TraceSvg({ ann, view }) {
+    const shown = view || normalizeTraceSettings(ann.trace).view;
+    const box = { width: "100%", height: "100%", display: "block" };
+    if (!ann.traceW || !ann.traceH) return null;
+    const outlines = shown === "outlines" || shown === "outlinesSource";
+    const showSource = (shown === "source" || shown === "outlinesSource") && ann.traceSource;
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, showSource && /* @__PURE__ */ React.createElement("img", { src: ann.traceSource, alt: "", draggable: "false", style: { ...box, position: "absolute", inset: 0, opacity: shown === "outlinesSource" ? 0.45 : 1 } }), shown !== "source" && /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${ann.traceW} ${ann.traceH}`, preserveAspectRatio: "none", style: { ...box, position: "absolute", inset: 0, overflow: "visible" }, "aria-hidden": "true" }, outlines ? (ann.paths || []).map((p, i) => /* @__PURE__ */ React.createElement("path", { key: i, d: p.d, fill: "none", stroke: OUTLINE_COLOR, strokeWidth: "1", vectorEffect: "non-scaling-stroke" })) : traceDrawList(ann).map((item, i) => /* @__PURE__ */ React.createElement(
+      "path",
+      {
+        key: i,
+        d: item.d,
+        fill: item.fill || "none",
+        stroke: item.stroke || void 0,
+        strokeWidth: item.stroke ? item.strokeWidth : void 0,
+        strokeLinejoin: "round",
+        strokeLinecap: "round"
+      }
+    ))));
+  }
+
+  // apps/ZEditor/src/ui/canvas/AnnotationTrace.jsx
+  function AnnotationTrace({ ann, tool, isSelected, showHandles, onPress, onUpdate, zoom }) {
+    function startResize(handle, e) {
+      const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+      const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+      trackPointerDrag((ev) => {
+        const { dx, dy } = dragDelta(ev);
+        onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
+      });
+    }
+    return /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        "data-ann-id": ann.id,
+        className: "ze-ann-image ze-ann-trace" + (isSelected ? " is-selected" : "") + (ann.locked ? " is-locked" : ""),
+        style: boxOuterStyle(ann),
+        onMouseDown: (e) => {
+          if (tool === "select") onPress(e, ann);
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-ann-image-shadow", style: { ...boxGroupStyle(ann), position: "absolute", inset: 0 } }, /* @__PURE__ */ React.createElement(TraceSvg, { ann })),
+      showHandles && /* @__PURE__ */ React.createElement(ResizeHandles, { handles: ALL_RESIZE_HANDLES, onStart: startResize, onRotate: (angle) => onUpdate(ann.id, { angle }) })
+    );
+  }
+
   // apps/ZEditor/src/ui/canvas/StrokeShape.jsx
   function StrokeShape({ ann, tool, isSelected, onPress }) {
     const isHi = ann.tool === "highlighter";
@@ -11700,6 +12284,9 @@
         }
       );
     }
+    if (a.type === "trace") {
+      return /* @__PURE__ */ React.createElement(AnnotationTrace, { ann: a, tool, isSelected, showHandles, onPress, onUpdate, zoom });
+    }
     if (a.type === "text") {
       return /* @__PURE__ */ React.createElement(
         AnnotationText,
@@ -11726,7 +12313,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/ClipWrap.jsx
-  var { useState: useState16, useEffect: useEffect13, useRef: useRef14 } = React;
+  var { useState: useState17, useEffect: useEffect13, useRef: useRef15 } = React;
   var MASK_MAX_SCALE = 2;
   var MASK_MAX_PIXELS = 16e6;
   function shapeSignature(base, pageSize) {
@@ -11737,8 +12324,8 @@
     return JSON.stringify(summary) + "@" + pageSize.width + "x" + pageSize.height;
   }
   function ClipWrap({ base, pageSize, pageFilter, blend, children }) {
-    const [maskUrl, setMaskUrl] = useState16(null);
-    const urlRef = useRef14(null);
+    const [maskUrl, setMaskUrl] = useState17(null);
+    const urlRef = useRef15(null);
     const signature = shapeSignature(base, pageSize);
     useEffect13(() => {
       let cancelled = false;
@@ -12235,10 +12822,10 @@
   }
 
   // apps/ZEditor/src/ui/canvas/usePageBackground.js
-  var { useState: useState17, useRef: useRef15, useEffect: useEffect14 } = React;
+  var { useState: useState18, useRef: useRef16, useEffect: useEffect14 } = React;
   function usePageBackground(page, pdfDocsRef, pageFilter) {
-    const canvasRef = useRef15(null);
-    const [canvasSize, setCanvasSize] = useState17({ width: 0, height: 0 });
+    const canvasRef = useRef16(null);
+    const [canvasSize, setCanvasSize] = useState18({ width: 0, height: 0 });
     useEffect14(() => {
       if (!page) return;
       let cancelled = false;
@@ -12281,7 +12868,7 @@
 
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
   var SNAP_PX = 6;
-  var { useState: useState18, useRef: useRef16, useEffect: useEffect15, useLayoutEffect: useLayoutEffect3 } = React;
+  var { useState: useState19, useRef: useRef17, useEffect: useEffect15, useLayoutEffect: useLayoutEffect3 } = React;
   function ComposeCanvas({
     pdfDocsRef,
     page,
@@ -12334,27 +12921,27 @@
     rulerUnit
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
-    const layerRef = useRef16(null);
-    const artboardRef = useRef16(null);
+    const layerRef = useRef17(null);
+    const artboardRef = useRef17(null);
     useLayoutEffect3(() => {
       centerArtboard(artboardRef.current);
     }, [page && page.key, canvasSize.width, canvasSize.height]);
-    const [, setWrapTick] = useState18(0);
+    const [, setWrapTick] = useState19(0);
     useEffect15(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
-    const [dragRect, setDragRect] = useState18(null);
-    const drawingRef = useRef16(null);
-    const [brushPos, setBrushPos] = useState18(null);
-    const [polygonHover, setPolygonHover] = useState18(null);
+    const [dragRect, setDragRect] = useState19(null);
+    const drawingRef = useRef17(null);
+    const [brushPos, setBrushPos] = useState19(null);
+    const [polygonHover, setPolygonHover] = useState19(null);
     const drawingPolygon = tool === "marquee" && Boolean(marquee) && marquee.kind === "polygon" && !marquee.closed;
     const softErasing = tool === "eraser" && eraserMode === "soft";
     const magicErasing = tool === "eraser" && eraserMode === "magic";
-    const [, setDrawTick] = useState18(0);
-    const [measure, setMeasure] = useState18(null);
-    const measureGesture = useRef16(null);
+    const [, setDrawTick] = useState19(0);
+    const [measure, setMeasure] = useState19(null);
+    const measureGesture = useRef17(null);
     const measuring = tool === "measure";
     const pageKey = page && page.key;
     useEffect15(() => setMeasure(null), [measuring, pageKey]);
-    const [eraseTargetId, setEraseTargetId] = useState18(null);
+    const [eraseTargetId, setEraseTargetId] = useState19(null);
     useEffect15(() => setEraseTargetId(null), [softErasing, pageKey]);
     const eraseTarget = eraseTargetId !== null && annotations.some((a) => a.id === eraseTargetId && a.type === "image" && !a.hidden && !a.locked) ? eraseTargetId : null;
     function overlayPoint(e) {
@@ -12659,7 +13246,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/Rulers.jsx
-  var { useEffect: useEffect16, useLayoutEffect: useLayoutEffect4, useRef: useRef17, useState: useState19 } = React;
+  var { useEffect: useEffect16, useLayoutEffect: useLayoutEffect4, useRef: useRef18, useState: useState20 } = React;
   var RULER_SIZE = 18;
   function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
     const dpr = window.devicePixelRatio || 1;
@@ -12733,11 +13320,11 @@
     }
   }
   function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
-    const topRef = useRef17(null);
-    const leftRef = useRef17(null);
-    const [geom, setGeom] = useState19(null);
-    const [cursor, setCursor] = useState19(null);
-    const [drag, setDrag] = useState19(null);
+    const topRef = useRef18(null);
+    const leftRef = useRef18(null);
+    const [geom, setGeom] = useState20(null);
+    const [cursor, setCursor] = useState20(null);
+    const [drag, setDrag] = useState20(null);
     const readoutSpot = (x, y) => {
       if (document.documentElement.getAttribute("data-ze-input") !== "touch") return { left: x + 12, top: y + 12 };
       const pane = paneRef.current;
@@ -12745,7 +13332,7 @@
       const left = x + 40 > w - 90 ? x - 130 : x + 40;
       return { left: Math.max(4, left), top: Math.max(4, y - 72) };
     };
-    const [hover, setHover] = useState19(null);
+    const [hover, setHover] = useState20(null);
     const pxPerPt = MAIN_SCALE * zoom;
     const gap = hover && geom && !drag ? guideGap(guides, hover.axis, (hover.at - geom[hover.axis === "x" ? "left" : "top"]) / pxPerPt) : null;
     const hoverOn = (axis) => (e) => {
@@ -12920,7 +13507,7 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
-  var { useState: useState20 } = React;
+  var { useState: useState21 } = React;
   var MM_PER_INCH = 25.4;
   var ptToMm = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
   var mmToPt = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
@@ -12933,11 +13520,11 @@
     return Number.isFinite(v) && v > 0 ? Math.max(CUSTOM_MIN_MM, Math.min(CUSTOM_MAX_MM, v)) : fallback;
   };
   function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
-    const [presetKey, setPresetKey] = useState20("a5");
-    const [orientation, setOrientation] = useState20("portrait");
-    const [pageCountText, setPageCountText] = useState20("1");
-    const [customWText, setCustomWText] = useState20("148");
-    const [customHText, setCustomHText] = useState20("210");
+    const [presetKey, setPresetKey] = useState21("a5");
+    const [orientation, setOrientation] = useState21("portrait");
+    const [pageCountText, setPageCountText] = useState21("1");
+    const [customWText, setCustomWText] = useState21("148");
+    const [customHText, setCustomHText] = useState21("210");
     if (!open) return null;
     const custom = presetKey === "custom";
     const customW = clampMm(customWText, 148), customH = clampMm(customHText, 210);
@@ -13060,13 +13647,13 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
-  var { useEffect: useEffect18, useState: useState21 } = React;
+  var { useEffect: useEffect18, useState: useState22 } = React;
   var OPEN_KINDS = [
     { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
     { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
   ];
   function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
-    const [kind, setKind] = useState21("project");
+    const [kind, setKind] = useState22("project");
     useEffect18(() => {
       if (!open) return void 0;
       const onKey = (e) => {
@@ -13081,9 +13668,9 @@
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState22 } = React;
+  var { useState: useState23 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState22(null);
+    const [draft, setDraft] = useState23(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -13116,8 +13703,8 @@
   }
   function HexColorInput({ value, onChange }) {
     const hexProps = useDraftInputProps(value, (text) => {
-      const hex = "#" + text.trim().replace(/^#/, "");
-      if (/^#[0-9a-f]{6}$/i.test(hex)) onChange(hex.toLowerCase());
+      const hex2 = "#" + text.trim().replace(/^#/, "");
+      if (/^#[0-9a-f]{6}$/i.test(hex2)) onChange(hex2.toLowerCase());
     });
     return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value, onChange: (e) => onChange(e.target.value) }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "ze-format-number", spellCheck: "false", maxLength: "7", "aria-label": "Hex color", ...hexProps }));
   }
@@ -13136,7 +13723,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState23, useRef: useRef18, useEffect: useEffect19 } = React;
+  var { useState: useState24, useRef: useRef19, useEffect: useEffect19 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -13156,12 +13743,12 @@
     const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState23(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState24(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
-    const wasChecked = useRef18(checked);
+    const wasChecked = useRef19(checked);
     useEffect19(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
@@ -13228,7 +13815,8 @@
   }
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage }) {
+  var { useState: useState25 } = React;
+  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace }) {
     const patch = (p) => onUpdate(ann.id, p);
     const isCroppingThis = croppingAnnId === ann.id;
     const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -13279,7 +13867,7 @@
           /* @__PURE__ */ React.createElement(ControlList, { controls: group.controls, source: ann, onPatch: patch })
         );
       })
-    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.flatten",
@@ -13289,6 +13877,21 @@
       },
       /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: isCroppingThis, onClick: () => onFlattenImage(ann) }, "Flatten Image")
     ));
+  }
+  function ImageTraceSection({ ann, imageTrace, disabled }) {
+    const [preset, setPreset] = useState25(DEFAULT_TRACE_PRESET);
+    const busy = imageTrace.busyId === ann.id;
+    return /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "image.trace",
+        title: "Image Trace",
+        hint: "Traces the image into filled shapes, like Illustrator's Image Trace: a new layer goes above it and the image is hidden (show it again in the Layers panel). The new layer's panel has the full trace settings, and changes there re-trace live. The trace follows the crop, adjustments and filter."
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(SelectInput, { options: TRACE_PRESETS.map((p) => ({ key: p.key, label: p.label })), value: preset, onChange: setPreset })),
+      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: disabled || busy, onClick: () => imageTrace.trace(ann, preset) }, busy ? "Tracing…" : "Trace"),
+      imageTrace.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint ze-trace-error" }, imageTrace.error)
+    );
   }
   function ImageStyleSection({ ann, filterType, filterOption, patch }) {
     return /* @__PURE__ */ React.createElement(
@@ -13404,18 +14007,18 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState24, useRef: useRef19, useEffect: useEffect20, useMemo: useMemo3 } = React;
+  var { useState: useState26, useRef: useRef20, useEffect: useEffect20, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState24(value || "");
-    const [typed, setTyped] = useState24(false);
-    const [open, setOpen] = useState24(false);
-    const [highlight, setHighlight] = useState24(-1);
-    const previewFromRef = useRef19(null);
-    const listRef = useRef19(null);
-    const [status, setStatus] = useState24(null);
-    const [loadingFonts, setLoadingFonts] = useState24(false);
-    const containerRef = useRef19(null);
-    const uploadInputRef = useRef19(null);
+    const [query, setQuery] = useState26(value || "");
+    const [typed, setTyped] = useState26(false);
+    const [open, setOpen] = useState26(false);
+    const [highlight, setHighlight] = useState26(-1);
+    const previewFromRef = useRef20(null);
+    const listRef = useRef20(null);
+    const [status, setStatus] = useState26(null);
+    const [loadingFonts, setLoadingFonts] = useState26(false);
+    const containerRef = useRef20(null);
+    const uploadInputRef = useRef20(null);
     useEffect20(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
@@ -13612,10 +14215,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState25, useRef: useRef20 } = React;
+  var { useState: useState27, useRef: useRef21 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef20(null);
-    const [error, setError] = useState25(null);
+    const inputRef = useRef21(null);
+    const [error, setError] = useState27(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -13704,10 +14307,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState26 } = React;
+  var { useState: useState28 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState26("latin");
-    const [count, setCount] = useState26(3);
+    const [kind, setKind] = useState28("latin");
+    const [count, setCount] = useState28(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -13738,7 +14341,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState27 } = React;
+  var { useState: useState29 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -13746,7 +14349,7 @@
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState27(null);
+    const [message, setMessage] = useState29(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -13783,7 +14386,7 @@
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState27(null);
+    const [sizeDraft, setSizeDraft] = useState29(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -13818,11 +14421,11 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState28 } = React;
+  var { useState: useState30 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState28("");
-    const [basedOn, setBasedOn] = useState28("");
-    const [message, setMessage] = useState28(null);
+    const [name, setName] = useState30("");
+    const [basedOn, setBasedOn] = useState30("");
+    const [message, setMessage] = useState30(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -13919,6 +14522,69 @@
     ), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch, effects: TEXT_EFFECTS, before: /* @__PURE__ */ React.createElement(TextPhotoFill, { ann, patch }), beforeLabel: ann.fillSrc ? "Photo fill" : void 0 }), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.transform", title: "Rotation", hint: "Opacity and blend are in the Layers panel.", onReset: () => patch(resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.rasterize", title: "Rasterize", hint: "Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : void 0, onClick: () => onRasterizeText(ann) }, "Rasterize to Image")));
   }
 
+  // apps/ZEditor/src/ui/panels/format/TraceFormat.jsx
+  var PRESET_ICONS = {
+    bw: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2", fill: "#fff", stroke: "currentColor" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21 21 3v16a2 2 0 0 1-2 2Z", fill: "currentColor" })),
+    lineart: /* @__PURE__ */ React.createElement("path", { d: "M4 18c3-8 6-12 9-6s4 4 7-6", fill: "none", stroke: "currentColor", strokeWidth: "2.4", strokeLinecap: "round" }),
+    silhouette: /* @__PURE__ */ React.createElement("path", { d: "M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm-7 18c0-5 3-8 7-8s7 3 7 8Z", fill: "currentColor" }),
+    outline: /* @__PURE__ */ React.createElement("path", { d: "M12 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm-7 18c0-5 3-8 7-8s7 3 7 8Z", fill: "none", stroke: "currentColor", strokeWidth: "1.6" }),
+    gray: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "6", height: "16", fill: "#222" }), /* @__PURE__ */ React.createElement("rect", { x: "9", y: "4", width: "6", height: "16", fill: "#777" }), /* @__PURE__ */ React.createElement("rect", { x: "15", y: "4", width: "6", height: "16", fill: "#ccc" })),
+    color3: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "6", height: "16", fill: "#d33" }), /* @__PURE__ */ React.createElement("rect", { x: "9", y: "4", width: "6", height: "16", fill: "#3a4" }), /* @__PURE__ */ React.createElement("rect", { x: "15", y: "4", width: "6", height: "16", fill: "#36d" })),
+    color6: /* @__PURE__ */ React.createElement("g", null, ["#d33", "#e93", "#ed3", "#3a4", "#36d", "#93c"].map((c, i) => /* @__PURE__ */ React.createElement("rect", { key: c, x: 3 + i % 3 * 6, y: i < 3 ? 4 : 12, width: "6", height: "8", fill: c }))),
+    color16: /* @__PURE__ */ React.createElement("g", null, Array.from({ length: 16 }, (_, i) => /* @__PURE__ */ React.createElement("rect", { key: i, x: 3 + i % 4 * 4.5, y: 3 + Math.floor(i / 4) * 4.5, width: "4.5", height: "4.5", fill: `hsl(${i * 22} 70% ${40 + i % 3 * 12}%)` })))
+  };
+  var METHODS = [
+    { key: "abut", label: "Abutting", hint: "Each shape is exactly its own colour's area. Thin gaps can show where colours meet.", icon: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("path", { d: "M4 4h8v16H4Z", fill: "currentColor" }), /* @__PURE__ */ React.createElement("path", { d: "M12 4h8v16h-8Z", fill: "none", stroke: "currentColor", strokeWidth: "1.6" })) },
+    { key: "overlap", label: "Overlapping", hint: "Each shape also runs under the colours above it, so no gaps show between colours.", icon: /* @__PURE__ */ React.createElement("g", null, /* @__PURE__ */ React.createElement("path", { d: "M4 4h12v16H4Z", fill: "currentColor", opacity: "0.55" }), /* @__PURE__ */ React.createElement("path", { d: "M10 4h10v16H10Z", fill: "none", stroke: "currentColor", strokeWidth: "1.6" })) }
+  ];
+  function TraceFormat({ ann, imageTrace, onUpdate, onRasterize }) {
+    const s = normalizeTraceSettings(ann.trace);
+    const live = isLiveTrace(ann);
+    const change = (patch) => imageTrace.change(ann, patch);
+    const busy = imageTrace.busyId === ann.id;
+    const custom = !matchesPreset(s);
+    const presetLabel2 = (TRACE_PRESETS.find((p) => p.key === s.preset) || TRACE_PRESETS[0]).label;
+    const presetOptions = [...custom ? [{ key: "custom", label: "Custom (from " + presetLabel2 + ")" }] : [], ...TRACE_PRESETS.map((p) => ({ key: p.key, label: p.label }))];
+    const pickPreset = (key) => {
+      if (key !== "custom") change(key === s.preset ? Object.fromEntries(Object.entries(presetSettings(key)).filter(([k]) => k !== "view")) : { preset: key });
+    };
+    const advancedOf = (src) => Object.fromEntries(TRACE_ADVANCED_PROPS.map((k) => [k, src[k]]));
+    const advancedChanged = TRACE_ADVANCED_PROPS.some((k) => s[k] !== presetSettings(s.preset)[k]);
+    const pathCount = (ann.paths || []).length;
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — Image Trace" }, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-head" }, live ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-trace-presets", role: "group", "aria-label": "Presets" }, TRACE_PRESETS.map((p) => /* @__PURE__ */ React.createElement("button", { key: p.key, type: "button", className: "ze-trace-preset" + (s.preset === p.key && !custom ? " active" : ""), title: p.label, "aria-label": p.label, onClick: () => pickPreset(p.key) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" }, PRESET_ICONS[p.key])))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(SelectInput, { options: presetOptions, value: custom ? "custom" : s.preset, onChange: pickPreset }))) : /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Expanded: these shapes no longer follow the trace settings. Undo brings them back."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "View"), /* @__PURE__ */ React.createElement(SelectInput, { options: live ? TRACE_VIEW_OPTIONS : TRACE_VIEW_OPTIONS.filter((o) => !o.key.toLowerCase().includes("source")), value: s.view, onChange: (view) => change({ view }) })), live && /* @__PURE__ */ React.createElement(ControlList, { controls: TRACE_MAIN_CONTROLS, source: s, onPatch: change }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-status", "aria-live": "polite" }, busy ? "Tracing…" : `${pathCount} ${pathCount === 1 ? "colour" : "colours"} · ${Math.max(1, Math.round((ann.paths || []).reduce((n, p) => n + p.d.length, 0) / 1024))} KB of paths`), imageTrace.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint ze-trace-error" }, imageTrace.error)), live && /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "trace.advanced",
+        title: "Advanced",
+        hint: "Paths: how closely outlines follow the pixels (higher = more detail, less smoothing). Corners: how readily a bend becomes a sharp corner. Noise: specks smaller than this many pixels are left out.",
+        summary: advancedChanged ? "changed" : void 0,
+        onReset: advancedChanged ? () => change(advancedOf(presetSettings(s.preset))) : void 0
+      },
+      /* @__PURE__ */ React.createElement(ControlList, { controls: TRACE_ADVANCED_CONTROLS, source: s, onPatch: change }),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Method"), /* @__PURE__ */ React.createElement("div", { className: "ze-trace-methods", role: "radiogroup", "aria-label": "Method" }, METHODS.map((m) => /* @__PURE__ */ React.createElement("button", { key: m.key, type: "button", role: "radio", "aria-checked": s.method === m.key, className: "ze-trace-preset" + (s.method === m.key ? " active" : ""), title: m.label + ": " + m.hint, onClick: () => change({ method: m.key }) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" }, m.icon))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, METHODS.find((m) => m.key === s.method).label)))
+    ), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.create", title: "Create", defaultOpen: true, summary: [s.fills === "on" && "Fills", s.strokes === "on" && "Strokes"].filter(Boolean).join(" + ") || "Nothing" }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.fills === "on", onChange: (e) => change({ fills: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Fills")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: s.strokes === "on", onChange: (e) => change({ strokes: e.target.checked ? "on" : "off" }) }), /* @__PURE__ */ React.createElement("span", null, "Strokes")), s.strokes === "on" && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stroke width (px)"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 20, value: s.strokeWidth, onChange: (strokeWidth) => change({ strokeWidth }) }))), /* @__PURE__ */ React.createElement(TraceColors, { ann, imageTrace }), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.transform", title: "Transform", hint: "Drag a corner to resize (it keeps its proportions; hold Shift to stretch). Opacity and blend are in the Layers panel.", onReset: () => onUpdate(ann.id, resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(SizeReadout, { ann }), /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: (p) => onUpdate(ann.id, p) })), live && /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.expand", title: "Expand", hint: "Fixes the shapes as they are now and drops the copy of the source picture the layer keeps for re-tracing, so the project file gets smaller. The settings above go away; Undo brings them back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => imageTrace.expand(ann) }, "Expand")), /* @__PURE__ */ React.createElement(PanelSection, { id: "trace.rasterize", title: "Rasterize", hint: "Turns the traced shapes into an ordinary image, so image filters and effects can be used on it. Undo brings the trace back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: busy, onClick: () => onRasterize(ann) }, "Rasterize to Image")));
+  }
+  function TraceColors({ ann, imageTrace }) {
+    const paths = (ann.paths || []).slice().reverse();
+    const changed = Object.keys(ann.recolor || {}).length;
+    return /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "trace.colors",
+        title: "Colours",
+        defaultOpen: true,
+        summary: changed ? changed + " changed" : void 0,
+        hint: "The traced colours, top first. Pick a new colour, or hide one. Changes are kept when you change the trace settings, as long as the trace finds that colour again.",
+        onReset: changed ? () => imageTrace.recolor(ann, null, null) : void 0
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-trace-colors" }, paths.map((p) => {
+        const now = traceColorOf(ann, p.color);
+        const hidden = now === "none";
+        return /* @__PURE__ */ React.createElement("div", { key: p.color, className: "ze-trace-color" + (hidden ? " is-hidden" : "") }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: hidden ? p.color : now, disabled: hidden, "aria-label": "Colour " + p.color, onChange: (e) => imageTrace.recolor(ann, p.color, e.target.value) }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-hex" }, hidden ? "hidden" : now), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: hidden ? "Show this colour" : "Hide this colour", onClick: () => imageTrace.recolor(ann, p.color, hidden ? null : "none") }, hidden ? "Show" : "Hide"), !hidden && now !== p.color && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: "Back to the traced colour " + p.color, onClick: () => imageTrace.recolor(ann, p.color, null) }, "Reset"));
+      }))
+    );
+  }
+
   // apps/ZEditor/src/ui/panels/format/ToolPanels.jsx
   function ShapeToolPanel({ tool, toolDefaults }) {
     const { rectDefaults, setRectDefaults } = toolDefaults;
@@ -13933,7 +14599,7 @@
     const fills = settings.cutLeaves === "fill" || !fromLayer;
     const needsLayer = fromLayer && !targetLayer;
     const radio = (name, value, label, current, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
-    const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : "Image") : null;
+    const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Image Trace" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", fills ? "fill" : "transparent", (v) => change({ cutLeaves: v }))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")));
@@ -14071,13 +14737,15 @@
     magicErase,
     marquee,
     targetLayer,
-    styleActions
+    styleActions,
+    imageTrace
   }) {
     const ann = selectedAnn;
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
-    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage });
+    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace });
+    if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize });
     if (ann && ann.type === "rect") return /* @__PURE__ */ React.createElement(ShapeFormat, { key: ann.id, ann, onUpdate, onRasterizeRect });
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
     if (tool === "text") return /* @__PURE__ */ React.createElement(TextToolPanel, { toolDefaults });
@@ -14086,7 +14754,7 @@
     if (tool === "measure") {
       return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Measure", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Click one point, then another, to see the distance between them in the ruler's unit. A third click clears it. Dragging from one point to the other works too. Once the line is shown, drag either end to adjust. Hold Shift for 45° steps; ends land on ruler guides unless you hold Alt."));
     }
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add."));
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty" }, "Select a text box, image, rectangle, Image Trace or stroke to edit it, or pick a tool to set defaults for the next one you add."));
   }
 
   // apps/ZEditor/src/model/layerNames.js
@@ -14094,15 +14762,16 @@
     if (ann.name) return ann.name;
     if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
     if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+    if (ann.type === "trace") return "Image Trace";
     if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
     return "Image";
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState29, useRef: useRef21, useEffect: useEffect21, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState31, useRef: useRef22, useEffect: useEffect21, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState29(false);
-    const containerRef = useRef21(null);
+    const [open, setOpen] = useState31(false);
+    const containerRef = useRef22(null);
     useEffect21(() => {
       if (!open) return;
       function handleClickOutside(e) {
@@ -14118,7 +14787,7 @@
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef21(null);
+    const menuRef = useRef22(null);
     useLayoutEffect5(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
@@ -14396,11 +15065,12 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState30, useRef: useRef22, useEffect: useEffect22 } = React;
+  var { useState: useState32, useRef: useRef23, useEffect: useEffect22 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
     if (ann.type === "text") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-text" }, "T");
+    if (ann.type === "trace") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb ze-layer-thumb-trace" }, /* @__PURE__ */ React.createElement(TraceSvg, { ann, view: "result" }));
     const isHi = ann.tool === "highlighter";
     return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color), strokeWidth: "3", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M3 16c4-9 6-9 8-4s4 5 10-5" })));
   }
@@ -14461,21 +15131,21 @@
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
-    const [renamingId, setRenamingId] = useState30(null);
-    const [menuOpen, setMenuOpen] = useState30(false);
-    const menuRef = useRef22(null);
-    const [dropInfo, setDropInfo] = useState30(null);
-    const [, setCollapseTick] = useState30(0);
-    const dragIdRef = useRef22(null);
-    const listRef = useRef22(null);
-    const panelRef = useRef22(null);
-    const headRef = useRef22(null);
+    const [renamingId, setRenamingId] = useState32(null);
+    const [menuOpen, setMenuOpen] = useState32(false);
+    const menuRef = useRef23(null);
+    const [dropInfo, setDropInfo] = useState32(null);
+    const [, setCollapseTick] = useState32(0);
+    const dragIdRef = useRef23(null);
+    const listRef = useRef23(null);
+    const panelRef = useRef23(null);
+    const headRef = useRef23(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState30(null);
-    const rowMenuRef = useRef22(null);
+    const [rowMenu, setRowMenu] = useState32(null);
+    const rowMenuRef = useRef23(null);
     useEffect22(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
@@ -14820,11 +15490,11 @@
   }
 
   // apps/ZEditor/src/ui/PanelResizer.jsx
-  var { useLayoutEffect: useLayoutEffect6, useRef: useRef23 } = React;
+  var { useLayoutEffect: useLayoutEffect6, useRef: useRef24 } = React;
   var MIN_CANVAS = 360;
   var KEY_STEP = 16;
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
-    const widthRef = useRef23(null);
+    const widthRef = useRef24(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
     const clamp3 = (px) => {
       const body = bodyRef.current;
@@ -14981,15 +15651,15 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState31, useRef: useRef24, useEffect: useEffect23 } = React;
+  var { useState: useState33, useRef: useRef25, useEffect: useEffect23 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef24(null);
-    const bodyRef = useRef24(null);
-    const scrollDirRef = useRef24(0);
-    const rafRef = useRef24(null);
-    const [dragOverInfo, setDragOverInfo] = useState31(null);
+    const dragIndexRef = useRef25(null);
+    const bodyRef = useRef25(null);
+    const scrollDirRef = useRef25(0);
+    const rafRef = useRef25(null);
+    const [dragOverInfo, setDragOverInfo] = useState33(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -15118,14 +15788,14 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState32, useEffect: useEffect24 } = React;
+  var { useState: useState34, useEffect: useEffect24 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState32(false);
-    const [alt, setAlt] = useState32(false);
+    const [shift, setShift] = useState34(false);
+    const [alt, setAlt] = useState34(false);
     useEffect24(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
@@ -15271,9 +15941,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState33 } = React;
+  var { useState: useState35 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState33(null);
+    const [customizing, setCustomizing] = useState35(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -15287,7 +15957,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f1ded04"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "42383e1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -15697,6 +16367,7 @@
     const selection = useSelection(doc);
     const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
     const magic = useMagicErase({ doc, selection, edits, toolDefaults });
+    const imageTrace = useImageTrace({ doc, selection, edits });
     const marquee = useMarquee({ doc, selection, edits, toolDefaults, status });
     const uiHistory = { ...history, handleUndo: () => {
       if (!magic.cancel()) history.handleUndo();
@@ -15842,6 +16513,7 @@
         onRasterizeText: edits.handleRasterizeText,
         toolDefaults,
         styleActions: edits.styleActions,
+        imageTrace,
         magicErase: magic,
         marquee,
         targetLayer: (selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null

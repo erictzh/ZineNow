@@ -124,7 +124,7 @@ Where things went that might not be obvious:
   and `render/itemGeometry.js` has `annotationBounds` / `rotatedAnnotation`
   (a text box's size comes from layout), so `model/` never measures text.
 - The Format panel: `ui/panels/FormatPanel.jsx` only picks a panel —
-  `format/TextFormat`, `ImageFormat`, `ShapeFormat`, `StrokeFormat` for a
+  `format/TextFormat`, `ImageFormat`, `ShapeFormat`, `StrokeFormat`, `TraceFormat` (Image Trace) for a
   selected item, `format/ToolPanels` for a tool with nothing selected. Panels
   get the `useToolDefaults` object as `toolDefaults` rather than one prop per
   setting.

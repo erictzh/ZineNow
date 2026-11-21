@@ -347,3 +347,31 @@
 .ze-format-radio input, .ze-format-check input { margin: 3px 0 0; accent-color: var(--ui-accent); }
 .ze-format-radio .ze-format-hint, .ze-format-check .ze-format-hint { grid-column: 2; margin-top: 2px; }
 .ze-format-radio:has(input:disabled) { opacity: 0.5; cursor: default; }
+
+/* ---- Image Trace panel (ui/panels/format/TraceFormat.jsx), after Illustrator's ---- */
+.ze-trace-head { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--ui-border); }
+.ze-trace-head .ze-format-field { margin: 0; }
+.ze-trace-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.ze-trace-preset {
+    width: 30px; height: 30px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--ui-border); border-radius: 4px;
+    background: transparent; color: var(--ui-fg);
+    cursor: pointer;
+}
+.ze-trace-preset:hover { border-color: var(--ui-fg-muted); }
+.ze-trace-preset.active { border-color: var(--ui-accent); box-shadow: inset 0 0 0 1px var(--ui-accent); }
+.ze-trace-methods { display: flex; align-items: center; gap: 4px; }
+.ze-trace-methods .ze-format-hint { margin: 0 0 0 6px; }
+.ze-trace-status { font-size: 12px; color: var(--ui-fg-muted); }
+.ze-trace-error { color: #e5484d; }
+.ze-trace-colors { display: flex; flex-direction: column; gap: 6px; }
+.ze-trace-color { display: flex; align-items: center; gap: 8px; }
+.ze-trace-color.is-hidden .ze-trace-hex { opacity: 0.5; font-style: italic; }
+.ze-trace-hex { flex: 1; font-size: 12px; font-family: ui-monospace, monospace; }
+.ze-trace-mini {
+    padding: 2px 8px; font-size: 12px;
+    border: 1px solid var(--ui-border); border-radius: 4px;
+    background: transparent; color: var(--ui-fg); cursor: pointer;
+}
+.ze-trace-mini:hover { border-color: var(--ui-fg-muted); }

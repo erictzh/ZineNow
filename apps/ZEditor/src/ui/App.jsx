@@ -9,6 +9,7 @@ import { useDocumentState } from "../state/useDocumentState.js";
 import { useExport } from "../state/useExport.js";
 import { useHistory } from "../state/useHistory.js";
 import { useKeyboardShortcuts } from "../state/useKeyboardShortcuts.js";
+import { useImageTrace } from "../state/useImageTrace.js";
 import { useMagicErase } from "../state/useMagicErase.js";
 import { useMarquee } from "../state/useMarquee.js";
 import { useOnionGhost } from "../state/useOnionGhost.js";
@@ -48,6 +49,7 @@ export function App() {
   const selection = useSelection(doc);
   const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
   const magic = useMagicErase({ doc, selection, edits, toolDefaults });
+  const imageTrace = useImageTrace({ doc, selection, edits });
   const marquee = useMarquee({ doc, selection, edits, toolDefaults, status });
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
@@ -196,6 +198,7 @@ export function App() {
             onRasterizeText={edits.handleRasterizeText}
             toolDefaults={toolDefaults}
             styleActions={edits.styleActions}
+            imageTrace={imageTrace}
             magicErase={magic}
             marquee={marquee}
             targetLayer={(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}

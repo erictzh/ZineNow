@@ -5,21 +5,23 @@ import { FormatPanelShell } from "./format/FormatPanelShell.jsx";
 import { ShapeFormat } from "./format/ShapeFormat.jsx";
 import { StrokeFormat } from "./format/StrokeFormat.jsx";
 import { TextFormat } from "./format/TextFormat.jsx";
+import { TraceFormat } from "./format/TraceFormat.jsx";
 import { EraserToolPanel, MarqueeToolPanel, ShapeToolPanel, StrokeToolPanel, TextToolPanel } from "./format/ToolPanels.jsx";
 
 // `toolDefaults` is the useToolDefaults hook object (fonts, text styles and
 // each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js);
-// `marquee` is the Marquee tool's state (state/useMarquee.js) and `targetLayer` the selected layer it can work on.
+// `imageTrace` is Image Trace (state/useImageTrace.js); `marquee` is the Marquee tool's state (state/useMarquee.js) and `targetLayer` the selected layer it can work on.
 export function FormatPanel({
   tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
-  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, marquee, targetLayer, styleActions,
+  onFlattenImage, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, marquee, targetLayer, styleActions, imageTrace,
 }) {
   const ann = selectedAnn;
   // The Marquee tool keeps its own panel even with a layer selected (that layer is what it works on).
   if (tool === "marquee") return <MarqueeToolPanel toolDefaults={toolDefaults} marquee={marquee} targetLayer={targetLayer} />;
   if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} styleActions={styleActions} />;
   if (ann && ann.type === "stroke") return <StrokeFormat key={ann.id} ann={ann} onUpdate={onUpdate} />;
-  if (ann && ann.type === "image") return <ImageFormat key={ann.id} ann={ann} onUpdate={onUpdate} croppingAnnId={croppingAnnId} onToggleCrop={onToggleCrop} onFlattenImage={onFlattenImage} />;
+  if (ann && ann.type === "image") return <ImageFormat key={ann.id} ann={ann} onUpdate={onUpdate} croppingAnnId={croppingAnnId} onToggleCrop={onToggleCrop} onFlattenImage={onFlattenImage} imageTrace={imageTrace} />;
+  if (ann && ann.type === "trace") return <TraceFormat key={ann.id} ann={ann} imageTrace={imageTrace} onUpdate={onUpdate} onRasterize={imageTrace.rasterize} />;
   if (ann && ann.type === "rect") return <ShapeFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeRect={onRasterizeRect} />;
 
   if (tool === "rect" || tool === "ellipse") return <ShapeToolPanel tool={tool} toolDefaults={toolDefaults} />;
@@ -41,7 +43,7 @@ export function FormatPanel({
   return (
     <FormatPanelShell title="Format" sections={false}>
       <div className="ze-format-empty">
-        Select a text box, image, rectangle, or stroke to edit it, or pick a tool to set defaults for the next one you add.
+        Select a text box, image, rectangle, Image Trace or stroke to edit it, or pick a tool to set defaults for the next one you add.
       </div>
     </FormatPanelShell>
   );

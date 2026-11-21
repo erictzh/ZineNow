@@ -4,7 +4,7 @@ import { EXPORT_SCALE, MAIN_SCALE } from "../constants.js";
 import { rotatePoint } from "../model/geometry.js";
 import { pointsBounds, regionPolygon } from "../model/marquee.js";
 import { isThreaded } from "../model/text/threads.js";
-import { rasterizedRectPatch, rasterizedTextPatch, trimmedImageFromCanvas } from "./bake.js";
+import { rasterizedRectPatch, rasterizedTextPatch, rasterizedTracePatch, trimmedImageFromCanvas } from "./bake.js";
 import { drawPageItem } from "./clipMask.js";
 import { loadImageElement } from "./drawImage.js";
 import { getPageDisplaySize, renderPageToCanvas } from "./pageRender.js";
@@ -51,7 +51,7 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
     let rasterized = null;
     if (target.type !== "image") {
       const view = resolvePageText(annotations).find((a) => a.id === target.id);
-      rasterized = target.type === "text" ? await rasterizedTextPatch(view) : await rasterizedRectPatch(target);
+      rasterized = target.type === "text" ? await rasterizedTextPatch(view) : target.type === "trace" ? await rasterizedTracePatch(target) : await rasterizedRectPatch(target);
       if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
       base = { ...target, ...rasterized };
     }
