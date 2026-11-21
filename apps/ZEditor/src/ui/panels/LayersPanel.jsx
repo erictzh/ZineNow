@@ -305,9 +305,9 @@ export function LayersPanel({ position, onMove, onMinimize, annotations, selecte
               aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                <circle cx="5" cy="12" r="1.9" />
+                <circle cx="12" cy="5" r="1.9" />
                 <circle cx="12" cy="12" r="1.9" />
-                <circle cx="19" cy="12" r="1.9" />
+                <circle cx="12" cy="19" r="1.9" />
               </svg>
             </button>
             {menuOpen && (
