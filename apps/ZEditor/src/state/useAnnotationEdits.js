@@ -10,6 +10,7 @@ import { isThreaded, removeWithThreads, routeFramePatch, withoutResolvedProps } 
 import { flattenedImagePatch, rasterizedRectPatch, rasterizedTextPatch } from "../render/bake.js";
 import { rotatedAnnotation } from "../render/itemGeometry.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
+import { isSvgFile, svgFileToPng } from "../io/images.js";
 import { resolvePageText } from "../render/pageText.js";
 import { makeTextFrameActions } from "./textFrameActions.js";
 
@@ -234,18 +235,31 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   // Shared by the Image tool's file picker and pasting an image straight
   // from the system clipboard (Ctrl+V) — both just need a File/Blob and
   // the page to drop it on.
+  // An SVG is drawn into a PNG first (io/images.js svgFileToPng); it starts at its own size,
+  // as another picture would, while its pixels are high resolution for printing.
   function addImageAnnotationFromFile(file, pageIdx) {
     if (!file || pageIdx === null) return;
     const pageAtChooseTime = pages[pageIdx];
+    if (isSvgFile(file)) {
+      svgFileToPng(file)
+        .then((png) => placeImage(png.src, png.width, png.height))
+        .catch((err) => window.alert(err.message || "That SVG file couldn't be opened."));
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => {
-      const src = reader.result;
+    reader.onload = () => placeImage(reader.result, null, null);
+    reader.readAsDataURL(file);
+
+    // `shownW/H`: the size to start from, if not the image's own pixels (an SVG's).
+    function placeImage(src, shownW, shownH) {
       const img = new Image();
       img.onload = async () => {
         const MAX_W = 260; // a sensible starting size — the resize handle takes it from there
-        const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
-        const width = img.naturalWidth * scale;
-        const height = img.naturalHeight * scale;
+        const baseW = shownW || img.naturalWidth;
+        const baseH = shownH || img.naturalHeight;
+        const scale = baseW > MAX_W ? MAX_W / baseW : 1;
+        const width = baseW * scale;
+        const height = baseH * scale;
         const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
         const x = Math.max(0, (display.width - width) / 2);
         const y = Math.max(0, (display.height - height) / 2);
@@ -258,8 +272,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
         setSelectedAnnId(id);
       };
       img.src = src;
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   function handleImageFileChosen(e) {

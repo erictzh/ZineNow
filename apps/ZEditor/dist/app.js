@@ -7890,6 +7890,80 @@
     return canvas.toDataURL();
   }
 
+  // apps/ZEditor/src/io/images.js
+  function readPhotoFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Couldn't read that photo."));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("That file isn't an image the browser can open."));
+        img.onload = () => {
+          const shrink = Math.min(1, 2e3 / Math.max(img.naturalWidth, img.naturalHeight));
+          const width = Math.max(1, Math.round(img.naturalWidth * shrink));
+          const height = Math.max(1, Math.round(img.naturalHeight * shrink));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve({ src: canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.92), width, height });
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  function isSvgFile(file) {
+    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
+  }
+  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+  function svgLength(value) {
+    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
+    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
+  }
+  function svgSize(svgEl) {
+    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
+    let width = svgLength(svgEl.getAttribute("width"));
+    let height = svgLength(svgEl.getAttribute("height"));
+    if (hasViewBox) {
+      if (!width && !height) {
+        width = vb[2];
+        height = vb[3];
+      } else if (!width) width = height * (vb[2] / vb[3]);
+      else if (!height) height = width * (vb[3] / vb[2]);
+    }
+    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
+  }
+  function svgFileToPng(file, maxSide = 2048) {
+    return file.text().then((text) => new Promise((resolve, reject) => {
+      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+      const svg = doc.documentElement;
+      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
+        reject(new Error("That SVG file couldn't be read."));
+        return;
+      }
+      const size = svgSize(svg);
+      const scale = maxSide / Math.max(size.width, size.height);
+      const outW = Math.max(1, Math.round(size.width * scale));
+      const outH = Math.max(1, Math.round(size.height * scale));
+      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
+      svg.setAttribute("width", String(outW));
+      svg.setAttribute("height", String(outH));
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      const img = new Image();
+      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
+        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
+      };
+      img.src = url;
+    }));
+  }
+
   // apps/ZEditor/src/state/textFrameActions.js
   var FRAME_GAP = 12;
   function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds }) {
@@ -8123,15 +8197,22 @@
     function addImageAnnotationFromFile(file, pageIdx) {
       if (!file || pageIdx === null) return;
       const pageAtChooseTime = pages[pageIdx];
+      if (isSvgFile(file)) {
+        svgFileToPng(file).then((png) => placeImage(png.src, png.width, png.height)).catch((err) => window.alert(err.message || "That SVG file couldn't be opened."));
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = () => {
-        const src = reader.result;
+      reader.onload = () => placeImage(reader.result, null, null);
+      reader.readAsDataURL(file);
+      function placeImage(src, shownW, shownH) {
         const img = new Image();
         img.onload = async () => {
           const MAX_W = 260;
-          const scale = img.naturalWidth > MAX_W ? MAX_W / img.naturalWidth : 1;
-          const width = img.naturalWidth * scale;
-          const height = img.naturalHeight * scale;
+          const baseW = shownW || img.naturalWidth;
+          const baseH = shownH || img.naturalHeight;
+          const scale = baseW > MAX_W ? MAX_W / baseW : 1;
+          const width = baseW * scale;
+          const height = baseH * scale;
           const display2 = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
           const x = Math.max(0, (display2.width - width) / 2);
           const y = Math.max(0, (display2.height - height) / 2);
@@ -8151,8 +8232,7 @@
           setSelectedAnnId(id);
         };
         img.src = src;
-      };
-      reader.readAsDataURL(file);
+      }
     }
     function handleImageFileChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -14424,30 +14504,6 @@
     )))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row ze-format-swatches" }, TEXT_COLOR_SWATCHES.map((c) => /* @__PURE__ */ React.createElement("button", { key: c, type: "button", className: "ze-format-swatch" + (color === c ? " active" : ""), style: { backgroundColor: c }, title: c, onClick: () => onChange({ color: c }) })), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#1a1a1a", onChange: (c) => onChange({ color: c }) }))), fillAlphaSource && /* @__PURE__ */ React.createElement(ControlList, { controls: [TEXT_FILL_ALPHA_CONTROL], source: fillAlphaSource, onPatch: onFillAlpha }));
   }
 
-  // apps/ZEditor/src/io/images.js
-  function readPhotoFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error("Couldn't read that photo."));
-      reader.onload = () => {
-        const img = new Image();
-        img.onerror = () => reject(new Error("That file isn't an image the browser can open."));
-        img.onload = () => {
-          const shrink = Math.min(1, 2e3 / Math.max(img.naturalWidth, img.naturalHeight));
-          const width = Math.max(1, Math.round(img.naturalWidth * shrink));
-          const height = Math.max(1, Math.round(img.naturalHeight * shrink));
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve({ src: canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.92), width, height });
-        };
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
   var { useState: useState27, useRef: useRef21 } = React;
   function TextPhotoFill({ ann, patch }) {
@@ -16191,7 +16247,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "a373e45"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2492f90"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -16786,7 +16842,7 @@
         onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
         onReorder: edits.handleReorderLayers
       }
-    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*,.svg,image/svg+xml", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
       InsertPdfDialog,
       {
         file: files.pendingInsertFile,

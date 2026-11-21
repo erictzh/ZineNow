@@ -234,7 +234,8 @@ export function App() {
 
       {/* Hidden file pickers, opened by their buttons. */}
       <input ref={files.fileInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleFileInputChange} />
-      <input ref={edits.imageInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={edits.handleImageFileChosen} />
+      {/* SVG named on its own too: on Android "image/*" alone opens the photo gallery, which never lists .svg files. */}
+      <input ref={edits.imageInputRef} type="file" accept="image/*,.svg,image/svg+xml" style={{ display: "none" }} onChange={edits.handleImageFileChosen} />
       <input ref={files.insertPdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleInsertPdfInputChange} />
       <input ref={project.projectInputRef} type="file" accept=".znow" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
 
