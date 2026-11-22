@@ -386,7 +386,3 @@
     background: transparent; color: var(--ui-fg); cursor: pointer;
 }
 .ze-trace-mini:hover { border-color: var(--ui-fg-muted); }
-
-/* The Marquee panel's switch between its two jobs (Make layer / Remove & fill): full width, in line with the sections. */
-.ze-marquee-modes { padding: 12px 16px; border-bottom: 1px solid var(--ui-border, rgba(255,255,255,.08)); }
-.ze-marquee-modes .ze-format-toggle { flex: 1 1 0; min-width: 0; }

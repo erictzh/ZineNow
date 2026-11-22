@@ -5,7 +5,7 @@ Use this to take a thing out of a picture (a stray object, a mark, a bit of text
 ## The short version
 
 1. Press **M** (Marquee tool) and draw a box round the thing. Draw it a little **bigger** than the thing.
-2. In the right-hand panel, switch to the **Remove & fill** tab (below Shape and Works on) and press **Remove & fill**.
+2. In the right-hand panel, set **Action** (below Shape and Works on) to **Remove & fill** and press **Remove & fill**.
 3. Not happy? Press **Try another** a few times. Still not right? Open **Fine-tune** (just below) and change a number (see below).
 4. **Ctrl+Z** undoes any of it.
 
@@ -25,7 +25,7 @@ Use this to take a thing out of a picture (a stray object, a mark, a bit of text
 
 ### 3. Fill it
 
-The panel has two tabs, **Make layer** and **Remove & fill**, and shows only the one you picked. Under **Remove & fill**:
+The **Action** dropdown chooses between **Make a new layer** and **Remove & fill**, and the panel shows only the options for the one you picked. For **Remove & fill**:
 
 - **Style**
   - **Pattern** (default): copies real texture from the rest of the picture. Best for grass, leaves, road, brick, walls, sky with grain, anything with texture. Works on areas up to about 130 px of the page. A bigger area switches to Smooth by itself and tells you so.
@@ -48,7 +48,7 @@ Change a number with the **+** and **−** buttons (or type it), then press **Re
 
 ### 5. Fill and cut in one go (optional)
 
-If you want to remove something **and keep it** as its own layer: in the **Make layer** tab choose **Cut to a new layer**, then under **What a cut leaves behind** choose **Filled from the surroundings** (it uses the style and numbers of the Remove & fill tab), then press **Make layer** (Ctrl+Shift+J). You get the cut-out as a new layer on top, and the gap behind it is already filled.
+If you want to remove something **and keep it** as its own layer: set Action to **Make a new layer** and choose **Cut to a new layer**, then under **What a cut leaves behind** choose **Filled from the surroundings** (it uses the style and numbers saved for Remove & fill), then press **Make layer** (Ctrl+Shift+J). You get the cut-out as a new layer on top, and the gap behind it is already filled.
 
 ## Tips
 
@@ -74,7 +74,7 @@ If you want to remove something **and keep it** as its own layer: in the **Make 
 
 ## Where things are
 
-- Panel: **Format** panel on the right, with the **Marquee** tool active. It remembers which tab (Make layer or Remove & fill) you used last.
+- Panel: **Format** panel on the right, with the **Marquee** tool active. It remembers which Action (Make a new layer or Remove & fill) you used last.
 - After a fill the Marquee panel stays open, so you can change a number and fill again straight away.
 - Shortcuts: **M** Marquee tool, **Ctrl+Z** undo, **Ctrl+J** copy to a new layer, **Ctrl+Shift+J** cut to a new layer.
 - The settings are kept while the editor is open (not saved with the project).
