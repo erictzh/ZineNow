@@ -1176,7 +1176,7 @@ input {
     .za-zoom { display: inline-flex; align-items: center; gap: 6px; }
     .za-zoom-slider { width: 70px; accent-color: var(--ui-accent); cursor: pointer; }
     .za-zoom .za-zoom-number {
-        width: 56px;
+        width: 94px; /* room for the - and + buttons (shared/styles/numberFields.css) */
         padding: 2px 4px 2px 6px;
         font-size: 12px;
         text-align: right;

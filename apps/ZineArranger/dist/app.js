@@ -14,15 +14,11 @@
   }
 
   // shared/js/numberFields.js
-  var STRIP_PX = 24;
+  var STRIP_PX = 28;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
   var allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
-  var touching = () => {
-    const d = document.documentElement.dataset;
-    return d.input === "touch" || d.zeInput === "touch";
-  };
   var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
   var held = /* @__PURE__ */ new WeakMap();
   function holdEmpty(el) {
@@ -80,11 +76,13 @@
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
     function buttonAt(el, x, y) {
+      if (el.hasAttribute("data-no-steppers")) return 0;
       const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth) return 0;
-      const scale = r.width / el.offsetWidth;
-      if (x < r.right - STRIP_PX * scale || x > r.right || y < r.top || y > r.bottom) return 0;
-      return y < r.top + r.height / 2 ? 1 : -1;
+      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom) return 0;
+      const strip = STRIP_PX * (r.width / el.offsetWidth);
+      if (x >= r.left && x <= r.left + strip) return -1;
+      if (x <= r.right && x >= r.right - strip) return 1;
+      return 0;
     }
     function stepBy(el, dir) {
       const before = el.value;
@@ -117,7 +115,7 @@
     document.addEventListener("pointerdown", (e) => {
       const el = e.target;
       if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-      if (e.pointerType === "mouse" || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el) || !touching()) return;
+      if (e.pointerType === "mouse" && e.button !== 0 || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el)) return;
       const dir = buttonAt(el, e.clientX, e.clientY);
       if (!dir) return;
       e.preventDefault();
@@ -5372,7 +5370,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 8c7cb39";
+    subtitle.textContent += " · build e7ef6ca";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

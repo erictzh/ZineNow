@@ -141,8 +141,3 @@
     font-size: 15px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
-
-/* Number boxes get a strip of up/down buttons while a finger is used (shared/styles/numberFields.css): the
-   narrow ones grow so their digits still show. */
-[data-ze-input="touch"] .ze-format-slider-row input[type="number"].ze-format-number { width: 84px; }
-[data-ze-input="touch"] .ze-layers-look-row input[type="number"].ze-format-number { width: 76px; }

@@ -1,25 +1,32 @@
-/* Up and down buttons for number boxes while a finger is used (shared/js/numberFields.js). Chrome on
-   Android draws none of its own, so they are drawn here as a background picture in a strip at the right
-   edge of the box, and the script makes that strip work. With a mouse nothing changes: the browser's own
-   spinner shows on hover. data-input is set by shared/js/inputMode.js, data-ze-input by ZEditor.
-   The strip is --zn-step-w wide; keep it equal to STRIP_PX in the script. */
+/* − and + buttons on every number box (shared/js/numberFields.js makes them work). A "−" sits inside the left
+   edge of the box and a "+" inside the right edge, each the full height of the box, drawn as background pictures;
+   the browser's own up/down spinner is hidden so there is only one set. Boxes that must stay plain say
+   data-no-steppers. The buttons are --zn-step-w wide; the script reads the same variable. A narrow box needs
+   room for them (about 90 px for three digits): see the width rules in each app's CSS. */
 
 :root {
-  --zn-step-w: 24px;
+  --zn-step-w: 28px;
 }
 
-[data-input="touch"] input[type="number"],
-[data-ze-input="touch"] input[type="number"] {
-  padding-right: var(--zn-step-w) !important; /* room for the strip, whatever padding the box had */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='26' viewBox='0 0 18 26' fill='none' stroke='%23c9ccd6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 10.5 9 6l4.5 4.5'/%3E%3Cpath d='M4.5 15.5 9 20l4.5-4.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 3px center;
-  background-size: 18px 26px;
+input[type="number"]:not([data-no-steppers]) {
+  padding-left: var(--zn-step-w) !important; /* room for the buttons, whatever padding the box had */
+  padding-right: var(--zn-step-w) !important;
+  text-align: center !important;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none' stroke='%23c9ccd6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M9 14h10'/%3E%3Cpath d='M27.5 7v14' stroke-width='1' opacity='.3'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none' stroke='%23c9ccd6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M9 14h10M14 9v10'/%3E%3Cpath d='M.5 7v14' stroke-width='1' opacity='.3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position: left center, right center;
+  background-size: 28px 28px, 28px 28px;
   -moz-appearance: textfield;
   appearance: textfield;
   touch-action: manipulation;
 }
-[data-input="touch"] input[type="number"]:disabled,
-[data-ze-input="touch"] input[type="number"]:disabled {
+input[type="number"]:not([data-no-steppers])::-webkit-inner-spin-button,
+input[type="number"]:not([data-no-steppers])::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"]:disabled {
   background-image: none;
 }
