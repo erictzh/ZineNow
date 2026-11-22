@@ -1,4 +1,4 @@
-# ZEditor guide: Remove & fill, Magic eraser and the Unlimited canvas
+# ZEditor guide: Remove & fill, Magic eraser, the Unlimited canvas and Vectorize
 
 For people who use the app, not people who write code. Each part has two bits:
 
@@ -158,6 +158,68 @@ The code lives in `apps/ZEditor/src/state/useCanvasGrow.js` (the growing), `apps
 
 ---
 
+## Part 4: Vectorize (turn a picture into editable shapes)
+
+### What it's for
+
+A normal picture is a grid of coloured dots. If you enlarge it a lot, it goes blurry or blocky. **Vectorize** turns it into **shapes** (outlines filled with colour) that stay perfectly sharp at any size, and that you can recolour. It is like Illustrator's "Image Trace". Good for logos, line drawings, stamps, stencils, posters, risograph or screen-print looks, and cut-paper effects.
+
+### How to use it
+
+1. **Select an image** on the page (Move tool).
+2. In the right-hand panel, open the **Vectorize** section, pick a **Preset** (start with **Black & White**) and press **Vectorize**.
+3. **A new layer appears above your image** called Vectorized, and the original image is **hidden** (not deleted). You can show it again in the Layers panel.
+4. **The Vectorize panel now belongs to that new layer**, and every change you make there redoes the tracing live:
+
+| Control | What it does | When to change it |
+|---|---|---|
+| **Preset** | One-tap starting points: Black & White, Line Art, Silhouette, Outline, Shades of Grey, 3, 6 or 16 Colours. | Pick the nearest to what you want, then fine-tune. |
+| **Mode** | Black & white, shades of grey, or colour. | Colour for a poster look, Black & white for stamps and stencils. |
+| **Threshold** (black & white only) | Higher turns more of the picture black. Lower keeps only the darkest parts. | The drawing is too thin or too heavy. |
+| **Colours** (grey and colour modes) | How many colours the picture is reduced to. Fewer = flatter, poster-like. | 3–6 for a bold look, 16 for detail. |
+| **View** | What you see while working: the result, only the outlines, outlines over the source picture, or the source. | Use "Outlines with source image" to check how closely it follows. |
+
+5. **Advanced** (fold it open):
+
+| Setting | What it does |
+|---|---|
+| **Paths** | Low = loose, smooth, blobby outlines. High = outlines hug the pixels closely. |
+| **Corners** | Low = bends become round curves. High = bends become sharp, cut-paper corners. |
+| **Noise** | Drops specks and dust smaller than this. Raise it to clean up grainy photos. |
+| **White areas** | **Leave see-through** lets the paper (or what's below) show where the picture was white. |
+| **Method** | **Overlapping** hides hairline gaps between colours. **Abutting** makes each shape exactly its own area. |
+
+6. **Create:** choose **Fills**, **Strokes** (outlines) or both, and the stroke width. For an outline-only look, turn off Fills and turn on Strokes.
+7. **Colours:** every traced colour has a row. Change its colour with the picker, or **Hide** it (for example to remove a background colour), or **Reset** it. Your colour changes are kept when you change the trace settings, as long as the trace finds that colour again.
+8. **When you're done:**
+   - **Save as SVG** saves just this layer as a vector file (opens in Illustrator, Inkscape, Affinity and in browsers).
+   - **Expand** locks the shapes as they are and throws away the copy of the original picture the layer keeps for re-tracing, so the project file gets smaller. After that the trace settings stop working. Undo brings them back.
+   - **Rasterize to Image** turns the shapes back into an ordinary picture, so filters and effects can be used on it. Undo brings the trace back.
+
+### Tips that matter
+
+- **Start with the preset, then move one slider at a time.** The result updates as you go.
+- **High contrast pictures trace best.** A photo with soft shadows gives blobs. Raise the contrast first (Photo Adjustments) or use fewer colours.
+- A fuzzy, grainy photo gives lots of tiny specks. Raise **Noise**.
+- **Thin lines:** try the **Line Art** preset, and raise **Paths** for more detail.
+- For a one-colour stamp or stencil, use Black & White and set **White areas** to **Leave see-through**, then recolour the black.
+- The picture is traced at a limited size (up to 900 pixels on its long side), so very fine detail in a big photo is lost. The result is still sharp when you scale it, but it has less detail than the original.
+- The Lomo and Feather effects are not included in what gets traced.
+
+### What's going on inside
+
+Vectorize is a small three-step factory, and each step is its own piece of code. Nothing is sent anywhere: it all runs in your browser.
+
+1. **Cut the picture down to a few colours** (the "quantize" step). The app looks at every pixel and decides which of a small set of colours it belongs to. In black & white that is just "darker than the threshold = black, otherwise white". In colour mode it groups similar colours together (like sorting a bag of sweets into a few piles). White pixels can be marked "see-through" instead of a colour.
+2. **Find the outlines** (the "contours" step). For each colour, the app finds the area it covers, then walks round the edge of that area, along the little square pixel edges, until it gets back to where it started. That gives a closed loop for every blob and for every hole in a blob. At this point the outline is still stair-stepped, because pixels are squares.
+3. **Smooth the stairs into curves** (the "curves" step). The app smooths each loop and turns it into a **path**: a list of points and curve instructions, the same format a vector (SVG) file uses. The **Paths** slider decides how closely the curve follows the pixels, and the **Corners** slider decides when a bend is a sharp corner and when it is rounded. **Noise** throws away loops smaller than a set size.
+
+The result is stored as "one path per colour" (so a 6-colour trace is 6 shapes, stacked), plus a copy of the original picture so the settings can be changed later. **Overlapping** makes each shape also run under the shapes above it, which stops thin cracks showing between colours. **Expand** deletes that stored copy. **Rasterize** paints the shapes back into pixels.
+
+The code lives in `apps/ZEditor/src/model/trace/` (`quantize.js`, `contours.js`, `curves.js`, run in order by `traceImage.js`; `traceSettings.js` holds the presets and what each slider means), `apps/ZEditor/src/state/useImageTrace.js` (the live re-tracing when you move a slider) and `apps/ZEditor/src/ui/panels/format/TraceFormat.jsx` (the panel).
+
+---
+
 ## When something goes wrong
 
 | What you see | What to do |
@@ -168,6 +230,8 @@ The code lives in `apps/ZEditor/src/state/useCanvasGrow.js` (the growing), `apps
 | "Pattern fill could not be used here" | The area is too big. Draw a smaller box, or accept the Smooth fill it used. |
 | Magic eraser erased too much | Lower the two tolerances, or switch to **Connected only**. |
 | Magic eraser left bits behind | Raise the tolerances, or use **Whole image**. |
+| Vectorize gives blobs or too much detail | Change **Colours**, **Paths** and **Noise** one at a time. High-contrast pictures work best. |
+| Vectorize result has tiny specks | Raise **Noise**. |
 | The canvas doesn't grow | You have to let go of the mouse or finger first. Check you created it with "No paper". |
 | Something looks wrong on the tablet but fine elsewhere | Close and reopen the app to load the newest version, then tell me what you see. |
 
