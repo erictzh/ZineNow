@@ -299,8 +299,11 @@
 /* The Size & style row wraps by groups: the size box with its - and + buttons, then Bold / Italic / Underline,
    so on a narrow panel B I U drop to a second line together. */
 .ze-format-inline-wrap { flex-wrap: wrap; row-gap: 6px; }
-.ze-format-inline > .zn-num { flex: 1 1 auto; width: auto; min-width: 0; }
-.ze-format-inline-wrap > .zn-num { flex: 1 1 112px; min-width: 112px; }
+.ze-format-inline .ze-format-select { flex: 1 1 0; width: auto; min-width: 0; } /* a dropdown shares the row, never pushes the rest out */
+/* A number box with its - and + buttons (shared/styles/numberFields.css) in such a row: at least room for three digits. */
+.ze-format-inline > .zn-num { flex: 1 1 112px; width: auto; min-width: 112px; }
+/* ...or a fixed size, beside a dropdown (the placeholder text's paragraph count). */
+.ze-format-inline > .zn-num.ze-format-count { flex: 0 0 auto; width: 112px; }
 .ze-format-group { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 
 
