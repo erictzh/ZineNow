@@ -104,5 +104,21 @@ for (const style of ["smooth", "detail"]) {
   ok(worst < 40, "detail: a fill beside a sharp edge stays on the sky-to-branch colours (worst distance " + worst.toFixed(1) + ")");
 }
 
+// 7. grain: a noisy flat picture gets a fill with the same amount of noise; with grain off the fill is smooth
+{
+  const BW = 140, BH = 120;
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const gauss = () => Math.sqrt(-2 * Math.log(rnd())) * Math.cos(2 * Math.PI * rnd());
+  const mk = () => { const a = make(BW, BH, () => [120, 120, 120]); for (let i = 0; i < BW * BH; i++) for (let c = 0; c < 3; c++) a[i * 4 + c] = 120 + 8 * gauss(); return a; };
+  const hole = holeAt(BW, BH, 40, 30, 100, 90);
+  const std = (img) => { let n = 0, s = 0, s2 = 0; for (let i = 0; i < hole.length; i++) if (hole[i]) { const v = img[i * 4]; n++; s += v; s2 += v * v; } return Math.sqrt(s2 / n - (s / n) * (s / n)); };
+  const a = mk(); fillFromSurroundings(a, BW, BH, hole, "smooth");
+  const b = mk(); fillFromSurroundings(b, BW, BH, hole, "smooth", { grain: false });
+  ok(std(a) > 5.5 && std(a) < 10.5, "smooth + grain: the fill is as noisy as its surroundings (noise " + std(a).toFixed(1) + ", the picture's is about 8)");
+  ok(std(b) < 3, "smooth, grain off: the fill is flat (noise " + std(b).toFixed(2) + ")");
+  let mean = 0, n = 0; for (let i = 0; i < hole.length; i++) if (hole[i]) { mean += a[i * 4]; n++; }
+  ok(Math.abs(mean / n - 120) < 3, "the grain does not change the average colour (" + (mean / n).toFixed(1) + ")");
+}
+
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);

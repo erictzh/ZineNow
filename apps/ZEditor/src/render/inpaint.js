@@ -17,7 +17,8 @@
 const MARGIN = 32; // px of the surroundings kept round the hole's box
 const MAX_SIDE = { smooth: 1600, detail: 900 }; // a bigger box is worked on shrunk, then scaled back up
 
-export function fillFromSurroundings(rgba, width, height, hole, style) {
+export function fillFromSurroundings(rgba, width, height, hole, style, options) {
+  const grain = !options || options.grain !== false; // match the surroundings' grain (on unless turned off)
   // The hole's box
   let x0 = width, y0 = height, x1 = -1, y1 = -1, count = 0;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -55,7 +56,35 @@ export function fillFromSurroundings(rgba, width, height, hole, style) {
     const s = (by + y) * width + bx + x;
     for (let c = 0; c < 4; c++) rgba[s * 4 + c] = k > 1 ? sampleBilinear(img, w, h, (x + 0.5) / k - 0.5, (y + 0.5) / k - 0.5, c) : img[d * 4 + c];
   }
+  if (grain) addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole);
   return true;
+}
+
+// The fills above are smooth, which shows on a noisy photo as a flat patch. Measures the noise in the known pixels round
+// the hole (each pixel against the average of its four neighbours, per colour channel; edges are left out) and adds the
+// same amount of noise to the filled pixels. A seeded generator, so the same fill always gives the same picture.
+function addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole) {
+  const sum2 = [0, 0, 0], count = [0, 0, 0];
+  for (let y = 1; y < bh - 1; y++) for (let x = 1; x < bw - 1; x++) {
+    const d = y * bw + x;
+    if (full.msk[d] || full.msk[d - 1] || full.msk[d + 1] || full.msk[d - bw] || full.msk[d + bw]) continue;
+    for (let c = 0; c < 3; c++) {
+      const res = full.img[d * 4 + c] - (full.img[(d - 1) * 4 + c] + full.img[(d + 1) * 4 + c] + full.img[(d - bw) * 4 + c] + full.img[(d + bw) * 4 + c]) / 4;
+      if (Math.abs(res) > 24) continue; // an edge or a detail, not noise
+      sum2[c] += res * res; count[c]++;
+    }
+  }
+  // a pixel against its neighbours' mean has 1.25 x the noise variance
+  const sigma = sum2.map((s, c) => (count[c] > 50 ? Math.sqrt(s / count[c] / 1.25) : 0));
+  if (sigma.every((s) => s < 0.6)) return;
+  let seed = 2463534242 ^ (bw * 7919 + bh * 104729);
+  const rand = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const gauss = () => Math.sqrt(-2 * Math.log(rand() + 1e-12)) * Math.cos(2 * Math.PI * rand());
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
+    if (!full.msk[y * bw + x]) continue;
+    const s = (by + y) * width + bx + x;
+    for (let c = 0; c < 3; c++) rgba[s * 4 + c] += sigma[c] * gauss();
+  }
 }
 
 // ---- shared helpers -------------------------------------------------------------------------------
