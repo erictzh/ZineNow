@@ -4929,6 +4929,8 @@
   var STROKE_EFFECT = {
     key: "stroke",
     label: "Stroke",
+    excludes: ["feather"],
+    // a stroke on a faded edge looks wrong, so turning one on turns the other off
     controls: [
       { kind: "color", prop: "strokeColor", label: "Color", fallback: "#000000" },
       { kind: "slider", prop: "strokeThickness", label: "Thickness (px)", min: 1, max: 40, fallback: 4 }
@@ -4957,7 +4959,48 @@
       { kind: "slider", prop: "textureVariation", label: "Variation", min: 0, max: 100, fallback: 0 }
     ]
   };
-  var IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+  var FEATHER_EFFECT = {
+    key: "feather",
+    label: "Feather",
+    excludes: ["stroke"],
+    controls: [
+      { kind: "slider", prop: "featherAmount", label: "Width (% of the short side)", min: 1, max: 50, fallback: 12 },
+      { kind: "select", prop: "featherFade", label: "Fade", fallback: "smooth", options: [{ key: "smooth", label: "Smooth" }, { key: "linear", label: "Linear" }] },
+      {
+        kind: "select",
+        prop: "featherSides",
+        label: "Sides",
+        fallback: "all",
+        options: [{ key: "all", label: "All round" }, { key: "tb", label: "Top and bottom" }, { key: "lr", label: "Left and right" }, { key: "top", label: "Top only" }, { key: "bottom", label: "Bottom only" }, { key: "left", label: "Left only" }, { key: "right", label: "Right only" }],
+        hint: "With an edge shape on (Rounded, Ellipse...) the fade is always all round."
+      }
+    ]
+  };
+  var lomoPreset = (key, label, v) => ({ key, label, values: { lomoStrength: 100, lomoContrast: 40, lomoSaturation: 30, lomoTint: 40, lomoShadowTint: "#0e5a73", lomoHighlightTint: "#ffb35c", lomoVignette: 55, lomoVignetteSize: 50, lomoVignetteRound: 50, lomoGrain: 20, ...v } });
+  var LOMO_CONTROLS = [
+    { kind: "slider", prop: "lomoStrength", label: "Strength (%)", min: 0, max: 100, fallback: 100 },
+    { kind: "slider", prop: "lomoContrast", label: "Contrast", min: 0, max: 100, fallback: 40 },
+    { kind: "slider", prop: "lomoSaturation", label: "Saturation boost", min: -50, max: 100, fallback: 30 },
+    { kind: "slider", prop: "lomoTint", label: "Colour shift", min: 0, max: 100, fallback: 40 },
+    { kind: "color", prop: "lomoShadowTint", label: "Shadow colour", fallback: "#0e5a73" },
+    { kind: "color", prop: "lomoHighlightTint", label: "Highlight colour", fallback: "#ffb35c" },
+    { kind: "slider", prop: "lomoVignette", label: "Vignette: darkness", min: 0, max: 100, fallback: 55 },
+    { kind: "slider", prop: "lomoVignetteSize", label: "Vignette: how far in", min: 0, max: 100, fallback: 50 },
+    { kind: "slider", prop: "lomoVignetteRound", label: "Vignette: round ↔ fits the picture", min: 0, max: 100, fallback: 50 },
+    { kind: "slider", prop: "lomoGrain", label: "Grain", min: 0, max: 100, fallback: 20 }
+  ];
+  var LOMO_EFFECT = {
+    key: "lomo",
+    label: "Lomo",
+    controls: LOMO_CONTROLS,
+    presets: [
+      lomoPreset("classic", "Classic", {}),
+      lomoPreset("warm", "Warm", { lomoShadowTint: "#6b2d0f", lomoHighlightTint: "#ffd27a", lomoSaturation: 20, lomoGrain: 25 }),
+      lomoPreset("teal", "Teal & orange", { lomoShadowTint: "#0a6a78", lomoHighlightTint: "#ff9a4d", lomoTint: 60, lomoContrast: 50 }),
+      lomoPreset("faded", "Faded", { lomoContrast: 10, lomoSaturation: -10, lomoTint: 30, lomoShadowTint: "#3a4a6b", lomoHighlightTint: "#f2d8b0", lomoVignette: 35, lomoGrain: 35 })
+    ]
+  };
+  var IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
   function imageEdgeOutline(ann) {
     if (isEllipse(ann)) return ellipseOutline(ann);
     const edge = IMAGE_EFFECTS.find((effect) => effect.outline && ann[effect.key]);
@@ -6211,14 +6254,14 @@
         });
       }
     }
-    let curve = null;
+    let curve2 = null;
     if (look.curve && look.curve.curveBend !== 0) {
       const widest = Math.max(1, ...lines.map(measure));
       const radius = widest / (Math.abs(look.curve.curveBend) / 100 * Math.PI);
-      curve = { radius, sign: look.curve.curveBend > 0 ? 1 : -1, sag: radius * (1 - Math.cos(widest / 2 / radius)) };
+      curve2 = { radius, sign: look.curve.curveBend > 0 ? 1 : -1, sag: radius * (1 - Math.cos(widest / 2 / radius)) };
     }
-    const boxHeight = textHeight + padY * 2 + (curve ? curve.sag : 0);
-    return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, typesetLines, textHeight, boxHeight, measure, fontAt, ascent, descent, curve, overflow, columns, columnWidth, columnStride: columnWidth + columnGap };
+    const boxHeight = textHeight + padY * 2 + (curve2 ? curve2.sag : 0);
+    return { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, typesetLines, textHeight, boxHeight, measure, fontAt, ascent, descent, curve: curve2, overflow, columns, columnWidth, columnStride: columnWidth + columnGap };
   }
   function textCanvasMargin(ann, look) {
     const fontSize = ann.fontSize || 16;
@@ -6373,9 +6416,9 @@
     return [.../* @__PURE__ */ new Set([...ids, ...mates])];
   }
   function groupColor(groupId) {
-    let hash = 0;
-    for (const ch of String(groupId)) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-    return `hsl(${hash * 47 % 360} 70% 60%)`;
+    let hash2 = 0;
+    for (const ch of String(groupId)) hash2 = (hash2 * 31 + ch.charCodeAt(0)) % 360;
+    return `hsl(${hash2 * 47 % 360} 70% 60%)`;
   }
   function translatedAnnotation(ann, dx, dy) {
     return ann.type === "stroke" ? { ...ann, points: ann.points.map(([px, py]) => [px + dx, py + dy]) } : { ...ann, x: ann.x + dx, y: ann.y + dy };
@@ -7175,6 +7218,182 @@
     }
   }
 
+  // apps/ZEditor/src/render/feather.js
+  var curve = (t, kind) => {
+    const c = Math.min(1, Math.max(0, t));
+    return kind === "linear" ? c : c * c * (3 - 2 * c);
+  };
+  function distanceToOutside(inside, w, h) {
+    const W = w + 2, H = h + 2, INF = 1e9;
+    const d = new Float32Array(W * H).fill(0);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[(y + 1) * W + x + 1] = inside[y * w + x] ? INF : 0;
+    for (let y = 1; y <= h; y++) for (let x = 1; x <= w; x++) {
+      const i = y * W + x;
+      if (d[i] === 0) continue;
+      d[i] = Math.min(d[i], d[i - 1] + 1, d[i - W] + 1, d[i - W - 1] + 1.4142, d[i - W + 1] + 1.4142);
+    }
+    for (let y = h; y >= 1; y--) for (let x = w; x >= 1; x--) {
+      const i = y * W + x;
+      if (d[i] === 0) continue;
+      d[i] = Math.min(d[i], d[i + 1] + 1, d[i + W] + 1, d[i + W + 1] + 1.4142, d[i + W - 1] + 1.4142);
+    }
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = d[(y + 1) * W + x + 1];
+    return out;
+  }
+  function featherAlpha(w, h, widthPx, kind, sides, shape) {
+    const f = Math.max(1, widthPx);
+    const out = new Float32Array(w * h);
+    if (shape) {
+      const dist = distanceToOutside(shape, w, h);
+      for (let i = 0; i < out.length; i++) out[i] = shape[i] ? curve((dist[i] - 0.5) / f, kind) : 0;
+      return out;
+    }
+    const on = { top: false, bottom: false, left: false, right: false };
+    if (sides === "tb") {
+      on.top = on.bottom = true;
+    } else if (sides === "lr") {
+      on.left = on.right = true;
+    } else if (on[sides] === false) {
+      on[sides] = true;
+    } else {
+      on.top = on.bottom = on.left = on.right = true;
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let a = 1;
+      if (on.top) a *= curve((y + 0.5) / f, kind);
+      if (on.bottom) a *= curve((h - y - 0.5) / f, kind);
+      if (on.left) a *= curve((x + 0.5) / f, kind);
+      if (on.right) a *= curve((w - x - 0.5) / f, kind);
+      out[y * w + x] = a;
+    }
+    return out;
+  }
+  function applyFeather(ctx, canvas, ann, outline, unitScale) {
+    const { width, height } = canvas;
+    if (width === 0 || height === 0) return;
+    const s = effectSettings(ann, FEATHER_EFFECT);
+    let shape = null;
+    if (outline) {
+      const m = document.createElement("canvas");
+      m.width = width;
+      m.height = height;
+      const mctx = m.getContext("2d");
+      mctx.scale(unitScale, unitScale);
+      mctx.fillStyle = "#000";
+      mctx.fill(new Path2D(outline));
+      const a = mctx.getImageData(0, 0, width, height).data;
+      shape = new Uint8Array(width * height);
+      for (let i = 0; i < shape.length; i++) shape[i] = a[i * 4 + 3] > 127 ? 1 : 0;
+    }
+    const alpha = featherAlpha(width, height, s.featherAmount / 100 * Math.min(width, height), s.featherFade, s.featherSides, shape);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    for (let i = 0; i < alpha.length; i++) data[i * 4 + 3] = data[i * 4 + 3] * alpha[i];
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // apps/ZEditor/src/render/lomo.js
+  var smoothstep = (a, b, x) => {
+    const t = Math.min(1, Math.max(0, (x - a) / (b - a || 1)));
+    return t * t * (3 - 2 * t);
+  };
+  function hash(x, y, seed) {
+    let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(seed | 0, 1442695041) | 0;
+    h = Math.imul(h ^ h >>> 13, 1274126177);
+    return ((h ^ h >>> 16) >>> 0) / 4294967296;
+  }
+  function lomoPixels(data, w, h, p) {
+    const strength = p.strength / 100;
+    if (strength <= 0) return;
+    const contrast = p.contrast / 100;
+    const saturation = 1 + p.saturation / 100;
+    const tintAmount = p.tintAmount / 100;
+    const chroma = (rgb) => {
+      const l = rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114;
+      return [rgb[0] - l, rgb[1] - l, rgb[2] - l];
+    };
+    const shadowChroma = chroma(p.shadowTint), highlightChroma = chroma(p.highlightTint);
+    const vignette = p.vignette / 100;
+    const vStart = 1 - p.vignetteSize / 100 * 0.9;
+    const round = p.vignetteRound / 100;
+    const grain = p.grain / 100 * 60;
+    const cx = w / 2, cy = h / 2, halfDiag = Math.hypot(w, h) / 2;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i + 3] === 0) continue;
+        const o0 = data[i], o1 = data[i + 1], o2 = data[i + 2];
+        let r = o0 / 255, g = o1 / 255, b = o2 / 255;
+        if (contrast > 0) {
+          const s = (v) => v * v * (3 - 2 * v);
+          r += (s(r) - r) * contrast * 1.4;
+          g += (s(g) - g) * contrast * 1.4;
+          b += (s(b) - b) * contrast * 1.4;
+        }
+        let l = r * 0.299 + g * 0.587 + b * 0.114;
+        if (saturation !== 1) {
+          r = l + (r - l) * saturation;
+          g = l + (g - l) * saturation;
+          b = l + (b - l) * saturation;
+        }
+        if (tintAmount > 0) {
+          l = Math.min(1, Math.max(0, l));
+          const ws = (1 - l) * (1 - l) * tintAmount / 255, wh = l * l * tintAmount / 255;
+          r += shadowChroma[0] * ws + highlightChroma[0] * wh;
+          g += shadowChroma[1] * ws + highlightChroma[1] * wh;
+          b += shadowChroma[2] * ws + highlightChroma[2] * wh;
+        }
+        if (vignette > 0) {
+          const dx = (x + 0.5 - cx) / cx, dy = (y + 0.5 - cy) / cy;
+          const oval = Math.hypot(dx, dy) / Math.SQRT2;
+          const circle = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) / halfDiag;
+          const d = oval + (circle - oval) * round;
+          const k = 1 - vignette * smoothstep(vStart, 1, d);
+          r *= k;
+          g *= k;
+          b *= k;
+        }
+        if (grain > 0) {
+          const mid = 1 - Math.abs(l - 0.5) * 1.2;
+          const n = (hash(x, y, 1) + hash(x, y, 2) - 1) * grain * mid / 255;
+          r += n;
+          g += n;
+          b += n;
+        }
+        data[i] = o0 + (r * 255 - o0) * strength;
+        data[i + 1] = o1 + (g * 255 - o1) * strength;
+        data[i + 2] = o2 + (b * 255 - o2) * strength;
+      }
+    }
+  }
+  function lomoParams(ann) {
+    const v = controlValues(ann, LOMO_CONTROLS);
+    const rgb = (hex2) => {
+      const c = hexToRgb(hex2);
+      return [c.r, c.g, c.b];
+    };
+    return {
+      strength: v.lomoStrength,
+      contrast: v.lomoContrast,
+      saturation: v.lomoSaturation,
+      tintAmount: v.lomoTint,
+      shadowTint: rgb(v.lomoShadowTint),
+      highlightTint: rgb(v.lomoHighlightTint),
+      vignette: v.lomoVignette,
+      vignetteSize: v.lomoVignetteSize,
+      vignetteRound: v.lomoVignetteRound,
+      grain: v.lomoGrain
+    };
+  }
+  function applyLomo(ctx, canvas, ann) {
+    const { width, height } = canvas;
+    if (width === 0 || height === 0) return;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    lomoPixels(imageData.data, width, height, lomoParams(ann));
+    ctx.putImageData(imageData, 0, 0);
+  }
+
   // apps/ZEditor/src/render/photoAdjust.js
   function applyPhotoAdjust(ctx, canvas, ann) {
     const { width, height } = canvas;
@@ -7246,14 +7465,17 @@
     const imgFilter = effectiveImageFilter(ann, pageFilter);
     const filterType = imgFilter.type;
     const adjusted = hasPhotoAdjust(ann);
-    if (filterType && filterType !== "none" || adjusted) {
+    const lomo = Boolean(ann.lomo), feathered = Boolean(ann.feather);
+    if (filterType && filterType !== "none" || adjusted || lomo || feathered) {
       const off = document.createElement("canvas");
       off.width = Math.max(1, Math.round(w));
       off.height = Math.max(1, Math.round(h));
       const octx = off.getContext("2d");
       octx.drawImage(img, sx, sy, sw, sh, 0, 0, off.width, off.height);
       if (adjusted) applyPhotoAdjust(octx, off, ann);
+      if (lomo) applyLomo(octx, off, ann);
       applyPageFilter(octx, off, imgFilter, scaleFactor);
+      if (feathered) applyFeather(octx, off, ann, imageEdgeOutline(ann), off.width / ann.width);
       source = off;
       sx = 0;
       sy = 0;
@@ -7531,7 +7753,7 @@
     const photoImg = ann.fillSrc ? await loadImageElement(ann.fillSrc) : null;
     ctx.save();
     const layout = layoutText(ctx, ann, scaleFactor);
-    const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve } = layout;
+    const { look, fontSize, lineHeight, baselineOffset, x, y, padX, padY, boxWidth, innerWidth, lines, lineStarts, textHeight, boxHeight, measure, ascent, descent, curve: curve2 } = layout;
     rotateAboutCenter(ctx, ann, x + boxWidth / 2, y + boxHeight / 2);
     if (look.label) {
       ctx.fillStyle = rgbaCss(look.label.labelColor, look.label.labelAlpha);
@@ -7554,7 +7776,7 @@
     let runs = [];
     let lineExtents = [];
     let letterIndex = 0;
-    if (!look.ransom && !curve) {
+    if (!look.ransom && !curve2) {
       ({ runs, lineExtents } = layoutPlainRuns(layout, ann));
     } else {
       lines.forEach((line, i) => {
@@ -7562,7 +7784,7 @@
         let lineX = x + padX;
         if (ann.align === "center" || look.stacked) lineX = x + (boxWidth - lineWidth) / 2;
         else if (ann.align === "right") lineX = x + boxWidth - padX - lineWidth;
-        const lineTop = y + padY + (curve && curve.sign < 0 ? curve.sag : 0) + i * lineHeight;
+        const lineTop = y + padY + (curve2 && curve2.sign < 0 ? curve2.sag : 0) + i * lineHeight;
         const baselineY = lineTop + baselineOffset;
         const lineStart = lineStarts[i];
         lineExtents.push({ line, lineX, lineWidth, baselineY, segments: [{ x0: lineX, x1: lineX + lineWidth, color: null }] });
@@ -7590,11 +7812,11 @@
                 run2.tile = RANSOM_PAPER_COLORS[Math.floor(seededNoise(k * 4 + 3, seed) * RANSOM_PAPER_COLORS.length)];
               }
             }
-            if (curve) {
-              const phi = (run2.cx - (lineX + lineWidth / 2)) / curve.radius;
-              run2.tilt += curve.sign * phi;
-              run2.dx += curve.radius * Math.sin(phi) - phi * curve.radius;
-              run2.dy += curve.sign * curve.radius * (1 - Math.cos(phi));
+            if (curve2) {
+              const phi = (run2.cx - (lineX + lineWidth / 2)) / curve2.radius;
+              run2.tilt += curve2.sign * phi;
+              run2.dx += curve2.radius * Math.sin(phi) - phi * curve2.radius;
+              run2.dy += curve2.sign * curve2.radius * (1 - Math.cos(phi));
             }
           }
           runs.push(run2);
@@ -7614,7 +7836,7 @@
       draw(run2);
       c.restore();
     };
-    const fillsThroughLayer = Boolean(photoImg || look.gradient && (look.ransom || curve));
+    const fillsThroughLayer = Boolean(photoImg || look.gradient && (look.ransom || curve2));
     const tilePad = fontSize * 0.06;
     const paintText = (c) => {
       setFont(c);
@@ -7681,7 +7903,7 @@
         paintOwnColors();
       }
       lineExtents.forEach(({ line, baselineY, segments }) => {
-        if (!line || curve) return;
+        if (!line || curve2) return;
         segments.forEach(({ x0, x1, color, underline, strike }) => {
           const decoColor = color || look.color;
           const underlined = underline != null ? underline : ann.underline;
@@ -12890,8 +13112,9 @@
     const imgFilter = effectiveImageFilter(ann, pageFilter);
     const filterType = imgFilter.type;
     const adjusted = hasPhotoAdjust(ann);
-    const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
-    const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null]) : null;
+    const lomoOn = Boolean(ann.lomo), featherOn = Boolean(ann.feather);
+    const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted || lomoOn || featherOn;
+    const filterCanvasKey = usesFilterCanvas ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null, lomoOn ? controlValues(ann, LOMO_CONTROLS) : null, featherOn ? [effectSettings(ann, FEATHER_EFFECT), imageEdgeOutline(ann)] : null]) : null;
     useEffect12(() => {
       if (!usesFilterCanvas || isCropping) return;
       let cancelled = false;
@@ -12907,7 +13130,9 @@
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
         if (adjusted) applyPhotoAdjust(ctx, canvas, ann);
+        if (lomoOn) applyLomo(ctx, canvas, ann);
         applyPageFilter(ctx, canvas, imgFilter, 1);
+        if (featherOn) applyFeather(ctx, canvas, ann, imageEdgeOutline(ann), w / ann.width);
       })();
       return () => {
         cancelled = true;
@@ -15217,12 +15442,13 @@
   function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
     const toggleEffect = (effect, on) => {
       const otherEdgesOff = effect.outline && on ? Object.fromEntries(effects.filter((e) => e.outline).map((e) => [e.key, false])) : {};
-      onPatch({ ...otherEdgesOff, [effect.key]: on });
+      const excluded = on && effect.excludes ? Object.fromEntries(effect.excludes.map((key) => [key, false])) : {};
+      onPatch({ ...otherEdgesOff, ...excluded, [effect.key]: on });
     };
     const available = effects.filter((effect) => !(effect.outline && isEllipse(ann)) && !(effect === ELLIPSE_EFFECT && ann.type === "rect"));
     const active = [...beforeLabel ? [beforeLabel] : [], ...available.filter((effect) => ann[effect.key]).map((effect) => effect.label)];
     return /* @__PURE__ */ React.createElement(PanelSection, { id: "effects", title: "Effect", essential: Boolean(essential), group: true, summary: active.length > 0 ? active.join(", ") : void 0 }, before, available.map((effect) => {
-      const hint = [effect.outline && "Only one edge shape can be on at a time.", effect.hint].filter(Boolean).join(" ");
+      const hint = [effect.outline && "Only one edge shape can be on at a time.", effect.hint, effect.excludes && "Turns " + effect.excludes.map((key) => (effects.find((e) => e.key === key) || { label: key }).label).join(" and ") + " off."].filter(Boolean).join(" ");
       return /* @__PURE__ */ React.createElement(
         PanelSection,
         {
@@ -15234,9 +15460,26 @@
           hint: hint || void 0,
           onReset: effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : void 0
         },
+        effect.presets && /* @__PURE__ */ React.createElement(PresetPicker, { effect, ann, onPatch }),
         effect.controls.length > 0 && /* @__PURE__ */ React.createElement(ControlList, { controls: effect.controls, source: ann, onPatch })
       );
     }));
+  }
+  function PresetPicker({ effect, ann, onPatch }) {
+    const values = controlValues(ann, effect.controls);
+    const same = (preset) => Object.entries(preset.values).every(([prop, v]) => values[prop] === v);
+    const current = (effect.presets.find(same) || { key: "custom" }).key;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(
+      SelectInput,
+      {
+        options: [...effect.presets.map((p) => ({ key: p.key, label: p.label })), { key: "custom", label: "Custom" }],
+        value: current,
+        onChange: (key) => {
+          const preset = effect.presets.find((p) => p.key === key);
+          if (preset) onPatch(preset.values);
+        }
+      }
+    ));
   }
 
   // apps/ZEditor/src/ui/panels/TextWrapSection.jsx
@@ -17520,7 +17763,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "3976c83"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f951ac4"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
