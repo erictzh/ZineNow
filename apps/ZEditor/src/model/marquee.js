@@ -16,7 +16,7 @@ export { dragBox } from "./geometry.js";
 //               from the pixels round it, see fillStyle). Cutting from everything visible can only cover the
 //               spot, so there it is "fill" or "surround".
 // fillStyle:    how "surround" (and the Remove & fill button) fills: "smooth" (a blend of the edge colours, the
-//               default), "pattern" (texture copied from elsewhere in the picture) or "detail"; fillGrain: add noise like the surroundings' so the fill is not flat (lines and edges run on through it); render/inpaint.js.
+//               fell back to when pattern can't be used), "pattern" (the default) (texture copied from elsewhere in the picture) or "detail"; fillGrain: add noise like the surroundings' so the fill is not flat (lines and edges run on through it); render/inpaint.js.
 // fillColor:    the colour of that fill (white, like paper).
 export const MARQUEE_DEFAULTS = {
   action: "copy",
@@ -24,8 +24,14 @@ export const MARQUEE_DEFAULTS = {
   source: "visible",
   includePaper: false,
   cutLeaves: "transparent",
-  fillStyle: "smooth",
+  fillStyle: "pattern",
   fillGrain: true,
+  fillMix: 100, // Pattern: how much of the result is the texture copy (the rest is the smooth blend), %
+  fillPatch: 15, // Pattern: the size of the patches copied, px of the picture
+  fillReach: 80, // Pattern: how far from the area it looks for texture to copy, px of the picture
+  fillGrow: 0, // how much bigger than the marquee the filled area is, px of the picture
+  fillGrainAmount: 100, // how much grain is added, % of what the picture has
+  fillSeed: 0, // Pattern: another number picks other patches ("Try another")
   fillColor: "#ffffff",
 };
 

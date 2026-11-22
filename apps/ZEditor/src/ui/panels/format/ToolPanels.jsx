@@ -6,8 +6,8 @@ import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/strokes.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { CustomColorInput } from "../../controls/inputs.jsx";
-import { isUsableMarquee } from "../../../model/marquee.js";
-import { SliderNumberInput } from "../../controls/inputs.jsx";
+import { MARQUEE_DEFAULTS, isUsableMarquee } from "../../../model/marquee.js";
+import { SliderNumberInput, StepperNumberInput } from "../../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { StrokeFormatFields } from "../../controls/StrokeFormatFields.jsx";
 import { TextBasicSection } from "../TextBasicSection.jsx";
@@ -111,15 +111,27 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
           <option value="pattern">Pattern: copies texture from the rest of the picture</option>
           <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
         </select>
-        <label className="ze-format-check">
-          <input type="checkbox" checked={settings.fillGrain !== false} onChange={(e) => change({ fillGrain: e.target.checked })} />
-          <span>Match the grain</span>
-          <span className="ze-format-hint">Adds noise like the picture's own, so the fill is not a flat patch.</span>
-        </label>
         <div className="ze-format-row">
           <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
+          <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
         </div>
         <span className="ze-format-hint">{!ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern suits grass, foliage, brick, road and other texture (areas up to about 350 px of the picture; it takes a moment); Smooth suits plain paper and soft backgrounds; Detailed suits thin lines and small marks."}</span>
+      </PanelSection>
+      <PanelSection id="marquee.fillTune" title="Fine-tune the fill" defaultOpen>
+        <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to redo it). All sizes are in pixels of the picture.</span>
+        {[
+          { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+          { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+          { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+          { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
+          { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100) },
+        ].filter((f) => f.show).map((f) => (
+          <div className="ze-format-field" key={f.key}>
+            <span className="ze-format-label">{f.label}</span>
+            <StepperNumberInput min={f.min} max={f.max} step={f.step} label={f.label} value={settings[f.key] === undefined ? MARQUEE_DEFAULTS[f.key] : settings[f.key]} onChange={(v) => change({ [f.key]: v })} />
+            <span className="ze-format-hint">{f.hint}</span>
+          </div>
+        ))}
       </PanelSection>
     </FormatPanelShell>
   );

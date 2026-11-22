@@ -15,7 +15,7 @@
 // is bigger than MAX_HOLE_SIDE, or no patch of the picture is free of the hole to copy from.
 
 const DEFAULT_HALF = 7; // patches are 15 x 15 (bigger ones keep more of a pattern, e.g. brick courses)
-const MARGIN = 80; // px of the picture kept round the hole's box to copy from
+const DEFAULT_REACH = 80; // px of the picture kept round the hole's box to copy from
 export const MAX_HOLE_SIDE = 360;
 const MAX_CANDIDATES = 3000; // patches tried per step (spread evenly over the picture)
 
@@ -27,6 +27,7 @@ export async function patchFill(rgba, width, height, hole, options = {}) {
     if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
   }
   if (x1 < 0 || x1 - x0 + 1 > MAX_HOLE_SIDE || y1 - y0 + 1 > MAX_HOLE_SIDE) return false;
+  const MARGIN = Math.max(HALF * 3, Math.round(options.reach || DEFAULT_REACH));
   const bx = Math.max(0, x0 - MARGIN), by = Math.max(0, y0 - MARGIN);
   const w = Math.min(width, x1 + 1 + MARGIN) - bx, h = Math.min(height, y1 + 1 + MARGIN) - by;
 
@@ -93,6 +94,9 @@ export async function patchFill(rgba, width, height, hole, options = {}) {
   for (let i = 0; i < w * h; i++) if (isFront(i)) { front.add(i); prio[i] = priorityAt(i); }
 
   const side = 2 * HALF + 1;
+  const seed = options.seed || 0;
+  let rs = (seed * 2654435761) >>> 0 || 1; // a seeded generator for the variation
+  const rand = () => { rs = (rs + 0x6D2B79F5) | 0; let t = Math.imul(rs ^ (rs >>> 15), 1 | rs); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   let lastYield = Date.now();
   while (front.size) {
     let pi = -1, bp = -1;
@@ -107,18 +111,27 @@ export async function patchFill(rgba, width, height, hole, options = {}) {
       tOff.push(dy * w + dx); tRgb.push(img[j * 4], img[j * 4 + 1], img[j * 4 + 2]);
     }
     // the best match
+    // (with a variation number, one of the three best is taken, picked by that number: another number, other patches)
     let bestC = -1, bestD = Infinity;
+    const top = [], topD = [];
     for (let k = 0; k < cands.length; k++) {
       const c = cands[k];
       let d = 0;
-      for (let t = 0; t < tOff.length && d < bestD; t++) {
+      const limit = seed ? (topD.length < 3 ? Infinity : topD[2]) : bestD;
+      for (let t = 0; t < tOff.length && d < limit; t++) {
         const o = (c + tOff[t]) * 4;
         const a = img[o] - tRgb[t * 3], b = img[o + 1] - tRgb[t * 3 + 1], e = img[o + 2] - tRgb[t * 3 + 2];
         d += a * a + b * b + e * e;
       }
       if (d < bestD) { bestD = d; bestC = c; }
+      if (seed && d < limit) {
+        let at = topD.length; while (at > 0 && topD[at - 1] > d) at--;
+        top.splice(at, 0, c); topD.splice(at, 0, d);
+        if (top.length > 3) { top.pop(); topD.pop(); }
+      }
     }
     if (bestC < 0) return false;
+    if (seed && top.length) bestC = top[Math.floor(rand() * top.length)];
 
     // copy into the hole part of the patch
     const cf = conf[pi] > 0 ? conf[pi] : prio[pi];

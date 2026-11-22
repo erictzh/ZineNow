@@ -18,7 +18,7 @@ const MARGIN = 32; // px of the surroundings kept round the hole's box
 const MAX_SIDE = { smooth: 1600, detail: 900 }; // a bigger box is worked on shrunk, then scaled back up
 
 export function fillFromSurroundings(rgba, width, height, hole, style, options) {
-  const grain = !options || options.grain !== false; // match the surroundings' grain (on unless turned off)
+  const grainAmount = !options ? 1 : options.grain === false ? 0 : options.grainAmount === undefined ? 1 : options.grainAmount; // x the surroundings' grain (1 = the same; 0 = none)
   // The hole's box
   let x0 = width, y0 = height, x1 = -1, y1 = -1, count = 0;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -56,14 +56,14 @@ export function fillFromSurroundings(rgba, width, height, hole, style, options) 
     const s = (by + y) * width + bx + x;
     for (let c = 0; c < 4; c++) rgba[s * 4 + c] = k > 1 ? sampleBilinear(img, w, h, (x + 0.5) / k - 0.5, (y + 0.5) / k - 0.5, c) : img[d * 4 + c];
   }
-  if (grain) addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole);
+  if (grainAmount > 0) addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole, grainAmount);
   return true;
 }
 
 // The fills above are smooth, which shows on a noisy photo as a flat patch. Measures the noise in the known pixels round
 // the hole (each pixel against the average of its four neighbours, per colour channel; edges are left out) and adds the
 // same amount of noise to the filled pixels. A seeded generator, so the same fill always gives the same picture.
-function addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole) {
+function addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole, amount) {
   const sum2 = [0, 0, 0], count = [0, 0, 0];
   for (let y = 1; y < bh - 1; y++) for (let x = 1; x < bw - 1; x++) {
     const d = y * bw + x;
@@ -83,7 +83,7 @@ function addMatchingGrain(rgba, width, bx, by, bw, bh, full, hole) {
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     if (!full.msk[y * bw + x]) continue;
     const s = (by + y) * width + bx + x;
-    for (let c = 0; c < 3; c++) rgba[s * 4 + c] += sigma[c] * gauss();
+    for (let c = 0; c < 3; c++) rgba[s * 4 + c] += amount * sigma[c] * gauss();
   }
 }
 

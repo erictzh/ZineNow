@@ -39,6 +39,16 @@ export function SliderNumberInput({ min, max, value, onChange }) {
   );
 }
 
+// A number box with its - and + buttons and no slider (so changing it is cheap): a whole number kept between `min`
+// and `max`; `step` is what a button press changes it by.
+export function StepperNumberInput({ min, max, step = 1, value, onChange, label }) {
+  const numberProps = useDraftInputProps(value, (text) => {
+    const n = Number(text);
+    if (text.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, Math.round(n))));
+  });
+  return <NumberBox className="ze-format-number" min={min} max={max} step={step} aria-label={label} {...numberProps} />;
+}
+
 // The "pick any colour" control beside a row of preset swatches. A rainbow
 // ring around the current colour and an eyedropper on top say what it is;
 // the eyedropper is drawn in a difference blend so it shows on any colour.
