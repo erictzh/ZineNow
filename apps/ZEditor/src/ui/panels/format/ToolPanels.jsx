@@ -83,8 +83,8 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
       </PanelSection>
 
       <div className="ze-marquee-box">
-        <div className="ze-marquee-box-title">Action</div>
-        <select className="ze-format-select" aria-label="Action" value={fillMode ? "fill" : "layer"} onChange={(e) => change({ mode: e.target.value })}>
+        <div className="ze-marquee-box-title">Marquee Action</div>
+        <select className="ze-format-select" aria-label="Marquee Action" value={fillMode ? "fill" : "layer"} onChange={(e) => change({ mode: e.target.value })}>
           <option value="layer">Make a new layer</option>
           <option value="fill">Remove &amp; fill</option>
         </select>
