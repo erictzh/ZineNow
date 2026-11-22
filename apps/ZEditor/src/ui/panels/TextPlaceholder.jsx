@@ -2,6 +2,7 @@
 
 import { MAX_PLACEHOLDER_PARAGRAPHS, PLACEHOLDER_KINDS, placeholderText } from "../../model/text/placeholderText.js";
 import { PanelSection } from "../controls/PanelSection.jsx";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 
 const { useState } = React;
 
@@ -23,8 +24,8 @@ export function TextPlaceholder({ ann, patch }) {
           <select className="ze-format-select" aria-label="Placeholder language" value={kind} onChange={(e) => setKind(e.target.value)}>
             {PLACEHOLDER_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
-          <input
-            type="number" className="ze-format-number" min="1" max={MAX_PLACEHOLDER_PARAGRAPHS} step="1"
+          <NumberBox
+            className="ze-format-number" min="1" max={MAX_PLACEHOLDER_PARAGRAPHS} step="1"
             aria-label="Paragraphs" title="Number of paragraphs" value={count}
             onChange={(e) => setCount(e.target.value)}
             onBlur={() => setCount(Math.max(1, Math.min(MAX_PLACEHOLDER_PARAGRAPHS, Math.round(Number(count)) || 1)))}

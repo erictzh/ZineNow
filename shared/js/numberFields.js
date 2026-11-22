@@ -1,5 +1,5 @@
-// Number boxes (<input type="number">) that behave on a tablet, for every ZineNow app. One script, no
-// changes to the boxes themselves. Call installNumberFields() once at start-up.
+// Number boxes (<input type="number">) that behave on a tablet, for every ZineNow app. Call installNumberFields()
+// once at start-up.
 //
 // 1. You can clear a box and type a new number. Many boxes turn what is typed into a number on every
 //    keystroke and put the old value straight back when the box is emptied, so the old digits could
@@ -11,15 +11,14 @@
 //    the box, which looks like a last digit that can't be deleted. So while a box is held empty it also
 //    refuses those write-backs; only the person typing changes it.
 //
-// 2. − and + buttons on every number box, after the number: ( 12 )( − )( + ) (drawn in
-//    shared/styles/numberFields.css): the strip at the right edge of the box has the + at the very edge and the −
-//    just before it; each steps its way, holding repeats. Chrome on Android has no spinner of its own, and
-//    these are big enough for a finger. Pressing a button doesn't focus the box, so the keyboard doesn't
-//    open. It steps the way the browser's own spinner does (min, max, step), and tells the app the way the
-//    spinner does: an `input` event without an inputType, then `change`. Mouse and touch alike. A box that
-//    must stay plain says data-no-steppers.
+// 2. ( number )( − )( + ): every number box has a − button and a + button beside it, like T- / T+ in ZEditor's
+//    text panel. The markup is  <span class="zn-num"> <input type="number"> <button class="zn-num-btn"
+//    data-zn-step="-1"> <button class="zn-num-btn" data-zn-step="1"> </span>  (React apps: the NumberBox component
+//    in shared/js/NumberBox.jsx; plain pages: wrapNumberInput below; styles: shared/styles/numberFields.css).
+//    A press steps the box the way the browser's own spinner does (min, max, step) and tells the app the way the
+//    spinner does: an `input` event without an inputType, then `change`; holding repeats. Pressing a button
+//    doesn't take the focus, so a box that is being typed in keeps its keyboard and no other keyboard opens.
 
-const STEP_PX = 29; // hit area of each button, as in the stylesheet (--zn-step-w)
 const HOLD_MS = 450; // before holding a button repeats
 const REPEAT_MS = 80;
 
@@ -29,7 +28,7 @@ const allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
 // Writes a value to the box without telling the app (the app already holds that value).
 const writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
 
-// Boxes held empty on purpose (see 1. below): box -> the box's own `value` property as it was before
+// Boxes held empty on purpose (see 1. above): box -> the box's own `value` property as it was before
 // (React puts one on every box it makes, to notice changes), or null if it had none.
 const held = new WeakMap();
 
@@ -56,6 +55,37 @@ function releaseEmpty(el) {
   if (own) Object.defineProperty(el, "value", own);
   else delete el.value; // nothing to put back: the inherited one applies
 }
+
+// ---- Plain pages: put the − and + buttons beside number boxes that no framework draws -------------------------
+
+function makeButton(dir) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "zn-num-btn";
+  b.tabIndex = -1;
+  b.dataset.znStep = String(dir);
+  b.textContent = dir < 0 ? "−" : "+";
+  b.setAttribute("aria-label", dir < 0 ? "Decrease" : "Increase");
+  b.title = dir < 0 ? "Decrease" : "Increase";
+  return b;
+}
+
+// Wraps one number box with its buttons (a no-op if it already has them, or says data-no-steppers). Only for
+// pages whose markup no framework owns: moving a box that React made would break React.
+export function wrapNumberInput(input) {
+  if (!input || !input.parentNode || input.closest(".zn-num") || input.hasAttribute("data-no-steppers")) return input;
+  const wrap = document.createElement("span");
+  wrap.className = "zn-num";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.append(input, makeButton(-1), makeButton(1));
+  return wrap;
+}
+
+export function wrapNumberInputs(root = document) {
+  root.querySelectorAll('input[type="number"]').forEach(wrapNumberInput);
+}
+
+// ---- Behaviour -------------------------------------------------------------------------------------------------
 
 export function installNumberFields() {
   const lastGood = new WeakMap(); // box -> the last non-empty value it had
@@ -89,19 +119,7 @@ export function installNumberFields() {
     if (isNumberBox(e.target)) restoreIfEmpty(e.target);
   }, true);
 
-  // ---- 2. Up and down buttons ------------------------------------------------------------------
-  // Which button a press at (x, y) on `el` lands on: +1 for the + (the last 29 px at the right edge), -1 for the −
-  // (the 29 px before it), or 0 on the number itself.
-  function buttonAt(el, x, y) {
-    if (el.hasAttribute("data-no-steppers")) return 0;
-    const r = el.getBoundingClientRect();
-    if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
-    const fromRight = (r.right - x) / (r.width / el.offsetWidth); // the Interface size setting zooms the controls
-    if (fromRight <= STEP_PX) return 1;
-    if (fromRight <= STEP_PX * 2) return -1;
-    return 0;
-  }
-
+  // ---- 2. The − and + buttons ------------------------------------------------------------------
   // One step the way the browser's spinner makes it; false at a limit (or if the box can't step).
   function stepBy(el, dir) {
     const before = el.value;
@@ -112,39 +130,24 @@ export function installNumberFields() {
     return true;
   }
 
-  const madeReadOnly = new WeakMap(); // box -> timer that undoes the read-only this script set
-  const unlock = (el) => {
-    if (!madeReadOnly.has(el)) return;
-    clearTimeout(madeReadOnly.get(el));
-    madeReadOnly.delete(el);
-    el.readOnly = false;
-  };
   let holdTimer = 0;
   let repeatTimer = 0;
-  let quietUntil = 0; // the mouse events and click that follow a touch must not focus the box
   const stop = () => { clearTimeout(holdTimer); clearInterval(repeatTimer); holdTimer = repeatTimer = 0; };
+  const buttonOf = (e) => (e.target instanceof Element ? e.target.closest(".zn-num-btn") : null);
+  const boxOf = (button) => (button.parentElement ? button.parentElement.querySelector('input[type="number"]') : null);
 
   document.addEventListener("pointerdown", (e) => {
-    const el = e.target;
-    // A press on the box itself (outside the strip) means typing is wanted: lift the guard at once.
-    if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-    if ((e.pointerType === "mouse" && e.button !== 0) || !isNumberBox(el) || el.disabled || (el.readOnly && !madeReadOnly.has(el))) return;
-    const dir = buttonAt(el, e.clientX, e.clientY);
-    if (!dir) return;
-    e.preventDefault();
-    quietUntil = performance.now() + 700;
-    // Read-only for a moment: even if the browser still focuses it, no keyboard opens.
-    el.readOnly = true;
-    clearTimeout(madeReadOnly.get(el));
-    madeReadOnly.set(el, setTimeout(() => unlock(el), 700));
-    if (document.activeElement === el) el.blur();
+    const button = buttonOf(e);
+    if (!button || button.disabled || (e.pointerType === "mouse" && e.button !== 0)) return;
+    const el = boxOf(button);
+    if (!el || el.disabled || el.readOnly) return;
+    e.preventDefault(); // the focus stays where it is: a box being typed in keeps its keyboard, no other one opens
+    const dir = Number(button.dataset.znStep) || 0;
     stop();
     stepBy(el, dir);
     holdTimer = setTimeout(() => { repeatTimer = setInterval(() => { if (!stepBy(el, dir)) stop(); }, REPEAT_MS); }, HOLD_MS);
     const release = () => {
       stop();
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.set(el, setTimeout(() => unlock(el), 250)); // after the click that follows the lift
       // A box that applies what is typed when it loses focus (a draft + Enter or blur) gets that moment too.
       if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     };
@@ -152,12 +155,10 @@ export function installNumberFields() {
     window.addEventListener("pointercancel", release, { once: true });
   }, true);
 
+  // The click that follows a press must not reach the app: a button inside a menu row would otherwise close the menu.
   for (const type of ["mousedown", "mouseup", "click"]) {
     document.addEventListener(type, (e) => {
-      if (performance.now() < quietUntil && isNumberBox(e.target) && buttonAt(e.target, e.clientX, e.clientY)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      if (buttonOf(e)) { e.preventDefault(); e.stopPropagation(); }
     }, true);
   }
 }

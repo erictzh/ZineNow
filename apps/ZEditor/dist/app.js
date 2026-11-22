@@ -13994,13 +13994,20 @@
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, step === 1 ? "This will erase your unsaved edits" : "Confirm"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint", style: { margin: 0 } }, step === 1 ? "This will ERASE all your current unsaved edits." : "Are you sure to proceed?")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Back"), step === 1 ? /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onProceed }, "Proceed") : /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onYes }, "Yes"))));
   }
 
+  // shared/js/NumberBox.jsx
+  function NumberBox({ steppers = true, wrapClassName, ...inputProps }) {
+    const input = /* @__PURE__ */ React.createElement("input", { type: "number", ...inputProps });
+    if (!steppers) return input;
+    const disabled = Boolean(inputProps.disabled);
+    return /* @__PURE__ */ React.createElement("span", { className: "zn-num" + (wrapClassName ? " " + wrapClassName : "") }, input, /* @__PURE__ */ React.createElement("button", { type: "button", className: "zn-num-btn", "data-zn-step": "-1", tabIndex: -1, "aria-label": "Decrease", title: "Decrease", disabled }, "−"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "zn-num-btn", "data-zn-step": "1", tabIndex: -1, "aria-label": "Increase", title: "Increase", disabled }, "+"));
+  }
+
   // apps/ZEditor/src/ui/dialogs/InsertPdfDialog.jsx
   function InsertPdfDialog({ file, pageCount, afterPage, onChangeAfterPage, onConfirm, onCancel }) {
     if (!file) return null;
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "Insert PDF"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint", style: { margin: "0 0 14px" } }, "Inserting ", /* @__PURE__ */ React.createElement("strong", null, file.name), " into this document."), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Insert after page (0 for the very beginning)"), /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "0",
         max: pageCount,
@@ -14040,9 +14047,8 @@
     const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
     const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => setPresetKey(e.target.value) }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, presetLabel(p))), /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)…"))), custom && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Custom size (mm)"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: CUSTOM_MIN_MM,
         max: CUSTOM_MAX_MM,
@@ -14054,9 +14060,8 @@
         onBlur: () => setCustomWText(String(customW))
       }
     ), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "×"), /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: CUSTOM_MIN_MM,
         max: CUSTOM_MAX_MM,
@@ -14068,9 +14073,8 @@
         onBlur: () => setCustomHText(String(customH))
       }
     ), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "mm"))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Orientation"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : ""), onClick: () => setOrientation("portrait") }, "Portrait"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : ""), onClick: () => setOrientation("landscape") }, "Landscape"))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Pages"), /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "1",
         max: MAX_NEW_DOCUMENT_PAGES,
@@ -14201,7 +14205,7 @@
         value,
         onChange: (e) => onChange(Number(e.target.value))
       }
-    ), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min, max, step: "1", ...numberProps }));
+    ), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min, max, step: "1", ...numberProps }));
   }
   function CustomColorInput({ value, onChange }) {
     return /* @__PURE__ */ React.createElement("label", { className: "ze-custom-color", title: "Custom color — pick any color" }, /* @__PURE__ */ React.createElement("input", { type: "color", value, onChange: (e) => onChange(e.target.value), "aria-label": "Custom color" }), /* @__PURE__ */ React.createElement("span", { className: "ze-custom-color-face", style: { backgroundColor: value } }), /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "m2 22 1-1h3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21v-3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" })));
@@ -14701,9 +14705,8 @@
       if (patch) onChange(patch);
     };
     return /* @__PURE__ */ React.createElement(PanelSection, { id: "text.basic", title: "Text/Character", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: fontFamily, onChange: (v) => onChange({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size & style"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline ze-format-inline-wrap" }, /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "4",
         max: "200",
@@ -14838,9 +14841,8 @@
         hint: "Fills the box with dummy text, to try a layout before the real words are ready. Each paragraph is a new line. In linked frames, the text flows on into the next frame."
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Text"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Placeholder language", value: kind, onChange: (e) => setKind(e.target.value) }, PLACEHOLDER_KINDS.map((k) => /* @__PURE__ */ React.createElement("option", { key: k.key, value: k.key }, k.label))), /* @__PURE__ */ React.createElement(
-        "input",
+        NumberBox,
         {
-          type: "number",
           className: "ze-format-number",
           min: "1",
           max: MAX_PLACEHOLDER_PARAGRAPHS,
@@ -14911,9 +14913,8 @@
     }
     const count = (runs || []).reduce((total, run2) => total + run2.end - run2.start, 0);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: current("fontFamily"), onChange: (v) => setProps({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "4",
         max: "200",
@@ -16527,9 +16528,8 @@
   // apps/ZEditor/src/ui/settings/GuidesSettings.jsx
   function GuidesSettings({ format, onFormatChange, marginIn, onMarginChange, bleedIn, onBleedChange }) {
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Format"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: format, onChange: (e) => onFormatChange(e.target.value) }, GUIDE_FORMAT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Margin (in)"), /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "0",
         max: "3",
@@ -16538,9 +16538,8 @@
         onChange: (e) => onMarginChange(Math.max(0, Number(e.target.value) || 0))
       }
     )), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (in)"), /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         className: "ze-format-number",
         min: "0",
         max: "1",
@@ -16570,7 +16569,7 @@
   // apps/ZEditor/src/ui/settings/PageNumbersSettings.jsx
   function PageNumbersSettings({ settings, pageCount, onChange }) {
     const whole = (value, fallback, min = 0) => Math.max(min, Math.round(Number(value)) || fallback);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Start numbering on page"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "1", max: Math.max(1, pageCount), value: settings.from, onChange: (e) => onChange({ from: whole(e.target.value, 1, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stop after page (empty = last)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "1", max: Math.max(1, pageCount), placeholder: "last", "data-allow-empty": true, value: settings.to || "", onChange: (e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "First page shows number"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", step: "1", value: settings.first, onChange: (e) => onChange({ first: Math.round(Number(e.target.value)) || 0 }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Position"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_POSITIONS, value: settings.position, onChange: (position) => onChange({ position }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Style"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_FORMATS, value: settings.format, onChange: (format) => onChange({ format }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size (pt)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "4", max: "48", value: settings.size, onChange: (e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Distance from edge (in)"), /* @__PURE__ */ React.createElement("input", { type: "number", className: "ze-format-number", min: "0", max: "3", step: "0.05", value: settings.marginIn, onChange: (e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: settings.color, onChange: (e) => onChange({ color: e.target.value }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.'));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Start numbering on page"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), value: settings.from, onChange: (e) => onChange({ from: whole(e.target.value, 1, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stop after page (empty = last)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), placeholder: "last", "data-allow-empty": true, value: settings.to || "", onChange: (e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "First page shows number"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", step: "1", value: settings.first, onChange: (e) => onChange({ first: Math.round(Number(e.target.value)) || 0 }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Position"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_POSITIONS, value: settings.position, onChange: (position) => onChange({ position }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Style"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_FORMATS, value: settings.format, onChange: (format) => onChange({ format }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size (pt)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "4", max: "48", value: settings.size, onChange: (e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Distance from edge (in)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "0", max: "3", step: "0.05", value: settings.marginIn, onChange: (e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: settings.color, onChange: (e) => onChange({ color: e.target.value }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.'));
   }
 
   // apps/ZEditor/src/ui/settings/RulersSettings.jsx
@@ -16596,7 +16595,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b92859b"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "26d51c0"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -17261,7 +17260,6 @@
   }
 
   // shared/js/numberFields.js
-  var STEP_PX = 29;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
@@ -17322,15 +17320,6 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function buttonAt(el, x, y) {
-      if (el.hasAttribute("data-no-steppers")) return 0;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
-      const fromRight = (r.right - x) / (r.width / el.offsetWidth);
-      if (fromRight <= STEP_PX) return 1;
-      if (fromRight <= STEP_PX * 2) return -1;
-      return 0;
-    }
     function stepBy(el, dir) {
       const before = el.value;
       try {
@@ -17344,33 +17333,22 @@
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
-    const madeReadOnly = /* @__PURE__ */ new WeakMap();
-    const unlock = (el) => {
-      if (!madeReadOnly.has(el)) return;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.delete(el);
-      el.readOnly = false;
-    };
     let holdTimer = 0;
     let repeatTimer = 0;
-    let quietUntil = 0;
     const stop2 = () => {
       clearTimeout(holdTimer);
       clearInterval(repeatTimer);
       holdTimer = repeatTimer = 0;
     };
+    const buttonOf = (e) => e.target instanceof Element ? e.target.closest(".zn-num-btn") : null;
+    const boxOf = (button) => button.parentElement ? button.parentElement.querySelector('input[type="number"]') : null;
     document.addEventListener("pointerdown", (e) => {
-      const el = e.target;
-      if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-      if (e.pointerType === "mouse" && e.button !== 0 || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el)) return;
-      const dir = buttonAt(el, e.clientX, e.clientY);
-      if (!dir) return;
+      const button = buttonOf(e);
+      if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
+      const el = boxOf(button);
+      if (!el || el.disabled || el.readOnly) return;
       e.preventDefault();
-      quietUntil = performance.now() + 700;
-      el.readOnly = true;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.set(el, setTimeout(() => unlock(el), 700));
-      if (document.activeElement === el) el.blur();
+      const dir = Number(button.dataset.znStep) || 0;
       stop2();
       stepBy(el, dir);
       holdTimer = setTimeout(() => {
@@ -17380,8 +17358,6 @@
       }, HOLD_MS);
       const release = () => {
         stop2();
-        clearTimeout(madeReadOnly.get(el));
-        madeReadOnly.set(el, setTimeout(() => unlock(el), 250));
         if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
@@ -17389,7 +17365,7 @@
     }, true);
     for (const type of ["mousedown", "mouseup", "click"]) {
       document.addEventListener(type, (e) => {
-        if (performance.now() < quietUntil && isNumberBox(e.target) && buttonAt(e.target, e.clientX, e.clientY)) {
+        if (buttonOf(e)) {
           e.preventDefault();
           e.stopPropagation();
         }

@@ -65,8 +65,8 @@
 /* A thin vertical line between sets of tools. */
 .ze-tool-bar-divider { flex: 0 0 1px; align-self: center; width: 1px; height: 20px; margin: 0 4px; background: var(--ui-border); }
 .ze-zoom-control {
-    flex: 0 1 240px;
-    min-width: 170px;
+    flex: 0 1 310px; /* room for the zoom box and its - and + buttons */
+    min-width: 240px;
     display: flex;
     align-items: center;
     gap: 8px;

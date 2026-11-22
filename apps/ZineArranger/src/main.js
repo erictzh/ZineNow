@@ -3,7 +3,7 @@
 // see docs/ARCHITECTURE.md for what goes where.
 
 import { installInputMode } from "../../../shared/js/inputMode.js";
-import { installNumberFields } from "../../../shared/js/numberFields.js";
+import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
 import { warnBeforeLeaving } from "../../../shared/js/leaveWarning.js";
 import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
@@ -51,6 +51,15 @@ window.addEventListener("resize", function() {
 document.getElementById("selector").addEventListener("change", refreshSpecs, false);
 setUpPanelResize(); // before the first layout, so a saved panel width is already in place
 setUpPreviewZoom(); // the footer's zoom controls, before anything writes the footer's text
+
+// The - and + buttons beside the settings panel's number boxes (the footer's zoom box got its own above). The
+// signature-size box starts hidden: its wrapper takes over that, and readOptions.js shows and hides the wrapper.
+wrapNumberInputs();
+(function () {
+    var sig = document.getElementById("sig-size");
+    var wrap = sig && sig.closest(".zn-num");
+    if (wrap) { sig.style.display = ""; wrap.style.display = "none"; }
+})();
 refreshSpecs();
 
 // ---- ZEditor handoff --------------------------------------------------

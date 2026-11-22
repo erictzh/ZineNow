@@ -1,6 +1,7 @@
 // New blank document: paper size (a preset or a custom size in mm), orientation, page count.
 
 import { MAX_NEW_DOCUMENT_PAGES, NEW_DOCUMENT_PRESETS, POINTS_PER_INCH } from "../../constants.js";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 const { useState } = React;
 
 const MM_PER_INCH = 25.4;
@@ -54,14 +55,14 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
             <div className="ze-format-field">
               <span className="ze-format-label">Custom size (mm)</span>
               <div className="ze-format-inline">
-                <input
-                  type="number" className="ze-format-number" min={CUSTOM_MIN_MM} max={CUSTOM_MAX_MM} step="0.5"
+                <NumberBox
+                  className="ze-format-number" min={CUSTOM_MIN_MM} max={CUSTOM_MAX_MM} step="0.5"
                   aria-label="Width (mm)" title="Width (mm)" value={customWText}
                   onChange={(e) => setCustomWText(e.target.value)} onBlur={() => setCustomWText(String(customW))}
                 />
                 <span className="ze-format-hint" style={{ margin: 0 }}>×</span>
-                <input
-                  type="number" className="ze-format-number" min={CUSTOM_MIN_MM} max={CUSTOM_MAX_MM} step="0.5"
+                <NumberBox
+                  className="ze-format-number" min={CUSTOM_MIN_MM} max={CUSTOM_MAX_MM} step="0.5"
                   aria-label="Height (mm)" title="Height (mm)" value={customHText}
                   onChange={(e) => setCustomHText(e.target.value)} onBlur={() => setCustomHText(String(customH))}
                 />
@@ -78,8 +79,8 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
           </div>
           <label className="ze-format-field">
             <span className="ze-format-label">Pages</span>
-            <input
-              type="number" className="ze-format-number" min="1" max={MAX_NEW_DOCUMENT_PAGES}
+            <NumberBox
+              className="ze-format-number" min="1" max={MAX_NEW_DOCUMENT_PAGES}
               value={pageCountText} onChange={(e) => setPageCountText(e.target.value)}
               onBlur={() => setPageCountText(String(pageCount))}
             />

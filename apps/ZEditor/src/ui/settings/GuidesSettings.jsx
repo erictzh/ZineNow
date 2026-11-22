@@ -1,6 +1,7 @@
 // Guide format, margin and bleed settings.
 
 import { GUIDE_FORMAT_PRESETS } from "../../model/guides.js";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 
 // ---- Guides settings — format/margin/bleed for the trim guides.
 export function GuidesSettings({ format, onFormatChange, marginIn, onMarginChange, bleedIn, onBleedChange }) {
@@ -16,16 +17,16 @@ export function GuidesSettings({ format, onFormatChange, marginIn, onMarginChang
       </div>
       <label className="ze-format-field">
         <span className="ze-format-label">Margin (in)</span>
-        <input
-          type="number" className="ze-format-number" min="0" max="3" step="0.0625"
+        <NumberBox
+          className="ze-format-number" min="0" max="3" step="0.0625"
           value={marginIn}
           onChange={(e) => onMarginChange(Math.max(0, Number(e.target.value) || 0))}
         />
       </label>
       <label className="ze-format-field">
         <span className="ze-format-label">Bleed (in)</span>
-        <input
-          type="number" className="ze-format-number" min="0" max="1" step="0.0625"
+        <NumberBox
+          className="ze-format-number" min="0" max="1" step="0.0625"
           value={bleedIn}
           onChange={(e) => onBleedChange(Math.max(0, Number(e.target.value) || 0))}
         />

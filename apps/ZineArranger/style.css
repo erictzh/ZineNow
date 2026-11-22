@@ -1176,7 +1176,7 @@ input {
     .za-zoom { display: inline-flex; align-items: center; gap: 6px; }
     .za-zoom-slider { width: 70px; accent-color: var(--ui-accent); cursor: pointer; }
     .za-zoom .za-zoom-number {
-        width: 108px; /* room for the - and + buttons (shared/styles/numberFields.css) */
+        width: 56px;
         padding: 2px 4px 2px 6px;
         font-size: 12px;
         text-align: right;
@@ -1600,3 +1600,9 @@ input[type="file"]::file-selector-button:hover {
         display: none !important;
     }
 }
+
+/* A number box with its - and + buttons (shared/styles/numberFields.css): small ones in the footer's zoom controls,
+   and in the settings panel the box and its buttons sit on the line of their label as the bare box did. */
+.za-zoom .zn-num { width: auto; flex: 0 0 auto; gap: 3px; --zn-btn-w: 24px; }
+.za-zoom .zn-num .zn-num-btn { font-size: 14px; }
+.workspace-panel .zn-num { display: inline-flex; width: auto; vertical-align: middle; }

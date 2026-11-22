@@ -7,6 +7,7 @@
 import { CODE_LANGUAGES, cleanLanguageTag, languageLabel } from "../../editor/codeLanguages.js";
 import { DropMenu, MenuItem, MenuSeparator } from "../Menu.jsx";
 import { ALT, MOD, SHIFT } from "../shortcutKeys.js";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 
 // The block-style dropdown's choices, and what it shows when the caret's line is something else.
 const BLOCK_OPTIONS = [
@@ -235,8 +236,7 @@ export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSp
               keepEditorFocus={keepEditorFocus}
             >
               <span className="md2ebook-menu-space">
-                <input
-                  type="number"
+                <NumberBox
                   min="1"
                   max="200"
                   value={spaceLines}

@@ -1,31 +1,65 @@
-/* − and + buttons on every number box, after the number: ( 12 )( − )( + ). They are two small button tiles drawn as
-   background pictures inside the right edge of the box, each with a hit area --zn-step-w wide and the full height
-   of the box; shared/js/numberFields.js makes them work. The browser's own up/down spinner is hidden so there is only
-   one set. Boxes that must stay plain say data-no-steppers. A narrow box needs room for the tiles (about 100 px for
-   three digits): see the width rules in each app's CSS. */
+/* A number box with its − and + buttons beside it: ( number )( − )( + ) (markup: shared/js/NumberBox.jsx for React,
+   wrapNumberInput in shared/js/numberFields.js for plain pages; behaviour: numberFields.js). The wrapper fills
+   the row the way a bare box with width: 100% did; where a box has a width of its own (a slider row, a status
+   bar...) the app's CSS gives its wrapper width: auto. The buttons are drawn like ZEditor's T- / T+. The
+   browser's own up/down spinner is hidden so there is only one set. */
 
-:root {
-  --zn-step-w: 29px; /* one button's hit area; the script uses the same number (STEP_PX) */
+.zn-num {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-
-input[type="number"]:not([data-no-steppers]) {
-  padding-right: calc(var(--zn-step-w) * 2 + 4px) !important; /* room for the two tiles, whatever padding the box had */
-  text-align: center !important;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6' fill='%23fff' fill-opacity='.07' stroke='%23fff' stroke-opacity='.22'/%3E%3Cpath d='M7 12h10' stroke='%23d6d8e0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6' fill='%23fff' fill-opacity='.07' stroke='%23fff' stroke-opacity='.22'/%3E%3Cpath d='M7 12h10M12 7v10' stroke='%23d6d8e0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat, no-repeat;
-  background-position: right 31px center, right 3px center; /* minus, then plus at the very edge */
-  background-size: 24px 24px, 24px 24px;
+.zn-num > input[type="number"] {
+  flex: 1 1 auto;
+  min-width: 0;
   -moz-appearance: textfield;
   appearance: textfield;
-  touch-action: manipulation;
 }
-input[type="number"]:not([data-no-steppers])::-webkit-inner-spin-button,
-input[type="number"]:not([data-no-steppers])::-webkit-outer-spin-button {
+.zn-num > input[type="number"]::-webkit-inner-spin-button,
+.zn-num > input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-input[type="number"]:disabled {
-  background-image: none;
+
+.zn-num .zn-num-btn {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: var(--zn-btn-w, 28px);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background-color: #0c0c0cab;
+  color: var(--ui-fg);
+  font: 700 15px/1 var(--ui-font, system-ui, sans-serif);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.zn-num .zn-num-btn:hover {
+  border-color: var(--ui-fg-muted);
+}
+.zn-num .zn-num-btn:active {
+  background-color: color-mix(in srgb, var(--ui-accent) 35%, #0c0c0c);
+  border-color: var(--ui-accent);
+}
+.zn-num .zn-num-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Bigger to hit with a finger (data-input: shared/js/inputMode.js; data-ze-input: ZEditor). */
+[data-input="touch"] .zn-num .zn-num-btn,
+[data-ze-input="touch"] .zn-num .zn-num-btn {
+  --zn-btn-w: 38px;
+  font-size: 18px;
 }
