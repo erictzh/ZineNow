@@ -106,8 +106,9 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
       </PanelSection>
       <PanelSection id="marquee.fill" title="Fill from surroundings" defaultOpen>
         <span className="ze-format-hint">Replaces what is inside the marquee with a fill made from the pixels round it, and makes no new layer. From a selected layer it changes that layer's picture; from All visible it puts the fill on top of the page as a new image.</span>
-        <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" ? "detail" : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
+        <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
           <option value="smooth">Smooth: a blend of the edge colours</option>
+          <option value="pattern">Pattern: copies texture from the rest of the picture</option>
           <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
         </select>
         <label className="ze-format-check">
@@ -118,7 +119,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         <div className="ze-format-row">
           <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
         </div>
-        <span className="ze-format-hint">{!ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Detailed suits scratches, small marks and text on a photo; Smooth suits plain paper and soft backgrounds. A big area looks blurry; try a smaller marquee."}</span>
+        <span className="ze-format-hint">{!ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern suits grass, foliage, brick, road and other texture (areas up to about 350 px of the picture; it takes a moment); Smooth suits plain paper and soft backgrounds; Detailed suits thin lines and small marks."}</span>
       </PanelSection>
     </FormatPanelShell>
   );

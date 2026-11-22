@@ -16,7 +16,7 @@ export { dragBox } from "./geometry.js";
 //               from the pixels round it, see fillStyle). Cutting from everything visible can only cover the
 //               spot, so there it is "fill" or "surround".
 // fillStyle:    how "surround" (and the Remove & fill button) fills: "smooth" (a blend of the edge colours, the
-//               default) or "detail"; fillGrain: add noise like the surroundings' so the fill is not flat (lines and edges run on through it); render/inpaint.js.
+//               default), "pattern" (texture copied from elsewhere in the picture) or "detail"; fillGrain: add noise like the surroundings' so the fill is not flat (lines and edges run on through it); render/inpaint.js.
 // fillColor:    the colour of that fill (white, like paper).
 export const MARQUEE_DEFAULTS = {
   action: "copy",
