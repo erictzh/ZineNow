@@ -4,8 +4,9 @@
 // src/modelStore.js downloads and keeps the model file).
 
 import { downloadBlob } from "../../../shared/js/download.js";
+import { sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
 import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
-import { MODEL_SIZE, blendWeights, cropWindow, dilate, holeBounds, paste, windowMask } from "./fill.js";
+import { MODEL_SIZE, blendWeights, dilate, groupMask, groupPieces, holeBounds, labelPieces, paste, windowMask } from "./fill.js";
 import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "./modelStore.js";
 import { createSession, gpuUsable, runModel } from "./runtime.js";
 
@@ -46,7 +47,7 @@ function fitView() {
 }
 function updateButtons() {
   const has = hasPicture();
-  for (const id of ["save", "clear", "fill", "compare"]) $(id).disabled = !has || busy;
+  for (const id of ["save", "send", "clear", "fill", "compare"]) $(id).disabled = !has || busy;
   $("undo").disabled = !undoStack.length || busy; $("redo").disabled = !redoStack.length || busy;
 }
 
@@ -177,53 +178,67 @@ async function ensureSession() {
   return session;
 }
 
+const MAX_OBJECTS = 12;
+
+// One fill: the model on one window round one group of marks, pasted into the picture.
+async function fillOne(mask, crop, w) {
+  const sess = await ensureSession();
+  // the window, shrunk or enlarged to the model's size
+  const win = document.createElement("canvas"); win.width = win.height = MODEL_SIZE;
+  const wx = win.getContext("2d", { willReadFrequently: true });
+  wx.imageSmoothingQuality = "high";
+  wx.drawImage(imgC, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
+  const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
+  const hole = windowMask(mask, w, crop);
+  let answer;
+  try { answer = await runModel(sess.session, rgba, hole); }
+  catch (e) {
+    if (sess.backend !== "gpu") throw e;
+    status("The graphics chip failed; trying the processor…");
+    session = await createSession(modelBytes, false);
+    answer = await runModel(session.session, rgba, hole);
+    refreshModelInfo();
+  }
+  // the answer back to the window's size, pasted over the marked area only
+  const ac = document.createElement("canvas"); ac.width = ac.height = MODEL_SIZE;
+  ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
+  const sc = document.createElement("canvas"); sc.width = sc.height = crop.side;
+  const sx = sc.getContext("2d", { willReadFrequently: true }); sx.imageSmoothingQuality = "high"; sx.drawImage(ac, 0, 0, crop.side, crop.side);
+  const scaled = sx.getImageData(0, 0, crop.side, crop.side).data;
+  const region = imgX.getImageData(crop.x, crop.y, crop.side, crop.side);
+  paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, scaled, blendWeights(mask, w, crop, FEATHER));
+  imgX.putImageData(region, crop.x, crop.y);
+}
+
 async function removeObject() {
   if (busy || !hasPicture()) return;
   const w = imgC.width, h = imgC.height;
   const marked = markedPixels();
   if (!holeBounds(marked, w, h)) { status("Paint over the object first (Brush or Box), then press Remove object.", "bad"); return; }
   const mask = dilate(marked, w, h, Math.max(0, Math.round(settings.grow)));
-  const crop = cropWindow(holeBounds(mask, w, h), w, h);
-  if (!crop) { status("That area is too big for the AI: mark a smaller part, or do it in two or three steps.", "bad"); return; }
+  // separate objects far apart get a window each; marks close together share one
+  const { labels, boxes } = labelPieces(mask, w, h);
+  const groups = groupPieces(boxes, w, h);
+  if (groups.some((g) => !g.crop)) { status("That area is too big for the AI: mark a smaller part, or do it in two or three steps.", "bad"); return; }
+  if (groups.length > MAX_OBJECTS) { status("That is " + groups.length + " separate marks: do at most " + MAX_OBJECTS + " at a time.", "bad"); return; }
   busy = true; updateButtons();
   const t0 = performance.now();
+  let before = null;
   try {
-    const sess = await ensureSession();
-    status("Removing it… (" + (sess.backend === "gpu" ? "graphics chip" : "processor, slower") + ")");
-    await new Promise((r) => setTimeout(r, 30)); // let the message show
-    // the window, shrunk or enlarged to the model's size
-    const win = document.createElement("canvas"); win.width = win.height = MODEL_SIZE;
-    const wx = win.getContext("2d", { willReadFrequently: true });
-    wx.imageSmoothingQuality = "high";
-    wx.drawImage(imgC, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
-    const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
-    const hole = windowMask(mask, w, crop);
-    let answer;
-    try { answer = await runModel(sess.session, rgba, hole); }
-    catch (e) {
-      if (sess.backend !== "gpu") throw e;
-      status("The graphics chip failed; trying the processor…");
-      session = await createSession(modelBytes, false);
-      answer = await runModel(session.session, rgba, hole);
-      refreshModelInfo();
+    before = await createImageBitmap(imgC);
+    for (let i = 0; i < groups.length; i++) {
+      status((groups.length > 1 ? "Removing object " + (i + 1) + " of " + groups.length + "… " : "Removing it… ") + (session ? (session.backend === "gpu" ? "(graphics chip)" : "(processor, slower)") : ""));
+      await new Promise((r) => setTimeout(r, 30)); // let the message show
+      await fillOne(groups.length === 1 ? mask : groupMask(labels, groups[i].ids), groups[i].crop, w);
     }
-    // the answer back to the window's size, pasted over the marked area only
-    const ac = document.createElement("canvas"); ac.width = ac.height = MODEL_SIZE;
-    ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
-    const sc = document.createElement("canvas"); sc.width = sc.height = crop.side;
-    const sx = sc.getContext("2d", { willReadFrequently: true }); sx.imageSmoothingQuality = "high"; sx.drawImage(ac, 0, 0, crop.side, crop.side);
-    const scaled = sx.getImageData(0, 0, crop.side, crop.side).data;
-    const region = imgX.getImageData(crop.x, crop.y, crop.side, crop.side);
-    const before = await createImageBitmap(imgC);
-    paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, scaled, blendWeights(mask, w, crop, FEATHER));
-    imgX.putImageData(region, crop.x, crop.y);
     undoStack.push(before); if (undoStack.length > MAX_UNDO) undoStack.shift().close();
     redoStack = [];
     maskX.clearRect(0, 0, maskC.width, maskC.height);
-    status("Done in " + ((performance.now() - t0) / 1000).toFixed(1) + " s. Not right? Undo, mark a bit differently, or press Remove object again.", "ok");
+    status("Done in " + ((performance.now() - t0) / 1000).toFixed(1) + " s" + (groups.length > 1 ? " (" + groups.length + " objects)" : "") + ". Not right? Undo, mark a bit differently, or press Remove object again.", "ok");
   } catch (e) {
     $("prog").hidden = true;
-    status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+    if (before) { imgX.clearRect(0, 0, w, h); imgX.drawImage(before, 0, 0); before.close(); } // put the picture back as it was
+    status("Something went wrong: " + (e && e.message ? e.message : e) + " The picture was left as it was.", "bad");
   } finally { busy = false; updateButtons(); }
 }
 $("fill").addEventListener("click", removeObject);
@@ -244,6 +259,14 @@ for (const ev of ["pointerdown"]) compare.addEventListener(ev, () => showOrigina
 for (const ev of ["pointerup", "pointerleave", "pointercancel"]) compare.addEventListener(ev, () => showOriginal(false));
 $("save").addEventListener("click", () => {
   imgC.toBlob((blob) => { if (blob) downloadBlob(blob, fileName + "-filled.png"); else status("Couldn't save the picture.", "bad"); }, "image/png");
+});
+
+const toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't make the picture."))), "image/png"));
+$("send").addEventListener("click", async () => {
+  if (!hasPicture()) return;
+  status("Opening ZEditor…");
+  try { await sendImageToZEditor(toBlob, fileName + "-filled.png"); status("Sent to ZEditor (it opened in a new tab).", "ok"); }
+  catch (e) { status("Couldn't send it: " + (e && e.message ? e.message : e), "bad"); }
 });
 
 // ---- opening pictures: button, drop, paste, keys -----------------------------------------------------
