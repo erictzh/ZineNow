@@ -146,6 +146,7 @@ export function ComposeCanvas({
     });
   }
 
+  const latestMouseDown = useRef(null);
   function handleOverlayMouseDown(e) {
     if (!page) return;
     if (measuring) {
@@ -225,6 +226,32 @@ export function ComposeCanvas({
       }
     });
   }
+
+  latestMouseDown.current = handleOverlayMouseDown;
+  // The grey outer canvas round the page works like the page for every tool: a press on empty outer canvas
+  // (the pane itself or its padding wrapper, not an item, not the scrollbar) goes to the same handler, with
+  // coordinates measured from the page, so a shape, text box, stroke, marquee or measure can start or run off the page.
+  useEffect(() => {
+    const pane = artboardRef.current && artboardRef.current.closest(".preview-pane");
+    if (!pane) return undefined;
+    const onDown = (e) => {
+      if (e.button !== 0 || e.defaultPrevented) return;
+      if (!(e.target === pane || (e.target.classList && e.target.classList.contains("preview-canvas-wrapper")))) return;
+      const box = pane.getBoundingClientRect();
+      if (e.clientX >= box.left + pane.clientLeft + pane.clientWidth || e.clientY >= box.top + pane.clientTop + pane.clientHeight) return; // scrollbar
+      if (latestMouseDown.current) latestMouseDown.current(e);
+    };
+    pane.addEventListener("mousedown", onDown);
+    return () => pane.removeEventListener("mousedown", onDown);
+  }, [Boolean(page)]);
+  // the same cursor out there as on the page
+  const paneCursor = tool === "text" ? "text" : (tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || tool === "marquee" || measuring) ? "crosshair" : "";
+  useEffect(() => {
+    const pane = artboardRef.current && artboardRef.current.closest(".preview-pane");
+    if (!pane) return undefined;
+    pane.style.cursor = paneCursor;
+    return () => { pane.style.cursor = ""; };
+  }, [paneCursor, Boolean(page)]);
 
   // Pen/highlighter: collect points while the mouse is down, add the stroke on release.
   function startDrawing(e) {

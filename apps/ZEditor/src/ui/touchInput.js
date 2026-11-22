@@ -164,7 +164,9 @@ export function installTouchInput() {
     // Buttons and fields (the touch bar's too) are the browser's: they neither edit nor scroll.
     if (target.closest(NATIVE_TARGETS)) return;
     const inScrollArea = Boolean(target.closest(SCROLL_AREA));
-    const surface = Boolean(target.closest(DRAG_SURFACES));
+    // The empty outer canvas round the page (the pane itself or its padding wrapper) draws like the page (ComposeCanvas).
+    const outerCanvas = target.classList.contains("preview-pane") || target.classList.contains("preview-canvas-wrapper");
+    const surface = outerCanvas || Boolean(target.closest(DRAG_SURFACES));
 
     if (isFinger && inScrollArea) {
       fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
