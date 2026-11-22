@@ -8,7 +8,7 @@ import { sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
 import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
 import { MODEL_SIZE, blendWeights, dilate, groupMask, groupPieces, holeBounds, labelPieces, paste, windowMask } from "./fill.js";
 import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "./modelStore.js";
-import { createSession, gpuUsable, runModel } from "./runtime.js";
+import { createSession, findSign, gpuUsable, runModel } from "./runtime.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_SIDE = 4096; // a bigger picture is shrunk to this when opened (memory)
@@ -33,7 +33,7 @@ let view = { s: 1, x: 0, y: 0 };
 let tool = "brush";
 let busy = false;
 let undoStack = [], redoStack = [];
-let session = null, modelBytes = null;
+let session = null, modelBytes = null, maskSign = null;
 
 function status(text, kind) { const s = $("status"); s.textContent = text; s.className = kind || ""; }
 let loaded = false;
@@ -173,6 +173,17 @@ function markedPixels() {
   return m;
 }
 
+// The model wants its mask channel one way round or the other; found by a short test the first time, then remembered per model.
+async function checkMaskSign(url) {
+  const key = "sign:" + url;
+  const saved = (settings.signs || {})[key];
+  if (saved === 1 || saved === -1) { maskSign = saved; return; }
+  status("Checking the model (one time, a few seconds)…");
+  const r = await findSign(session.session);
+  maskSign = r.sign;
+  settings.signs = { ...(settings.signs || {}), [key]: r.sign }; saveSettings();
+}
+
 async function ensureSession() {
   if (session) return session;
   const url = $("model-url").value.trim() || DEFAULT_MODEL_URL;
@@ -187,6 +198,7 @@ async function ensureSession() {
   }
   status("Starting the model…");
   session = await createSession(modelBytes, true);
+  await checkMaskSign(url);
   refreshModelInfo();
   return session;
 }
@@ -204,12 +216,12 @@ async function fillOne(mask, crop, w) {
   const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
   const hole = windowMask(mask, w, crop);
   let answer;
-  try { answer = await runModel(sess.session, rgba, hole); }
+  try { answer = await runModel(sess.session, rgba, hole, maskSign || 1); }
   catch (e) {
     if (sess.backend !== "gpu") throw e;
     status("The graphics chip failed; trying the processor…");
     session = await createSession(modelBytes, false);
-    answer = await runModel(session.session, rgba, hole);
+    answer = await runModel(session.session, rgba, hole, maskSign || 1);
     refreshModelInfo();
   }
   // the answer back to the window's size, pasted over the marked area only

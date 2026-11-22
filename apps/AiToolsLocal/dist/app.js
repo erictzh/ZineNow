@@ -253,21 +253,31 @@
     }
     return out;
   }
-  function buildInput(rgba, hole) {
+  function buildInput(rgba, hole, sign = 1) {
     const n = MODEL_SIZE * MODEL_SIZE;
     const x = new Float32Array(4 * n);
     for (let i = 0; i < n; i++) {
       const known = hole[i] ? 0 : 1;
-      x[i] = known - 0.5;
+      x[i] = sign * (known - 0.5);
       for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = (rgba[i * 4 + c] / 127.5 - 1) * known;
     }
     return x;
   }
   function outputToRgba(out) {
     const n = MODEL_SIZE * MODEL_SIZE;
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < 3 * n; i += 7) {
+      const v = out[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const mode = min < -0.01 && max <= 1.5 ? "signed" : max <= 1.5 ? "unit" : "byte";
     const rgba = new Uint8ClampedArray(n * 4);
     for (let i = 0; i < n; i++) {
-      for (let c = 0; c < 3; c++) rgba[i * 4 + c] = (out[c * n + i] + 1) * 127.5;
+      for (let c = 0; c < 3; c++) {
+        const v = out[c * n + i];
+        rgba[i * 4 + c] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v;
+      }
       rgba[i * 4 + 3] = 255;
     }
     return rgba;
@@ -376,6 +386,31 @@
     for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
     return out;
   }
+  async function findMaskSign(run) {
+    const n = MODEL_SIZE * MODEL_SIZE;
+    const rgba = new Uint8ClampedArray(n * 4), truth = new Uint8ClampedArray(n * 4), hole = new Uint8Array(n);
+    for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
+      const i = y * MODEL_SIZE + x;
+      const px = [40 + x / MODEL_SIZE * 180, 60 + y / MODEL_SIZE * 150, 140 + (x + y) / (2 * MODEL_SIZE) * 90];
+      for (let c = 0; c < 3; c++) {
+        rgba[i * 4 + c] = px[c];
+        truth[i * 4 + c] = px[c];
+      }
+      rgba[i * 4 + 3] = truth[i * 4 + 3] = 255;
+      if (Math.hypot(x - 256, y - 256) < 60) hole[i] = 1;
+    }
+    const errors = {};
+    for (const sign of [1, -1]) {
+      const out = await run(rgba, hole, sign);
+      let sum = 0, count = 0;
+      for (let i = 0; i < n; i++) if (hole[i]) {
+        for (let c = 0; c < 3; c++) sum += Math.abs(out[i * 4 + c] - truth[i * 4 + c]);
+        count += 3;
+      }
+      errors[sign] = sum / count;
+    }
+    return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
+  }
 
   // apps/AiToolsLocal/src/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
@@ -469,12 +504,13 @@
     }
     return { session: await ort.InferenceSession.create(modelBytes2, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
   }
-  async function runModel(session2, rgba, hole) {
+  async function runModel(session2, rgba, hole, sign = 1) {
     const ort = await loadOrt();
-    const input = new ort.Tensor("float32", buildInput(rgba, hole), [1, 4, MODEL_SIZE, MODEL_SIZE]);
+    const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
     const out = await session2.run({ [session2.inputNames[0]]: input });
     return outputToRgba(out[session2.outputNames[0]].data);
   }
+  var findSign = (session2) => findMaskSign((rgba, hole, sign) => runModel(session2, rgba, hole, sign));
 
   // apps/AiToolsLocal/src/main.js
   var $ = (id) => document.getElementById(id);
@@ -514,6 +550,7 @@
   var redoStack = [];
   var session = null;
   var modelBytes = null;
+  var maskSign = null;
   function status(text, kind) {
     const s = $("status");
     s.textContent = text;
@@ -709,6 +746,19 @@
     for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] >= 64 ? 1 : 0;
     return m;
   }
+  async function checkMaskSign(url) {
+    const key = "sign:" + url;
+    const saved = (settings.signs || {})[key];
+    if (saved === 1 || saved === -1) {
+      maskSign = saved;
+      return;
+    }
+    status("Checking the model (one time, a few seconds)…");
+    const r = await findSign(session.session);
+    maskSign = r.sign;
+    settings.signs = { ...settings.signs || {}, [key]: r.sign };
+    saveSettings();
+  }
   async function ensureSession() {
     if (session) return session;
     const url = $("model-url").value.trim() || DEFAULT_MODEL_URL;
@@ -727,6 +777,7 @@
     }
     status("Starting the model…");
     session = await createSession(modelBytes, true);
+    await checkMaskSign(url);
     refreshModelInfo();
     return session;
   }
@@ -742,12 +793,12 @@
     const hole = windowMask(mask, w, crop);
     let answer;
     try {
-      answer = await runModel(sess.session, rgba, hole);
+      answer = await runModel(sess.session, rgba, hole, maskSign || 1);
     } catch (e) {
       if (sess.backend !== "gpu") throw e;
       status("The graphics chip failed; trying the processor…");
       session = await createSession(modelBytes, false);
-      answer = await runModel(session.session, rgba, hole);
+      answer = await runModel(session.session, rgba, hole, maskSign || 1);
       refreshModelInfo();
     }
     const ac = document.createElement("canvas");
