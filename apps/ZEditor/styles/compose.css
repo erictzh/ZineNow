@@ -509,7 +509,8 @@
 .ze-marquee-corner { cursor: pointer; z-index: 13; }
 .ze-marquee-corner.is-first { background-color: var(--ui-accent); width: 14px; height: 14px; }
 
-/* A clipped layer's picture: page-sized, masked by the layer below (ui/canvas/ClipWrap.jsx), and out of the
+/* A clipped layer's picture: masked by the layer below and covering that layer's own area, which can reach past the
+   page (ui/canvas/ClipWrap.jsx; its left, top, width and height are set there), and out of the
    mouse's way. The real item sits above it inside .ze-clip-ghost with its own picture hidden: its box, outline
    and handles stay (so it can be pressed, dragged and resized outside the mask), but nothing of it shows. */
 .ze-clip-wrap {
