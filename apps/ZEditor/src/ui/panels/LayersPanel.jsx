@@ -153,7 +153,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -198,13 +198,15 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
     e.stopPropagation();
     if (rowMenu && rowMenu.id === id) { setRowMenu(null); return; }
     const box = e.currentTarget.getBoundingClientRect();
-    const MENU_W = 200, MENU_H = 84;
+    const MENU_W = 200, MENU_H = typeof id === "string" ? 90 : 84;
     const x = Math.max(4, Math.min(box.right - MENU_W, window.innerWidth - MENU_W - 4));
     const y = box.bottom + 4 + MENU_H > window.innerHeight ? box.top - 4 - MENU_H : box.bottom + 4;
     setMenuOpen(false);
     setRowMenu({ id, x, y });
   }
-  const rowMenuAnn = rowMenu ? annotations.find((a) => a.id === rowMenu.id) : null;
+  // A group row's ⋮ menu: rowMenu = { id: "g:" + groupId, ... }.
+  const groupMenuId = rowMenu && typeof rowMenu.id === "string" && rowMenu.id.startsWith("g:") ? rowMenu.id.slice(2) : null;
+  const rowMenuAnn = rowMenu && !groupMenuId ? annotations.find((a) => a.id === rowMenu.id) : null;
   const rowMenuIndex = rowMenuAnn ? annotations.indexOf(rowMenuAnn) : -1;
 
   function toggleCollapsed(groupId) {
@@ -418,6 +420,14 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           >
             <EyeIcon hidden={allHidden} />
           </button>
+          <button
+            type="button" className={"ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId ? " is-open" : "")}
+            title="Group actions: save as .znow, import" aria-label={"Actions for group " + name} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === "g:" + groupId)}
+            onClick={(e) => toggleRowMenu(e, "g:" + groupId)}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <MoreIcon />
+          </button>
         </div>
         {collapsed ? dropLine(key, false) : items.map((i) => layerRow(i.ann, i.row, true))}
       </React.Fragment>
@@ -454,6 +464,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
                 <MenuItem label="Ungroup" shortcut="Ctrl+Shift+G" disabled={!canUngroup} onClick={onUngroup} close={() => setMenuOpen(false)} />
                 <MenuItem label="Clip to below (multiple)" shortcut="Ctrl+Alt+G" hint="Clips the selected layers in one go: the bottom-most selected layer stays as the base and the others show only where it has pixels. With one layer selected, clips it to the layer below." disabled={!canClip} onClick={onClip} close={() => setMenuOpen(false)} />
                 <MenuItem label="Release clipping mask" disabled={!canRelease} onClick={onRelease} close={() => setMenuOpen(false)} />
+                <MenuItem label="Import .znow as a group…" hint="Brings the items of a .znow file (a group saved from a group's ⋮ menu) in as a new group on this page" onClick={onImportGroup} close={() => setMenuOpen(false)} />
               </div>
             )}
           </span>
@@ -497,6 +508,12 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
             label="Release clipping mask" disabled={!rowMenuAnn.clipToBelow}
             onClick={() => onToggleClip(rowMenuAnn.id)} close={() => setRowMenu(null)}
           />
+        </div>
+      )}
+      {groupMenuId && (
+        <div className="ze-menu ze-layer-row-menu" role="menu" ref={rowMenuRef} style={{ left: rowMenu.x, top: rowMenu.y }}>
+          <MenuItem label="Save group as .znow" hint="Saves just this group as a project file (it opens on its own, or comes into another document with Import group)" onClick={() => onExportGroup(groupMenuId)} close={() => setRowMenu(null)} />
+          <MenuItem label="Import .znow as a group…" hint="Brings the items of a .znow file in as a new group on this page" onClick={onImportGroup} close={() => setRowMenu(null)} />
         </div>
       )}
       {RESIZE_EDGES.map((edge) => (
