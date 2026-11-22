@@ -74,23 +74,28 @@ export function windowMask(mask, w, crop) {
 // The model's input: 4 channels, as float numbers. Channel 0 is "known - 0.5" (0.5 where the picture is known, -0.5 in the area to
 // fill); channels 1-3 are the picture's red, green, blue scaled to -1..1, with the area blanked to 0.
 // `rgba`: the 512 x 512 window of the picture (RGBA bytes); `hole`: Uint8Array of 512 x 512 (1 = fill this).
-export function buildInput(rgba, hole) {
+// `sign` (1 or -1) flips the mask channel: models differ on which way round it is, and the app finds out by testing (runtime.js).
+export function buildInput(rgba, hole, sign = 1) {
   const n = MODEL_SIZE * MODEL_SIZE;
   const x = new Float32Array(4 * n);
   for (let i = 0; i < n; i++) {
     const known = hole[i] ? 0 : 1;
-    x[i] = known - 0.5;
+    x[i] = sign * (known - 0.5);
     for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = (rgba[i * 4 + c] / 127.5 - 1) * known;
   }
   return x;
 }
 
-// The model's answer (3 channels of -1..1 numbers) as RGBA bytes.
+// The model's answer (3 channels of numbers) as RGBA bytes. The numbers are read as -1..1 (most models), 0..1 or already 0..255,
+// whichever the values themselves show.
 export function outputToRgba(out) {
   const n = MODEL_SIZE * MODEL_SIZE;
+  let min = Infinity, max = -Infinity;
+  for (let i = 0; i < 3 * n; i += 7) { const v = out[i]; if (v < min) min = v; if (v > max) max = v; }
+  const mode = min < -0.01 && max <= 1.5 ? "signed" : max <= 1.5 ? "unit" : "byte";
   const rgba = new Uint8ClampedArray(n * 4);
   for (let i = 0; i < n; i++) {
-    for (let c = 0; c < 3; c++) rgba[i * 4 + c] = (out[c * n + i] + 1) * 127.5;
+    for (let c = 0; c < 3; c++) { const v = out[c * n + i]; rgba[i * 4 + c] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v; }
     rgba[i * 4 + 3] = 255;
   }
   return rgba;
@@ -206,4 +211,28 @@ export function groupMask(labels, ids) {
   const out = new Uint8Array(labels.length);
   for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
   return out;
+}
+
+// ---- which way round the mask channel goes ---------------------------------------------------------------------
+// Models differ on whether the mask channel is "known - 0.5" (sign 1) or "0.5 - known" (sign -1). This tests it on a made-up smooth
+// picture with a round hole: `run(rgba, hole, sign)` gives the model's answer (512 x 512 RGBA bytes). The right sign gives back
+// the smooth picture inside the hole, the wrong one gives something else. Returns { sign, errors } (errors: mean difference by sign).
+export async function findMaskSign(run) {
+  const n = MODEL_SIZE * MODEL_SIZE;
+  const rgba = new Uint8ClampedArray(n * 4), truth = new Uint8ClampedArray(n * 4), hole = new Uint8Array(n);
+  for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
+    const i = y * MODEL_SIZE + x;
+    const px = [40 + (x / MODEL_SIZE) * 180, 60 + (y / MODEL_SIZE) * 150, 140 + ((x + y) / (2 * MODEL_SIZE)) * 90];
+    for (let c = 0; c < 3; c++) { rgba[i * 4 + c] = px[c]; truth[i * 4 + c] = px[c]; }
+    rgba[i * 4 + 3] = truth[i * 4 + 3] = 255;
+    if (Math.hypot(x - 256, y - 256) < 60) hole[i] = 1;
+  }
+  const errors = {};
+  for (const sign of [1, -1]) {
+    const out = await run(rgba, hole, sign);
+    let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) if (hole[i]) { for (let c = 0; c < 3; c++) sum += Math.abs(out[i * 4 + c] - truth[i * 4 + c]); count += 3; }
+    errors[sign] = sum / count;
+  }
+  return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
 }

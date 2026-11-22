@@ -14,27 +14,73 @@
 
   // shared/js/imageHandoff.js
   var ZEDITOR_READY_MESSAGE = "zeditor-ready";
+  var AITOOLS_READY_MESSAGE = "aitools-ready";
   var HANDOFF_IMAGE_MESSAGE = "zinenow-handoff-image";
-  async function sendImageToZEditor(getBlob, filename) {
-    const win = window.open("../ZEditor/index.html", "_blank");
+  async function sendImageToApp(path, readyType, getBlob, filename, meta) {
+    const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         window.removeEventListener("message", onMessage);
-        reject(new Error("ZEditor didn't answer. It may still be loading: try again in a moment."));
+        reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
-        if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== ZEDITOR_READY_MESSAGE) return;
+        if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
         clearTimeout(timer);
         window.removeEventListener("message", onMessage);
         resolve();
       }
       window.addEventListener("message", onMessage);
     });
-    const blob = await getBlob();
+    const made = await getBlob();
+    const blob = made.blob || made;
     const buffer = await blob.arrayBuffer();
     await ready;
-    win.postMessage({ type: HANDOFF_IMAGE_MESSAGE, buffer, filename, mime: blob.type || "image/png" }, location.origin, [buffer]);
+    win.postMessage({ type: HANDOFF_IMAGE_MESSAGE, buffer, filename, mime: blob.type || "image/png", meta: made.blob ? made.meta : meta }, location.origin, [buffer]);
+  }
+  var sendImageToZEditor = (getBlob, filename, meta) => sendImageToApp("../ZEditor/index.html", ZEDITOR_READY_MESSAGE, getBlob, filename, meta);
+  function hasOpener() {
+    try {
+      return Boolean(window.opener && window.opener !== window && !window.opener.closed && window.opener.location.origin === location.origin);
+    } catch (e) {
+      return false;
+    }
+  }
+  async function sendImageToOpener(getBlob, filename, meta) {
+    if (!hasOpener()) throw new Error("The app that opened this one has been closed.");
+    const made = await getBlob();
+    const blob = made.blob || made;
+    const buffer = await blob.arrayBuffer();
+    window.opener.postMessage({ type: HANDOFF_IMAGE_MESSAGE, buffer, filename, mime: blob.type || "image/png", meta: made.blob ? made.meta : meta }, location.origin, [buffer]);
+  }
+  function listenForHandoffImage(readyType, onImage) {
+    let ping = 0, n = 0, pinging = true;
+    const stopPing = () => {
+      pinging = false;
+      clearInterval(ping);
+    };
+    function onMessage(e) {
+      if (e.origin !== location.origin || !e.data || e.data.type !== HANDOFF_IMAGE_MESSAGE || !(e.data.buffer instanceof ArrayBuffer)) return;
+      stopPing();
+      onImage(new File([e.data.buffer], e.data.filename || "picture.png", { type: e.data.mime || "image/png" }), e.source === window.opener, e.data.meta);
+    }
+    window.addEventListener("message", onMessage);
+    if (window.opener && window.opener !== window) {
+      const send = () => {
+        if (!pinging) return;
+        try {
+          window.opener.postMessage({ type: readyType }, location.origin);
+        } catch (err) {
+        }
+        if (++n > 40) stopPing();
+      };
+      ping = setInterval(send, 500);
+      send();
+    }
+    return () => {
+      stopPing();
+      window.removeEventListener("message", onMessage);
+    };
   }
 
   // shared/js/numberFields.js
@@ -253,21 +299,31 @@
     }
     return out;
   }
-  function buildInput(rgba, hole) {
+  function buildInput(rgba, hole, sign = 1) {
     const n = MODEL_SIZE * MODEL_SIZE;
     const x = new Float32Array(4 * n);
     for (let i = 0; i < n; i++) {
       const known = hole[i] ? 0 : 1;
-      x[i] = known - 0.5;
+      x[i] = sign * (known - 0.5);
       for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = (rgba[i * 4 + c] / 127.5 - 1) * known;
     }
     return x;
   }
   function outputToRgba(out) {
     const n = MODEL_SIZE * MODEL_SIZE;
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < 3 * n; i += 7) {
+      const v = out[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const mode = min < -0.01 && max <= 1.5 ? "signed" : max <= 1.5 ? "unit" : "byte";
     const rgba = new Uint8ClampedArray(n * 4);
     for (let i = 0; i < n; i++) {
-      for (let c = 0; c < 3; c++) rgba[i * 4 + c] = (out[c * n + i] + 1) * 127.5;
+      for (let c = 0; c < 3; c++) {
+        const v = out[c * n + i];
+        rgba[i * 4 + c] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v;
+      }
       rgba[i * 4 + 3] = 255;
     }
     return rgba;
@@ -376,6 +432,31 @@
     for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
     return out;
   }
+  async function findMaskSign(run) {
+    const n = MODEL_SIZE * MODEL_SIZE;
+    const rgba = new Uint8ClampedArray(n * 4), truth = new Uint8ClampedArray(n * 4), hole = new Uint8Array(n);
+    for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
+      const i = y * MODEL_SIZE + x;
+      const px = [40 + x / MODEL_SIZE * 180, 60 + y / MODEL_SIZE * 150, 140 + (x + y) / (2 * MODEL_SIZE) * 90];
+      for (let c = 0; c < 3; c++) {
+        rgba[i * 4 + c] = px[c];
+        truth[i * 4 + c] = px[c];
+      }
+      rgba[i * 4 + 3] = truth[i * 4 + 3] = 255;
+      if (Math.hypot(x - 256, y - 256) < 60) hole[i] = 1;
+    }
+    const errors = {};
+    for (const sign of [1, -1]) {
+      const out = await run(rgba, hole, sign);
+      let sum = 0, count = 0;
+      for (let i = 0; i < n; i++) if (hole[i]) {
+        for (let c = 0; c < 3; c++) sum += Math.abs(out[i * 4 + c] - truth[i * 4 + c]);
+        count += 3;
+      }
+      errors[sign] = sum / count;
+    }
+    return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
+  }
 
   // apps/AiToolsLocal/src/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
@@ -469,12 +550,13 @@
     }
     return { session: await ort.InferenceSession.create(modelBytes2, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
   }
-  async function runModel(session2, rgba, hole) {
+  async function runModel(session2, rgba, hole, sign = 1) {
     const ort = await loadOrt();
-    const input = new ort.Tensor("float32", buildInput(rgba, hole), [1, 4, MODEL_SIZE, MODEL_SIZE]);
+    const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
     const out = await session2.run({ [session2.inputNames[0]]: input });
     return outputToRgba(out[session2.outputNames[0]].data);
   }
+  var findSign = (session2) => findMaskSign((rgba, hole, sign) => runModel(session2, rgba, hole, sign));
 
   // apps/AiToolsLocal/src/main.js
   var $ = (id) => document.getElementById(id);
@@ -514,6 +596,9 @@
   var redoStack = [];
   var session = null;
   var modelBytes = null;
+  var maskSign = null;
+  var cameFromZEditor = false;
+  var handoffMeta;
   function status(text, kind) {
     const s = $("status");
     s.textContent = text;
@@ -709,6 +794,19 @@
     for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] >= 64 ? 1 : 0;
     return m;
   }
+  async function checkMaskSign(url) {
+    const key = "sign:" + url;
+    const saved = (settings.signs || {})[key];
+    if (saved === 1 || saved === -1) {
+      maskSign = saved;
+      return;
+    }
+    status("Checking the model (one time, a few seconds)…");
+    const r = await findSign(session.session);
+    maskSign = r.sign;
+    settings.signs = { ...settings.signs || {}, [key]: r.sign };
+    saveSettings();
+  }
   async function ensureSession() {
     if (session) return session;
     const url = $("model-url").value.trim() || DEFAULT_MODEL_URL;
@@ -727,6 +825,7 @@
     }
     status("Starting the model…");
     session = await createSession(modelBytes, true);
+    await checkMaskSign(url);
     refreshModelInfo();
     return session;
   }
@@ -742,12 +841,12 @@
     const hole = windowMask(mask, w, crop);
     let answer;
     try {
-      answer = await runModel(sess.session, rgba, hole);
+      answer = await runModel(sess.session, rgba, hole, maskSign || 1);
     } catch (e) {
       if (sess.backend !== "gpu") throw e;
       status("The graphics chip failed; trying the processor…");
       session = await createSession(modelBytes, false);
-      answer = await runModel(session.session, rgba, hole);
+      answer = await runModel(session.session, rgba, hole, maskSign || 1);
       refreshModelInfo();
     }
     const ac = document.createElement("canvas");
@@ -839,13 +938,24 @@
   var toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't make the picture.")), "image/png"));
   $("send").addEventListener("click", async () => {
     if (!hasPicture()) return;
-    status("Opening ZEditor…");
     try {
+      if (cameFromZEditor && hasOpener()) {
+        await sendImageToOpener(toBlob, fileName + "-filled.png", handoffMeta);
+        status("Sent back to ZEditor: a new layer in the document it came from.", "ok");
+        return;
+      }
+      status("Opening ZEditor…");
       await sendImageToZEditor(toBlob, fileName + "-filled.png");
       status("Sent to ZEditor (it opened in a new tab).", "ok");
     } catch (e) {
       status("Couldn't send it: " + (e && e.message ? e.message : e), "bad");
     }
+  });
+  listenForHandoffImage(AITOOLS_READY_MESSAGE, async (file, fromOpener, meta) => {
+    await openFile(file);
+    cameFromZEditor = fromOpener;
+    handoffMeta = meta;
+    if (fromOpener) $("send").textContent = "Send back to ZEditor";
   });
   $("open").addEventListener("click", () => $("file").click());
   $("empty-open").addEventListener("click", () => $("file").click());

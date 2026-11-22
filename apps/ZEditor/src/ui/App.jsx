@@ -63,7 +63,7 @@ export function App() {
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });
   const groupFiles = useGroupFiles({ doc, edits, selection, status });
-  useImageHandoff({ doc, files, edits }); // a picture sent from Ai Tools (Local) opens as a new canvas document
+  useImageHandoff({ doc, files, edits, selection }); // a picture sent from Ai Tools (Local) opens as a new canvas document
   const zoom = useZoom();
   useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
@@ -230,6 +230,7 @@ export function App() {
             croppingAnnId={croppingAnnId}
             onToggleCrop={selection.handleToggleCrop}
             onFlattenImage={edits.handleFlattenImage}
+            onOpenInAiTools={edits.handleOpenInAiTools}
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}
             toolDefaults={toolDefaults}

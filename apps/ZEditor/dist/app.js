@@ -6408,6 +6408,63 @@
     return out;
   }
 
+  // shared/js/imageHandoff.js
+  var ZEDITOR_READY_MESSAGE = "zeditor-ready";
+  var AITOOLS_READY_MESSAGE = "aitools-ready";
+  var HANDOFF_IMAGE_MESSAGE = "zinenow-handoff-image";
+  async function sendImageToApp(path, readyType, getBlob, filename, meta) {
+    const win = window.open(path, "_blank");
+    if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
+    const ready = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
+      }, 2e4);
+      function onMessage(e) {
+        if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
+        clearTimeout(timer);
+        window.removeEventListener("message", onMessage);
+        resolve();
+      }
+      window.addEventListener("message", onMessage);
+    });
+    const made = await getBlob();
+    const blob = made.blob || made;
+    const buffer = await blob.arrayBuffer();
+    await ready;
+    win.postMessage({ type: HANDOFF_IMAGE_MESSAGE, buffer, filename, mime: blob.type || "image/png", meta: made.blob ? made.meta : meta }, location.origin, [buffer]);
+  }
+  var sendImageToAiTools = (getBlob, filename, meta) => sendImageToApp("../AiToolsLocal/index.html", AITOOLS_READY_MESSAGE, getBlob, filename, meta);
+  function listenForHandoffImage(readyType, onImage) {
+    let ping = 0, n = 0, pinging = true;
+    const stopPing = () => {
+      pinging = false;
+      clearInterval(ping);
+    };
+    function onMessage(e) {
+      if (e.origin !== location.origin || !e.data || e.data.type !== HANDOFF_IMAGE_MESSAGE || !(e.data.buffer instanceof ArrayBuffer)) return;
+      stopPing();
+      onImage(new File([e.data.buffer], e.data.filename || "picture.png", { type: e.data.mime || "image/png" }), e.source === window.opener, e.data.meta);
+    }
+    window.addEventListener("message", onMessage);
+    if (window.opener && window.opener !== window) {
+      const send2 = () => {
+        if (!pinging) return;
+        try {
+          window.opener.postMessage({ type: readyType }, location.origin);
+        } catch (err) {
+        }
+        if (++n > 40) stopPing();
+      };
+      ping = setInterval(send2, 500);
+      send2();
+    }
+    return () => {
+      stopPing();
+      window.removeEventListener("message", onMessage);
+    };
+  }
+
   // apps/ZEditor/src/model/annotations.js
   function withGroupMates(annotations, ids) {
     const groups = new Set(annotations.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
@@ -8704,6 +8761,15 @@
       if (!patch) return;
       updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
     }
+    function handleOpenInAiTools(ann) {
+      const name = (ann.name || "picture").replace(/[^\w .-]+/g, "") || "picture";
+      const pageKey = selectedIdx !== null && pages[selectedIdx] ? pages[selectedIdx].key : null;
+      sendImageToAiTools(async () => {
+        const patch = await flattenedImagePatch(ann, pageFilter);
+        if (!patch) throw new Error("There is nothing visible on that picture to send.");
+        return { blob: await (await fetch(patch.src)).blob(), meta: { pageKey, x: patch.x, y: patch.y, width: patch.width, height: patch.height, angle: patch.angle, name } };
+      }, name + ".png").catch((err) => window.alert("Couldn't open Ai Tools (Local): " + (err && err.message ? err.message : err)));
+    }
     async function handleRasterizeText(ann) {
       const pageIdx = selectedIdx;
       const patch = await rasterizedTextPatch(ann);
@@ -8760,6 +8826,7 @@
       handleUpdateAnnotation,
       handleSetLayerLook,
       handleFlattenImage,
+      handleOpenInAiTools,
       handleRasterizeText,
       handleRasterizeRect,
       handleDeleteAnnotation,
@@ -12908,48 +12975,37 @@
     return { inputRef, handleExportGroup, openImportPicker, handleImportInput };
   }
 
-  // shared/js/imageHandoff.js
-  var ZEDITOR_READY_MESSAGE = "zeditor-ready";
-  var HANDOFF_IMAGE_MESSAGE = "zinenow-handoff-image";
-  function listenForHandoffImage(onImage) {
-    if (!window.opener || window.opener === window) return () => {
-    };
-    let ping = 0, stopped = false;
-    const stop2 = () => {
-      stopped = true;
-      clearInterval(ping);
-      window.removeEventListener("message", onMessage);
-    };
-    function onMessage(e) {
-      if (e.source !== window.opener || e.origin !== location.origin || !e.data || e.data.type !== HANDOFF_IMAGE_MESSAGE) return;
-      stop2();
-      onImage(new File([e.data.buffer], e.data.filename || "picture.png", { type: e.data.mime || "image/png" }));
-    }
-    window.addEventListener("message", onMessage);
-    let n = 0;
-    const send2 = () => {
-      if (stopped) return;
-      try {
-        window.opener.postMessage({ type: ZEDITOR_READY_MESSAGE }, location.origin);
-      } catch (err) {
-      }
-      if (++n > 40) stop2();
-    };
-    ping = setInterval(send2, 500);
-    send2();
-    return stop2;
-  }
-
   // apps/ZEditor/src/state/useImageHandoff.js
   var { useEffect: useEffect11, useRef: useRef14 } = React;
   var SHOW_MAX = 800;
   var MARGIN2 = 80;
-  function useImageHandoff({ doc, files, edits }) {
+  function useImageHandoff({ doc, files, edits, selection }) {
     const latest = useRef14(null);
-    latest.current = { doc, files, edits };
-    useEffect11(() => listenForHandoffImage(async (file) => {
-      const { doc: d, files: f, edits: ed } = latest.current;
+    latest.current = { doc, files, edits, selection };
+    useEffect11(() => listenForHandoffImage(ZEDITOR_READY_MESSAGE, async (file, fromOpener, meta) => {
+      const { doc: d, files: f, edits: ed, selection: s } = latest.current;
       if (d.pages.length > 0) {
+        const idx = meta && meta.pageKey != null ? d.pages.findIndex((p) => p.key === meta.pageKey) : -1;
+        if (meta && idx >= 0 && Number.isFinite(meta.width) && Number.isFinite(meta.height)) {
+          try {
+            const src = await new Promise((resolve, reject) => {
+              const r = new FileReader();
+              r.onload = () => resolve(r.result);
+              r.onerror = reject;
+              r.readAsDataURL(file);
+            });
+            const bmp = await createImageBitmap(file);
+            const naturalWidth = bmp.width, naturalHeight = bmp.height;
+            bmp.close && bmp.close();
+            const id = d.nextAnnIdRef.current++;
+            ed.updateAnnotationsFor(idx, (anns) => [...anns, { id, type: "image", x: meta.x, y: meta.y, width: meta.width, height: meta.height, angle: meta.angle || void 0, naturalWidth, naturalHeight, src, name: (meta.name || "picture") + " (AI)" }]);
+            if (d.selectedIdx !== idx) d.setSelectedIdx(idx);
+            s.setSelectedAnnId(id);
+          } catch (err) {
+            window.alert("The picture couldn't be added: " + (err && err.message ? err.message : err));
+          }
+          return;
+        }
         ed.addImageAnnotationFromFile(file, d.selectedIdx === null ? 0 : d.selectedIdx);
         return;
       }
@@ -15573,7 +15629,7 @@
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
   var { useState: useState26 } = React;
-  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace }) {
+  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace }) {
     const patch = (p) => onUpdate(ann.id, p);
     const isCroppingThis = croppingAnnId === ann.id;
     const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -15625,6 +15681,14 @@
         );
       })
     ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "image.aitools",
+        title: "Ai Tools (Local)",
+        hint: "Opens this picture (with its crop, adjustments and effects) in Ai Tools (Local), the AI object remover that runs on your device. When you press Send back to ZEditor there, the result arrives here as a new layer. Nothing is uploaded."
+      },
+      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: isCroppingThis, onClick: () => onOpenInAiTools(ann) }, "Open in Ai Tools (remove objects)")
+    ), /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.flatten",
@@ -16478,6 +16542,7 @@
     croppingAnnId,
     onToggleCrop,
     onFlattenImage,
+    onOpenInAiTools,
     onRasterizeRect,
     onRasterizeText,
     toolDefaults,
@@ -16492,7 +16557,7 @@
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
-    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace });
+    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace });
     if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize, onExportSvg });
     if (ann && ann.type === "rect") return /* @__PURE__ */ React.createElement(ShapeFormat, { key: ann.id, ann, onUpdate, onRasterizeRect });
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
@@ -17847,7 +17912,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2cfb58a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "109df50"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -18282,7 +18347,7 @@
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
     const exporter = useExport({ doc, status, view, project, selection });
     const groupFiles = useGroupFiles({ doc, edits, selection, status });
-    useImageHandoff({ doc, files, edits });
+    useImageHandoff({ doc, files, edits, selection });
     const zoom = useZoom();
     useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 });
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
@@ -18443,6 +18508,7 @@
         croppingAnnId,
         onToggleCrop: selection.handleToggleCrop,
         onFlattenImage: edits.handleFlattenImage,
+        onOpenInAiTools: edits.handleOpenInAiTools,
         onRasterizeRect: edits.handleRasterizeRect,
         onRasterizeText: edits.handleRasterizeText,
         toolDefaults,

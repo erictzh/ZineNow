@@ -1,5 +1,5 @@
 // The AI remover's picture maths (apps/AiToolsLocal/src/fill.js).
-import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, groupMask, groupPieces, holeBounds, labelPieces, outputToRgba, paste, windowMask } from "../apps/AiToolsLocal/src/fill.js";
+import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, findMaskSign, groupMask, groupPieces, holeBounds, labelPieces, outputToRgba, paste, windowMask } from "../apps/AiToolsLocal/src/fill.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -45,9 +45,15 @@ const x = buildInput(rgba, hole);
 ok(x.length === 4 * n && x[0] === 0.5 && x[5] === -0.5, "mask channel: +0.5 where known, -0.5 in the area");
 ok(Math.abs(x[n + 0] - 1) < 1e-6 && Math.abs(x[2 * n + 0] + 1) < 1e-6 && Math.abs(x[3 * n + 0]) < 0.01, "picture channels are scaled to -1..1");
 ok(x[n + 5] === 0 && x[2 * n + 5] === 0, "the area is blanked to 0 in the picture channels");
+const xf = buildInput(rgba, hole, -1);
+ok(xf[0] === -0.5 && xf[5] === 0.5, "sign -1 flips the mask channel (the other convention)");
 const out = new Float32Array(3 * n); out.fill(-1); for (let i = 0; i < n; i++) out[i] = 1;
 const o = outputToRgba(out);
 ok(o[0] === 255 && o[1] === 0 && o[3] === 255, "the answer's -1..1 numbers become 0..255 colours");
+const unit = new Float32Array(3 * n).fill(0.5); for (let i = 0; i < n; i++) unit[i] = 1;
+ok(outputToRgba(unit)[0] === 255 && Math.abs(outputToRgba(unit)[1] - 127.5) < 1, "numbers in 0..1 are read as 0..1");
+const bytes = new Float32Array(3 * n).fill(100); bytes[0] = 255;
+ok(outputToRgba(bytes)[1] === 100, "numbers up to 255 are read as they are");
 
 // blending and pasting
 const m2 = new Uint8Array(100 * 100); for (let y = 30; y < 40; y++) for (let x2 = 30; x2 < 40; x2++) m2[y * 100 + x2] = 1;
@@ -81,5 +87,15 @@ ok(image[(35 * 100 + 35) * 4] === 250 && image[(20 * 100 + 20) * 4] === 10, "pas
   ok(labelPieces(d, 100, 100).boxes.length === 1, "pixels touching at a corner are one piece");
 }
 
-console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
-process.exit(fails ? 1 : 0);
+// ---- finding the mask sign with a pretend model
+(async () => {
+  const fake = (goodSign) => async (rgba, hole, sign) => {
+    const out = new Uint8ClampedArray(rgba.length);
+    for (let i = 0; i < rgba.length; i++) out[i] = sign === goodSign ? rgba[i] : 128 + ((i * 7) % 90); // the right way round: the picture back; the wrong way: junk
+    return out;
+  };
+  const a = await findMaskSign(fake(1)), b = await findMaskSign(fake(-1));
+  ok(a.sign === 1 && b.sign === -1, "the sign test picks the convention that gives the smooth picture back (" + a.sign + ", " + b.sign + ")");
+  console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
+  process.exit(fails ? 1 : 0);
+})();

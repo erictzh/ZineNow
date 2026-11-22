@@ -1,5 +1,6 @@
 // Every change to the items on a page: adding, editing, moving, rotating, grouping, layering, erasing, deleting; plus the page filter.
 
+import { sendImageToAiTools } from "../../../../shared/js/imageHandoff.js";
 import { MAIN_SCALE } from "../constants.js";
 import { orderAfterMove, translatedAnnotation, withGroupMates } from "../model/annotations.js";
 import { clipTargets } from "../model/clipping.js";
@@ -352,6 +353,20 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
   }
 
+  // Sends the picture, as it looks (crop, adjustments, effects baked in), to Ai Tools (Local) in a new tab (shared/js/imageHandoff.js).
+  // Called straight from the button's click, so the browser allows the new tab. The result comes back as a new layer
+  // (state/useImageHandoff.js adds it to the document that is open here).
+  function handleOpenInAiTools(ann) {
+    const name = (ann.name || "picture").replace(/[^\w .-]+/g, "") || "picture";
+    const pageKey = selectedIdx !== null && pages[selectedIdx] ? pages[selectedIdx].key : null;
+    sendImageToAiTools(async () => {
+      const patch = await flattenedImagePatch(ann, pageFilter);
+      if (!patch) throw new Error("There is nothing visible on that picture to send.");
+      // the baked picture's own box goes along, so the result comes back exactly over it
+      return { blob: await (await fetch(patch.src)).blob(), meta: { pageKey, x: patch.x, y: patch.y, width: patch.width, height: patch.height, angle: patch.angle, name } };
+    }, name + ".png").catch((err) => window.alert("Couldn't open Ai Tools (Local): " + (err && err.message ? err.message : err)));
+  }
+
   async function handleRasterizeText(ann) {
     const pageIdx = selectedIdx;
     const patch = await rasterizedTextPatch(ann);
@@ -408,7 +423,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
-    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
+    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleOpenInAiTools, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
   };
