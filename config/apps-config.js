@@ -24,5 +24,9 @@ window.ZINENOW_APPS = [
   {
     folder: "ZEditor",
     desc: "Compose and edit zine pages"
+  },
+  {
+    folder: "AiToolsLocal",
+    desc: "Remove objects with AI, on your device"
   }
 ];
