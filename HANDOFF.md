@@ -523,3 +523,4 @@ Reported: dragging the left/right panel's edge (touch) made the canvas move side
 - Feather's width now goes up to **100%** of the short side (was 50, `FEATHER_EFFECT` in `model/imageEffects.js`); above 50 the fade is wider than half the picture, so the middle stays partly see-through (the control's hint says so).
 - A plain-language guide for Remove & fill, the Magic eraser and the no-paper canvas (how to use + how it works inside) is in `docs/GUIDE-fill-magic-eraser-canvas.md`.
 - The guide `docs/GUIDE-fill-magic-eraser-canvas.md` now also has a Vectorize part.
+- The guide `docs/GUIDE-fill-magic-eraser-canvas.md` was rewritten with in-depth, plain-language 'How it works' sections (real technique names: harmonic fill, Telea, Criminisi, flood fill, k-means, Douglas-Peucker...) and a glossary.
