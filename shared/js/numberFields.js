@@ -11,23 +11,19 @@
 //    the box, which looks like a last digit that can't be deleted. So while a box is held empty it also
 //    refuses those write-backs; only the person typing changes it.
 //
-// 2. Up and down buttons. Chrome on Android draws none, so while a finger is being used, a strip at the
-//    right edge of every number box acts as a pair of buttons (drawn in shared/styles/numberFields.css):
-//    the upper half steps up, the lower half steps down, holding repeats. Pressing it doesn't focus the box,
-//    so the keyboard doesn't open. It steps the way the browser's own spinner does (min, max, step), and tells
-//    the app the way the spinner does: an `input` event without an inputType, then `change`. With a mouse the
-//    browser's own spinner is left alone.
+// 2. − and + buttons on every number box (drawn in shared/styles/numberFields.css): the left strip of the box
+//    steps down, the right strip steps up, holding repeats. Chrome on Android has no spinner of its own, and
+//    this one is big enough for a finger. Pressing a button doesn't focus the box, so the keyboard doesn't
+//    open. It steps the way the browser's own spinner does (min, max, step), and tells the app the way the
+//    spinner does: an `input` event without an inputType, then `change`. Mouse and touch alike. A box that
+//    must stay plain says data-no-steppers.
 
-const STRIP_PX = 24; // width of the button strip, as in the stylesheet (--zn-step-w)
+const STRIP_PX = 28; // width of each button, as in the stylesheet (--zn-step-w)
 const HOLD_MS = 450; // before holding a button repeats
 const REPEAT_MS = 80;
 
 const isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
 const allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
-const touching = () => {
-  const d = document.documentElement.dataset;
-  return d.input === "touch" || d.zeInput === "touch"; // shared/js/inputMode.js, ZEditor's touchInput.js
-};
 
 // Writes a value to the box without telling the app (the app already holds that value).
 const writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
@@ -93,13 +89,15 @@ export function installNumberFields() {
   }, true);
 
   // ---- 2. Up and down buttons ------------------------------------------------------------------
-  // Which button (+1 up, -1 down) a press at (x, y) on `el` lands on, or 0 outside the strip.
+  // Which button (+1 right, -1 left) a press at (x, y) on `el` lands on, or 0 between them.
   function buttonAt(el, x, y) {
+    if (el.hasAttribute("data-no-steppers")) return 0;
     const r = el.getBoundingClientRect();
-    if (!r.width || !el.offsetWidth) return 0;
-    const scale = r.width / el.offsetWidth; // the Interface size setting zooms the controls
-    if (x < r.right - STRIP_PX * scale || x > r.right || y < r.top || y > r.bottom) return 0;
-    return y < r.top + r.height / 2 ? 1 : -1;
+    if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom) return 0;
+    const strip = STRIP_PX * (r.width / el.offsetWidth); // the Interface size setting zooms the controls
+    if (x >= r.left && x <= r.left + strip) return -1;
+    if (x <= r.right && x >= r.right - strip) return 1;
+    return 0;
   }
 
   // One step the way the browser's spinner makes it; false at a limit (or if the box can't step).
@@ -128,7 +126,7 @@ export function installNumberFields() {
     const el = e.target;
     // A press on the box itself (outside the strip) means typing is wanted: lift the guard at once.
     if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-    if (e.pointerType === "mouse" || !isNumberBox(el) || el.disabled || (el.readOnly && !madeReadOnly.has(el)) || !touching()) return;
+    if ((e.pointerType === "mouse" && e.button !== 0) || !isNumberBox(el) || el.disabled || (el.readOnly && !madeReadOnly.has(el))) return;
     const dir = buttonAt(el, e.clientX, e.clientY);
     if (!dir) return;
     e.preventDefault();

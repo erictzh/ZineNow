@@ -14,15 +14,11 @@
   }
 
   // shared/js/numberFields.js
-  var STRIP_PX = 24;
+  var STRIP_PX = 28;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
   var allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
-  var touching = () => {
-    const d = document.documentElement.dataset;
-    return d.input === "touch" || d.zeInput === "touch";
-  };
   var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
   var held = /* @__PURE__ */ new WeakMap();
   function holdEmpty(el) {
@@ -80,11 +76,13 @@
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
     function buttonAt(el, x, y) {
+      if (el.hasAttribute("data-no-steppers")) return 0;
       const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth) return 0;
-      const scale = r.width / el.offsetWidth;
-      if (x < r.right - STRIP_PX * scale || x > r.right || y < r.top || y > r.bottom) return 0;
-      return y < r.top + r.height / 2 ? 1 : -1;
+      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom) return 0;
+      const strip = STRIP_PX * (r.width / el.offsetWidth);
+      if (x >= r.left && x <= r.left + strip) return -1;
+      if (x <= r.right && x >= r.right - strip) return 1;
+      return 0;
     }
     function stepBy(el, dir) {
       const before = el.value;
@@ -117,7 +115,7 @@
     document.addEventListener("pointerdown", (e) => {
       const el = e.target;
       if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-      if (e.pointerType === "mouse" || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el) || !touching()) return;
+      if (e.pointerType === "mouse" && e.button !== 0 || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el)) return;
       const dir = buttonAt(el, e.clientX, e.clientY);
       if (!dir) return;
       e.preventDefault();
@@ -1678,7 +1676,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "9e2f427"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "cc23e10"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",

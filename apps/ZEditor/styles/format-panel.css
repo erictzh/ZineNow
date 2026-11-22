@@ -178,7 +178,7 @@
 .ze-format-slider-row { display: flex; align-items: center; gap: 8px; }
 .ze-format-slider-row .ze-format-slider { flex: 1 1 auto; min-width: 0; }
 .ze-format-slider-row .ze-format-number { flex: 0 0 auto; width: 76px; }
-.ze-format-slider-row input[type="number"].ze-format-number { width: 58px; }
+.ze-format-slider-row input[type="number"].ze-format-number { width: 92px; } /* room for the - and + buttons (shared/styles/numberFields.css) */
 .ze-format-slider-row .ze-format-color-input { flex: 0 0 auto; }
 
 /* ---- Collapsible sections (CapCut-style) ---------------------------------
