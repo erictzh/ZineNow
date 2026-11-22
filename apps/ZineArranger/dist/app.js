@@ -14,7 +14,6 @@
   }
 
   // shared/js/numberFields.js
-  var STEP_PX = 29;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
@@ -42,6 +41,28 @@
     held.delete(el);
     if (own) Object.defineProperty(el, "value", own);
     else delete el.value;
+  }
+  function makeButton(dir) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "zn-num-btn";
+    b.tabIndex = -1;
+    b.dataset.znStep = String(dir);
+    b.textContent = dir < 0 ? "−" : "+";
+    b.setAttribute("aria-label", dir < 0 ? "Decrease" : "Increase");
+    b.title = dir < 0 ? "Decrease" : "Increase";
+    return b;
+  }
+  function wrapNumberInput(input) {
+    if (!input || !input.parentNode || input.closest(".zn-num") || input.hasAttribute("data-no-steppers")) return input;
+    const wrap = document.createElement("span");
+    wrap.className = "zn-num";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.append(input, makeButton(-1), makeButton(1));
+    return wrap;
+  }
+  function wrapNumberInputs(root = document) {
+    root.querySelectorAll('input[type="number"]').forEach(wrapNumberInput);
   }
   function installNumberFields() {
     const lastGood = /* @__PURE__ */ new WeakMap();
@@ -75,15 +96,6 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function buttonAt(el, x, y) {
-      if (el.hasAttribute("data-no-steppers")) return 0;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
-      const fromRight = (r.right - x) / (r.width / el.offsetWidth);
-      if (fromRight <= STEP_PX) return 1;
-      if (fromRight <= STEP_PX * 2) return -1;
-      return 0;
-    }
     function stepBy(el, dir) {
       const before = el.value;
       try {
@@ -97,33 +109,22 @@
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
-    const madeReadOnly = /* @__PURE__ */ new WeakMap();
-    const unlock = (el) => {
-      if (!madeReadOnly.has(el)) return;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.delete(el);
-      el.readOnly = false;
-    };
     let holdTimer = 0;
     let repeatTimer = 0;
-    let quietUntil = 0;
     const stop = () => {
       clearTimeout(holdTimer);
       clearInterval(repeatTimer);
       holdTimer = repeatTimer = 0;
     };
+    const buttonOf = (e) => e.target instanceof Element ? e.target.closest(".zn-num-btn") : null;
+    const boxOf = (button) => button.parentElement ? button.parentElement.querySelector('input[type="number"]') : null;
     document.addEventListener("pointerdown", (e) => {
-      const el = e.target;
-      if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-      if (e.pointerType === "mouse" && e.button !== 0 || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el)) return;
-      const dir = buttonAt(el, e.clientX, e.clientY);
-      if (!dir) return;
+      const button = buttonOf(e);
+      if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
+      const el = boxOf(button);
+      if (!el || el.disabled || el.readOnly) return;
       e.preventDefault();
-      quietUntil = performance.now() + 700;
-      el.readOnly = true;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.set(el, setTimeout(() => unlock(el), 700));
-      if (document.activeElement === el) el.blur();
+      const dir = Number(button.dataset.znStep) || 0;
       stop();
       stepBy(el, dir);
       holdTimer = setTimeout(() => {
@@ -133,8 +134,6 @@
       }, HOLD_MS);
       const release = () => {
         stop();
-        clearTimeout(madeReadOnly.get(el));
-        madeReadOnly.set(el, setTimeout(() => unlock(el), 250));
         if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
@@ -142,7 +141,7 @@
     }, true);
     for (const type of ["mousedown", "mouseup", "click"]) {
       document.addEventListener(type, (e) => {
-        if (performance.now() < quietUntil && isNumberBox(e.target) && buttonAt(e.target, e.clientX, e.clientY)) {
+        if (buttonOf(e)) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -4442,6 +4441,7 @@
       setPreviewZoom(null);
     });
     zoom.append(slider, numberBox, percentSign, fitButton);
+    wrapNumberInput(numberBox);
     footer.append(footerInfo, divider, zoom);
     var inner = document.getElementById("zine-scale");
     if (inner && window.ResizeObserver) new ResizeObserver(function() {
@@ -4760,12 +4760,14 @@
     state.spineSide = document.getElementById("spine-side").checked;
     state.flipBackCover = document.getElementById("flip-bc").checked;
     state.quarterCopy = document.getElementById("quarter-copy").checked;
+    var sigBox = document.getElementById("sig-size");
+    var sigShown = sigBox.closest(".zn-num") || sigBox;
     if (document.getElementById("cust-sig-size").checked) {
-      document.getElementById("sig-size").style = "display:inline";
+      sigShown.style.display = sigShown === sigBox ? "inline" : "inline-flex";
       document.getElementById("sig-size-label").style = "display:inline";
-      state.sigSize = document.getElementById("sig-size").value;
+      state.sigSize = sigBox.value;
     } else {
-      document.getElementById("sig-size").style = "display:none";
+      sigShown.style.display = "none";
       document.getElementById("sig-size-label").style = "display:none";
       state.sigSize = 0;
     }
@@ -5370,7 +5372,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 7aec2d3";
+    subtitle.textContent += " · build 3eaf828";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();
@@ -5383,6 +5385,15 @@
   document.getElementById("selector").addEventListener("change", refreshSpecs, false);
   setUpPanelResize();
   setUpPreviewZoom();
+  wrapNumberInputs();
+  (function() {
+    var sig = document.getElementById("sig-size");
+    var wrap = sig && sig.closest(".zn-num");
+    if (wrap) {
+      sig.style.display = "";
+      wrap.style.display = "none";
+    }
+  })();
   refreshSpecs();
   (function setUpZEditorHandoff() {
     function receivePdf(file) {

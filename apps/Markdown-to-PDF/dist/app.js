@@ -14,7 +14,6 @@
   }
 
   // shared/js/numberFields.js
-  var STEP_PX = 29;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
@@ -75,15 +74,6 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function buttonAt(el, x, y) {
-      if (el.hasAttribute("data-no-steppers")) return 0;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
-      const fromRight = (r.right - x) / (r.width / el.offsetWidth);
-      if (fromRight <= STEP_PX) return 1;
-      if (fromRight <= STEP_PX * 2) return -1;
-      return 0;
-    }
     function stepBy(el, dir) {
       const before = el.value;
       try {
@@ -97,33 +87,22 @@
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
-    const madeReadOnly = /* @__PURE__ */ new WeakMap();
-    const unlock = (el) => {
-      if (!madeReadOnly.has(el)) return;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.delete(el);
-      el.readOnly = false;
-    };
     let holdTimer = 0;
     let repeatTimer = 0;
-    let quietUntil = 0;
     const stop = () => {
       clearTimeout(holdTimer);
       clearInterval(repeatTimer);
       holdTimer = repeatTimer = 0;
     };
+    const buttonOf = (e) => e.target instanceof Element ? e.target.closest(".zn-num-btn") : null;
+    const boxOf = (button) => button.parentElement ? button.parentElement.querySelector('input[type="number"]') : null;
     document.addEventListener("pointerdown", (e) => {
-      const el = e.target;
-      if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
-      if (e.pointerType === "mouse" && e.button !== 0 || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el)) return;
-      const dir = buttonAt(el, e.clientX, e.clientY);
-      if (!dir) return;
+      const button = buttonOf(e);
+      if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
+      const el = boxOf(button);
+      if (!el || el.disabled || el.readOnly) return;
       e.preventDefault();
-      quietUntil = performance.now() + 700;
-      el.readOnly = true;
-      clearTimeout(madeReadOnly.get(el));
-      madeReadOnly.set(el, setTimeout(() => unlock(el), 700));
-      if (document.activeElement === el) el.blur();
+      const dir = Number(button.dataset.znStep) || 0;
       stop();
       stepBy(el, dir);
       holdTimer = setTimeout(() => {
@@ -133,8 +112,6 @@
       }, HOLD_MS);
       const release = () => {
         stop();
-        clearTimeout(madeReadOnly.get(el));
-        madeReadOnly.set(el, setTimeout(() => unlock(el), 250));
         if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
@@ -142,7 +119,7 @@
     }, true);
     for (const type of ["mousedown", "mouseup", "click"]) {
       document.addEventListener(type, (e) => {
-        if (performance.now() < quietUntil && isNumberBox(e.target) && buttonAt(e.target, e.clientX, e.clientY)) {
+        if (buttonOf(e)) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -1676,7 +1653,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "87d81c1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "88b1bdd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1862,6 +1839,14 @@
     };
   }
 
+  // shared/js/NumberBox.jsx
+  function NumberBox({ steppers = true, wrapClassName, ...inputProps }) {
+    const input = /* @__PURE__ */ React.createElement("input", { type: "number", ...inputProps });
+    if (!steppers) return input;
+    const disabled = Boolean(inputProps.disabled);
+    return /* @__PURE__ */ React.createElement("span", { className: "zn-num" + (wrapClassName ? " " + wrapClassName : "") }, input, /* @__PURE__ */ React.createElement("button", { type: "button", className: "zn-num-btn", "data-zn-step": "-1", tabIndex: -1, "aria-label": "Decrease", title: "Decrease", disabled }, "−"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "zn-num-btn", "data-zn-step": "1", tabIndex: -1, "aria-label": "Increase", title: "Increase", disabled }, "+"));
+  }
+
   // apps/Markdown-to-PDF/src/ui/PreviewCanvas.jsx
   var { useState: useState2, useEffect: useEffect2, useLayoutEffect: useLayoutEffect3, useRef: useRef3, useMemo } = React;
   var PAGE_SEAM_PX = 3;
@@ -1876,9 +1861,8 @@
       setDraft(null);
     };
     return /* @__PURE__ */ React.createElement("span", { className: "md2ebook-page-jump" }, "Page", /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         min: 1,
         max: total,
         step: 1,
@@ -1886,7 +1870,10 @@
         disabled: total <= 1,
         onChange: (e) => {
           if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
-          else onGo(Number(e.target.value));
+          else {
+            setDraft(null);
+            onGo(Number(e.target.value));
+          }
         },
         onBlur: commit,
         onKeyDown: (e) => {
@@ -1924,16 +1911,18 @@
         "aria-label": "Preview zoom"
       }
     ), /* @__PURE__ */ React.createElement("span", { className: "md2ebook-zoom-number" }, /* @__PURE__ */ React.createElement(
-      "input",
+      NumberBox,
       {
-        type: "number",
         min: ZOOM_MIN,
         max: ZOOM_MAX,
         step: 5,
         value: draft != null ? draft : percent,
         onChange: (e) => {
           if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
-          else onZoom(clampZoom(Number(e.target.value)));
+          else {
+            setDraft(null);
+            onZoom(clampZoom(Number(e.target.value)));
+          }
         },
         onBlur: commit,
         onKeyDown: (e) => {
@@ -2264,19 +2253,17 @@
     )));
   }
   function TextInput({ value, onChange, placeholder, type = "text", inputMode, step, min }) {
-    return /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        type,
-        inputMode,
-        step,
-        min,
-        value,
-        onChange: (e) => onChange(e.target.value),
-        placeholder,
-        className: "w-full text-sm placeholder-fg-muted"
-      }
-    );
+    const props = {
+      inputMode,
+      step,
+      min,
+      value,
+      onChange: (e) => onChange(e.target.value),
+      placeholder,
+      className: "w-full text-sm placeholder-fg-muted"
+    };
+    if (type === "number") return /* @__PURE__ */ React.createElement(NumberBox, { ...props });
+    return /* @__PURE__ */ React.createElement("input", { type, ...props });
   }
   function SelectInput({ value, onChange, children }) {
     return /* @__PURE__ */ React.createElement("select", { value, onChange: (e) => onChange(e.target.value), className: "w-full text-sm" }, children);
@@ -2576,9 +2563,8 @@
         keepEditorFocus
       },
       /* @__PURE__ */ React.createElement("span", { className: "md2ebook-menu-space" }, /* @__PURE__ */ React.createElement(
-        "input",
+        NumberBox,
         {
-          type: "number",
           min: "1",
           max: "200",
           value: spaceLines,

@@ -34,12 +34,15 @@ export function readOptionsIntoState() {
     state.flipBackCover = document.getElementById("flip-bc").checked;
     state.quarterCopy = document.getElementById("quarter-copy").checked;
     
+    // The signature-size box sits in a wrapper with its - and + buttons (shared/js/numberFields.js): that is what shows and hides.
+    var sigBox = document.getElementById("sig-size");
+    var sigShown = sigBox.closest(".zn-num") || sigBox;
     if(document.getElementById("cust-sig-size").checked) {
-        document.getElementById("sig-size").style = "display:inline";
+        sigShown.style.display = sigShown === sigBox ? "inline" : "inline-flex";
         document.getElementById("sig-size-label").style = "display:inline";
-        state.sigSize = document.getElementById("sig-size").value;
+        state.sigSize = sigBox.value;
     } else {
-        document.getElementById("sig-size").style = "display:none";
+        sigShown.style.display = "none";
         document.getElementById("sig-size-label").style = "display:none";
         state.sigSize = 0;
     }

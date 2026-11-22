@@ -61,7 +61,8 @@
 .ze-layers-look-sep + .ze-format-label { flex: 0 0 auto; }
 .ze-layers-look-row .ze-layers-group-btn:hover:not(:disabled) { color: var(--ui-fg); background-color: var(--ui-bg-hover, rgba(255, 255, 255, 0.08)); }
 .ze-layers-look-row .ze-layers-group-btn:disabled { opacity: 0.35; cursor: default; }
-.ze-layers-look-row input[type="number"].ze-format-number { width: 100px; padding-top: 4px; padding-bottom: 4px; }
+.ze-layers-look-row input[type="number"].ze-format-number { width: 50px; padding: 4px 6px; }
+.ze-layers-look-row .zn-num { flex: 0 0 auto; width: auto; gap: 3px; --zn-btn-w: 22px; }
 
 /* Grab zones along the left, right and bottom edges and the bottom corners. */
 .ze-layers-resize { position: absolute; z-index: 2; touch-action: none; }

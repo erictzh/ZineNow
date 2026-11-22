@@ -4,6 +4,7 @@ import { renderHtmlDocument } from "../document/previewDocument.js";
 import { PAPER_SIZES } from "../settings/defaults.js";
 import { PAPER_SIZE_OPTIONS } from "../settings/initialConfig.js";
 import { createPinchGate } from "../../../../shared/js/pinchGate.js";
+import { NumberBox } from "../../../../shared/js/NumberBox.jsx";
 const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 
 // Preview geometry, in unscaled px: the seam (border-bottom) and gap (margin-bottom) under every page
@@ -26,8 +27,7 @@ function PageJump({ current, total, onGo }) {
   return (
     <span className="md2ebook-page-jump">
       Page
-      <input
-        type="number"
+      <NumberBox
         min={1}
         max={total}
         step={1}
@@ -35,7 +35,7 @@ function PageJump({ current, total, onGo }) {
         disabled={total <= 1}
         onChange={(e) => {
           if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
-          else onGo(Number(e.target.value));
+          else { setDraft(null); onGo(Number(e.target.value)); } // a step by the - / + buttons: apply it, drop any half-typed text
         }}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -78,8 +78,7 @@ function ZoomControl({ percent, isFit, onZoom }) {
         aria-label="Preview zoom"
       />
       <span className="md2ebook-zoom-number">
-        <input
-          type="number"
+        <NumberBox
           min={ZOOM_MIN}
           max={ZOOM_MAX}
           step={5}
@@ -87,7 +86,7 @@ function ZoomControl({ percent, isFit, onZoom }) {
           onChange={(e) => {
             // The spinner arrows apply at once; typed digits wait for Enter or blur.
             if (e.nativeEvent && e.nativeEvent.inputType) setDraft(e.target.value);
-            else onZoom(clampZoom(Number(e.target.value)));
+            else { setDraft(null); onZoom(clampZoom(Number(e.target.value))); } // a step by the - / + buttons: drop any half-typed text
           }}
           onBlur={commit}
           onKeyDown={(e) => {

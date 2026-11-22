@@ -1,6 +1,7 @@
 // Small form pieces for the settings sidebar: labels, fields, toggles, inputs, alignment and heading-line controls.
 
 import { DEFAULTS, TEXT_ALIGN_OPTIONS } from "../settings/defaults.js";
+import { NumberBox } from "../../../../shared/js/NumberBox.jsx";
 
 /* ==========================================================================
    Small presentational helpers
@@ -67,18 +68,18 @@ export function ToggleRow({ checked, onChange, label }) {
 // input[type="text"], input[type="number"] rule — only layout (w-full) and
 // what the kit leaves unset (font-size, placeholder color) are added here.
 export function TextInput({ value, onChange, placeholder, type = "text", inputMode, step, min }) {
-  return (
-    <input
-      type={type}
-      inputMode={inputMode}
-      step={step}
-      min={min}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full text-sm placeholder-fg-muted"
-    />
-  );
+  const props = {
+    inputMode,
+    step,
+    min,
+    value,
+    onChange: (e) => onChange(e.target.value),
+    placeholder,
+    className: "w-full text-sm placeholder-fg-muted",
+  };
+  // A number box comes with its - and + buttons beside it (shared/js/NumberBox.jsx).
+  if (type === "number") return <NumberBox {...props} />;
+  return <input type={type} {...props} />;
 }
 // <select> isn't one of component-kit.css's covered elements — styled here
 // (in styles.css, see the "select" rule) to match its input look using the

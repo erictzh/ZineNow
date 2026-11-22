@@ -7,6 +7,7 @@ import { ptToPx, pxToPt } from "../../model/text/textLook.js";
 import { FontCombobox } from "../controls/FontCombobox.jsx";
 import { CustomColorInput } from "../controls/inputs.jsx";
 import { textSelectionStore } from "../textSelection.js";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 const { useState } = React;
 
 const ALIGNS = [
@@ -79,8 +80,8 @@ export function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
       <div className="ze-format-field">
         <span className="ze-format-label">Size</span>
         <div className="ze-format-inline">
-          <input
-            type="number" className="ze-format-number" min="4" max="200" step="0.5" aria-label="Size of the selected letters (pt)"
+          <NumberBox
+            className="ze-format-number" min="4" max="200" step="0.5" aria-label="Size of the selected letters (pt)"
             title="Size of the selected letters (pt). Press Enter or leave the box to apply."
             value={sizeDraft != null ? sizeDraft : Math.round(pxToPt(current("fontSize") || 16) * 10) / 10}
             onChange={(e) => setSizeDraft(e.target.value)}

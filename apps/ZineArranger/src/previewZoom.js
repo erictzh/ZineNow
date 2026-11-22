@@ -10,6 +10,7 @@
 
 import { state } from "./state.js";
 import { createPinchGate } from "../../../shared/js/pinchGate.js";
+import { wrapNumberInput } from "../../../shared/js/numberFields.js";
 
 const ZOOM_MIN = 15; // percent
 const ZOOM_MAX = 200;
@@ -154,6 +155,7 @@ export function setUpPreviewZoom() {
     fitButton.title = "Fit the sheets to the preview's width (at most real size)";
     fitButton.addEventListener("click", function () { setPreviewZoom(null); });
     zoom.append(slider, numberBox, percentSign, fitButton);
+    wrapNumberInput(numberBox); // the - and + buttons beside the box
     footer.append(footerInfo, divider, zoom);
 
     // The box around the sheets follows their content (a new PDF, different options).

@@ -7,6 +7,7 @@ import { ControlList } from "../controls/ControlList.jsx";
 import { FontCombobox } from "../controls/FontCombobox.jsx";
 import { CustomColorInput } from "../controls/inputs.jsx";
 import { PanelSection } from "../controls/PanelSection.jsx";
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 
 // Font, size, B/I/U, alignment and colour: one section shared by a text
 // box's own panel and the Text tool's defaults.
@@ -35,8 +36,8 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
       <div className="ze-format-field">
         <span className="ze-format-label">Size &amp; style</span>
         <div className="ze-format-inline ze-format-inline-wrap">
-          <input
-            type="number" className="ze-format-number" min="4" max="200" step="0.5" aria-label="Font size (pt)" title="Font size (pt)"
+          <NumberBox
+            className="ze-format-number" min="4" max="200" step="0.5" aria-label="Font size (pt)" title="Font size (pt)"
             value={Math.round(pxToPt(fontSize) * 10) / 10}
             onChange={(e) => { const pt = Number(e.target.value); if (pt > 0) onChange({ fontSize: Math.round(ptToPx(pt) * 1000) / 1000 }); }}
           />

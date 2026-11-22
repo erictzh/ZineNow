@@ -178,7 +178,9 @@
 .ze-format-slider-row { display: flex; align-items: center; gap: 8px; }
 .ze-format-slider-row .ze-format-slider { flex: 1 1 auto; min-width: 0; }
 .ze-format-slider-row .ze-format-number { flex: 0 0 auto; width: 76px; }
-.ze-format-slider-row input[type="number"].ze-format-number { width: 104px; } /* room for the - and + buttons (shared/styles/numberFields.css) */
+.ze-format-slider-row input[type="number"].ze-format-number { width: 58px; }
+/* A number box with its - and + buttons (shared/styles/numberFields.css) where the bare box had a width of its own. */
+.ze-format-slider-row > .zn-num { flex: 0 0 auto; width: auto; }
 .ze-format-slider-row .ze-format-color-input { flex: 0 0 auto; }
 
 /* ---- Collapsible sections (CapCut-style) ---------------------------------
@@ -297,7 +299,8 @@
 /* The Size & style row wraps by groups: the size box with its T-/T+ buttons, then Bold / Italic / Underline,
    so on a narrow panel B I U drop to a second line together. */
 .ze-format-inline-wrap { flex-wrap: wrap; row-gap: 6px; }
-.ze-format-inline-wrap .ze-format-number { flex: 1 1 104px; min-width: 104px; }
+.ze-format-inline > .zn-num { flex: 1 1 auto; width: auto; min-width: 0; }
+.ze-format-inline-wrap > .zn-num { flex: 1 1 112px; min-width: 112px; }
 .ze-format-group { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .ze-format-sizestep { font-weight: 700; font-size: 12px; letter-spacing: -0.03em; }
 

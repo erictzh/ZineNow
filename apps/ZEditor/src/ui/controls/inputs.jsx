@@ -1,5 +1,7 @@
 // Small inputs: slider with number box, colour pickers, select, draft text input.
 
+import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
+
 const { useState } = React;
 
 // ---- Right-side panel. What it shows depends on context, in priority
@@ -32,7 +34,7 @@ export function SliderNumberInput({ min, max, value, onChange }) {
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
-      <input type="number" className="ze-format-number" min={min} max={max} step="1" {...numberProps} />
+      <NumberBox className="ze-format-number" min={min} max={max} step="1" {...numberProps} />
     </div>
   );
 }
