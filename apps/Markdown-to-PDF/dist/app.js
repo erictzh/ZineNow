@@ -13,6 +13,116 @@
     }, true);
   }
 
+  // shared/js/numberFields.js
+  var STRIP_PX = 24;
+  var HOLD_MS = 450;
+  var REPEAT_MS = 80;
+  var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
+  var allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
+  var touching = () => {
+    const d = document.documentElement.dataset;
+    return d.input === "touch" || d.zeInput === "touch";
+  };
+  var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
+  function installNumberFields() {
+    const lastGood = /* @__PURE__ */ new WeakMap();
+    document.addEventListener("focusin", (e) => {
+      if (isNumberBox(e.target) && e.target.value !== "") lastGood.set(e.target, e.target.value);
+    }, true);
+    document.addEventListener("input", (e) => {
+      const el = e.target;
+      if (!isNumberBox(el)) return;
+      if (el.value !== "") {
+        lastGood.set(el, el.value);
+        return;
+      }
+      if (allowsEmpty(el) || document.activeElement !== el) return;
+      e.stopImmediatePropagation();
+    }, true);
+    const restoreIfEmpty = (el) => {
+      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) return false;
+      writeValue(el, lastGood.get(el));
+      return true;
+    };
+    document.addEventListener("change", (e) => {
+      if (isNumberBox(e.target) && restoreIfEmpty(e.target)) e.stopImmediatePropagation();
+    }, true);
+    document.addEventListener("focusout", (e) => {
+      if (isNumberBox(e.target)) restoreIfEmpty(e.target);
+    }, true);
+    function buttonAt(el, x, y) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || !el.offsetWidth) return 0;
+      const scale = r.width / el.offsetWidth;
+      if (x < r.right - STRIP_PX * scale || x > r.right || y < r.top || y > r.bottom) return 0;
+      return y < r.top + r.height / 2 ? 1 : -1;
+    }
+    function stepBy(el, dir) {
+      const before = el.value;
+      try {
+        if (dir > 0) el.stepUp();
+        else el.stepDown();
+      } catch (err) {
+        return false;
+      }
+      if (el.value === before) return false;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+    const madeReadOnly = /* @__PURE__ */ new WeakMap();
+    const unlock = (el) => {
+      if (!madeReadOnly.has(el)) return;
+      clearTimeout(madeReadOnly.get(el));
+      madeReadOnly.delete(el);
+      el.readOnly = false;
+    };
+    let holdTimer = 0;
+    let repeatTimer = 0;
+    let quietUntil = 0;
+    const stop = () => {
+      clearTimeout(holdTimer);
+      clearInterval(repeatTimer);
+      holdTimer = repeatTimer = 0;
+    };
+    document.addEventListener("pointerdown", (e) => {
+      const el = e.target;
+      if (isNumberBox(el) && madeReadOnly.has(el) && !buttonAt(el, e.clientX, e.clientY)) unlock(el);
+      if (e.pointerType === "mouse" || !isNumberBox(el) || el.disabled || el.readOnly && !madeReadOnly.has(el) || !touching()) return;
+      const dir = buttonAt(el, e.clientX, e.clientY);
+      if (!dir) return;
+      e.preventDefault();
+      quietUntil = performance.now() + 700;
+      el.readOnly = true;
+      clearTimeout(madeReadOnly.get(el));
+      madeReadOnly.set(el, setTimeout(() => unlock(el), 700));
+      if (document.activeElement === el) el.blur();
+      stop();
+      stepBy(el, dir);
+      holdTimer = setTimeout(() => {
+        repeatTimer = setInterval(() => {
+          if (!stepBy(el, dir)) stop();
+        }, REPEAT_MS);
+      }, HOLD_MS);
+      const release = () => {
+        stop();
+        clearTimeout(madeReadOnly.get(el));
+        madeReadOnly.set(el, setTimeout(() => unlock(el), 250));
+        if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      };
+      window.addEventListener("pointerup", release, { once: true });
+      window.addEventListener("pointercancel", release, { once: true });
+    }, true);
+    for (const type of ["mousedown", "mouseup", "click"]) {
+      document.addEventListener(type, (e) => {
+        if (performance.now() < quietUntil && isNumberBox(e.target) && buttonAt(e.target, e.clientX, e.clientY)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+    }
+  }
+
   // shared/js/leaveWarning.js
   var hasWork = () => false;
   var bypassOnce = false;
@@ -1539,7 +1649,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "8df72d4"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "df2cdb7"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -3633,6 +3743,7 @@
 
   // apps/Markdown-to-PDF/src/main.jsx
   installInputMode();
+  installNumberFields();
   installMd2pdfDisplaySettings();
   var rootElement = document.getElementById("root");
   var root = ReactDOM.createRoot(rootElement);

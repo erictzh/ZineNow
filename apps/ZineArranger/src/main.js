@@ -3,6 +3,7 @@
 // see docs/ARCHITECTURE.md for what goes where.
 
 import { installInputMode } from "../../../shared/js/inputMode.js";
+import { installNumberFields } from "../../../shared/js/numberFields.js";
 import { warnBeforeLeaving } from "../../../shared/js/leaveWarning.js";
 import { ARRANGER_READY_MESSAGE, HANDOFF_PDF_MESSAGE } from "../../../shared/js/zineArrangerHandoff.js";
 import { clearLog, copyLog, logSys, toggleLogPanel } from "./activityLog.js";
@@ -16,6 +17,9 @@ import { triggerPrint } from "./print.js";
 
 // <html data-input="touch|mouse">: bigger targets while a finger is used (style.css).
 installInputMode();
+
+// Number boxes that can be cleared and typed in, with up/down buttons for a finger (shared/js/numberFields.js).
+installNumberFields();
 
 // The Display gear at the bottom left: interface size, show/hide (displaySettings.js).
 installArrangerDisplaySettings();
