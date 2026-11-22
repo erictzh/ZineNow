@@ -17,8 +17,9 @@ export function canvasToArrayBuffer(canvas) {
 // Project — `data` can be bytes, a string, or a Blob. Resolves to the
 // chosen file's handle (so Save Project can write to it again without
 // asking), "cancelled" if the dialog was closed, or null after the
-// download fallback (no handle to keep).
-export async function saveFile(data, filename, mimeType, description, extensions) {
+// download fallback (no handle to keep). `downloadType`: the type the download fallback labels
+// the file with, if not `mimeType` (see the .znow note in state/useProject.js).
+export async function saveFile(data, filename, mimeType, description, extensions, downloadType) {
   if (typeof window.showSaveFilePicker === "function") {
     try {
       const handle = await window.showSaveFilePicker({
@@ -32,7 +33,7 @@ export async function saveFile(data, filename, mimeType, description, extensions
       // fall through to the download fallback below
     }
   }
-  const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
+  const blob = new Blob([data], { type: downloadType || mimeType });
   downloadBlob(blob, filename);
   return null;
 }

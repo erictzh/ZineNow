@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-22 (Layers panel header over a ruler no longer makes guides by touch; SVG button in ZEditor; see the cloud-session sections at the end).
+Last updated: 2026-11-22 (.znow saves no longer become .znow.json on Android; Layers panel header over a ruler; SVG button; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -380,3 +380,4 @@ At the user's request every commit, branch and the `pre-modular-refactor` tag no
 - **Bug:** with the floating Layers panel's header over a ruler, a finger drag on the header made a guide instead of moving the panel (and the header's buttons there were stolen too). `ui/touchInput.js` treats a finger within 12 px of a ruler as on it (`rulerNear`) and replaced the press target with the ruler whatever was on top.
 - **Fix:** the ruler slop now applies only when the finger's real target is inside the canvas area (`.ze-ruler-frame`) and not in something floating over the rulers (`OVER_RULERS`: `.ze-layers-panel`, `.ze-bottom-left` gear + touch bar). Mouse presses were never affected (they hit the top element).
 - Tested headless with synthetic touch: before the fix, dragging the header over the top ruler left the panel put and made guides; after it, the panel moves and no guide appears; a finger just under the ruler on the canvas still makes a guide.
+- **Projects saved on Android came out as "Name.znow.json".** Android Chrome has no `showSaveFilePicker`, so Save uses the download fallback, and the blob was typed `application/json`: Android's download manager appends `.json` to a JSON download whose name doesn't end in .json. Fix: `saveFile` (`io/fileSave.js`) takes an optional `downloadType`; Save Project passes `application/octet-stream`, so the name stays `.znow`. Opening: the hidden input's `accept` is now `.znow,.json,application/json,application/octet-stream` (old `.znow.json` files, and on Android a `.znow` has no known type), and the desktop open picker also takes `.json`. Tested headless with the Save dialog removed: download "….znow", blob `application/octet-stream`; a `.znow.json` reopens. Not yet confirmed on the tablet. Existing `.znow.json` files can simply be opened (or renamed).
