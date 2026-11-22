@@ -11972,6 +11972,114 @@
     }, [pages, selectedIdx, releaseTick]);
   }
 
+  // apps/ZEditor/src/io/groupFile.js
+  var PAD = 40;
+  function itemsBounds(items) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const a of items) {
+      const b = annotationBounds(a);
+      if (![b.x, b.y, b.width, b.height].every(Number.isFinite)) continue;
+      x0 = Math.min(x0, b.x);
+      y0 = Math.min(y0, b.y);
+      x1 = Math.max(x1, b.x + b.width);
+      y1 = Math.max(y1, b.y + b.height);
+    }
+    return Number.isFinite(x0) ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+  }
+  function serializeGroup(name, items) {
+    const b = itemsBounds(items);
+    if (!b) throw new Error("There is nothing in that group to save.");
+    const dx = PAD - b.x, dy = PAD - b.y;
+    const moved = items.map((a, i) => {
+      const m = translatedAnnotation(a, dx, dy);
+      return i === 0 && m.clipToBelow ? { ...m, clipToBelow: void 0 } : m;
+    });
+    const page = {
+      key: 1,
+      isBlank: true,
+      isCanvas: true,
+      rotation: 0,
+      width: Math.ceil(b.width + 2 * PAD) / MAIN_SCALE,
+      height: Math.ceil(b.height + 2 * PAD) / MAIN_SCALE,
+      annotations: moved
+    };
+    return serializeProject({ title: name, pdfDocs: {}, pages: [page], textStyles: [], settings: {} });
+  }
+  async function readGroupFile(file, nextPageKey) {
+    const project = await readProjectFile(file, nextPageKey);
+    const items = project.pages.flatMap((p) => p.annotations || []);
+    if (!items.length) throw new Error("That file has no items in it.");
+    const named = items.find((a) => a.groupName);
+    return { items, name: named && named.groupName || project.title || "Imported group" };
+  }
+
+  // apps/ZEditor/src/state/useGroupFiles.js
+  var { useRef: useRef13 } = React;
+  function useGroupFiles({ doc, edits, selection, status }) {
+    const { pages, selectedIdx, pdfDocsRef, nextAnnIdRef, ids } = doc;
+    const inputRef = useRef13(null);
+    async function handleExportGroup(groupId) {
+      const page = selectedIdx !== null ? pages[selectedIdx] : null;
+      if (!page) return;
+      const items = (page.annotations || []).filter((a) => a.groupId === groupId);
+      if (!items.length) return;
+      status.setErrorMsg(null);
+      try {
+        const name = items.find((a) => a.groupName) ? items.find((a) => a.groupName).groupName : "Group";
+        const json = serializeGroup(name, items);
+        const handle = await saveFile(json, titleToFileName(name, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
+        if (handle !== "cancelled") status.setNotice("Saved the group as " + (handle && handle.name ? handle.name : titleToFileName(name, ".znow")) + ". Open it on its own, or bring it into any document with Import group.");
+      } catch (err) {
+        status.setErrorMsg("Couldn't save the group — " + (err && err.message ? err.message : "unknown error"));
+      }
+    }
+    function openImportPicker() {
+      if (selectedIdx === null) {
+        status.setErrorMsg("Open or create a document first, then import a group into it.");
+        return;
+      }
+      inputRef.current && inputRef.current.click();
+    }
+    function handleImportInput(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) importGroup(file);
+    }
+    async function importGroup(file) {
+      const idx = selectedIdx;
+      const page = idx !== null ? pages[idx] : null;
+      if (!page) return;
+      status.setErrorMsg(null);
+      try {
+        const { items, name } = await readGroupFile(file, ids.pageKey);
+        const size = await getPageDisplaySize(page, pdfDocsRef, MAIN_SCALE);
+        const b = itemsBounds(items);
+        const dx = b ? Math.round(size.width / 2 - (b.x + b.width / 2)) : 0;
+        const dy = b ? Math.round(size.height / 2 - (b.y + b.height / 2)) : 0;
+        const used = new Set(pages.flatMap((p) => (p.annotations || []).map((a) => a.groupId).filter(Boolean)));
+        let groupId = "g" + nextAnnIdRef.current++;
+        while (used.has(groupId)) groupId = "g" + nextAnnIdRef.current++;
+        const newId = new Map(items.map((a) => [a.id, ids.annId()]));
+        const added = items.map((a) => {
+          const m = translatedAnnotation(a, dx, dy);
+          return {
+            ...m,
+            id: newId.get(a.id),
+            groupId: items.length > 1 ? groupId : void 0,
+            groupName: items.length > 1 ? name : void 0,
+            threadFrom: a.threadFrom != null && newId.has(a.threadFrom) ? newId.get(a.threadFrom) : void 0
+          };
+        });
+        edits.updateAnnotationsFor(idx, (anns) => [...anns, ...added]);
+        selection.handleSelectAnnotations(added.map((a) => a.id), false);
+        status.setNotice(items.length > 1 ? `Imported "${name}" as a group of ${items.length} layers.` : "Imported 1 layer.");
+      } catch (err) {
+        status.setErrorMsg("Couldn't import that file — " + (err && err.message ? err.message : "unknown error"));
+      }
+    }
+    return { inputRef, handleExportGroup, openImportPicker, handleImportInput };
+  }
+
   // apps/ZEditor/src/ui/pointer.js
   function dragDeltaFrom(startEvent, zoom, angle = 0) {
     const { clientX: startX, clientY: startY } = startEvent;
@@ -12040,9 +12148,9 @@
   }
 
   // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef: useRef13, useEffect: useEffect11 } = React;
+  var { useRef: useRef14, useEffect: useEffect11 } = React;
   function BoxEffectOverlays({ ann, edgeOutline }) {
-    const textureCanvasRef = useRef13(null);
+    const textureCanvasRef = useRef14(null);
     const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
     const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
     useEffect11(() => {
@@ -12122,9 +12230,9 @@
   }
 
   // apps/ZEditor/src/ui/canvas/AnnotationImage.jsx
-  var { useRef: useRef14, useEffect: useEffect12 } = React;
+  var { useRef: useRef15, useEffect: useEffect12 } = React;
   function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping, isEraseTarget, onPress, onUpdate, onToggleCrop, pageFilter, zoom }) {
-    const halftoneCanvasRef = useRef14(null);
+    const halftoneCanvasRef = useRef15(null);
     const naturalW = ann.naturalWidth, naturalH = ann.naturalHeight;
     const cropX = ann.cropX || 0, cropY = ann.cropY || 0;
     const cropW = ann.cropW || naturalW, cropH = ann.cropH || naturalH;
@@ -12407,7 +12515,7 @@
   var textSelectionStore = { annId: null, start: 0, end: 0 };
 
   // apps/ZEditor/src/ui/canvas/AnnotationText.jsx
-  var { useRef: useRef15, useState: useState17, useMemo: useMemo2, useEffect: useEffect13, useLayoutEffect: useLayoutEffect2 } = React;
+  var { useRef: useRef16, useState: useState17, useMemo: useMemo2, useEffect: useEffect13, useLayoutEffect: useLayoutEffect2 } = React;
   function spanCss(seg) {
     const span = seg.span || {};
     if (!seg.color && span.underline == null && span.strike == null) return void 0;
@@ -12415,12 +12523,12 @@
     return { color: seg.color || void 0, textDecorationLine: span.underline != null || span.strike != null ? lines.join(" ") || "none" : void 0 };
   }
   function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, zoom, onPress, onStartEdit, onFinishEdit, onUpdate, onLinkNext }) {
-    const boxRef = useRef15(null);
-    const inputRef = useRef15(null);
-    const pendingCaretRef = useRef15(null);
-    const liveCanvasRef = useRef15(null);
-    const dragRef = useRef15(null);
-    const goalXRef = useRef15(null);
+    const boxRef = useRef16(null);
+    const inputRef = useRef16(null);
+    const pendingCaretRef = useRef16(null);
+    const liveCanvasRef = useRef16(null);
+    const dragRef = useRef16(null);
+    const goalXRef = useRef16(null);
     const [sel, setSel] = useState17({ start: 0, end: 0, dir: "forward" });
     useLayoutEffect2(() => {
       if (!isEditing || !inputRef.current) return;
@@ -12965,7 +13073,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/ClipWrap.jsx
-  var { useState: useState18, useEffect: useEffect14, useRef: useRef16 } = React;
+  var { useState: useState18, useEffect: useEffect14, useRef: useRef17 } = React;
   var MASK_MAX_SCALE = 2;
   var MASK_MAX_PIXELS = 16e6;
   var EDGE_PAD = 3;
@@ -12983,10 +13091,10 @@
   }
   function ClipWrap({ base, pageSize, pageFilter, blend, children }) {
     const [maskUrl, setMaskUrl] = useState18(null);
-    const urlRef = useRef16(null);
+    const urlRef = useRef17(null);
     const signature = shapeSignature(base);
     const region = maskRegion(base);
-    const regionRef = useRef16(region);
+    const regionRef = useRef17(region);
     regionRef.current = region;
     useEffect14(() => {
       let cancelled = false;
@@ -13486,9 +13594,9 @@
   }
 
   // apps/ZEditor/src/ui/canvas/usePageBackground.js
-  var { useState: useState19, useRef: useRef17, useEffect: useEffect15 } = React;
+  var { useState: useState19, useRef: useRef18, useEffect: useEffect15 } = React;
   function usePageBackground(page, pdfDocsRef, pageFilter) {
-    const canvasRef = useRef17(null);
+    const canvasRef = useRef18(null);
     const [canvasSize, setCanvasSize] = useState19({ width: 0, height: 0 });
     useEffect15(() => {
       if (!page) return;
@@ -13534,7 +13642,7 @@
 
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
   var SNAP_PX = 6;
-  var { useState: useState20, useRef: useRef18, useEffect: useEffect16, useLayoutEffect: useLayoutEffect3 } = React;
+  var { useState: useState20, useRef: useRef19, useEffect: useEffect16, useLayoutEffect: useLayoutEffect3 } = React;
   function ComposeCanvas({
     pdfDocsRef,
     page,
@@ -13588,8 +13696,8 @@
     viewKey
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
-    const layerRef = useRef18(null);
-    const artboardRef = useRef18(null);
+    const layerRef = useRef19(null);
+    const artboardRef = useRef19(null);
     useLayoutEffect3(() => {
       const wrapper = artboardRef.current && artboardRef.current.parentElement;
       if (!wrapper) return;
@@ -13598,7 +13706,7 @@
       wrapper.style.setProperty("--ze-board-zoom", String(zoom));
       wrapper.style.setProperty("--ze-min-zoom", String(ZOOM_PERCENT.min / 100));
     }, [zoom, canvasSize.width, canvasSize.height]);
-    const skipCenterRef = useRef18(false);
+    const skipCenterRef = useRef19(false);
     useLayoutEffect3(() => {
       const g = canvasGrowShift.pending;
       const pane = artboardRef.current && artboardRef.current.closest(".preview-pane");
@@ -13619,7 +13727,7 @@
     const [, setWrapTick] = useState20(0);
     useEffect16(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
     const [dragRect, setDragRect] = useState20(null);
-    const drawingRef = useRef18(null);
+    const drawingRef = useRef19(null);
     const [brushPos, setBrushPos] = useState20(null);
     const [polygonHover, setPolygonHover] = useState20(null);
     const drawingPolygon = tool === "marquee" && Boolean(marquee) && marquee.kind === "polygon" && !marquee.closed;
@@ -13627,7 +13735,7 @@
     const magicErasing = tool === "eraser" && eraserMode === "magic";
     const [, setDrawTick] = useState20(0);
     const [measure, setMeasure] = useState20(null);
-    const measureGesture = useRef18(null);
+    const measureGesture = useRef19(null);
     const measuring = tool === "measure";
     const pageKey = page && page.key;
     useEffect16(() => setMeasure(null), [measuring, pageKey]);
@@ -13685,7 +13793,7 @@
         setMeasure((m) => m ? { ...m, pending: false, [which]: measurePoint(ev, m[other]) } : m);
       });
     }
-    const latestMouseDown = useRef18(null);
+    const latestMouseDown = useRef19(null);
     function handleOverlayMouseDown(e) {
       if (!page) return;
       if (measuring) {
@@ -13960,7 +14068,7 @@
   }
 
   // apps/ZEditor/src/ui/canvas/Rulers.jsx
-  var { useEffect: useEffect17, useLayoutEffect: useLayoutEffect4, useRef: useRef19, useState: useState21 } = React;
+  var { useEffect: useEffect17, useLayoutEffect: useLayoutEffect4, useRef: useRef20, useState: useState21 } = React;
   var RULER_SIZE = 18;
   function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
     const dpr = window.devicePixelRatio || 1;
@@ -14034,8 +14142,8 @@
     }
   }
   function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
-    const topRef = useRef19(null);
-    const leftRef = useRef19(null);
+    const topRef = useRef20(null);
+    const leftRef = useRef20(null);
     const [geom, setGeom] = useState21(null);
     const [cursor, setCursor] = useState21(null);
     const [drag, setDrag] = useState21(null);
@@ -14450,7 +14558,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState25, useRef: useRef20, useEffect: useEffect20 } = React;
+  var { useState: useState25, useRef: useRef21, useEffect: useEffect20 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -14475,7 +14583,7 @@
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
-    const wasChecked = useRef20(checked);
+    const wasChecked = useRef21(checked);
     useEffect20(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
@@ -14734,18 +14842,18 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState27, useRef: useRef21, useEffect: useEffect21, useMemo: useMemo3 } = React;
+  var { useState: useState27, useRef: useRef22, useEffect: useEffect21, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState27(value || "");
     const [typed, setTyped] = useState27(false);
     const [open, setOpen] = useState27(false);
     const [highlight, setHighlight] = useState27(-1);
-    const previewFromRef = useRef21(null);
-    const listRef = useRef21(null);
+    const previewFromRef = useRef22(null);
+    const listRef = useRef22(null);
     const [status, setStatus] = useState27(null);
     const [loadingFonts, setLoadingFonts] = useState27(false);
-    const containerRef = useRef21(null);
-    const uploadInputRef = useRef21(null);
+    const containerRef = useRef22(null);
+    const uploadInputRef = useRef22(null);
     useEffect21(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
@@ -14917,9 +15025,9 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState28, useRef: useRef22 } = React;
+  var { useState: useState28, useRef: useRef23 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef22(null);
+    const inputRef = useRef23(null);
     const [error, setError] = useState28(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
@@ -15469,10 +15577,10 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState32, useRef: useRef23, useEffect: useEffect22, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState32, useRef: useRef24, useEffect: useEffect22, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
     const [open, setOpen] = useState32(false);
-    const containerRef = useRef23(null);
+    const containerRef = useRef24(null);
     useEffect22(() => {
       if (!open) return;
       function handleClickOutside(e) {
@@ -15488,7 +15596,7 @@
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef23(null);
+    const menuRef = useRef24(null);
     useLayoutEffect5(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
@@ -15768,7 +15876,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState33, useRef: useRef24, useEffect: useEffect23 } = React;
+  var { useState: useState33, useRef: useRef25, useEffect: useEffect23 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -15833,22 +15941,22 @@
       if (v) onSetLook({ blend: v });
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
-  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease }) {
+  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
     const [renamingId, setRenamingId] = useState33(null);
     const [menuOpen, setMenuOpen] = useState33(false);
-    const menuRef = useRef24(null);
+    const menuRef = useRef25(null);
     const [dropInfo, setDropInfo] = useState33(null);
     const [, setCollapseTick] = useState33(0);
-    const dragIdRef = useRef24(null);
-    const listRef = useRef24(null);
-    const panelRef = useRef24(null);
-    const headRef = useRef24(null);
+    const dragIdRef = useRef25(null);
+    const listRef = useRef25(null);
+    const panelRef = useRef25(null);
+    const headRef = useRef25(null);
     const topFirst = annotations.slice().reverse();
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
     const [rowMenu, setRowMenu] = useState33(null);
-    const rowMenuRef = useRef24(null);
+    const rowMenuRef = useRef25(null);
     useEffect23(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
@@ -15879,13 +15987,14 @@
         return;
       }
       const box = e.currentTarget.getBoundingClientRect();
-      const MENU_W = 200, MENU_H = 84;
+      const MENU_W = 200, MENU_H = typeof id === "string" ? 90 : 84;
       const x = Math.max(4, Math.min(box.right - MENU_W, window.innerWidth - MENU_W - 4));
       const y = box.bottom + 4 + MENU_H > window.innerHeight ? box.top - 4 - MENU_H : box.bottom + 4;
       setMenuOpen(false);
       setRowMenu({ id, x, y });
     }
-    const rowMenuAnn = rowMenu ? annotations.find((a) => a.id === rowMenu.id) : null;
+    const groupMenuId = rowMenu && typeof rowMenu.id === "string" && rowMenu.id.startsWith("g:") ? rowMenu.id.slice(2) : null;
+    const rowMenuAnn = rowMenu && !groupMenuId ? annotations.find((a) => a.id === rowMenu.id) : null;
     const rowMenuIndex = rowMenuAnn ? annotations.indexOf(rowMenuAnn) : -1;
     function toggleCollapsed(groupId) {
       if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
@@ -16133,6 +16242,20 @@
             onDoubleClick: (e) => e.stopPropagation()
           },
           /* @__PURE__ */ React.createElement(EyeIcon, { hidden: allHidden })
+        ),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId ? " is-open" : ""),
+            title: "Group actions: save as .znow, import",
+            "aria-label": "Actions for group " + name,
+            "aria-haspopup": "menu",
+            "aria-expanded": Boolean(rowMenu && rowMenu.id === "g:" + groupId),
+            onClick: (e) => toggleRowMenu(e, "g:" + groupId),
+            onDoubleClick: (e) => e.stopPropagation()
+          },
+          /* @__PURE__ */ React.createElement(MoreIcon, null)
         )
       ), collapsed ? dropLine(key, false) : items.map((i) => layerRow(i.ann, i.row, true)));
     }
@@ -16162,7 +16285,7 @@
           }
         },
         /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }))
-      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Group", shortcut: "Ctrl+G", hint: "Group the selected layers (select two or more)", disabled: selectedIds.length < 2, onClick: onGroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Ungroup", shortcut: "Ctrl+Shift+G", disabled: !canUngroup, onClick: onUngroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to below (multiple)", shortcut: "Ctrl+Alt+G", hint: "Clips the selected layers in one go: the bottom-most selected layer stays as the base and the others show only where it has pixels. With one layer selected, clips it to the layer below.", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
+      ), menuOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layers-menu", role: "menu" }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Group", shortcut: "Ctrl+G", hint: "Group the selected layers (select two or more)", disabled: selectedIds.length < 2, onClick: onGroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Ungroup", shortcut: "Ctrl+Shift+G", disabled: !canUngroup, onClick: onUngroup, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Clip to below (multiple)", shortcut: "Ctrl+Alt+G", hint: "Clips the selected layers in one go: the bottom-most selected layer stays as the base and the others show only where it has pixels. With one layer selected, clips it to the layer below.", disabled: !canClip, onClick: onClip, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Release clipping mask", disabled: !canRelease, onClick: onRelease, close: () => setMenuOpen(false) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Import .znow as a group…", hint: "Brings the items of a .znow file (a group saved from a group's ⋮ menu) in as a new group on this page", onClick: onImportGroup, close: () => setMenuOpen(false) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Delete the selected layers (Delete)", "aria-label": "Delete selected layers", disabled: selectedIds.length === 0, onClick: onDelete }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16" }), /* @__PURE__ */ React.createElement("path", { d: "M9 7V4h6v3" }), /* @__PURE__ */ React.createElement("path", { d: "M6 7l1 13h10l1-13" }), /* @__PURE__ */ React.createElement("path", { d: "M10 11v6" }), /* @__PURE__ */ React.createElement("path", { d: "M14 11v6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize layers", "aria-label": "Minimize layers", onClick: onMinimize }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))))),
       /* @__PURE__ */ React.createElement(LayerLook, { annotations, selectedIds, onSetLook, onGroup, onUngroup, canUngroup }),
       /* @__PURE__ */ React.createElement("div", { className: "ze-layers-list", ref: listRef }, layerBlocks(topFirst).map((block) => {
         if (!block.groupId) return layerRow(block.items[0].ann, block.items[0].row, false);
@@ -16188,16 +16311,17 @@
           close: () => setRowMenu(null)
         }
       )),
+      groupMenuId && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layer-row-menu", role: "menu", ref: rowMenuRef, style: { left: rowMenu.x, top: rowMenu.y } }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Save group as .znow", hint: "Saves just this group as a project file (it opens on its own, or comes into another document with Import group)", onClick: () => onExportGroup(groupMenuId), close: () => setRowMenu(null) }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Import .znow as a group…", hint: "Brings the items of a .znow file in as a new group on this page", onClick: onImportGroup, close: () => setRowMenu(null) })),
       RESIZE_EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     );
   }
 
   // apps/ZEditor/src/ui/PanelResizer.jsx
-  var { useLayoutEffect: useLayoutEffect6, useRef: useRef25 } = React;
+  var { useLayoutEffect: useLayoutEffect6, useRef: useRef26 } = React;
   var MIN_CANVAS = 360;
   var KEY_STEP = 16;
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
-    const widthRef = useRef25(null);
+    const widthRef = useRef26(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
     const clamp3 = (px) => {
       const body = bodyRef.current;
@@ -16293,7 +16417,7 @@
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState34, useEffect: useEffect24, useRef: useRef26 } = React;
+  var { useState: useState34, useEffect: useEffect24, useRef: useRef27 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -16302,17 +16426,17 @@
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
     const [urls, setUrls] = useState34({});
-    const urlsRef = useRef26({});
-    const madeFrom = useRef26(/* @__PURE__ */ new Map());
-    const baseCache = useRef26(null);
-    const latest = useRef26({ pages, selectedKey });
-    const timer = useRef26(0);
-    const running = useRef26(false);
-    const lastEnd = useRef26(0);
-    const lastMs = useRef26(0);
-    const alive = useRef26(true);
+    const urlsRef = useRef27({});
+    const madeFrom = useRef27(/* @__PURE__ */ new Map());
+    const baseCache = useRef27(null);
+    const latest = useRef27({ pages, selectedKey });
+    const timer = useRef27(0);
+    const running = useRef27(false);
+    const lastEnd = useRef27(0);
+    const lastMs = useRef27(0);
+    const alive = useRef27(true);
     const [on, setOn] = useState34(() => !document.documentElement.classList.contains("ze-static-thumbs"));
-    const onRef = useRef26(on);
+    const onRef = useRef27(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
     useEffect24(() => {
@@ -16470,15 +16594,15 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState35, useRef: useRef27, useEffect: useEffect25 } = React;
+  var { useState: useState35, useRef: useRef28, useEffect: useEffect25 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
-    const dragIndexRef = useRef27(null);
-    const bodyRef = useRef27(null);
-    const scrollDirRef = useRef27(0);
-    const rafRef = useRef27(null);
+    const dragIndexRef = useRef28(null);
+    const bodyRef = useRef28(null);
+    const scrollDirRef = useRef28(0);
+    const rafRef = useRef28(null);
     const [dragOverInfo, setDragOverInfo] = useState35(null);
     function startAutoScroll() {
       if (rafRef.current) return;
@@ -16776,7 +16900,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "9419dd9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "d23b4a7"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -17210,6 +17334,7 @@
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
     const exporter = useExport({ doc, status, view, project, selection });
+    const groupFiles = useGroupFiles({ doc, edits, selection, status });
     const zoom = useZoom();
     useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 });
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
@@ -17402,9 +17527,11 @@
         onClip: () => edits.handleSetClip(selection.selectedAnnotationIds(), true),
         onRelease: () => edits.handleSetClip(selection.selectedAnnotationIds(), false),
         onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
-        onReorder: edits.handleReorderLayers
+        onReorder: edits.handleReorderLayers,
+        onExportGroup: groupFiles.handleExportGroup,
+        onImportGroup: groupFiles.openImportPicker
       }
-    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*,.svg,image/svg+xml", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow,.json,application/json,application/octet-stream", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*,.svg,image/svg+xml", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: groupFiles.inputRef, type: "file", accept: ".znow,.json,application/json,application/octet-stream", style: { display: "none" }, onChange: groupFiles.handleImportInput }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow,.json,application/json,application/octet-stream", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
       InsertPdfDialog,
       {
         file: files.pendingInsertFile,

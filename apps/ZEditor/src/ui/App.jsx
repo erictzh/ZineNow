@@ -22,6 +22,7 @@ import { useToolDefaults } from "../state/useToolDefaults.js";
 import { useViewSettings } from "../state/useViewSettings.js";
 import { useZoom } from "../state/useZoom.js";
 import { useCanvasGrow } from "../state/useCanvasGrow.js";
+import { useGroupFiles } from "../state/useGroupFiles.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
 import { Rulers } from "./canvas/Rulers.jsx";
 import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
@@ -60,6 +61,7 @@ export function App() {
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });
+  const groupFiles = useGroupFiles({ doc, edits, selection, status });
   const zoom = useZoom();
   useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
@@ -261,6 +263,8 @@ export function App() {
           onRelease={() => edits.handleSetClip(selection.selectedAnnotationIds(), false)}
           onRename={(id, name) => edits.handleUpdateAnnotation(id, { name })}
           onReorder={edits.handleReorderLayers}
+          onExportGroup={groupFiles.handleExportGroup}
+          onImportGroup={groupFiles.openImportPicker}
         />
       )}
 
@@ -272,6 +276,8 @@ export function App() {
       <input ref={files.insertPdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleInsertPdfInputChange} />
       {/* .json too: projects saved on Android before 2026-11-22 came out as "Name.znow.json". On Android a
           .znow file has no known type, hence application/octet-stream, so it isn't greyed out. */}
+      {/* Import group: a .znow file (a saved group, or any project) whose items come in as one group. */}
+      <input ref={groupFiles.inputRef} type="file" accept=".znow,.json,application/json,application/octet-stream" style={{ display: "none" }} onChange={groupFiles.handleImportInput} />
       <input ref={project.projectInputRef} type="file" accept=".znow,.json,application/json,application/octet-stream" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
 
       <InsertPdfDialog
