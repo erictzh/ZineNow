@@ -22,6 +22,7 @@ function HeadingLevel({ level, config, updateConfig, alignHint }) {
       <div className="grid grid-cols-2 gap-3">
         <ControlField label={`H${level} Size (px)`} hint={`Default: ${DEFAULTS[h + "Size"]}px`}>
           <TextInput
+            type="number" step="1" min="1"
             value={config[h + "Size"]}
             onChange={(v) => updateConfig(h + "Size", v)}
             placeholder={String(DEFAULTS[h + "Size"])}

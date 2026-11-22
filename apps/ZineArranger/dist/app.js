@@ -98,13 +98,17 @@
     }, true);
     function stepBy(el, dir) {
       const before = el.value;
+      if (before === "" && el.placeholder !== "" && isFinite(Number(el.placeholder))) writeValue(el, el.placeholder);
+      const start = el.value;
       try {
         if (dir > 0) el.stepUp();
         else el.stepDown();
       } catch (err) {
         return false;
       }
-      if (el.value === before) return false;
+      const dec = (String(el.step).split(".")[1] || "").length;
+      if (dec && el.value !== "" && isFinite(Number(el.value))) writeValue(el, String(Number(Number(el.value).toFixed(dec))));
+      if (el.value === start && before !== "") return false;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
@@ -5372,7 +5376,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 3eaf828";
+    subtitle.textContent += " · build df040d4";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

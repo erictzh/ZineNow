@@ -15,6 +15,7 @@ export function PageNumbersSection({ config, updateConfig }) {
       {config.pageNumbersEnabled ? (
         <ControlField label="Page Start From" hint={`Default: ${DEFAULTS.pageStartFrom}`}>
           <TextInput
+            type="number" step="1" min="1"
             value={config.pageStartFrom}
             onChange={(v) => updateConfig("pageStartFrom", v)}
             placeholder={String(DEFAULTS.pageStartFrom)}

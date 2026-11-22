@@ -27,7 +27,7 @@ window.MD2eBookDefaultConfig = {
   "paperSize": "a5",
   "fontSize": 13.33,
   "lineHeight": 1.6,
-  "paragraphSpacing": "1rem",
+  "paragraphSpacing": 16,
   "textAlign": "left",
   "h1TextAlign": "",
   "h2TextAlign": "",

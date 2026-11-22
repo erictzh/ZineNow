@@ -76,13 +76,17 @@
     }, true);
     function stepBy(el, dir) {
       const before = el.value;
+      if (before === "" && el.placeholder !== "" && isFinite(Number(el.placeholder))) writeValue(el, el.placeholder);
+      const start = el.value;
       try {
         if (dir > 0) el.stepUp();
         else el.stepDown();
       } catch (err) {
         return false;
       }
-      if (el.value === before) return false;
+      const dec = (String(el.step).split(".")[1] || "").length;
+      if (dec && el.value !== "" && isFinite(Number(el.value))) writeValue(el, String(Number(Number(el.value).toFixed(dec))));
+      if (el.value === start && before !== "") return false;
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
@@ -1113,8 +1117,8 @@
     // px (= 10pt, the Anarchist Library / Amusewiki default for A5 zine pages)
     lineHeight: 1.6,
     // unitless
-    paragraphSpacing: "1rem",
-    // CSS length (bottom margin on <p>)
+    paragraphSpacing: 16,
+    // px (bottom margin on <p>)
     textAlign: "left",
     // body text: left | center | right | justify
     // Per-heading alignment: blank = same as body text, or
@@ -1224,11 +1228,11 @@
     var n = toPositiveNumber(value, fallback);
     return Math.round(n);
   }
-  function toCssLength(value, fallback) {
+  function toCssLength(value, fallback, bareUnit) {
     if (isBlank(value)) return fallback;
     var str = String(value).trim();
     if (/^-?\d*\.?\d+$/.test(str)) {
-      return str + "rem";
+      return str + (bareUnit || "rem");
     }
     if (/^-?\d*\.?\d+(px|rem|em|in|cm|mm|pt|%)$/.test(str)) {
       return str;
@@ -1290,7 +1294,7 @@
       h3TextAlign: toTextAlign(config.h3TextAlign, toTextAlign(DEFAULTS.h3TextAlign, legacyHeadingAlign)),
       fontSize: toPositiveNumber(config.fontSize, DEFAULTS.fontSize),
       lineHeight: toPositiveNumber(config.lineHeight, DEFAULTS.lineHeight),
-      paragraphSpacing: toCssLength(config.paragraphSpacing, DEFAULTS.paragraphSpacing),
+      paragraphSpacing: toCssLength(config.paragraphSpacing, DEFAULTS.paragraphSpacing + "px", "px"),
       h1Size: toPositiveNumber(config.h1Size, DEFAULTS.h1Size),
       h1Weight: toNumber(config.h1Weight, DEFAULTS.h1Weight),
       h2Size: toPositiveNumber(config.h2Size, DEFAULTS.h2Size),
@@ -1653,7 +1657,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "88b1bdd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "45eb5bd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -2355,6 +2359,9 @@
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(ControlField, { label: `H${level} Line Height`, hint: `Default: ${DEFAULTS[lh]}` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "0.1",
+        min: "0.5",
         value: config[lh],
         onChange: (v) => updateConfig(lh, v),
         placeholder: String(DEFAULTS[lh]),
@@ -2830,10 +2837,18 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/typography/BodyTextSection.jsx
+  function paragraphPx(v) {
+    const m = /^(-?\d*\.?\d+)(px|rem|em)?$/.exec(String(v == null ? "" : v).trim());
+    if (!m) return "";
+    return m[2] === "rem" || m[2] === "em" ? String(Number((Number(m[1]) * 16).toFixed(2))) : m[1];
+  }
   function BodyTextSection({ config, updateConfig }) {
     return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Body Text" }, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Body Font Size (px)", hint: `Default: ${DEFAULTS.fontSize}px` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "1",
+        min: "1",
         value: config.fontSize,
         onChange: (v) => updateConfig("fontSize", v),
         placeholder: String(DEFAULTS.fontSize),
@@ -2842,6 +2857,9 @@
     )), /* @__PURE__ */ React.createElement(ControlField, { label: "Line Spacing", hint: `Default: ${DEFAULTS.lineHeight}` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "0.1",
+        min: "0.5",
         value: config.lineHeight,
         onChange: (v) => updateConfig("lineHeight", v),
         placeholder: String(DEFAULTS.lineHeight),
@@ -2855,10 +2873,13 @@
         onChange: (v) => updateConfig("textAlign", v),
         hint: "Code blocks and tables stay left-aligned."
       }
-    ), /* @__PURE__ */ React.createElement(ControlField, { label: "Paragraph Spacing", hint: `Default: ${DEFAULTS.paragraphSpacing} (accepts px, rem, em…)` }, /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ControlField, { label: "Paragraph Spacing (px)", hint: `Default: ${DEFAULTS.paragraphSpacing}px` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
-        value: config.paragraphSpacing,
+        type: "number",
+        step: "1",
+        min: "0",
+        value: paragraphPx(config.paragraphSpacing),
         onChange: (v) => updateConfig("paragraphSpacing", v),
         placeholder: DEFAULTS.paragraphSpacing
       }
@@ -2992,6 +3013,9 @@
     return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: `H${level} Heading` }, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: `H${level} Size (px)`, hint: `Default: ${DEFAULTS[h + "Size"]}px` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "1",
+        min: "1",
         value: config[h + "Size"],
         onChange: (v) => updateConfig(h + "Size", v),
         placeholder: String(DEFAULTS[h + "Size"]),
@@ -3022,6 +3046,9 @@
     ), config.pageNumbersEnabled ? /* @__PURE__ */ React.createElement(ControlField, { label: "Page Start From", hint: `Default: ${DEFAULTS.pageStartFrom}` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "1",
+        min: "1",
         value: config.pageStartFrom,
         onChange: (v) => updateConfig("pageStartFrom", v),
         placeholder: String(DEFAULTS.pageStartFrom),
@@ -3035,6 +3062,9 @@
     return /* @__PURE__ */ React.createElement(CollapsibleSection, { label: "Page", defaultOpen: true }, /* @__PURE__ */ React.createElement(ControlField, { label: "Paper Size" }, /* @__PURE__ */ React.createElement(SelectInput, { value: config.paperSize, onChange: (v) => updateConfig("paperSize", v) }, PAPER_SIZE_OPTIONS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ React.createElement(ControlField, { label: "Margin — Vertical (in)", hint: `Default: ${DEFAULTS.marginVerticalIn}in` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "0.125",
+        min: "0",
         value: config.marginVertical,
         onChange: (v) => updateConfig("marginVertical", v),
         placeholder: String(DEFAULTS.marginVerticalIn),
@@ -3043,6 +3073,9 @@
     )), /* @__PURE__ */ React.createElement(ControlField, { label: "Margin — Horizontal (in)", hint: `Default: ${DEFAULTS.marginHorizontalIn}in` }, /* @__PURE__ */ React.createElement(
       TextInput,
       {
+        type: "number",
+        step: "0.125",
+        min: "0",
         value: config.marginHorizontal,
         onChange: (v) => updateConfig("marginHorizontal", v),
         placeholder: String(DEFAULTS.marginHorizontalIn),
