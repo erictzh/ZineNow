@@ -82,14 +82,16 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         )}
       </PanelSection>
 
-      <div className="ze-format-row ze-marquee-modes" role="tablist" aria-label="What to do with the area">
-        <button type="button" role="tab" aria-selected={!fillMode} className={"ze-format-toggle ze-format-toggle-wide" + (!fillMode ? " active" : "")} onClick={() => change({ mode: "layer" })}>Make layer</button>
-        <button type="button" role="tab" aria-selected={fillMode} className={"ze-format-toggle ze-format-toggle-wide" + (fillMode ? " active" : "")} onClick={() => change({ mode: "fill" })}>Remove &amp; fill</button>
-      </div>
+      <PanelSection id="marquee.action" title="Action" defaultOpen>
+        <select className="ze-format-select" aria-label="Action" value={fillMode ? "fill" : "layer"} onChange={(e) => change({ mode: e.target.value })}>
+          <option value="layer">Make a new layer</option>
+          <option value="fill">Remove &amp; fill</option>
+        </select>
+      </PanelSection>
 
       {!fillMode && (
         <React.Fragment>
-          <PanelSection id="marquee.make" title="Make a layer" defaultOpen>
+          <PanelSection id="marquee.make" title="Make a new layer" defaultOpen>
             <span className="ze-format-hint">Turns what is inside the area into a new image layer, so you can give just that part a filter or effect.</span>
             <div className="ze-format-radio-group" role="radiogroup" aria-label="Make layer">
               {radio("marquee-action", "copy", "Copy to a new layer", settings.action, (v) => change({ action: v }), "The original stays as it is. (Ctrl+J)")}
@@ -107,7 +109,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
                 {radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
                 {radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v }))}
-                {radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers of the Remove & fill tab.")}
+                {radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers saved for Remove & fill.")}
               </div>
               {leaves === "fill" && (
                 <div className="ze-format-row">
