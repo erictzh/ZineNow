@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-22 (Md2PDF: - + on all Typography number boxes, paragraph spacing in px; ZEditor: Placeholder text row layout fixed; ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
+Last updated: 2026-11-22 (ZEditor: drawing tools work on the outer canvas; Md2PDF: - + on all Typography number boxes, paragraph spacing in px; ZEditor: Placeholder text row layout fixed; ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -470,3 +470,9 @@ Asked: put - + on Md2PDF too, with a step that fits each unit; margins 0.125, pa
 - **Paragraph Spacing is now a px number** (default 16, was the text `1rem`): `defaultConfig.json` and `defaults.js` hold 16; `normalizeConfig.js` `toCssLength(value, fallback, bareUnit)` treats a bare number as px for this field (still accepts `20px`, `1.5rem`, ...); the box shows an old saved `rem`/`em` value converted to px (x16). Paragraph spacing is no longer free text.
 - `shared/js/numberFields.js` `stepBy`: an empty box whose placeholder is a number (the default) steps from that default, not from 0/min; decimal steps are rounded to the step's decimals (no 0.1+0.1=0.2000...1).
 - Tested headless: margin 0.75 -> 0.875, 1, 1.125, back 1; paragraph 16 -> 17, 18, 19, 18 and the preview CSS var shows `18px`; body size, line spacing (1.6 -> 1.7 ...) OK. A margin of 0 still falls back to the default (`toMarginInches` treats <= 0 as blank): min stays 0 for now.
+
+## Session 2026-11-22 (cloud session, last): drawing tools work on the outer canvas
+Asked: rectangle, shapes, text box etc. must be usable outside the page (the grey outer canvas).
+- Before: only the page-sized `.ze-annotation-layer` took presses, so a press on the outer canvas did nothing. Now `ui/canvas/ComposeCanvas.jsx` adds a `mousedown` listener on the `.preview-pane` (effect after `startDrawing`) that sends a press on the **empty** pane or its padding wrapper (`.preview-canvas-wrapper`; not on items, not on the scrollbar, left button only) to the same `handleOverlayMouseDown` (kept fresh through `latestMouseDown`). It already measures from the page (`overlayPoint`), so Rectangle, Ellipse, Text, Draw/Highlight, Eraser, Marquee, Measure, and Move's deselect/box-select start and run anywhere, also from outside onto the page. The pane cursor follows the tool (crosshair/text).
+- Touch: `ui/touchInput.js` treats a press on the pane or wrapper as a drag surface (`outerCanvas`), so a finger/pen press there is forwarded as a mouse press like on the page.
+- Tested headless: rectangle fully left of the page, ellipse started outside and ended on the page, text click above the page, draw stroke right of the page, marquee outside all create their item; a synthetic finger drag with Rectangle on the outer canvas adds one. Items outside the page are not exported (page only), as before.
