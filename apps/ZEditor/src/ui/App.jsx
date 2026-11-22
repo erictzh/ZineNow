@@ -90,7 +90,7 @@ export function App() {
     onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file."),
   }), []);
   const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
-  useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen });
+  useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
   const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;

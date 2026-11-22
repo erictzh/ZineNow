@@ -40,6 +40,14 @@ export const KEYBOARD_SHORTCUTS = [
     ],
   },
   {
+    group: "View",
+    rows: [
+      ["Ctrl + mouse wheel, or a pinch on a touchpad", "Zoom the page at the pointer (over the page area), instead of the browser zooming the whole window"],
+      ["Ctrl + +  /  Ctrl + -", "Zoom the page in / out"],
+      ["Ctrl + 0", "Zoom the page to 100%"],
+    ],
+  },
+  {
     group: "Pages and selection",
     rows: [
       ["↑ / ↓", "Previous / next page, when no item is selected"],
