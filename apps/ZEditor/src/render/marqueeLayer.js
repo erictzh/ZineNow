@@ -63,13 +63,13 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
       if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
       base = { ...target, ...rasterized };
     }
-    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null) };
+    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null, settings.fillGrain !== false) };
     if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
   } else {
     // Everything visible can't be erased as one picture, so the spot is covered instead: the cover hides
     // whatever lay there (any kind of layer), and the new layer sits on top of it.
     result.cover = surround
-      ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style)
+      ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, settings.fillGrain !== false)
       : await coverForRegion(marquee, settings.fillColor, scale);
     if (surround && !result.cover) return { notice: "There is nothing around the marquee to fill it from." };
     if (surround && fillOnly) result.sourceId = null; // on top of everything
@@ -161,7 +161,7 @@ function layerFromRegion(picture, marquee, scale, name) {
 // The image's own pixels with the region taken out (transparent) or painted over (fill). The page-px
 // outline is mapped into the image's pixels with imagePixelAt, which allows for the image's rotation,
 // scale and crop. Returns a PNG data URL.
-async function cutFromImage(image, polygon, settings, surroundStyle) {
+async function cutFromImage(image, polygon, settings, surroundStyle, grain) {
   const source = await loadImageElement(image.src);
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth || source.naturalWidth;
@@ -178,7 +178,7 @@ async function cutFromImage(image, polygon, settings, surroundStyle) {
     // Replaced from the pixels round the region, in the image's own pixels
     const points = polygon.map(([px, py]) => { const at = imagePixelAt(image, px, py); return [at.x, at.y]; });
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-    fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle);
+    fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle, grain);
     ctx.restore();
     return canvas.toDataURL("image/png");
   }
@@ -229,7 +229,7 @@ async function coverForRegion(marquee, color, scale) {
 // Replaces the pixels inside `points` (a polygon, in this canvas's pixels) with a fill made from the pixels round it
 // (render/inpaint.js). Only the polygon's box and a margin are read and written back. Returns false when there was
 // nothing to fill from.
-function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style) {
+function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style, grain) {
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   const sx = Math.max(0, Math.floor(Math.min(...xs)) - FILL_CONTEXT_PX), sy = Math.max(0, Math.floor(Math.min(...ys)) - FILL_CONTEXT_PX);
   const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + FILL_CONTEXT_PX), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + FILL_CONTEXT_PX);
@@ -249,20 +249,20 @@ function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style) {
   const hole = new Uint8Array(w * h);
   for (let i = 0; i < hole.length; i++) hole[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
   const data = ctx.getImageData(sx, sy, w, h);
-  if (!fillFromSurroundings(data.data, w, h, hole, style)) return false;
+  if (!fillFromSurroundings(data.data, w, h, hole, style, { grain })) return false;
   ctx.putImageData(data, sx, sy);
   return true;
 }
 
 // The picture that covers the spot after a cut (or "Remove & fill") from everything visible, with the spot filled from
 // what is round it: an image of the region's box, see-through outside the region's outline. Null when it can't be filled.
-async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style) {
+async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, grain) {
   // The page as it looks, paper included, so the fill sees the paper too.
   const picture = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, false);
   const polygon = regionPolygon(marquee);
   const points = polygon.map(([x, y]) => [x * scale, y * scale]);
   const ctx = picture.getContext("2d");
-  if (!fillCanvasRegion(ctx, picture.width, picture.height, points, style)) return null;
+  if (!fillCanvasRegion(ctx, picture.width, picture.height, points, style, grain)) return null;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
   const right = Math.min(picture.width, Math.ceil(Math.max(...xs))), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)));

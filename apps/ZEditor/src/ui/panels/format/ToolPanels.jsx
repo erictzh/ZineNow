@@ -110,6 +110,11 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
           <option value="smooth">Smooth: a blend of the edge colours</option>
           <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
         </select>
+        <label className="ze-format-check">
+          <input type="checkbox" checked={settings.fillGrain !== false} onChange={(e) => change({ fillGrain: e.target.checked })} />
+          <span>Match the grain</span>
+          <span className="ze-format-hint">Adds noise like the picture's own, so the fill is not a flat patch.</span>
+        </label>
         <div className="ze-format-row">
           <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
         </div>
