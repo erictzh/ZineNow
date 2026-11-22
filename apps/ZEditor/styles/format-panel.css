@@ -386,3 +386,8 @@
     background: transparent; color: var(--ui-fg); cursor: pointer;
 }
 .ze-trace-mini:hover { border-color: var(--ui-fg-muted); }
+
+/* The Marquee panel's one box: the Action dropdown and, right under it, only that action's options (nothing folds). */
+.ze-marquee-box { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 18px; border-top: 1px solid var(--ui-border, rgba(255,255,255,.08)); }
+.ze-marquee-box-title { font-size: 12px; font-weight: 600; color: var(--ui-fg); margin-top: 4px; }
+.ze-marquee-box .ze-format-row .ze-format-toggle { flex: 1 1 0; min-width: 0; }

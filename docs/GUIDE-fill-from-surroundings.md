@@ -34,7 +34,7 @@ The **Action** dropdown chooses between **Make a new layer** and **Remove & fill
 - **Remove & fill**: does it. A big area takes a moment; the button says "Filling…".
 - **Try another**: undoes the fill you just made and fills again, copying different patches. Press it several times and keep the best one. (Only for the Pattern style.)
 
-### 4. Fine-tune (the section under the Remove & fill button)
+### 4. Fine-tune (the numbers in the Remove & fill box)
 
 Change a number with the **+** and **−** buttons (or type it), then press **Remove & fill** again. Press Ctrl+Z first if you want to replace the previous fill instead of filling over it. Sizes are in pixels of the picture.
 
