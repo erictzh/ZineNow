@@ -19,6 +19,10 @@ export const NEW_DOCUMENT_PRESETS = [
   { key: "digest", label: "Digest", width: 396, height: 594 },
 ];
 export const MAX_NEW_DOCUMENT_PAGES = 100;
+// A "no paper" page (an auto-expanding canvas): where it starts, in pt, and how it grows (editor px, see state/useCanvasGrow.js).
+export const CANVAS_PAGE_START = { width: 800, height: 600 };
+export const CANVAS_GROW_TRIGGER_PX = 40; // content this close to the edge (or past it) makes the canvas grow...
+export const CANVAS_GROW_MARGIN_PX = 240; // ...until there is this much room beyond the content
 export const ZOOM_PERCENT = { min: 10, max: 600, initial: 100 };
 
 // Guides — trim/margin/bleed presets, in inches. Page geometry

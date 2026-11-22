@@ -15,7 +15,7 @@ export function usePageOps({ doc, history, selection }) {
       const target = pages[i];
       const rotation = (target.rotation + 90) % 360;
       const dataUrl = target.isBlank
-        ? makeBlankThumb(target.width, target.height, rotation)
+        ? makeBlankThumb(target.width, target.height, rotation, undefined, target.isCanvas)
         : await renderPdfThumb(docFor(pdfDocsRef, target), target.pageNumber, rotation);
       updatesByKey.set(target.key, { rotation, dataUrl });
     }

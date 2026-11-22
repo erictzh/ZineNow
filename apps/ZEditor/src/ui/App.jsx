@@ -21,6 +21,7 @@ import { useStatus } from "../state/useStatus.js";
 import { useToolDefaults } from "../state/useToolDefaults.js";
 import { useViewSettings } from "../state/useViewSettings.js";
 import { useZoom } from "../state/useZoom.js";
+import { useCanvasGrow } from "../state/useCanvasGrow.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
 import { Rulers } from "./canvas/Rulers.jsx";
 import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
@@ -60,6 +61,7 @@ export function App() {
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });
   const zoom = useZoom();
+  useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
   // Pictures dragged in from the file manager or another website (shared/js/dropImages.js) go on the
   // selected page: where they were dropped if that was on the page, else in its middle.

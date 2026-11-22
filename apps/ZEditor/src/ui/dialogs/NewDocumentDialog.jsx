@@ -1,6 +1,6 @@
 // New blank document: paper size (a preset or a custom size in mm), orientation, page count.
 
-import { MAX_NEW_DOCUMENT_PAGES, NEW_DOCUMENT_PRESETS, POINTS_PER_INCH } from "../../constants.js";
+import { CANVAS_PAGE_START, MAX_NEW_DOCUMENT_PAGES, NEW_DOCUMENT_PRESETS, POINTS_PER_INCH } from "../../constants.js";
 import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 const { useState } = React;
 
@@ -29,10 +29,12 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
   const [customWText, setCustomWText] = useState("148");
   const [customHText, setCustomHText] = useState("210");
   if (!open) return null;
+  const noPaper = presetKey === "canvas"; // an auto-expanding canvas with no paper
   const custom = presetKey === "custom";
   const customW = clampMm(customWText, 148), customH = clampMm(customHText, 210);
   const preset = custom
     ? { width: mmToPt(customW), height: mmToPt(customH) }
+    : noPaper ? CANVAS_PAGE_START
     : NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
   const landscape = orientation === "landscape";
   const width = landscape ? preset.height : preset.width;
@@ -49,6 +51,7 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
             <select className="ze-format-select" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
               {NEW_DOCUMENT_PRESETS.map((p) => <option key={p.key} value={p.key}>{presetLabel(p)}</option>)}
               <option value="custom">Custom size (mm)…</option>
+              <option value="canvas">No paper: auto-expanding canvas</option>
             </select>
           </div>
           {custom && (
@@ -70,13 +73,13 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
               </div>
             </div>
           )}
-          <div className="ze-format-field">
+          {!noPaper && <div className="ze-format-field">
             <span className="ze-format-label">Orientation</span>
             <div className="ze-format-row">
               <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : "")} onClick={() => setOrientation("portrait")}>Portrait</button>
               <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : "")} onClick={() => setOrientation("landscape")}>Landscape</button>
             </div>
-          </div>
+          </div>}
           <label className="ze-format-field">
             <span className="ze-format-label">Pages</span>
             <NumberBox
@@ -86,13 +89,13 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
             />
           </label>
           <span className="ze-format-hint">
-            {formatMm(width)} × {formatMm(height)} mm ({inches(width)} × {inches(height)} in).{custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : ""} You can add or remove pages later.
+            {noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in).`}{custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : ""} You can add or remove pages later.
           </span>
         </div>
         <div className="ze-modal-actions">
           {onOpenPdf && <button type="button" onClick={onOpenPdf}>Open a PDF instead</button>}
           <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="btn-solid" onClick={() => onCreate({ width, height, pageCount })}>Create</button>
+          <button type="button" className="btn-solid" onClick={() => onCreate({ width, height, pageCount, canvas: noPaper })}>Create</button>
         </div>
       </div>
     </div>

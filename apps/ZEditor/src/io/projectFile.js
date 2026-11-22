@@ -67,7 +67,7 @@ export async function readProjectFile(file, nextPageKey) {
 
   const pages = await Promise.all(project.pages.map(async (p) => {
     const dataUrl = p.isBlank
-      ? makeBlankThumb(p.width, p.height, p.rotation)
+      ? makeBlankThumb(p.width, p.height, p.rotation, undefined, p.isCanvas)
       : await renderPdfThumb(docs[p.docId].doc, p.pageNumber, p.rotation);
     const annotations = project.version >= 2 ? p.annotations : legacyLayerOrder(p.annotations || []);
     return { ...p, annotations, key: nextPageKey(), dataUrl };

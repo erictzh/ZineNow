@@ -72,6 +72,7 @@
     display: block;
     border-radius: 2px;
 }
+.ze-page--canvas canvas { border-radius: 0; } /* no paper */
 .ze-guides-overlay {
     position: absolute;
     top: 0;

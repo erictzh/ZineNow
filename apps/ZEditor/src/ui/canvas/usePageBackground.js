@@ -26,8 +26,10 @@ export function usePageBackground(page, pdfDocsRef, pageFilter) {
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, h);
+        if (!page.isCanvas) { // a no-paper page has no sheet: the outer canvas shows through
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, w, h);
+        }
       } else {
         const doc = docFor(pdfDocsRef, page);
         if (!doc) return;
@@ -46,7 +48,7 @@ export function usePageBackground(page, pdfDocsRef, pageFilter) {
       setCanvasSize({ width: w, height: h });
     })();
     return () => { cancelled = true; };
-  }, [page && page.key, page && page.rotation, pageFilter]);
+  }, [page && page.key, page && page.rotation, page && page.width, page && page.height, pageFilter]);
 
   return { canvasRef, canvasSize };
 }

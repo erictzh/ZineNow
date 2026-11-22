@@ -24,6 +24,7 @@ import { pressPolygon, startMarqueeDraw } from "./marqueeGesture.js";
 import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 import { centerArtboard } from "../../state/useZoom.js";
+import { canvasGrowShift } from "../../state/useCanvasGrow.js";
 import { ZOOM_PERCENT } from "../../constants.js";
 
 const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
@@ -59,7 +60,24 @@ export function ComposeCanvas({
   // the page is picked), and when a document is created or opened (viewKey, with the zoom back at 100%). Not on zoom:
   // useZoom keeps its own anchor. After the sizes above, never before: centring
   // measures where the page sits, which depends on them.
-  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height, viewKey]);
+  // A no-paper page that has just grown left/up (state/useCanvasGrow.js): its items were shifted and the page got bigger
+  // on that side, so scroll by the same amount and the view stays where it was. Runs before the centring below,
+  // which it keeps from re-centring this once.
+  const skipCenterRef = useRef(false);
+  useLayoutEffect(() => {
+    const g = canvasGrowShift.pending;
+    const pane = artboardRef.current && artboardRef.current.closest(".preview-pane");
+    if (!g || !page || g.key !== page.key || !pane) return;
+    canvasGrowShift.pending = null;
+    skipCenterRef.current = true;
+    const r = artboardRef.current.getBoundingClientRect();
+    pane.scrollLeft += r.left - g.left + g.sx * g.zoom;
+    pane.scrollTop += r.top - g.top + g.sy * g.zoom;
+  }, [canvasSize.width, canvasSize.height]);
+  useLayoutEffect(() => {
+    if (skipCenterRef.current) { skipCenterRef.current = false; return; }
+    centerArtboard(artboardRef.current);
+  }, [page && page.key, canvasSize.width, canvasSize.height, viewKey]);
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
@@ -396,7 +414,7 @@ export function ComposeCanvas({
   // size, which is what gives the pane something to scroll.
   return (
     <div className="ze-artboard-zoom" ref={artboardRef} style={{ width: canvasSize.width * zoom, height: canvasSize.height * zoom }}>
-    <div className="ze-page ze-page--rendered" style={{ transform: zoom === 1 ? undefined : `scale(${zoom})`, "--ze-zoom": zoom }}>
+    <div className={"ze-page ze-page--rendered" + (page.isCanvas ? " ze-page--canvas" : "")} style={{ transform: zoom === 1 ? undefined : `scale(${zoom})`, "--ze-zoom": zoom }}>
       <canvas ref={canvasRef} />
       {onionGhostSrc && (
         <img className="ze-onion-ghost" src={onionGhostSrc} alt="" style={{ opacity: onionSkinOpacity }} />
@@ -459,12 +477,12 @@ export function ComposeCanvas({
       </div>
       <PageOverlays
         pageSize={canvasSize}
-        numberSpec={numberSpec}
-        guidesOn={guidesOn}
+        numberSpec={page.isCanvas ? null : numberSpec}
+        guidesOn={guidesOn && !page.isCanvas}
         guideFormat={guideFormat}
         guideMarginIn={guideMarginIn}
         guideBleedIn={guideBleedIn}
-        centerGuideOn={centerGuideOn}
+        centerGuideOn={centerGuideOn && !page.isCanvas}
       />
     </div>
     </div>
