@@ -651,6 +651,26 @@
     }
     if (pointers.size === 0) stroke = null;
   }
+  var ring = $("ring");
+  function showRing(e) {
+    if (!hasPicture() || tool !== "brush" && tool !== "erase" || pointers.size > 1) {
+      ring.hidden = true;
+      return;
+    }
+    const r = stage.getBoundingClientRect(), d = Math.max(4, settings.brush * view.s);
+    ring.style.width = ring.style.height = d + "px";
+    ring.style.left = e.clientX - r.left - d / 2 + "px";
+    ring.style.top = e.clientY - r.top - d / 2 + "px";
+    ring.hidden = false;
+  }
+  stage.addEventListener("pointermove", showRing);
+  stage.addEventListener("pointerdown", showRing);
+  stage.addEventListener("pointerleave", () => {
+    ring.hidden = true;
+  });
+  stage.addEventListener("pointerup", (e) => {
+    if (e.pointerType !== "mouse") ring.hidden = true;
+  });
   stage.addEventListener("pointerup", endPointer);
   stage.addEventListener("pointercancel", endPointer);
   stage.addEventListener("wheel", (e) => {
@@ -850,6 +870,12 @@
       e.preventDefault();
       (e.shiftKey ? $("redo") : $("undo")).click();
     } else if (e.key === "Enter" && hasPicture()) removeObject();
+    else if (e.key === "[" || e.key === "]") {
+      const v = Math.min(400, Math.max(1, Math.round(settings.brush * (e.key === "]" ? 1.2 : 1 / 1.2) + (e.key === "]" ? 1 : -1))));
+      settings.brush = v;
+      $("brush").value = v;
+      saveSettings();
+    }
   });
   window.addEventListener("resize", () => {
     if (hasPicture()) fitView();

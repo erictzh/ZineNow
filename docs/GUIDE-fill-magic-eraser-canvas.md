@@ -1,4 +1,4 @@
-# ZEditor guide: Remove & fill, Magic eraser, the Unlimited canvas and Vectorize
+# ZineNow guide: Remove & fill, Magic eraser, the Unlimited canvas, Vectorize and Ai Tools (Local)
 
 Each part has three sections:
 
@@ -347,6 +347,84 @@ The code: `apps/ZEditor/src/model/trace/` (`quantize.js` = stage 1, `contours.js
 
 ---
 
+# Part 5: Ai Tools (Local) (remove objects with an AI model on your own device)
+
+Technical names: **AI inpainting** with a **neural network** (here the model is called **MI-GAN**), run **on-device** with **ONNX Runtime Web**, using **WebGPU** (your graphics chip) or **WebAssembly** (your processor).
+
+## What it's for
+
+The same job as Remove & fill in ZEditor (take something out of a picture and fill the gap), but with an AI that has learned from millions of photos what usually sits behind things. It can invent believable content (a plausible bit of street, sky or grass) where the classical methods in Part 1 can only smear or copy. It is a separate app so ZEditor stays small and fast.
+
+## How to use it
+
+1. **Open the app** from your launcher (**Ai Tools (Local)**), or from its own address.
+2. **Open picture.** Tap **Open picture**, drop a picture on the window, or paste one (Ctrl+V). Pictures bigger than 4096 px on the long side are shrunk when opened, to save memory.
+3. **Mark what to remove:**
+   - **Brush:** paint over the object. A ring shows the brush size. **Brush size** is in the panel (use + and −, or the **[** and **]** keys).
+   - **Box:** drag a rectangle.
+   - **Erase mark:** rub out part of what you marked.
+   - **Move:** drag the picture. **Two fingers always move and zoom the picture**, whatever tool is on.
+4. **Grow the marked area by:** a few pixels more than you painted (default 6) covers shadows and fringes. This matters a lot: a mark that is too tight leaves a ghost outline.
+5. **Remove object.** The first time, the app downloads the AI model (about 28 MB) and keeps it, so after that it works with no internet. A fill takes about 2.5–4 seconds on a tablet's graphics chip, or 6–7 seconds on its processor.
+6. **Undo / Redo**, **Hold to compare** (shows the original while you hold the button) and **Save PNG**.
+7. **Send to ZEditor** opens ZEditor in a new tab with your picture on a new **unlimited canvas** page, ready to lay out.
+8. **Several objects at once:** mark them all, then press Remove object once. Objects far apart are done one after another, and a single Undo brings all of them back.
+9. **"Model and device"** at the bottom of the panel shows whether the model is saved, and whether the graphics chip is being used. **Forget the saved model** removes it from the device.
+
+**Tips that matter**
+- **Cover the whole object plus its shadow**, and use Grow.
+- **Small and tight areas look best.** The model sees a square window around your mark, so the more of that window your mark covers, the less real picture it has to learn from. For a very big object, do it in two or three steps.
+- If the result looks smudged, **Undo**, mark slightly differently, and try again. The AI is not random, so pressing the button again on the same marks gives the same result.
+- It is great at removing things from **busy backgrounds**; it is weaker at **people's faces and text**, which it can't know.
+
+## How it works
+
+### What an "AI model" is, in plain words
+
+A **neural network** is a very large pile of numbers (about 7 million of them here: the 28 MB file is 7 million numbers of 4 bytes each) arranged in layers. You feed numbers in (the pixels of a picture), each layer multiplies and adds them in a fixed pattern, and numbers come out (the pixels of a new picture). The numbers inside were set by **training**: the model was shown millions of photos with random bits hidden and was rewarded for guessing the hidden bits well. After enough training the patterns in those numbers capture things like "grass continues like this", "a wall has bricks in rows", "a horizon is a straight line". Nothing is written as rules by a person, and nothing is looked up. It is a learned guess.
+
+**MI-GAN** is a small, fast model of this kind designed for phones. "GAN" means it was trained against a second network that tried to spot fakes, which pushes its fills to look like real photos rather than blurry averages (the Smooth style in Part 1 averages; this invents).
+
+### Running it in your browser: ONNX, ONNX Runtime, WebGPU, WebAssembly
+
+- **ONNX** is a standard file format for neural networks (`.onnx`), so a model trained in one tool can run in another. The model file is 28 MB.
+- **ONNX Runtime Web** is a free program (a JavaScript library from Microsoft, about 800 KB plus some larger helper files) that reads an `.onnx` file and does all the multiplying and adding. It is downloaded the first time and saved by the app's offline cache.
+- **WebGPU** lets a web page use the **graphics chip**, which can do thousands of multiplications at once. This is why the fill takes 2.5–4 seconds on your tablet. Chrome on your tablet reports it as available.
+- **WebAssembly (WASM)** is the fallback: a fast format for running programs on the **processor**. It is slower (6–7 seconds) because a processor does far fewer things at once. If the graphics chip fails in the middle of a job, the app switches to this automatically.
+- **Offline:** the app's files, the runtime and the model are all kept on your device after the first use. I tested it with the network switched off, and it still opened and filled.
+
+### What the app does when you press Remove object
+
+1. **Your marks become a mask:** a map of which pixels to replace. "Grow" swells it outwards by some pixels (a **dilation**, like in the Magic eraser).
+2. **Separate objects are grouped:** pieces of the mask that touch each other are found (**connected components**). Pieces whose working squares would overlap are filled together, and pieces far apart are filled one after another.
+3. **A window is cut out.** The model only works on a **512 × 512** square, so the app cuts a square window from the picture around the marked area, at least 1.5 times the size of the area, so the AI gets surroundings to learn from. A big picture's window is shrunk to 512, and a small one is enlarged to 512. Nothing outside the window is ever touched.
+4. **The input is built.** The model takes **one input with 4 layers (channels)** of 512 × 512 numbers:
+   - layer 0: the mask, as 0.5 where the picture is known and −0.5 where it must be filled,
+   - layers 1–3: the picture's red, green and blue, scaled from 0–255 down to −1…+1, with the area to fill set to 0 (blanked out).
+5. **The model runs** and returns a 512 × 512 colour picture, again as numbers from −1 to +1, which the app turns back into 0–255 colours.
+6. **The answer is scaled back** to the window's size and **pasted over the marked area only**. Just outside the marked area there is a short soft fade (3 pixels), so the join does not show. Everything else in the picture stays exactly as it was.
+7. **One Undo step:** before changing anything the app saves a copy of the picture (as an **ImageBitmap**, a fast in-memory copy). **Undo** puts it back, and **Redo** reapplies the fill. If anything fails, the picture is restored automatically.
+
+### Why it behaves the way it does
+
+- **Why "Grow" matters:** the model keeps the pixels you did *not* mark as the truth. A leftover edge of the object that you didn't mark is "truth" to it, so it tries to continue that edge. Growing the mask hides it.
+- **Why very big objects fail:** the model learned on a 512 × 512 square. A hole that fills most of the square leaves it almost no surroundings to work from, and it can only guess. Marking in steps gives it context each time.
+- **Why big pictures can look slightly soft inside the fill:** the model works at 512 pixels, so inside a large photo's fill the detail is limited to that resolution, then scaled up. The rest of the picture is untouched at full quality.
+- **Why the first run is slower:** the model file has to download (28 MB), and the graphics chip has to compile its programs ("shaders") the first time. In my tablet test the first start took about 13 seconds, and later starts about 3 seconds.
+- **Why there is no "Try another":** unlike the Pattern style in Part 1, the model is deterministic: the same picture and the same marks always give the same answer.
+
+### What is stored on your device
+
+- The app's files, in the app's offline cache.
+- The AI runtime files (about 15–30 MB), cached the first time they are used.
+- The model file (28 MB), in a separate browser cache called "zinenow-ai-tools-model". **Forget the saved model** deletes it.
+- Your brush size and Grow setting, in the browser's local storage.
+- **Nothing is uploaded.** Your pictures never leave the device.
+
+The code lives in `apps/AiToolsLocal/src/`: `main.js` (the screen and the buttons), `fill.js` (the picture maths: windows, masks, grouping, pasting; tested in `tests/aitools-fill.test.js`), `runtime.js` (loading and running the model) and `modelStore.js` (downloading and saving the model). The hand-off is in `shared/js/imageHandoff.js` and `apps/ZEditor/src/state/useImageHandoff.js`.
+
+---
+
 ## When something goes wrong
 
 | What you see | What to do |
@@ -361,6 +439,10 @@ The code: `apps/ZEditor/src/model/trace/` (`quantize.js` = stage 1, `contours.js
 | The canvas doesn't grow | Let go of the mouse or finger first. Check you created it with "No paper". |
 | Vectorize gives blobs or too much detail | Change **Colours**, **Paths** and **Noise** one at a time. High-contrast pictures work best. |
 | Vectorize result has tiny specks | Raise **Noise**. |
+| Ai Tools leaves a ghost outline of the object | Raise **Grow the marked area by**, and paint a little past the object's edge and shadow. |
+| Ai Tools says the area is too big | Mark a smaller part, or do it in two or three steps. |
+| Ai Tools is slow or says "processor" | The graphics chip isn't available; it still works, just 6–7 seconds instead of 3. |
+| Ai Tools can't download the model | It needs the internet once. Check Wi-Fi, then try again. |
 | Something looks wrong on the tablet but fine elsewhere | Close and reopen the app to load the newest version, then tell me what you see. |
 
 Everything here can be undone with **Ctrl+Z**.
