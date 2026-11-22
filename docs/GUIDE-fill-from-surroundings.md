@@ -75,5 +75,6 @@ If you want to remove something **and keep it** as its own layer: under **Make l
 ## Where things are
 
 - Panel: **Format** panel on the right, with the **Marquee** tool active.
+- After a fill the Marquee panel stays open, so you can change a number and fill again straight away.
 - Shortcuts: **M** Marquee tool, **Ctrl+Z** undo, **Ctrl+J** Layer via Copy, **Ctrl+Shift+J** Layer via Cut.
 - The settings are kept while the editor is open (not saved with the project).
