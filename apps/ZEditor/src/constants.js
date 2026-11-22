@@ -19,7 +19,7 @@ export const NEW_DOCUMENT_PRESETS = [
   { key: "digest", label: "Digest", width: 396, height: 594 },
 ];
 export const MAX_NEW_DOCUMENT_PAGES = 100;
-export const ZOOM_PERCENT = { min: 25, max: 400, initial: 100 };
+export const ZOOM_PERCENT = { min: 10, max: 600, initial: 100 };
 
 // Guides — trim/margin/bleed presets, in inches. Page geometry
 // (page.width/height, canvas px at MAIN_SCALE) is already in points

@@ -4780,7 +4780,7 @@
     { key: "digest", label: "Digest", width: 396, height: 594 }
   ];
   var MAX_NEW_DOCUMENT_PAGES = 100;
-  var ZOOM_PERCENT = { min: 25, max: 400, initial: 100 };
+  var ZOOM_PERCENT = { min: 10, max: 600, initial: 100 };
   var POINTS_PER_INCH = 72;
   var EXPORT_DPI = 200;
   var EXPORT_SCALE = EXPORT_DPI / 72;
@@ -9596,7 +9596,7 @@
           const dir = e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? 1 : e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" ? -1 : e.key === "0" || e.code === "Numpad0" ? 0 : null;
           if (dir !== null) {
             e.preventDefault();
-            if (dir === 0) zoom.handleZoomChange(ZOOM_PERCENT.initial);
+            if (dir === 0) zoom.zoomReset();
             else zoom.zoomStep(dir);
             return;
           }
@@ -11762,7 +11762,7 @@
 
   // apps/ZEditor/src/state/useZoom.js
   var { useState: useState15, useRef: useRef11, useLayoutEffect, useEffect: useEffect9 } = React;
-  var ZOOM_STEPS = [25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400];
+  var ZOOM_STEPS = [10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500, 600];
   var PINCH_EVENT = "ze-pinch";
   var TOP_GAP = 40;
   function centerArtboard(board) {
@@ -11801,17 +11801,23 @@
       }
       setZoomPercent(percent);
     }
+    function leaveZoomBox() {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest(".ze-zoom-control")) active.blur();
+    }
     function zoomAt(raw, fx, fy) {
       const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
       floatRef.current = clamped;
       const percent = Math.round(clamped);
       if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
+      leaveZoomBox();
       const waiting = zoomAnchorRef.current;
       zoomAnchorRef.current = { ...waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy), fx, fy };
       requestedRef.current = percent;
       setZoomPercent(percent);
     }
     function zoomStep(direction) {
+      leaveZoomBox();
       const current = zoomRef.current;
       const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
       handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
@@ -11865,7 +11871,11 @@
       window.addEventListener("wheel", onWheel, { passive: false, capture: true });
       return () => window.removeEventListener("wheel", onWheel, { capture: true });
     }, []);
-    return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep };
+    function zoomReset() {
+      leaveZoomBox();
+      handleZoomChange(ZOOM_PERCENT.initial);
+    }
+    return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
   }
 
   // apps/ZEditor/src/ui/pointer.js
@@ -13474,6 +13484,14 @@
     useLayoutEffect3(() => {
       centerArtboard(artboardRef.current);
     }, [page && page.key, canvasSize.width, canvasSize.height]);
+    useLayoutEffect3(() => {
+      const wrapper = artboardRef.current && artboardRef.current.parentElement;
+      if (!wrapper) return;
+      wrapper.style.setProperty("--ze-board-w", canvasSize.width + "px");
+      wrapper.style.setProperty("--ze-board-h", canvasSize.height + "px");
+      wrapper.style.setProperty("--ze-board-zoom", String(zoom));
+      wrapper.style.setProperty("--ze-min-zoom", String(ZOOM_PERCENT.min / 100));
+    }, [zoom, canvasSize.width, canvasSize.height]);
     const [, setWrapTick] = useState19(0);
     useEffect15(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
     const [dragRect, setDragRect] = useState19(null);
@@ -16607,7 +16625,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "628115d"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "8bef7e5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
