@@ -10,9 +10,12 @@ import { loadImageElement } from "./drawImage.js";
 import { getPageDisplaySize, renderPageToCanvas } from "./pageRender.js";
 import { resolvePageText } from "./pageText.js";
 import { imagePixelAt } from "./softErase.js";
+import { fillFromSurroundings } from "./inpaint.js";
 
 const LAYER_NAMES = { copy: "Layer via Copy", cut: "Layer via Cut" };
 const COVER_NAME = "Cut fill";
+const FILL_NAME = "Filled area";
+const FILL_CONTEXT_PX = 40; // pixels of the surroundings handed to the fill, round the region
 
 // Works out what "make layer" does, without changing anything. Returns
 //   { layer, cover, sourceId, sourcePatch, notice }
@@ -22,7 +25,8 @@ const COVER_NAME = "Cut fill";
 // there's nothing to make, `layer` is missing and `notice` says why (model/marquee.js
 // applyMarqueeResult puts the result on the page).
 //
-// `mode` is "copy" or "cut"; `settings` the panel's settings (model/marquee.js MARQUEE_DEFAULTS);
+// `mode` is "copy", "cut" or "fill" ("Remove & fill": the region is replaced from its surroundings and no new
+// layer is made, so `layer` is missing and `fillOnly` is true); `settings` the panel's settings (model/marquee.js MARQUEE_DEFAULTS);
 // `targetId` the selected layer, used when the settings say to work on that layer alone.
 export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee, settings, mode, targetId }) {
   const annotations = page.annotations || [];
@@ -30,8 +34,8 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
   const target = fromLayer ? annotations.find((a) => a.id === targetId) : null;
   if (fromLayer && (!target || target.hidden)) return { notice: "Select a visible layer first (Move tool or Layers panel, then M), or choose All visible." };
   if (target && target.locked) return { notice: "That layer is locked." };
-  if (mode === "cut" && target && target.type === "stroke") return { notice: "A pen or highlighter stroke can't be cut in part. Use Layer via Copy." };
-  if (mode === "cut" && target && target.type === "text" && isThreaded(annotations, target.id)) return { notice: "Text in a linked chain can't be cut in part. Use Layer via Copy." };
+  if ((mode === "cut" || mode === "fill") && target && target.type === "stroke") return { notice: "A pen or highlighter stroke can't be cut in part. Use Layer via Copy." };
+  if ((mode === "cut" || mode === "fill") && target && target.type === "text" && isThreaded(annotations, target.id)) return { notice: "Text in a linked chain can't be cut in part. Use Layer via Copy." };
 
   // What the region is cut from: the whole page as seen (paper per the setting), or the one layer alone,
   // at export resolution so the new layer stays sharp in the PDF.
@@ -40,10 +44,14 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
     : await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, !settings.includePaper);
   const scale = EXPORT_SCALE / MAIN_SCALE;
 
-  const layer = layerFromRegion(picture, marquee, scale, LAYER_NAMES[mode]);
-  if (!layer) return { notice: "Nothing is visible inside the marquee." };
-  const result = { layer, cover: null, sourceId: target ? target.id : null, sourcePatch: null, notice: null };
-  if (mode !== "cut") return result;
+  const fillOnly = mode === "fill";
+  const layer = fillOnly ? null : layerFromRegion(picture, marquee, scale, LAYER_NAMES[mode]);
+  if (!fillOnly && !layer) return { notice: "Nothing is visible inside the marquee." };
+  const result = { layer, fillOnly, cover: null, sourceId: target ? target.id : null, sourcePatch: null, notice: null };
+  if (mode === "copy") return result;
+  // "Remove & fill" always fills from the surroundings; a cut does when the panel says so.
+  const surround = fillOnly || settings.cutLeaves === "surround";
+  const style = settings.fillStyle === "smooth" ? "smooth" : "detail";
 
   if (fromLayer) {
     // Cutting takes the pixels out of the layer's own picture, so a text box or shape becomes an image first.
@@ -55,12 +63,16 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
       if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
       base = { ...target, ...rasterized };
     }
-    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings) };
+    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null) };
     if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
   } else {
     // Everything visible can't be erased as one picture, so the spot is covered instead: the cover hides
     // whatever lay there (any kind of layer), and the new layer sits on top of it.
-    result.cover = await coverForRegion(marquee, settings.fillColor, scale);
+    result.cover = surround
+      ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style)
+      : await coverForRegion(marquee, settings.fillColor, scale);
+    if (surround && !result.cover) return { notice: "There is nothing around the marquee to fill it from." };
+    if (surround && fillOnly) result.sourceId = null; // on top of everything
   }
   return result;
 }
@@ -149,7 +161,7 @@ function layerFromRegion(picture, marquee, scale, name) {
 // The image's own pixels with the region taken out (transparent) or painted over (fill). The page-px
 // outline is mapped into the image's pixels with imagePixelAt, which allows for the image's rotation,
 // scale and crop. Returns a PNG data URL.
-async function cutFromImage(image, polygon, settings) {
+async function cutFromImage(image, polygon, settings, surroundStyle) {
   const source = await loadImageElement(image.src);
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth || source.naturalWidth;
@@ -162,6 +174,14 @@ async function cutFromImage(image, polygon, settings) {
     if (i === 0) ctx.moveTo(at.x, at.y); else ctx.lineTo(at.x, at.y);
   });
   ctx.closePath();
+  if (surroundStyle) {
+    // Replaced from the pixels round the region, in the image's own pixels
+    const points = polygon.map(([px, py]) => { const at = imagePixelAt(image, px, py); return [at.x, at.y]; });
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle);
+    ctx.restore();
+    return canvas.toDataURL("image/png");
+  }
   if (settings.cutLeaves === "fill") {
     ctx.fillStyle = settings.fillColor;
   } else {
@@ -201,5 +221,62 @@ async function coverForRegion(marquee, color, scale) {
     type: "image", name: COVER_NAME, src: canvas.toDataURL("image/png"),
     x: bounds.x, y: bounds.y, width: canvas.width / scale, height: canvas.height / scale,
     naturalWidth: canvas.width, naturalHeight: canvas.height, filter: { type: "none" },
+  };
+}
+
+// ---- Filling from the surroundings ------------------------------------------------------------
+
+// Replaces the pixels inside `points` (a polygon, in this canvas's pixels) with a fill made from the pixels round it
+// (render/inpaint.js). Only the polygon's box and a margin are read and written back. Returns false when there was
+// nothing to fill from.
+function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style) {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const sx = Math.max(0, Math.floor(Math.min(...xs)) - FILL_CONTEXT_PX), sy = Math.max(0, Math.floor(Math.min(...ys)) - FILL_CONTEXT_PX);
+  const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + FILL_CONTEXT_PX), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + FILL_CONTEXT_PX);
+  const w = ex - sx, h = ey - sy;
+  if (w <= 0 || h <= 0) return false;
+  // The polygon as a mask: any pixel it touches at all is part of the hole, so no rim of the old pixels is left.
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = w; maskCanvas.height = h;
+  const mctx = maskCanvas.getContext("2d");
+  mctx.fillStyle = "#000";
+  mctx.beginPath();
+  points.forEach(([x, y], i) => (i === 0 ? mctx.moveTo(x - sx, y - sy) : mctx.lineTo(x - sx, y - sy)));
+  mctx.closePath();
+  mctx.fill();
+  mctx.lineWidth = 2; mctx.strokeStyle = "#000"; mctx.stroke();
+  const alpha = mctx.getImageData(0, 0, w, h).data;
+  const hole = new Uint8Array(w * h);
+  for (let i = 0; i < hole.length; i++) hole[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
+  const data = ctx.getImageData(sx, sy, w, h);
+  if (!fillFromSurroundings(data.data, w, h, hole, style)) return false;
+  ctx.putImageData(data, sx, sy);
+  return true;
+}
+
+// The picture that covers the spot after a cut (or "Remove & fill") from everything visible, with the spot filled from
+// what is round it: an image of the region's box, see-through outside the region's outline. Null when it can't be filled.
+async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style) {
+  // The page as it looks, paper included, so the fill sees the paper too.
+  const picture = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, false);
+  const polygon = regionPolygon(marquee);
+  const points = polygon.map(([x, y]) => [x * scale, y * scale]);
+  const ctx = picture.getContext("2d");
+  if (!fillCanvasRegion(ctx, picture.width, picture.height, points, style)) return null;
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
+  const right = Math.min(picture.width, Math.ceil(Math.max(...xs))), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)));
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, right - left); out.height = Math.max(1, bottom - top);
+  const octx = out.getContext("2d");
+  octx.beginPath();
+  points.forEach(([x, y], i) => (i === 0 ? octx.moveTo(x - left, y - top) : octx.lineTo(x - left, y - top)));
+  octx.closePath();
+  octx.clip();
+  octx.drawImage(picture, -left, -top);
+  return {
+    type: "image", name: FILL_NAME, src: out.toDataURL("image/png"),
+    x: left / scale, y: top / scale, width: out.width / scale, height: out.height / scale,
+    naturalWidth: out.width, naturalHeight: out.height, filter: { type: "none" },
   };
 }
