@@ -3,6 +3,7 @@
 import { stripExtension, titleStamp } from "../model/documentTitle.js";
 import { makeBlankThumb } from "../render/pageRender.js";
 import { importPdfFile } from "../io/pdfImport.js";
+import { announceDocumentOpened } from "./useZoom.js";
 
 const { useState, useRef } = React;
 
@@ -28,6 +29,7 @@ export function useDocumentFiles({ doc, history, status, project, selection, dia
       setSelectedPageIndices([]);
       history.clearHistory(); // loading a document is a fresh start, not an undoable step
       project.startNewDocument(stripExtension(file.name) + " - " + titleStamp());
+      announceDocumentOpened(); // the page in the middle of the view at 100%
     } catch (err) {
       setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
     } finally {
@@ -71,6 +73,7 @@ export function useDocumentFiles({ doc, history, status, project, selection, dia
     selection.setSelectedAnnIds([]);
     history.clearHistory();
     project.startNewDocument("New Zine - " + titleStamp());
+    announceDocumentOpened(); // the page in the middle of the view at 100%
   }
 
   function handleNewDocumentOpenPdf() {

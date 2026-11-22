@@ -5,6 +5,7 @@ import { saveFile, writeFileHandle } from "../io/fileSave.js";
 import { readProjectFile, serializeProject } from "../io/projectFile.js";
 import { saveReloadSnapshot, takeReloadSnapshot } from "../io/reloadSnapshot.js";
 import { allowNextUnload, warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
+import { announceDocumentOpened } from "./useZoom.js";
 
 const { useEffect, useState, useRef } = React;
 
@@ -164,6 +165,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
       setProjectFile(handle ? { handle, name: handle.name } : null);
       setDocTitle(loaded.title || stripExtension(file.name));
       view.applySavedSettings(loaded.settings);
+      announceDocumentOpened(); // the page in the middle of the view at 100%
     } catch (err) {
       setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
     } finally {
