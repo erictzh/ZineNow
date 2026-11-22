@@ -897,3 +897,9 @@ select.md2ebook-statusbar-select option {
     display: none !important;
   }
 }
+
+/* Number boxes get a strip of up/down buttons while a finger is used (shared/styles/numberFields.css): the
+   narrow ones grow so their digits still show. */
+[data-input="touch"] .md2ebook-page-jump input[type="number"] { width: 66px; }
+[data-input="touch"] .md2ebook-zoom-number input[type="number"] { width: 78px; }
+[data-input="touch"] .md2ebook-menu-space input[type="number"] { width: 74px; }

@@ -5,7 +5,7 @@
 // HTML/JS/CSS are served network-first, so ordinary deploys reach users without touching
 // this file. Bump CACHE_VERSION when FILES or CDN change (a file added, renamed or
 // removed), so the old cache is dropped and the new list is precached.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 // Must all exist: install fails if any of these 404s.
 const FILES = [
@@ -20,6 +20,7 @@ const FILES = [
   "../../shared/styles/tokens.css",
   "../../shared/styles/buttons.css",
   "../../shared/styles/displaySettings.css",
+  "../../shared/styles/numberFields.css",
   "../../shared/vendor/pdfjs/build/pdf.js",
   "../../shared/vendor/pdfjs/build/pdf.worker.js",
 ];

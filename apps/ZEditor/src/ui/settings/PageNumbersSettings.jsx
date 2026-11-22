@@ -15,7 +15,7 @@ export function PageNumbersSettings({ settings, pageCount, onChange }) {
       </label>
       <label className="ze-format-field">
         <span className="ze-format-label">Stop after page (empty = last)</span>
-        <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} placeholder="last" value={settings.to || ""} onChange={(e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) })} />
+        <input type="number" className="ze-format-number" min="1" max={Math.max(1, pageCount)} placeholder="last" data-allow-empty value={settings.to || ""} onChange={(e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) })} />
       </label>
       <label className="ze-format-field">
         <span className="ze-format-label">First page shows number</span>
