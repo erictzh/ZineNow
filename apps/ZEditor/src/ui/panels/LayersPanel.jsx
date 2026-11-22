@@ -198,7 +198,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
     e.stopPropagation();
     if (rowMenu && rowMenu.id === id) { setRowMenu(null); return; }
     const box = e.currentTarget.getBoundingClientRect();
-    const MENU_W = 200, MENU_H = typeof id === "string" ? 90 : 84;
+    const MENU_W = 200, MENU_H = typeof id === "string" ? 48 : 84;
     const x = Math.max(4, Math.min(box.right - MENU_W, window.innerWidth - MENU_W - 4));
     const y = box.bottom + 4 + MENU_H > window.innerHeight ? box.top - 4 - MENU_H : box.bottom + 4;
     setMenuOpen(false);
@@ -422,7 +422,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           </button>
           <button
             type="button" className={"ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId ? " is-open" : "")}
-            title="Group actions: save as .znow, import" aria-label={"Actions for group " + name} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === "g:" + groupId)}
+            title="Group actions: save as .znow" aria-label={"Actions for group " + name} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === "g:" + groupId)}
             onClick={(e) => toggleRowMenu(e, "g:" + groupId)}
             onDoubleClick={(e) => e.stopPropagation()}
           >
@@ -513,7 +513,6 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
       {groupMenuId && (
         <div className="ze-menu ze-layer-row-menu" role="menu" ref={rowMenuRef} style={{ left: rowMenu.x, top: rowMenu.y }}>
           <MenuItem label="Save group as .znow" hint="Saves just this group as a project file (it opens on its own, or comes into another document with Import group)" onClick={() => onExportGroup(groupMenuId)} close={() => setRowMenu(null)} />
-          <MenuItem label="Import .znow as a group…" hint="Brings the items of a .znow file in as a new group on this page" onClick={onImportGroup} close={() => setRowMenu(null)} />
         </div>
       )}
       {RESIZE_EDGES.map((edge) => (
