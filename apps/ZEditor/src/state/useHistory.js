@@ -63,7 +63,7 @@ export function useHistory({ pages, setPages, selectedIdx, setSelectedIdx, selec
         existing.isBlank === p.isBlank && existing.pageNumber === p.pageNumber &&
         existing.docId === p.docId && existing.width === p.width && existing.height === p.height;
       if (reusable) return { ...p, dataUrl: existing.dataUrl };
-      const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation) : await renderPdfThumb(docFor(pdfDocsRef, p), p.pageNumber, p.rotation);
+      const dataUrl = p.isBlank ? makeBlankThumb(p.width, p.height, p.rotation, undefined, p.isCanvas) : await renderPdfThumb(docFor(pdfDocsRef, p), p.pageNumber, p.rotation);
       return { ...p, dataUrl };
     }));
     setPages(withThumbs);

@@ -104,7 +104,8 @@ export async function renderPageThumbWithItems(page, baseImage) {
 // Renders a blank white page straight to a data URL — no pdf.js
 // involved, since a blank page has no underlying PDF page to render.
 
-export function makeBlankThumb(width, height, rotation, scale) {
+// A no-paper page (`noPaper`) gets the dark workspace colour instead of white, since it has no sheet.
+export function makeBlankThumb(width, height, rotation, scale, noPaper) {
   const s = scale || THUMB_SCALE;
   const swapped = rotation % 180 !== 0;
   const w = Math.max(1, Math.round((swapped ? height : width) * s));
@@ -113,7 +114,7 @@ export function makeBlankThumb(width, height, rotation, scale) {
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = noPaper ? "#1f1c1a" : "#ffffff";
   ctx.fillRect(0, 0, w, h);
   return canvas.toDataURL();
 }

@@ -5,6 +5,8 @@ import { makeBlankThumb } from "../render/pageRender.js";
 import { importPdfFile } from "../io/pdfImport.js";
 import { announceDocumentOpened } from "./useZoom.js";
 
+const A4_FALLBACK = { width: 595.28, height: 841.89 }; // the size of a blank page added to a no-paper document
+
 const { useState, useRef } = React;
 
 export function useDocumentFiles({ doc, history, status, project, selection, dialogs }) {
@@ -51,15 +53,16 @@ export function useDocumentFiles({ doc, history, status, project, selection, dia
   // whatever was open (the caller has already confirmed that where it
   // matters). Orientation is baked into width/height rather than a
   // rotation, so page 1 isn't "rotated" from the user's point of view.
-  function handleCreateBlankDocument({ width, height, pageCount }) {
+  function handleCreateBlankDocument({ width, height, pageCount, canvas }) {
     dialogs.setNewDocOpen(false);
     setErrorMsg(null);
     pdfDocsRef.current = {};
-    pageSizeRef.current = { width, height }; // new blank pages added later match this
-    const thumb = makeBlankThumb(width, height, 0);
+    pageSizeRef.current = canvas ? A4_FALLBACK : { width, height }; // new blank pages added later match this (paper, even in a canvas document)
+    const thumb = makeBlankThumb(width, height, 0, undefined, canvas);
     const newPages = Array.from({ length: pageCount }, () => ({
       key: nextKeyRef.current++,
       isBlank: true,
+      ...(canvas ? { isCanvas: true } : {}), // no paper: the page grows to hold its items (state/useCanvasGrow.js)
       rotation: 0,
       width,
       height,
