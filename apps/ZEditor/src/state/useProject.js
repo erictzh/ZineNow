@@ -64,7 +64,10 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
       }
       // The dialog suggests the title box's name (a quick Save above keeps
       // writing to whatever file was picked, even if the title changed since).
-      const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"]);
+      // The download fallback (Android, Firefox, Safari: no Save dialog) labels the file as plain
+      // bytes, not JSON: Android's download manager adds ".json" to a JSON file whose name doesn't
+      // end in .json, which made "Zine.znow.json".
+      const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
       if (handle !== "cancelled") flashSaved();
       if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
     } catch (err) {
@@ -81,7 +84,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
     if (typeof window.showOpenFilePicker === "function") {
       try {
         const [handle] = await window.showOpenFilePicker({
-          types: [{ description: "ZEditor project file", accept: { "application/json": [".znow"] } }],
+          types: [{ description: "ZEditor project file", accept: { "application/json": [".znow", ".json"] } }], // .json: older Android saves (App.jsx)
         });
         handleLoadProjectFile(await handle.getFile(), handle);
         return;

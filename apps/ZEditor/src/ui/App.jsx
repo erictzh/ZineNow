@@ -239,7 +239,9 @@ export function App() {
       {/* The SVG button: no accept, so Android opens its Files browser (useAnnotationEdits.js). */}
       <input ref={edits.svgInputRef} type="file" style={{ display: "none" }} onChange={edits.handleSvgFileChosen} />
       <input ref={files.insertPdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleInsertPdfInputChange} />
-      <input ref={project.projectInputRef} type="file" accept=".znow" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
+      {/* .json too: projects saved on Android before 2026-11-22 came out as "Name.znow.json". On Android a
+          .znow file has no known type, hence application/octet-stream, so it isn't greyed out. */}
+      <input ref={project.projectInputRef} type="file" accept=".znow,.json,application/json,application/octet-stream" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
 
       <InsertPdfDialog
         file={files.pendingInsertFile}
