@@ -11,6 +11,8 @@ html, body { height: 100%; margin: 0; background: var(--ui-bg); color: var(--ui-
 .world[hidden] { display: none; }
 .world canvas { position: absolute; left: 0; top: 0; image-rendering: auto; }
 #mask { opacity: .55; pointer-events: none; }
+.ring { position: absolute; z-index: 2; box-sizing: border-box; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000, inset 0 0 0 1px #000; pointer-events: none; }
+.ring[hidden] { display: none; }
 #draft { pointer-events: none; }
 .panel { flex: 0 0 320px; overflow: auto; padding: 12px 14px 24px; border-left: 1px solid var(--ui-border); background: var(--ui-bg-card); }
 .panel section { padding: 6px 0 14px; border-bottom: 1px solid var(--ui-border); margin-bottom: 10px; }
