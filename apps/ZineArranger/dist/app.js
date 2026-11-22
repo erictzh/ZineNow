@@ -24,6 +24,29 @@
     return d.input === "touch" || d.zeInput === "touch";
   };
   var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
+  var held = /* @__PURE__ */ new WeakMap();
+  function holdEmpty(el) {
+    if (held.has(el)) return;
+    const own = Object.getOwnPropertyDescriptor(el, "value");
+    held.set(el, own || null);
+    if (!own || !own.get || !own.configurable) return;
+    Object.defineProperty(el, "value", {
+      configurable: true,
+      enumerable: own.enumerable,
+      get() {
+        return own.get.call(this);
+      },
+      set() {
+      }
+    });
+  }
+  function releaseEmpty(el) {
+    if (!held.has(el)) return;
+    const own = held.get(el);
+    held.delete(el);
+    if (own) Object.defineProperty(el, "value", own);
+    else delete el.value;
+  }
   function installNumberFields() {
     const lastGood = /* @__PURE__ */ new WeakMap();
     document.addEventListener("focusin", (e) => {
@@ -33,14 +56,20 @@
       const el = e.target;
       if (!isNumberBox(el)) return;
       if (el.value !== "") {
+        releaseEmpty(el);
         lastGood.set(el, el.value);
         return;
       }
       if (allowsEmpty(el) || document.activeElement !== el) return;
+      holdEmpty(el);
       e.stopImmediatePropagation();
     }, true);
     const restoreIfEmpty = (el) => {
-      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) return false;
+      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) {
+        releaseEmpty(el);
+        return false;
+      }
+      releaseEmpty(el);
       writeValue(el, lastGood.get(el));
       return true;
     };
@@ -5343,7 +5372,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 073db98";
+    subtitle.textContent += " · build 8c7cb39";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

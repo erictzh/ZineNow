@@ -16557,7 +16557,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2d5e6a7"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "89757f0"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -17232,6 +17232,29 @@
     return d.input === "touch" || d.zeInput === "touch";
   };
   var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
+  var held = /* @__PURE__ */ new WeakMap();
+  function holdEmpty(el) {
+    if (held.has(el)) return;
+    const own = Object.getOwnPropertyDescriptor(el, "value");
+    held.set(el, own || null);
+    if (!own || !own.get || !own.configurable) return;
+    Object.defineProperty(el, "value", {
+      configurable: true,
+      enumerable: own.enumerable,
+      get() {
+        return own.get.call(this);
+      },
+      set() {
+      }
+    });
+  }
+  function releaseEmpty(el) {
+    if (!held.has(el)) return;
+    const own = held.get(el);
+    held.delete(el);
+    if (own) Object.defineProperty(el, "value", own);
+    else delete el.value;
+  }
   function installNumberFields() {
     const lastGood = /* @__PURE__ */ new WeakMap();
     document.addEventListener("focusin", (e) => {
@@ -17241,14 +17264,20 @@
       const el = e.target;
       if (!isNumberBox(el)) return;
       if (el.value !== "") {
+        releaseEmpty(el);
         lastGood.set(el, el.value);
         return;
       }
       if (allowsEmpty(el) || document.activeElement !== el) return;
+      holdEmpty(el);
       e.stopImmediatePropagation();
     }, true);
     const restoreIfEmpty = (el) => {
-      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) return false;
+      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) {
+        releaseEmpty(el);
+        return false;
+      }
+      releaseEmpty(el);
       writeValue(el, lastGood.get(el));
       return true;
     };
