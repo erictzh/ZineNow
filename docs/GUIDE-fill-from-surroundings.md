@@ -5,8 +5,8 @@ Use this to take a thing out of a picture (a stray object, a mark, a bit of text
 ## The short version
 
 1. Press **M** (Marquee tool) and draw a box round the thing. Draw it a little **bigger** than the thing.
-2. In the right-hand panel, open **Fill from surroundings** and press **Remove & fill**.
-3. Not happy? Press **Try another** a few times. Still not right? Open **Fine-tune the fill** and change a number (see below).
+2. In the right-hand panel, switch to the **Remove & fill** tab (below Shape and Works on) and press **Remove & fill**.
+3. Not happy? Press **Try another** a few times. Still not right? Open **Fine-tune** (just below) and change a number (see below).
 4. **Ctrl+Z** undoes any of it.
 
 ## Step by step
@@ -18,14 +18,14 @@ Use this to take a thing out of a picture (a stray object, a mark, a bit of text
 - Draw the box so it covers the **whole** thing, including its shadow, glow or soft edge. A bit of the thing left outside the box gets copied into the fill. This is the most common reason for a bad result.
 - You can move, resize and turn the box afterwards by its handles.
 
-### 2. Choose what it works on ("Take it from")
+### 2. Choose what it works on ("Works on")
 
 - **All visible**: everything you can see on the page, as one picture. The fill becomes a **new layer called "Filled area"** placed on top, so your original is untouched underneath. Delete or hide that layer to get the original back.
 - **Selected layer**: only the layer you selected first (Move tool or Layers panel, then M). The layer's own picture is changed. (A text box or shape is turned into an image first so it can be changed.)
 
 ### 3. Fill it
 
-Under **Fill from surroundings**:
+The panel has two tabs, **Make layer** and **Remove & fill**, and shows only the one you picked. Under **Remove & fill**:
 
 - **Style**
   - **Pattern** (default): copies real texture from the rest of the picture. Best for grass, leaves, road, brick, walls, sky with grain, anything with texture. Works on areas up to about 130 px of the page. A bigger area switches to Smooth by itself and tells you so.
@@ -34,7 +34,7 @@ Under **Fill from surroundings**:
 - **Remove & fill**: does it. A big area takes a moment; the button says "Filling…".
 - **Try another**: undoes the fill you just made and fills again, copying different patches. Press it several times and keep the best one. (Only for the Pattern style.)
 
-### 4. Fine-tune the fill
+### 4. Fine-tune (the section under the Remove & fill button)
 
 Change a number with the **+** and **−** buttons (or type it), then press **Remove & fill** again. Press Ctrl+Z first if you want to replace the previous fill instead of filling over it. Sizes are in pixels of the picture.
 
@@ -48,7 +48,7 @@ Change a number with the **+** and **−** buttons (or type it), then press **Re
 
 ### 5. Fill and cut in one go (optional)
 
-If you want to remove something **and keep it** as its own layer: under **Make layer** choose **Layer via Cut**, and under **When cutting** choose **Fill it from the surroundings**, then press **Make layer** (Ctrl+Shift+J). You get the cut-out as a new layer on top, and the gap behind it is already filled.
+If you want to remove something **and keep it** as its own layer: in the **Make layer** tab choose **Cut to a new layer**, then under **What a cut leaves behind** choose **Filled from the surroundings** (it uses the style and numbers of the Remove & fill tab), then press **Make layer** (Ctrl+Shift+J). You get the cut-out as a new layer on top, and the gap behind it is already filled.
 
 ## Tips
 
@@ -74,7 +74,7 @@ If you want to remove something **and keep it** as its own layer: under **Make l
 
 ## Where things are
 
-- Panel: **Format** panel on the right, with the **Marquee** tool active.
+- Panel: **Format** panel on the right, with the **Marquee** tool active. It remembers which tab (Make layer or Remove & fill) you used last.
 - After a fill the Marquee panel stays open, so you can change a number and fill again straight away.
-- Shortcuts: **M** Marquee tool, **Ctrl+Z** undo, **Ctrl+J** Layer via Copy, **Ctrl+Shift+J** Layer via Cut.
+- Shortcuts: **M** Marquee tool, **Ctrl+Z** undo, **Ctrl+J** copy to a new layer, **Ctrl+Shift+J** cut to a new layer.
 - The settings are kept while the editor is open (not saved with the project).

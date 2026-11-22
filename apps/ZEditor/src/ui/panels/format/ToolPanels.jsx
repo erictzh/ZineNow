@@ -39,6 +39,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   // Cutting from everything visible can only cover the spot, so it always fills.
   const leaves = settings.cutLeaves === "surround" ? "surround" : (settings.cutLeaves === "fill" || !fromLayer) ? "fill" : "transparent";
   const needsLayer = fromLayer && !targetLayer;
+  const fillMode = settings.mode === "fill"; // which of the two jobs the panel shows: "layer" (Make layer) or "fill" (Remove & fill)
   const radio = (name, value, label, current, onPick, hint, disabled) => (
     <label className="ze-format-radio" key={value}>
       <input type="radio" name={name} checked={current === value} disabled={disabled} onChange={() => onPick(value)} />
@@ -53,7 +54,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
     <FormatPanelShell title="Marquee">
       <span className="ze-sec-intro">{polygon
         ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it."
-        : "Drag on the page to draw a box, then move, resize or turn it."} Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect.</span>
+        : "Drag on the page to draw a box, then move, resize or turn it."} Then choose what to do with what is inside it.</span>
       <PanelSection id="marquee.shape" title="Shape" defaultOpen>
         <select className="ze-format-select" aria-label="Marquee shape" value={polygon ? "polygon" : "rect"} onChange={(e) => change({ shape: e.target.value })}>
           <option value="rect">Rectangle</option>
@@ -66,25 +67,13 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
           </div>
         )}
       </PanelSection>
-      <PanelSection id="marquee.make" title="Make layer" defaultOpen>
-        <div className="ze-format-radio-group" role="radiogroup" aria-label="Make layer">
-          {radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is.")}
-          {radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")}
-        </div>
-        <div className="ze-format-row">
-          <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
-        </div>
-        <span className="ze-format-hint">
-          {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut."}
-        </span>
-      </PanelSection>
-      <PanelSection id="marquee.from" title="Take it from" defaultOpen>
-        <div className="ze-format-radio-group" role="radiogroup" aria-label="Take it from">
-          {radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top.")}
-          {radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")}
+      <PanelSection id="marquee.from" title="Works on" defaultOpen>
+        <div className="ze-format-radio-group" role="radiogroup" aria-label="Works on">
+          {radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), fillMode ? "Everything you can see on the page. The fill goes on top as a new image layer." : "Everything you can see on the page, as one picture. The new layer goes on top.")}
+          {radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), fillMode ? "Only that layer: its own picture is changed." : "Only that layer. The new layer goes just above it.")}
         </div>
         {fromLayer && <span className="ze-format-hint">{layerName ? "Layer: " + layerName : "No layer selected. Select one (Move tool or Layers panel), then press M."}</span>}
-        {!fromLayer && (
+        {!fromLayer && !fillMode && (
           <label className="ze-format-check">
             <input type="checkbox" checked={settings.includePaper} onChange={(e) => change({ includePaper: e.target.checked })} />
             <span>Include the paper</span>
@@ -92,47 +81,79 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
           </label>
         )}
       </PanelSection>
-      <PanelSection id="marquee.cut" title="When cutting" defaultOpen>
-        <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
-          {radio("marquee-leaves", "transparent", "Leave it transparent", leaves, (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
-          {radio("marquee-leaves", "fill", "Fill it with a colour", leaves, (v) => change({ cutLeaves: v }))}
-          {radio("marquee-leaves", "surround", "Fill it from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Made from the colours and pattern round it (see Fill from surroundings below).")}
-        </div>
-        <div className="ze-format-row">
-          <span className="ze-format-label">Fill colour</span>
-          <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff"} onChange={(color) => change({ fillColor: color })} />
-        </div>
-        <span className="ze-format-hint">A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.</span>
-      </PanelSection>
-      <PanelSection id="marquee.fill" title="Fill from surroundings" defaultOpen>
-        <span className="ze-format-hint">Replaces what is inside the marquee with a fill made from the pixels round it, and makes no new layer. From a selected layer it changes that layer's picture; from All visible it puts the fill on top of the page as a new image.</span>
-        <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
-          <option value="smooth">Smooth: a blend of the edge colours</option>
-          <option value="pattern">Pattern: copies texture from the rest of the picture</option>
-          <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
-        </select>
-        <div className="ze-format-row">
-          <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
-          <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
-        </div>
-        <span className="ze-format-hint">{!ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern suits grass, foliage, brick, road and other texture (areas up to about 350 px of the picture; it takes a moment); Smooth suits plain paper and soft backgrounds; Detailed suits thin lines and small marks."}</span>
-      </PanelSection>
-      <PanelSection id="marquee.fillTune" title="Fine-tune the fill" defaultOpen>
-        <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to redo it). All sizes are in pixels of the picture.</span>
-        {[
-          { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
-          { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
-          { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
-          { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
-          { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100) },
-        ].filter((f) => f.show).map((f) => (
-          <div className="ze-format-field" key={f.key}>
-            <span className="ze-format-label">{f.label}</span>
-            <StepperNumberInput min={f.min} max={f.max} step={f.step} label={f.label} value={settings[f.key] === undefined ? MARQUEE_DEFAULTS[f.key] : settings[f.key]} onChange={(v) => change({ [f.key]: v })} />
-            <span className="ze-format-hint">{f.hint}</span>
-          </div>
-        ))}
-      </PanelSection>
+
+      <div className="ze-format-row ze-marquee-modes" role="tablist" aria-label="What to do with the area">
+        <button type="button" role="tab" aria-selected={!fillMode} className={"ze-format-toggle ze-format-toggle-wide" + (!fillMode ? " active" : "")} onClick={() => change({ mode: "layer" })}>Make layer</button>
+        <button type="button" role="tab" aria-selected={fillMode} className={"ze-format-toggle ze-format-toggle-wide" + (fillMode ? " active" : "")} onClick={() => change({ mode: "fill" })}>Remove &amp; fill</button>
+      </div>
+
+      {!fillMode && (
+        <React.Fragment>
+          <PanelSection id="marquee.make" title="Make a layer" defaultOpen>
+            <span className="ze-format-hint">Turns what is inside the area into a new image layer, so you can give just that part a filter or effect.</span>
+            <div className="ze-format-radio-group" role="radiogroup" aria-label="Make layer">
+              {radio("marquee-action", "copy", "Copy to a new layer", settings.action, (v) => change({ action: v }), "The original stays as it is. (Ctrl+J)")}
+              {radio("marquee-action", "cut", "Cut to a new layer", settings.action, (v) => change({ action: v }), "The area is taken out of the original. (Ctrl+Shift+J)")}
+            </div>
+            <div className="ze-format-row">
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
+            </div>
+            <span className="ze-format-hint">
+              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "The new layer is selected and the Move tool takes over."}
+            </span>
+          </PanelSection>
+          {settings.action === "cut" && (
+            <PanelSection id="marquee.cut" title="What a cut leaves behind" defaultOpen>
+              <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
+                {radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
+                {radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v }))}
+                {radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers of the Remove & fill tab.")}
+              </div>
+              {leaves === "fill" && (
+                <div className="ze-format-row">
+                  <span className="ze-format-label">Colour</span>
+                  <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff"} onChange={(color) => change({ fillColor: color })} />
+                </div>
+              )}
+              <span className="ze-format-hint">A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.</span>
+            </PanelSection>
+          )}
+        </React.Fragment>
+      )}
+
+      {fillMode && (
+        <React.Fragment>
+          <PanelSection id="marquee.fill" title="Remove & fill" defaultOpen>
+            <span className="ze-format-hint">Replaces what is inside the area with a fill made from the pixels around it. No new layer is made.</span>
+            <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
+              <option value="pattern">Pattern: copies texture from the rest of the picture</option>
+              <option value="smooth">Smooth: a blend of the edge colours</option>
+              <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
+            </select>
+            <div className="ze-format-row">
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
+            </div>
+            <span className="ze-format-hint">{!ready ? "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks."}</span>
+          </PanelSection>
+          <PanelSection id="marquee.fillTune.v2" title="Fine-tune">
+            <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture.</span>
+            {[
+              { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+              { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+              { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
+              { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
+              { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100) },
+            ].filter((f) => f.show).map((f) => (
+              <div className="ze-format-field" key={f.key}>
+                <span className="ze-format-label">{f.label}</span>
+                <StepperNumberInput min={f.min} max={f.max} step={f.step} label={f.label} value={settings[f.key] === undefined ? MARQUEE_DEFAULTS[f.key] : settings[f.key]} onChange={(v) => change({ [f.key]: v })} />
+                <span className="ze-format-hint">{f.hint}</span>
+              </div>
+            ))}
+          </PanelSection>
+        </React.Fragment>
+      )}
     </FormatPanelShell>
   );
 }
