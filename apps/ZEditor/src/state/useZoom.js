@@ -17,6 +17,11 @@ const ZOOM_STEPS = [10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200
 // spreading zooms and moving both scrolls, together.
 export const PINCH_EVENT = "ze-pinch";
 
+// Fired on window when a document is created or opened (a PDF, a new blank document, a saved project): the view
+// starts fresh, the page in the middle at 100%. Not for Insert PDF or new pages in a document being worked on.
+export const DOCUMENT_OPENED_EVENT = "ze-document-opened";
+export const announceDocumentOpened = () => window.dispatchEvent(new Event(DOCUMENT_OPENED_EVENT));
+
 // Scrolls the pane so the page is in the middle of it, or, for a page taller than the view, its
 // top a little below the top edge. Used when a page opens: the pasteboard round the page
 // (styles/layout.css) is half a view wide, so without this the view would start in its corner.
@@ -42,6 +47,8 @@ export function useZoom() {
   const floatRef = useRef(zoomPercent); // the wheel's unrounded zoom, so a touchpad pinch's tiny steps add up
   if (Math.round(floatRef.current) !== zoomPercent) floatRef.current = zoomPercent; // changed some other way
   const requestedRef = useRef(null); // a zoom asked for by the wheel and not drawn yet
+  // Bumped when a document is created or opened: tells ComposeCanvas to centre the page again, after the zoom is back at 100%.
+  const [viewKey, setViewKey] = useState(0);
 
   function artboardElement() {
     return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
@@ -151,11 +158,25 @@ export function useZoom() {
     return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, []);
 
+  // A document was created or opened: 100%, no anchor to keep, and the page centred (ComposeCanvas, on the new viewKey).
+  useEffect(() => {
+    function onDocumentOpened() {
+      leaveZoomBox();
+      zoomAnchorRef.current = null;
+      requestedRef.current = null;
+      floatRef.current = ZOOM_PERCENT.initial;
+      setZoomPercent(ZOOM_PERCENT.initial);
+      setViewKey((k) => k + 1);
+    }
+    window.addEventListener(DOCUMENT_OPENED_EVENT, onDocumentOpened);
+    return () => window.removeEventListener(DOCUMENT_OPENED_EVENT, onDocumentOpened);
+  }, []);
+
   // Ctrl 0: back to 100%.
   function zoomReset() {
     leaveZoomBox();
     handleZoomChange(ZOOM_PERCENT.initial);
   }
 
-  return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
+  return { zoomPercent, viewKey, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
 }

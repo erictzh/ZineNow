@@ -8632,15 +8632,161 @@
     return { docId, entry: { doc, bytes }, pages, firstPageSize: { width: vp1.width, height: vp1.height } };
   }
 
+  // shared/js/pinchGate.js
+  var PINCH_THRESHOLD = 0.3;
+  function createPinchGate(threshold = PINCH_THRESHOLD) {
+    let base = null;
+    return function gate(rawScale) {
+      if (base === null) {
+        if (!(rawScale > 0) || Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)) return 1;
+        base = rawScale;
+      }
+      return rawScale / base;
+    };
+  }
+
+  // apps/ZEditor/src/state/useZoom.js
+  var { useState: useState2, useRef: useRef2, useLayoutEffect, useEffect: useEffect2 } = React;
+  var ZOOM_STEPS = [10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500, 600];
+  var PINCH_EVENT = "ze-pinch";
+  var DOCUMENT_OPENED_EVENT = "ze-document-opened";
+  var announceDocumentOpened = () => window.dispatchEvent(new Event(DOCUMENT_OPENED_EVENT));
+  var TOP_GAP = 40;
+  function centerArtboard(board) {
+    const pane = board && board.closest(".preview-pane");
+    if (!pane) return;
+    const w = board.offsetWidth, h = board.offsetHeight;
+    pane.scrollLeft = board.offsetLeft + w / 2 - pane.clientWidth / 2;
+    pane.scrollTop = h + 2 * TOP_GAP <= pane.clientHeight ? board.offsetTop + h / 2 - pane.clientHeight / 2 : board.offsetTop - TOP_GAP;
+  }
+  function useZoom() {
+    const [zoomPercent, setZoomPercent] = useState2(ZOOM_PERCENT.initial);
+    const previewPaneRef = useRef2(null);
+    const zoomAnchorRef = useRef2(null);
+    const zoomRef = useRef2(zoomPercent);
+    zoomRef.current = zoomPercent;
+    const floatRef = useRef2(zoomPercent);
+    if (Math.round(floatRef.current) !== zoomPercent) floatRef.current = zoomPercent;
+    const requestedRef = useRef2(null);
+    const [viewKey, setViewKey] = useState2(0);
+    function artboardElement() {
+      return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
+    }
+    function pagePointAt(fx, fy) {
+      const pane = previewPaneRef.current, board = artboardElement();
+      return { x: (pane.scrollLeft + fx - board.offsetLeft) / zoomRef.current, y: (pane.scrollTop + fy - board.offsetTop) / zoomRef.current };
+    }
+    function scrollPointTo(point, fx, fy, percent) {
+      const pane = previewPaneRef.current, board = artboardElement();
+      pane.scrollLeft = point.x * percent + board.offsetLeft - fx;
+      pane.scrollTop = point.y * percent + board.offsetTop - fy;
+    }
+    function handleZoomChange(percent) {
+      const pane = previewPaneRef.current;
+      if (artboardElement()) {
+        const fx = pane.clientWidth / 2, fy = pane.clientHeight / 2;
+        zoomAnchorRef.current = { ...pagePointAt(fx, fy), fx, fy };
+      }
+      setZoomPercent(percent);
+    }
+    function leaveZoomBox() {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && active.closest(".ze-zoom-control")) active.blur();
+    }
+    function zoomAt(raw, fx, fy) {
+      const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
+      floatRef.current = clamped;
+      const percent = Math.round(clamped);
+      if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
+      leaveZoomBox();
+      const waiting = zoomAnchorRef.current;
+      zoomAnchorRef.current = { ...waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy), fx, fy };
+      requestedRef.current = percent;
+      setZoomPercent(percent);
+    }
+    function zoomStep(direction) {
+      leaveZoomBox();
+      const current = zoomRef.current;
+      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
+      handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
+    }
+    useLayoutEffect(() => {
+      requestedRef.current = null;
+      const anchor = zoomAnchorRef.current;
+      if (!anchor || !artboardElement()) return;
+      zoomAnchorRef.current = null;
+      scrollPointTo(anchor, anchor.fx, anchor.fy, zoomPercent);
+    }, [zoomPercent]);
+    useEffect2(() => {
+      let pinch = null;
+      function onPinch(e) {
+        const pane = previewPaneRef.current;
+        const { phase, scale, x, y } = e.detail || {};
+        if (!pane || !artboardElement()) return;
+        const r = pane.getBoundingClientRect();
+        const fx = x - r.left, fy = y - r.top;
+        if (phase === "start") {
+          pinch = { point: pagePointAt(fx, fy), startPercent: zoomRef.current, gate: createPinchGate() };
+          return;
+        }
+        if (!pinch) return;
+        if (phase === "end") {
+          pinch = null;
+          return;
+        }
+        const percent = Math.round(Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, pinch.startPercent * pinch.gate(scale))));
+        if (percent === zoomRef.current) {
+          scrollPointTo(pinch.point, fx, fy, percent);
+        } else {
+          zoomAnchorRef.current = { ...pinch.point, fx, fy };
+          setZoomPercent(percent);
+        }
+      }
+      window.addEventListener(PINCH_EVENT, onPinch);
+      return () => window.removeEventListener(PINCH_EVENT, onPinch);
+    }, []);
+    useEffect2(() => {
+      function onWheel(e) {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const pane = previewPaneRef.current;
+        if (!pane || !(e.target instanceof Element) || !e.target.closest(".ze-ruler-frame") || !artboardElement()) return;
+        e.preventDefault();
+        const r = pane.getBoundingClientRect();
+        const fx = Math.min(r.width, Math.max(0, e.clientX - r.left)), fy = Math.min(r.height, Math.max(0, e.clientY - r.top));
+        const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
+        zoomAt(floatRef.current * Math.exp(-Math.max(-25, Math.min(25, pixels)) * 8e-3), fx, fy);
+      }
+      window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+      return () => window.removeEventListener("wheel", onWheel, { capture: true });
+    }, []);
+    useEffect2(() => {
+      function onDocumentOpened() {
+        leaveZoomBox();
+        zoomAnchorRef.current = null;
+        requestedRef.current = null;
+        floatRef.current = ZOOM_PERCENT.initial;
+        setZoomPercent(ZOOM_PERCENT.initial);
+        setViewKey((k) => k + 1);
+      }
+      window.addEventListener(DOCUMENT_OPENED_EVENT, onDocumentOpened);
+      return () => window.removeEventListener(DOCUMENT_OPENED_EVENT, onDocumentOpened);
+    }, []);
+    function zoomReset() {
+      leaveZoomBox();
+      handleZoomChange(ZOOM_PERCENT.initial);
+    }
+    return { zoomPercent, viewKey, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
+  }
+
   // apps/ZEditor/src/state/useDocumentFiles.js
-  var { useState: useState2, useRef: useRef2 } = React;
+  var { useState: useState3, useRef: useRef3 } = React;
   function useDocumentFiles({ doc, history, status, project, selection, dialogs }) {
     const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, pageSizeRef, ids } = doc;
     const { setLoading, setErrorMsg } = status;
-    const fileInputRef = useRef2(null);
-    const insertPdfInputRef = useRef2(null);
-    const [pendingInsertFile, setPendingInsertFile] = useState2(null);
-    const [insertAfterPage, setInsertAfterPage] = useState2(0);
+    const fileInputRef = useRef3(null);
+    const insertPdfInputRef = useRef3(null);
+    const [pendingInsertFile, setPendingInsertFile] = useState3(null);
+    const [insertAfterPage, setInsertAfterPage] = useState3(0);
     async function handleFile(file) {
       setErrorMsg(null);
       setLoading(true);
@@ -8653,6 +8799,7 @@
         setSelectedPageIndices([]);
         history.clearHistory();
         project.startNewDocument(stripExtension(file.name) + " - " + titleStamp());
+        announceDocumentOpened();
       } catch (err) {
         setErrorMsg("Couldn't load that PDF — " + (err && err.message ? err.message : "unknown error"));
       } finally {
@@ -8689,6 +8836,7 @@
       selection.setSelectedAnnIds([]);
       history.clearHistory();
       project.startNewDocument("New Zine - " + titleStamp());
+      announceDocumentOpened();
     }
     function handleNewDocumentOpenPdf() {
       dialogs.setNewDocOpen(false);
@@ -8748,18 +8896,18 @@
   }
 
   // apps/ZEditor/src/state/useDocumentState.js
-  var { useState: useState3, useRef: useRef3, useMemo } = React;
+  var { useState: useState4, useRef: useRef4, useMemo } = React;
   function useDocumentState() {
-    const [pages, setPages] = useState3([]);
-    const [selectedIdx, setSelectedIdx] = useState3(null);
-    const [selectedPageIndices, setSelectedPageIndices] = useState3([]);
+    const [pages, setPages] = useState4([]);
+    const [selectedIdx, setSelectedIdx] = useState4(null);
+    const [selectedPageIndices, setSelectedPageIndices] = useState4([]);
     const selectedPage = selectedIdx !== null ? pages[selectedIdx] : null;
     const pageFilter = useMemo(() => selectedPage && selectedPage.filter || DEFAULT_PAGE_FILTER, [selectedPage]);
-    const pdfDocsRef = useRef3({});
-    const nextKeyRef = useRef3(1);
-    const nextAnnIdRef = useRef3(1);
-    const nextDocIdRef = useRef3(1);
-    const pageSizeRef = useRef3(null);
+    const pdfDocsRef = useRef4({});
+    const nextKeyRef = useRef4(1);
+    const nextAnnIdRef = useRef4(1);
+    const nextDocIdRef = useRef4(1);
+    const pageSizeRef = useRef4(null);
     const ids = {
       pageKey: () => nextKeyRef.current++,
       docId: () => "doc" + nextDocIdRef.current++,
@@ -9387,12 +9535,12 @@
   }
 
   // apps/ZEditor/src/state/useExport.js
-  var { useState: useState4 } = React;
+  var { useState: useState5 } = React;
   function useExport({ doc, status, view, project, selection }) {
     const { pages, pdfDocsRef } = doc;
     const { setErrorMsg, setNotice } = status;
-    const [exporting, setExporting] = useState4(false);
-    const [sendingToArranger, setSendingToArranger] = useState4(false);
+    const [exporting, setExporting] = useState5(false);
+    const [sendingToArranger, setSendingToArranger] = useState5(false);
     const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice);
     async function handleExportPdf() {
       if (pages.length === 0 || exporting) return;
@@ -9519,14 +9667,14 @@
   var MAX_UNDO_HISTORY = 50;
 
   // apps/ZEditor/src/state/useHistory.js
-  var { useState: useState5, useRef: useRef4 } = React;
+  var { useState: useState6, useRef: useRef5 } = React;
   function stripDataUrls(pagesArr) {
     return pagesArr.map(({ dataUrl, ...rest }) => rest);
   }
   function useHistory({ pages, setPages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices, pdfDocsRef }) {
-    const [undoStack, setUndoStack] = useState5([]);
-    const [redoStack, setRedoStack] = useState5([]);
-    const lastCommitRef = useRef4({ time: 0, key: null });
+    const [undoStack, setUndoStack] = useState6([]);
+    const [redoStack, setRedoStack] = useState6([]);
+    const lastCommitRef = useRef5({ time: 0, key: null });
     function recordUndoCheckpoint(coalesceKey) {
       const now = Date.now();
       if (coalesceKey && lastCommitRef.current.key === coalesceKey && now - lastCommitRef.current.time < UNDO_COALESCE_MS) {
@@ -9577,12 +9725,12 @@
   }
 
   // apps/ZEditor/src/state/useKeyboardShortcuts.js
-  var { useRef: useRef5, useEffect: useEffect2 } = React;
+  var { useRef: useRef6, useEffect: useEffect3 } = React;
   function useKeyboardShortcuts(app) {
-    const appRef = useRef5(app);
+    const appRef = useRef6(app);
     appRef.current = app;
-    const clipboardRef = useRef5(null);
-    useEffect2(() => {
+    const clipboardRef = useRef6(null);
+    useEffect3(() => {
       function handleKeyDown(e) {
         const { doc, history, selection, edits, pageOps, project, marquee, modalOpen, zoom } = appRef.current;
         const { pages, selectedIdx, selectedPageIndices, setSelectedIdx, setSelectedPageIndices, nextAnnIdRef } = doc;
@@ -10056,13 +10204,13 @@
   }
 
   // apps/ZEditor/src/state/useImageTrace.js
-  var { useState: useState6, useRef: useRef6 } = React;
+  var { useState: useState7, useRef: useRef7 } = React;
   var RETRACE_DELAY_MS = 120;
   function useImageTrace({ doc, selection, edits }) {
-    const [busyId, setBusyId] = useState6(null);
-    const [error, setError] = useState6(null);
-    const timerRef = useRef6(null);
-    const tokenRef = useRef6(0);
+    const [busyId, setBusyId] = useState7(null);
+    const [error, setError] = useState7(null);
+    const timerRef = useRef7(null);
+    const tokenRef = useRef7(0);
     async function trace(image, preset) {
       const pageIdx = doc.selectedIdx;
       if (pageIdx === null || !image) return;
@@ -10375,18 +10523,18 @@
   }
 
   // apps/ZEditor/src/state/useMagicErase.js
-  var { useState: useState7, useRef: useRef7, useEffect: useEffect3 } = React;
+  var { useState: useState8, useRef: useRef8, useEffect: useEffect4 } = React;
   var RECOMPUTE_DELAY_MS = 60;
   var NO_EDGE_REFINING = { feather: 0, edgeShift: 0, specks: 0, defringe: 0 };
   function useMagicErase({ doc, selection, edits, toolDefaults }) {
-    const [active, setActive] = useState7(false);
-    const [preview, setPreview] = useState7(null);
-    const [notice, setNotice] = useState7(null);
-    const noticeTimerRef = useRef7(null);
-    const sessionRef = useRef7(null);
-    const loadTokenRef = useRef7(0);
+    const [active, setActive] = useState8(false);
+    const [preview, setPreview] = useState8(null);
+    const [notice, setNotice] = useState8(null);
+    const noticeTimerRef = useRef8(null);
+    const sessionRef = useRef8(null);
+    const loadTokenRef = useRef8(0);
     const settings = toolDefaults.magicEraser;
-    const latest = useRef7(null);
+    const latest = useRef8(null);
     latest.current = { settings, edits, doc };
     function compute(s) {
       const st = { ...latest.current.settings, clickMode: s.mode };
@@ -10528,7 +10676,7 @@
       clearTimeout(noticeTimerRef.current);
       noticeTimerRef.current = setTimeout(() => setNotice(null), 6e3);
     }
-    useEffect3(() => {
+    useEffect4(() => {
       const s = sessionRef.current;
       if (!s) return;
       if (selection.tool !== "eraser" || toolDefaults.eraserMode !== "magic" || doc.selectedIdx !== s.pageIdx || settings.clickMode !== s.mode) {
@@ -10537,7 +10685,7 @@
       }
       schedule(s);
     }, [selection.tool, toolDefaults.eraserMode, doc.selectedIdx, settings]);
-    useEffect3(() => {
+    useEffect4(() => {
       function handleKeyDown(e) {
         if (!sessionRef.current) return;
         const target = e.target || {};
@@ -10835,14 +10983,14 @@
   }
 
   // apps/ZEditor/src/state/useMarquee.js
-  var { useState: useState8, useRef: useRef8, useEffect: useEffect4 } = React;
+  var { useState: useState9, useRef: useRef9, useEffect: useEffect5 } = React;
   function useMarquee({ doc, selection, edits, toolDefaults, status }) {
-    const [region, setRegion] = useState8(null);
-    const [busy, setBusy] = useState8(false);
-    const busyRef = useRef8(false);
-    const latest = useRef8(null);
+    const [region, setRegion] = useState9(null);
+    const [busy, setBusy] = useState9(false);
+    const busyRef = useRef9(false);
+    const latest = useRef9(null);
     latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee };
-    useEffect4(() => {
+    useEffect5(() => {
       setRegion(null);
     }, [doc.selectedIdx, toolDefaults.marquee.shape]);
     const polygonOpen = selection.tool === "marquee" && Boolean(region) && region.kind === "polygon" && !region.closed;
@@ -10884,7 +11032,7 @@
         setBusy(false);
       }
     }
-    useEffect4(() => {
+    useEffect5(() => {
       function handleKeyDown(e) {
         const { selection: sel, region: m } = latest.current;
         if (sel.tool !== "marquee" || !m) return;
@@ -10910,10 +11058,10 @@
   }
 
   // apps/ZEditor/src/state/useOnionGhost.js
-  var { useState: useState9, useEffect: useEffect5 } = React;
+  var { useState: useState10, useEffect: useEffect6 } = React;
   function useOnionGhost({ onionSkinOn, pages, selectedIdx, pdfDocsRef }) {
-    const [onionGhostSrc, setOnionGhostSrc] = useState9(null);
-    useEffect5(() => {
+    const [onionGhostSrc, setOnionGhostSrc] = useState10(null);
+    useEffect6(() => {
       if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) {
         setOnionGhostSrc(null);
         return;
@@ -11168,16 +11316,16 @@
   }
 
   // apps/ZEditor/src/state/useProject.js
-  var { useEffect: useEffect6, useState: useState10, useRef: useRef9 } = React;
+  var { useEffect: useEffect7, useState: useState11, useRef: useRef10 } = React;
   function useProject({ doc, history, status, view, toolDefaults }) {
     const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
     const { setLoading, setErrorMsg } = status;
-    const projectInputRef = useRef9(null);
-    const [savingProject, setSavingProject] = useState10(false);
-    const [projectFile, setProjectFile] = useState10(null);
-    const [docTitle, setDocTitle] = useState10("");
-    const [justSaved, setJustSaved] = useState10(false);
-    const justSavedTimerRef = useRef9(null);
+    const projectInputRef = useRef10(null);
+    const [savingProject, setSavingProject] = useState11(false);
+    const [projectFile, setProjectFile] = useState11(null);
+    const [docTitle, setDocTitle] = useState11("");
+    const [justSaved, setJustSaved] = useState11(false);
+    const justSavedTimerRef = useRef10(null);
     function flashSaved() {
       setJustSaved(true);
       clearTimeout(justSavedTimerRef.current);
@@ -11236,8 +11384,8 @@
       e.target.value = "";
       if (file) handleLoadProjectFile(file);
     }
-    const [reloading, setReloading] = useState10(false);
-    const [startupChecked, setStartupChecked] = useState10(false);
+    const [reloading, setReloading] = useState11(false);
+    const [startupChecked, setStartupChecked] = useState11(false);
     async function reloadKeepingWork() {
       if (reloading) return;
       setReloading(true);
@@ -11259,12 +11407,12 @@
         setErrorMsg("Couldn't keep the work for the reload, so the page wasn't reloaded — " + (err && err.message ? err.message : "unknown error"));
       }
     }
-    const hasPagesRef = useRef9(false);
+    const hasPagesRef = useRef10(false);
     hasPagesRef.current = pages.length > 0;
-    useEffect6(() => {
+    useEffect7(() => {
       warnBeforeLeaving(() => hasPagesRef.current);
     }, []);
-    useEffect6(() => {
+    useEffect7(() => {
       let cancelled = false;
       takeReloadSnapshot().then(async (snapshot) => {
         if (cancelled) return;
@@ -11296,6 +11444,7 @@
         setProjectFile(handle ? { handle, name: handle.name } : null);
         setDocTitle(loaded.title || stripExtension(file.name));
         view.applySavedSettings(loaded.settings);
+        announceDocumentOpened();
       } catch (err) {
         setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
       } finally {
@@ -11321,14 +11470,14 @@
   }
 
   // apps/ZEditor/src/state/useSelection.js
-  var { useState: useState11, useEffect: useEffect7, useRef: useRef10 } = React;
+  var { useState: useState12, useEffect: useEffect8, useRef: useRef11 } = React;
   function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageIndices, setSelectedPageIndices }) {
-    const [tool, setTool] = useState11("select");
-    const [selectedAnnId, setSelectedAnnId] = useState11(null);
-    const [selectedAnnIds, setSelectedAnnIds] = useState11([]);
-    const [editingAnnId, setEditingAnnId] = useState11(null);
-    const [croppingAnnId, setCroppingAnnId] = useState11(null);
-    const panelPickRef = useRef10(null);
+    const [tool, setTool] = useState12("select");
+    const [selectedAnnId, setSelectedAnnId] = useState12(null);
+    const [selectedAnnIds, setSelectedAnnIds] = useState12([]);
+    const [editingAnnId, setEditingAnnId] = useState12(null);
+    const [croppingAnnId, setCroppingAnnId] = useState12(null);
+    const panelPickRef = useRef11(null);
     function selectTool(t) {
       setTool(t);
       setEditingAnnId(null);
@@ -11404,10 +11553,10 @@
     function handleToggleCrop(id) {
       setCroppingAnnId((cur) => cur === id ? null : id);
     }
-    useEffect7(() => {
+    useEffect8(() => {
       setSelectedAnnId(null);
     }, [selectedIdx]);
-    useEffect7(() => {
+    useEffect8(() => {
       if (croppingAnnId !== null && croppingAnnId !== selectedAnnId) setCroppingAnnId(null);
     }, [selectedAnnId]);
     return {
@@ -11435,11 +11584,11 @@
   }
 
   // apps/ZEditor/src/state/useStatus.js
-  var { useState: useState12 } = React;
+  var { useState: useState13 } = React;
   function useStatus() {
-    const [loading, setLoading] = useState12(false);
-    const [errorMsg, setErrorMsg] = useState12(null);
-    const [notice, setNotice] = useState12(null);
+    const [loading, setLoading] = useState13(false);
+    const [errorMsg, setErrorMsg] = useState13(null);
+    const [notice, setNotice] = useState13(null);
     return { loading, setLoading, errorMsg, setErrorMsg, notice, setNotice };
   }
 
@@ -11469,11 +11618,11 @@
   var SOFT_ERASER_DABS_PER_RADIUS = 4;
 
   // apps/ZEditor/src/state/useToolDefaults.js
-  var { useState: useState13, useEffect: useEffect8 } = React;
+  var { useState: useState14, useEffect: useEffect9 } = React;
   function useToolDefaults() {
-    const [fontOptions, setFontOptions] = useState13(DEFAULT_FONT_OPTIONS);
-    const [textStyles, setTextStyles] = useState13(readStoredTextStyles);
-    useEffect8(() => {
+    const [fontOptions, setFontOptions] = useState14(DEFAULT_FONT_OPTIONS);
+    const [textStyles, setTextStyles] = useState14(readStoredTextStyles);
+    useEffect9(() => {
       try {
         localStorage.setItem(TEXT_STYLES_STORAGE_KEY, JSON.stringify(textStyles));
       } catch (err) {
@@ -11498,24 +11647,24 @@
       if (!families.length) return;
       setFontOptions((prev) => Array.from(/* @__PURE__ */ new Set([...prev, ...families])).sort((a, b) => a.localeCompare(b)));
     }
-    const [penColor, setPenColor] = useState13(PEN_DEFAULTS.color);
-    const [penWidth, setPenWidth] = useState13(PEN_DEFAULTS.width);
-    const [penTaper, setPenTaper] = useState13(0);
-    const [eraserMode, setEraserMode] = useState13("soft");
-    const [softEraser, setSoftEraser] = useState13(SOFT_ERASER_DEFAULTS);
-    const [magicEraser, setMagicEraser] = useState13(MAGIC_ERASER_DEFAULTS);
-    const [marquee, setMarquee] = useState13(MARQUEE_DEFAULTS);
-    const [highlighterColor, setHighlighterColor] = useState13(HIGHLIGHTER_DEFAULTS.color);
-    const [highlighterWidth, setHighlighterWidth] = useState13(HIGHLIGHTER_DEFAULTS.width);
-    const [highlighterTaper, setHighlighterTaper] = useState13(0);
-    const [textFontFamily, setTextFontFamily] = useState13(DEFAULT_FONT_OPTIONS[0]);
-    const [textFontSize, setTextFontSize] = useState13(13.2);
-    const [textBold, setTextBold] = useState13(false);
-    const [textItalic, setTextItalic] = useState13(false);
-    const [textUnderline, setTextUnderline] = useState13(false);
-    const [textColor, setTextColor] = useState13("#1a1a1a");
-    const [textAlign, setTextAlign] = useState13("left");
-    const [rectDefaults, setRectDefaults] = useState13(() => controlValues({}, RECT_CONTROLS));
+    const [penColor, setPenColor] = useState14(PEN_DEFAULTS.color);
+    const [penWidth, setPenWidth] = useState14(PEN_DEFAULTS.width);
+    const [penTaper, setPenTaper] = useState14(0);
+    const [eraserMode, setEraserMode] = useState14("soft");
+    const [softEraser, setSoftEraser] = useState14(SOFT_ERASER_DEFAULTS);
+    const [magicEraser, setMagicEraser] = useState14(MAGIC_ERASER_DEFAULTS);
+    const [marquee, setMarquee] = useState14(MARQUEE_DEFAULTS);
+    const [highlighterColor, setHighlighterColor] = useState14(HIGHLIGHTER_DEFAULTS.color);
+    const [highlighterWidth, setHighlighterWidth] = useState14(HIGHLIGHTER_DEFAULTS.width);
+    const [highlighterTaper, setHighlighterTaper] = useState14(0);
+    const [textFontFamily, setTextFontFamily] = useState14(DEFAULT_FONT_OPTIONS[0]);
+    const [textFontSize, setTextFontSize] = useState14(13.2);
+    const [textBold, setTextBold] = useState14(false);
+    const [textItalic, setTextItalic] = useState14(false);
+    const [textUnderline, setTextUnderline] = useState14(false);
+    const [textColor, setTextColor] = useState14("#1a1a1a");
+    const [textAlign, setTextAlign] = useState14("left");
+    const [rectDefaults, setRectDefaults] = useState14(() => controlValues({}, RECT_CONTROLS));
     return {
       fontOptions,
       setFontOptions,
@@ -11664,23 +11813,23 @@
   }
 
   // apps/ZEditor/src/state/useViewSettings.js
-  var { useState: useState14 } = React;
+  var { useState: useState15 } = React;
   function useViewSettings() {
-    const [guidesOn, setGuidesOn] = useState14(false);
-    const [centerGuideOn, setCenterGuideOn] = useState14(false);
-    const [guideFormat, setGuideFormat] = useState14("match");
-    const [guideMarginIn, setGuideMarginIn] = useState14(DEFAULT_GUIDE_MARGIN_IN);
-    const [guideBleedIn, setGuideBleedIn] = useState14(DEFAULT_GUIDE_BLEED_IN);
-    const [pageNumbers, setPageNumbers] = useState14(DEFAULT_PAGE_NUMBERS);
-    const [onionSkinOn, setOnionSkinOn] = useState14(false);
-    const [onionSkinOpacity, setOnionSkinOpacity] = useState14(0.3);
-    const [layersOpen, setLayersOpen] = useState14(true);
-    const [rulersOn, setRulersOn] = useState14(true);
-    const [rulerUnit, setRulerUnit] = useState14(DEFAULT_RULER_UNIT);
-    const [rulerGuides, setRulerGuides] = useState14([]);
-    const [snapToGuidesOn, setSnapToGuidesOn] = useState14(true);
-    const [layersPosition, setLayersPosition] = useState14(null);
-    const [layersSize, setLayersSize] = useState14(null);
+    const [guidesOn, setGuidesOn] = useState15(false);
+    const [centerGuideOn, setCenterGuideOn] = useState15(false);
+    const [guideFormat, setGuideFormat] = useState15("match");
+    const [guideMarginIn, setGuideMarginIn] = useState15(DEFAULT_GUIDE_MARGIN_IN);
+    const [guideBleedIn, setGuideBleedIn] = useState15(DEFAULT_GUIDE_BLEED_IN);
+    const [pageNumbers, setPageNumbers] = useState15(DEFAULT_PAGE_NUMBERS);
+    const [onionSkinOn, setOnionSkinOn] = useState15(false);
+    const [onionSkinOpacity, setOnionSkinOpacity] = useState15(0.3);
+    const [layersOpen, setLayersOpen] = useState15(true);
+    const [rulersOn, setRulersOn] = useState15(true);
+    const [rulerUnit, setRulerUnit] = useState15(DEFAULT_RULER_UNIT);
+    const [rulerGuides, setRulerGuides] = useState15([]);
+    const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
+    const [layersPosition, setLayersPosition] = useState15(null);
+    const [layersSize, setLayersSize] = useState15(null);
     function settingsForSave() {
       return {
         guidesOn,
@@ -11745,137 +11894,6 @@
       settingsForSave,
       applySavedSettings
     };
-  }
-
-  // shared/js/pinchGate.js
-  var PINCH_THRESHOLD = 0.3;
-  function createPinchGate(threshold = PINCH_THRESHOLD) {
-    let base = null;
-    return function gate(rawScale) {
-      if (base === null) {
-        if (!(rawScale > 0) || Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)) return 1;
-        base = rawScale;
-      }
-      return rawScale / base;
-    };
-  }
-
-  // apps/ZEditor/src/state/useZoom.js
-  var { useState: useState15, useRef: useRef11, useLayoutEffect, useEffect: useEffect9 } = React;
-  var ZOOM_STEPS = [10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500, 600];
-  var PINCH_EVENT = "ze-pinch";
-  var TOP_GAP = 40;
-  function centerArtboard(board) {
-    const pane = board && board.closest(".preview-pane");
-    if (!pane) return;
-    const w = board.offsetWidth, h = board.offsetHeight;
-    pane.scrollLeft = board.offsetLeft + w / 2 - pane.clientWidth / 2;
-    pane.scrollTop = h + 2 * TOP_GAP <= pane.clientHeight ? board.offsetTop + h / 2 - pane.clientHeight / 2 : board.offsetTop - TOP_GAP;
-  }
-  function useZoom() {
-    const [zoomPercent, setZoomPercent] = useState15(ZOOM_PERCENT.initial);
-    const previewPaneRef = useRef11(null);
-    const zoomAnchorRef = useRef11(null);
-    const zoomRef = useRef11(zoomPercent);
-    zoomRef.current = zoomPercent;
-    const floatRef = useRef11(zoomPercent);
-    if (Math.round(floatRef.current) !== zoomPercent) floatRef.current = zoomPercent;
-    const requestedRef = useRef11(null);
-    function artboardElement() {
-      return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
-    }
-    function pagePointAt(fx, fy) {
-      const pane = previewPaneRef.current, board = artboardElement();
-      return { x: (pane.scrollLeft + fx - board.offsetLeft) / zoomRef.current, y: (pane.scrollTop + fy - board.offsetTop) / zoomRef.current };
-    }
-    function scrollPointTo(point, fx, fy, percent) {
-      const pane = previewPaneRef.current, board = artboardElement();
-      pane.scrollLeft = point.x * percent + board.offsetLeft - fx;
-      pane.scrollTop = point.y * percent + board.offsetTop - fy;
-    }
-    function handleZoomChange(percent) {
-      const pane = previewPaneRef.current;
-      if (artboardElement()) {
-        const fx = pane.clientWidth / 2, fy = pane.clientHeight / 2;
-        zoomAnchorRef.current = { ...pagePointAt(fx, fy), fx, fy };
-      }
-      setZoomPercent(percent);
-    }
-    function leaveZoomBox() {
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && active.closest(".ze-zoom-control")) active.blur();
-    }
-    function zoomAt(raw, fx, fy) {
-      const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
-      floatRef.current = clamped;
-      const percent = Math.round(clamped);
-      if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
-      leaveZoomBox();
-      const waiting = zoomAnchorRef.current;
-      zoomAnchorRef.current = { ...waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy), fx, fy };
-      requestedRef.current = percent;
-      setZoomPercent(percent);
-    }
-    function zoomStep(direction) {
-      leaveZoomBox();
-      const current = zoomRef.current;
-      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
-      handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
-    }
-    useLayoutEffect(() => {
-      requestedRef.current = null;
-      const anchor = zoomAnchorRef.current;
-      if (!anchor || !artboardElement()) return;
-      zoomAnchorRef.current = null;
-      scrollPointTo(anchor, anchor.fx, anchor.fy, zoomPercent);
-    }, [zoomPercent]);
-    useEffect9(() => {
-      let pinch = null;
-      function onPinch(e) {
-        const pane = previewPaneRef.current;
-        const { phase, scale, x, y } = e.detail || {};
-        if (!pane || !artboardElement()) return;
-        const r = pane.getBoundingClientRect();
-        const fx = x - r.left, fy = y - r.top;
-        if (phase === "start") {
-          pinch = { point: pagePointAt(fx, fy), startPercent: zoomRef.current, gate: createPinchGate() };
-          return;
-        }
-        if (!pinch) return;
-        if (phase === "end") {
-          pinch = null;
-          return;
-        }
-        const percent = Math.round(Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, pinch.startPercent * pinch.gate(scale))));
-        if (percent === zoomRef.current) {
-          scrollPointTo(pinch.point, fx, fy, percent);
-        } else {
-          zoomAnchorRef.current = { ...pinch.point, fx, fy };
-          setZoomPercent(percent);
-        }
-      }
-      window.addEventListener(PINCH_EVENT, onPinch);
-      return () => window.removeEventListener(PINCH_EVENT, onPinch);
-    }, []);
-    useEffect9(() => {
-      function onWheel(e) {
-        if (!(e.ctrlKey || e.metaKey)) return;
-        const pane = previewPaneRef.current;
-        if (!pane || !(e.target instanceof Element) || !e.target.closest(".ze-ruler-frame") || !artboardElement()) return;
-        e.preventDefault();
-        const r = pane.getBoundingClientRect();
-        const fx = Math.min(r.width, Math.max(0, e.clientX - r.left)), fy = Math.min(r.height, Math.max(0, e.clientY - r.top));
-        const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
-        zoomAt(floatRef.current * Math.exp(-Math.max(-25, Math.min(25, pixels)) * 8e-3), fx, fy);
-      }
-      window.addEventListener("wheel", onWheel, { passive: false, capture: true });
-      return () => window.removeEventListener("wheel", onWheel, { capture: true });
-    }, []);
-    function zoomReset() {
-      leaveZoomBox();
-      handleZoomChange(ZOOM_PERCENT.initial);
-    }
-    return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
   }
 
   // apps/ZEditor/src/ui/pointer.js
@@ -13488,7 +13506,8 @@
     marqueeShape,
     onMarqueeChange,
     zoom,
-    rulerUnit
+    rulerUnit,
+    viewKey
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
     const layerRef = useRef17(null);
@@ -13503,7 +13522,7 @@
     }, [zoom, canvasSize.width, canvasSize.height]);
     useLayoutEffect3(() => {
       centerArtboard(artboardRef.current);
-    }, [page && page.key, canvasSize.width, canvasSize.height]);
+    }, [page && page.key, canvasSize.width, canvasSize.height, viewKey]);
     const [, setWrapTick] = useState19(0);
     useEffect15(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
     const [dragRect, setDragRect] = useState19(null);
@@ -16637,7 +16656,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "39f4be1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "e168665"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -17161,6 +17180,7 @@
       ComposeCanvas,
       {
         zoom: zoom.zoomPercent / 100,
+        viewKey: zoom.viewKey,
         rulerUnit: view.rulerUnit,
         pdfDocsRef: doc.pdfDocsRef,
         page: selectedPage,

@@ -39,7 +39,7 @@ export function ComposeCanvas({
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   marquee, marqueeShape, onMarqueeChange,
-  zoom, rulerUnit,
+  zoom, rulerUnit, viewKey,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
@@ -56,9 +56,10 @@ export function ComposeCanvas({
     wrapper.style.setProperty("--ze-min-zoom", String(ZOOM_PERCENT.min / 100));
   }, [zoom, canvasSize.width, canvasSize.height]);
   // Centre the page in the view when it opens, and again once its real size is known (the background renders after
-  // the page is picked). Not on zoom: useZoom keeps its own anchor. After the sizes above, never before: centring
+  // the page is picked), and when a document is created or opened (viewKey, with the zoom back at 100%). Not on zoom:
+  // useZoom keeps its own anchor. After the sizes above, never before: centring
   // measures where the page sits, which depends on them.
-  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height]);
+  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height, viewKey]);
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
