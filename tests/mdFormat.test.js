@@ -1,5 +1,5 @@
 // Markdown-to-PDF's editor toolbar edits (Markdown-to-PDF/src/editor/format.js).
-import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
+import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageUrl, insertLink, nextImageRef, setBlock, toggleCodeBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
 import { cleanLanguageTag, languageForFile } from "../apps/Markdown-to-PDF/src/editor/codeLanguages.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
@@ -51,6 +51,19 @@ eq(run("one\n\n|", insertBlockLine, "\\toc"), "one\n\n\\toc|", "...only the ones
 ok(clampSpaceLines("-3") === 1 && clampSpaceLines("999") === 200 && clampSpaceLines("x") === 5, "blank-space height stays within 1–200");
 
 // Fenced code blocks
+// Images
+eq(nextImageRef("no pictures"), "image-1", "first image reference is image-1");
+eq(nextImageRef("x\n\n[image-2]: data:a\n[image-7]: data:b\n"), "image-8", "next reference is one past the highest");
+eq(run("Intro|\n\nOutro", insertImageFile, "cat", "data:image/png;base64,AAA"),
+  "Intro\n\n![cat][image-1]|\n\nOutro\n\n[image-1]: data:image/png;base64,AAA\n",
+  "image from a file: a line at the caret, its data at the end");
+eq(run("A|\n\n[image-1]: data:x\n", insertImageFile, "dog [2]", "data:y"),
+  "A\n\n![dog  2][image-2]|\n\n[image-1]: data:x\n\n[image-2]: data:y\n",
+  "...a second one gets the next number; brackets leave the alt text");
+eq(run("|", insertImageFile, "", "data:z"), "![image][image-1]|\n\n[image-1]: data:z\n", "...into an empty document, alt defaults to image");
+eq(run("See [a map] here", insertImageUrl), "See \n\n![a map]([https://])\n\n here", "image from the web: selected text becomes the alt, https:// selected");
+eq(run("|", insertImageUrl), "![image]([https://])", "...with nothing selected");
+
 const F = "```";
 eq(run("one|", toggleCodeBlock, "json"), "one\n\n" + F + "json\n|\n" + F, "nothing selected: an empty block with the caret inside");
 eq(run("intro\n[{\"a\": 1}]\nend", toggleCodeBlock, "json"), "intro\n\n" + F + "json\n[{\"a\": 1}]\n" + F + "\n\nend", "a selection is wrapped, whole lines, and stays selected");

@@ -249,6 +249,40 @@ export function insertLink(text, start, end) {
   return { from: start, to: end, insert, selStart: urlAt, selEnd: urlAt + 3 };
 }
 
+/* --------------------------------------------------------------------------
+   Images
+   -------------------------------------------------------------------------- */
+
+// The next free image reference name: image-1, image-2… (one more than the highest already used).
+export function nextImageRef(text) {
+  let n = 0;
+  for (const m of text.matchAll(/^\[image-(\d+)\]:/gm)) n = Math.max(n, Number(m[1]));
+  return "image-" + (n + 1);
+}
+
+// A picture from a file: `![alt][image-N]` on its own line at the caret (replacing any selection),
+// and its (long) data URL as a reference at the very end, `[image-N]: data:…`, so the text being
+// edited stays readable while the .md file still carries the picture. One edit (one undo step),
+// caret after the image line. Brackets in `alt` are dropped (they would end the alt text).
+export function insertImageFile(text, start, end, alt, url) {
+  const ref = nextImageRef(text);
+  const cleanAlt = String(alt || "image").replace(/[\[\]\n]/g, " ").trim() || "image";
+  const line = insertBlockLine(text, start, end, "![" + cleanAlt + "][" + ref + "]");
+  const withLine = applyEdit(text, line);
+  const tail = withLine.replace(/\s+$/, "");
+  const full = tail + "\n\n[" + ref + "]: " + url + "\n";
+  return { from: start, to: text.length, insert: full.slice(start), selStart: line.selStart, selEnd: line.selEnd };
+}
+
+// A picture from the web: `![alt text](https://)` on its own line with "https://" selected, ready
+// to paste the address over.
+export function insertImageUrl(text, start, end) {
+  const line = "![" + (text.slice(start, end).replace(/[\[\]\n]/g, " ").trim() || "image") + "](https://)";
+  const edit = insertBlockLine(text, start, end, line);
+  const urlAt = edit.from + edit.insert.indexOf("](https://)") + 2;
+  return { ...edit, selStart: urlAt, selEnd: urlAt + "https://".length };
+}
+
 // Puts `line` on its own line with a blank line either side (only adding the blank lines that are
 // missing), replacing the selection, with the caret after it. Used for the divider (---) and for the
 // \toc, \pagebreak and \space{N} markers.

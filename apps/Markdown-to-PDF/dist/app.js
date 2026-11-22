@@ -236,6 +236,26 @@
     const urlAt = start + label.length + 3;
     return { from: start, to: end, insert, selStart: urlAt, selEnd: urlAt + 3 };
   }
+  function nextImageRef(text) {
+    let n = 0;
+    for (const m of text.matchAll(/^\[image-(\d+)\]:/gm)) n = Math.max(n, Number(m[1]));
+    return "image-" + (n + 1);
+  }
+  function insertImageFile(text, start, end, alt, url) {
+    const ref = nextImageRef(text);
+    const cleanAlt = String(alt || "image").replace(/[\[\]\n]/g, " ").trim() || "image";
+    const line = insertBlockLine(text, start, end, "![" + cleanAlt + "][" + ref + "]");
+    const withLine = applyEdit(text, line);
+    const tail = withLine.replace(/\s+$/, "");
+    const full = tail + "\n\n[" + ref + "]: " + url + "\n";
+    return { from: start, to: text.length, insert: full.slice(start), selStart: line.selStart, selEnd: line.selEnd };
+  }
+  function insertImageUrl(text, start, end) {
+    const line = "![" + (text.slice(start, end).replace(/[\[\]\n]/g, " ").trim() || "image") + "](https://)";
+    const edit = insertBlockLine(text, start, end, line);
+    const urlAt = edit.from + edit.insert.indexOf("](https://)") + 2;
+    return { ...edit, selStart: urlAt, selEnd: urlAt + "https://".length };
+  }
   function insertBlockLine(text, start, end, line) {
     const before = text.slice(0, start);
     const after = text.slice(end);
@@ -1241,7 +1261,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "fddd6b2"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "a56bd57"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1803,6 +1823,93 @@
     return String(value || "").trim().toLowerCase().replace(/[\s`]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
   }
 
+  // shared/js/imageFiles.js
+  function isSvgFile(file) {
+    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
+  }
+  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+  function svgLength(value) {
+    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
+    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
+  }
+  function svgSize(svgEl) {
+    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
+    let width = svgLength(svgEl.getAttribute("width"));
+    let height = svgLength(svgEl.getAttribute("height"));
+    if (hasViewBox) {
+      if (!width && !height) {
+        width = vb[2];
+        height = vb[3];
+      } else if (!width) width = height * (vb[2] / vb[3]);
+      else if (!height) height = width * (vb[3] / vb[2]);
+    }
+    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
+  }
+  function svgFileToPng(file, maxSide = 2048) {
+    return file.text().then((text) => new Promise((resolve, reject) => {
+      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+      const svg = doc.documentElement;
+      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
+        reject(new Error("That SVG file couldn't be read."));
+        return;
+      }
+      const size = svgSize(svg);
+      const scale = maxSide / Math.max(size.width, size.height);
+      const outW = Math.max(1, Math.round(size.width * scale));
+      const outH = Math.max(1, Math.round(size.height * scale));
+      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
+      svg.setAttribute("width", String(outW));
+      svg.setAttribute("height", String(outH));
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      const img = new Image();
+      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
+        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
+      };
+      img.src = url;
+    }));
+  }
+  async function imageFileToDataUrl(file, { maxSide = 1600, quality = 0.85 } = {}) {
+    const url = isSvgFile(file) ? (await svgFileToPng(file, maxSide)).src : await readAsDataUrl(file);
+    const img = await loadImage(url);
+    const shrink = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * shrink));
+    const height = Math.max(1, Math.round(img.naturalHeight * shrink));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, width, height);
+    const png = hasTransparency(ctx, width, height);
+    return { src: png ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality), width, height };
+  }
+  function readAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(`Couldn't read "${file.name}".`));
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("That file isn't a picture the browser can open."));
+      img.onload = () => resolve(img);
+      img.src = src;
+    });
+  }
+  function hasTransparency(ctx, width, height) {
+    const data = ctx.getImageData(0, 0, width, height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
+    return false;
+  }
+
   // apps/Markdown-to-PDF/src/ui/fields.jsx
   function SectionLabel({ children }) {
     return /* @__PURE__ */ React.createElement("h3", { className: "md2pdf-section-label" }, children);
@@ -2038,6 +2145,8 @@
     // { } — a code block (the < > icon is inline code).
     codeBlock: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M5.5 2.5H5A1.5 1.5 0 0 0 3.5 4v2.2c0 .8-.6 1.3-1.5 1.8.9.5 1.5 1 1.5 1.8V12A1.5 1.5 0 0 0 5 13.5h.5" }), /* @__PURE__ */ React.createElement("path", { d: "M10.5 2.5h.5A1.5 1.5 0 0 1 12.5 4v2.2c0 .8.6 1.3 1.5 1.8-.9.5-1.5 1-1.5 1.8V12a1.5 1.5 0 0 1-1.5 1.5h-.5" })),
     link: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6.8 9.2a2.6 2.6 0 0 0 3.7 0l2.2-2.2a2.6 2.6 0 0 0-3.7-3.7l-.9.9" }), /* @__PURE__ */ React.createElement("path", { d: "M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9" })),
+    // A picture: frame, sun, hill.
+    image: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("rect", { x: "2", y: "3", width: "12", height: "10", rx: "1.5" }), /* @__PURE__ */ React.createElement("circle", { cx: "5.8", cy: "6.4", r: "1.1", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M14 10.5 10.8 7.4a1 1 0 0 0-1.4 0L3.5 13" })),
     ul: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6 4h8M6 8h8M6 12h8" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "4", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "8", r: "0.9", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("circle", { cx: "2.6", cy: "12", r: "0.9", fill: "currentColor", stroke: "none" })),
     ol: /* @__PURE__ */ React.createElement(Svg, null, /* @__PURE__ */ React.createElement("path", { d: "M6.5 4h7.5M6.5 8h7.5M6.5 12h7.5" }), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "5.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "1"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "9.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "2"), /* @__PURE__ */ React.createElement("text", { x: "0.6", y: "13.6", fontSize: "4.6", fill: "currentColor", stroke: "none", fontFamily: "sans-serif", fontWeight: "700" }, "3")),
     quote: /* @__PURE__ */ React.createElement(Svg, { fill: "currentColor" }, /* @__PURE__ */ React.createElement("path", { d: "M2.5 9.2C2.5 6.6 3.8 4.7 6.3 4l.5 1c-1.3.5-2 1.3-2.1 2.4H6.6V12H2.5V9.2Zm7 0c0-2.6 1.3-4.5 3.8-5.2l.5 1c-1.3.5-2 1.3-2.1 2.4h1.9V12H9.5V9.2Z" })),
@@ -2129,7 +2238,7 @@
         active: blockKind === "code",
         onPress: () => onAction("codeBlock", codeLang)
       }
-    ), /* @__PURE__ */ React.createElement(CodeLanguageMenu, { codeLang, onAction })), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(DropMenu, { trigger: "Insert", title: "Insert at the cursor", triggerClassName: "md2ebook-fmt-menu-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Table of contents", hint: "Inserts \\toc — its look is set in the Typography tab", onClick: () => onAction("line", "\\toc"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Page break", hint: "Inserts \\pagebreak — what follows starts on a new page", onClick: () => onAction("line", "\\pagebreak"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Divider line", hint: "Inserts --- (a horizontal rule)", onClick: () => onAction("line", "---"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code block", detail: codeLangName(codeLang), shortcut: MOD + SHIFT + "E", hint: "Inserts a fenced code block (``` … ```); pick its language with the arrow next to the { } button", onClick: () => onAction("codeBlock", codeLang), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code from file…", hint: "Inserts a text file as a code block; the language comes from its extension", onClick: () => onAction("codeFile"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(CodeLanguageMenu, { codeLang, onAction })), /* @__PURE__ */ React.createElement(ToolButton, { icon: "link", title: `Link (${MOD}K)`, onPress: () => onAction("link") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "image", title: "Insert image from a file (it's saved inside the Markdown). For a picture on the web: Insert ▾ › Image from web address", onPress: () => onAction("imageFile") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ul", title: `Bulleted list (${MOD}${SHIFT}8)`, active: blockKind === "ul", onPress: () => onAction("block", "ul") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "ol", title: `Numbered list (${MOD}${SHIFT}7)`, active: blockKind === "ol", onPress: () => onAction("block", "ol") }), /* @__PURE__ */ React.createElement(ToolButton, { icon: "quote", title: `Quote (${MOD}${SHIFT}9)`, active: blockKind === "quote", onPress: () => onAction("block", "quote") }), /* @__PURE__ */ React.createElement(Divider, null), /* @__PURE__ */ React.createElement(DropMenu, { trigger: "Insert", title: "Insert at the cursor", triggerClassName: "md2ebook-fmt-menu-trigger", keepEditorFocus: true }, ({ close, keepEditorFocus }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Table of contents", hint: "Inserts \\toc — its look is set in the Typography tab", onClick: () => onAction("line", "\\toc"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Page break", hint: "Inserts \\pagebreak — what follows starts on a new page", onClick: () => onAction("line", "\\pagebreak"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Divider line", hint: "Inserts --- (a horizontal rule)", onClick: () => onAction("line", "---"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code block", detail: codeLangName(codeLang), shortcut: MOD + SHIFT + "E", hint: "Inserts a fenced code block (``` … ```); pick its language with the arrow next to the { } button", onClick: () => onAction("codeBlock", codeLang), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Code from file…", hint: "Inserts a text file as a code block; the language comes from its extension", onClick: () => onAction("codeFile"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Image from file…", detail: "png · jpg · gif · webp · svg", hint: "Inserts a picture, shrunk to at most 1600 px and kept inside the Markdown (its data goes at the end of the text), so a saved .md keeps it", onClick: () => onAction("imageFile"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(MenuItem, { label: "Image from web address", hint: "Inserts ![image](https://) with the address selected: paste the picture's web address over it", onClick: () => onAction("imageUrl"), close, keepEditorFocus }), /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Blank space",
@@ -2195,6 +2304,9 @@
   var CODE_FILE_MAX_BYTES = 512 * 1024;
   var CODE_FILE_EXTS = CODE_LANGUAGES.flatMap((l) => l.ext);
   var CODE_PICKER = { id: "md2pdf-code-file", description: "Code or text file", accept: { "text/plain": CODE_FILE_EXTS } };
+  var IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+  var IMAGE_PICKER = { id: "md2pdf-image-file", description: "Picture", accept: { "image/*": IMAGE_EXTS } };
+  var IMAGE_MAX_SIDE = 1600;
   function shortcutFor(e) {
     if (!(e.ctrlKey || e.metaKey) || e.getModifierState && e.getModifierState("AltGraph")) return null;
     const k = e.key.toLowerCase();
@@ -2215,6 +2327,7 @@
     const [blockKind, setBlockKind] = useState3("p");
     const [codeLang, setCodeLangState] = useState3(loadCodeLang);
     const codeFileInputRef = useRef4(null);
+    const imageFileInputRef = useRef4(null);
     const setCodeLang = (tag) => {
       setCodeLangState(tag);
       saveCodeLang(tag);
@@ -2282,8 +2395,42 @@
       e.target.value = "";
       if (file) insertCodeFile(file);
     }
+    async function handleImageFile() {
+      setDocStatus(null);
+      const file = await pickFile(IMAGE_PICKER);
+      if (file === "fallback") {
+        if (imageFileInputRef.current) imageFileInputRef.current.click();
+        return;
+      }
+      if (file) await insertImage(file);
+    }
+    async function insertImage(file) {
+      const el = editorRef.current;
+      if (!el) return;
+      const at = { start: el.selectionStart, end: el.selectionEnd };
+      setDocStatus({ type: "success", message: `Adding "${file.name}"…` });
+      let picture;
+      try {
+        picture = await imageFileToDataUrl(file, { maxSide: IMAGE_MAX_SIDE });
+      } catch (err) {
+        setDocStatus({ type: "error", message: `Could not add "${file.name}": ` + errorText(err) });
+        return;
+      }
+      const alt = (file.name || "image").replace(/\.[^.]+$/, "");
+      el.focus();
+      el.setSelectionRange(at.start, at.end);
+      applyToEditor(insertImageFile(el.value, at.start, at.end, alt, picture.src));
+      const kb = Math.round(picture.src.length * 3 / 4 / 1024);
+      setDocStatus({ type: "success", message: `Added "${file.name}" (${picture.width} × ${picture.height} px, ${kb} KB). Its data sits at the end of the text.` });
+    }
+    function handleImageFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (file) insertImage(file);
+    }
     function runAction(action, arg) {
       if (action === "codeFile") return handleCodeFile();
+      if (action === "imageFile") return handleImageFile();
       if (action === "save") return fileSave.onSave();
       if (action === "saveAs") return fileSave.onSaveAs();
       if (action === "copy") return handleCopyAll();
@@ -2296,6 +2443,7 @@
       if (action === "inline") applyToEditor(toggleInline(text, s, e, arg));
       else if (action === "block") applyToEditor(setBlock(text, s, e, arg));
       else if (action === "link") applyToEditor(insertLink(text, s, e));
+      else if (action === "imageUrl") applyToEditor(insertImageUrl(text, s, e));
       else if (action === "codeBlock") {
         const lang = arg == null ? codeLang : arg;
         setCodeLang(lang);
@@ -2314,7 +2462,7 @@
       e.preventDefault();
       runAction(shortcut[0], shortcut[1]);
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, fileSave, onAction: runAction, spaceLines, setSpaceLines, codeLang }), /* @__PURE__ */ React.createElement("input", { ref: codeFileInputRef, type: "file", accept: CODE_FILE_EXTS.join(","), onChange: handleCodeFileSelected, className: "hidden" }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "h-full flex flex-col p-3" }, /* @__PURE__ */ React.createElement(FormatToolbar, { blockKind, fileSave, onAction: runAction, spaceLines, setSpaceLines, codeLang }), /* @__PURE__ */ React.createElement("input", { ref: codeFileInputRef, type: "file", accept: CODE_FILE_EXTS.join(","), onChange: handleCodeFileSelected, className: "hidden" }), /* @__PURE__ */ React.createElement("input", { ref: imageFileInputRef, type: "file", accept: "image/*," + IMAGE_EXTS.join(","), onChange: handleImageFileSelected, className: "hidden" }), /* @__PURE__ */ React.createElement(StatusLine, { status: docStatus, className: "mb-2" }), /* @__PURE__ */ React.createElement(
       "textarea",
       {
         ref: editorRef,
