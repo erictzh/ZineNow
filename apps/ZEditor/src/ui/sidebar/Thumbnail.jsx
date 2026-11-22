@@ -1,9 +1,11 @@
 // One page thumbnail with rotate and delete buttons.
 
+import { THUMB_SCALE, THUMB_SHOWN_SCALE } from "../../constants.js";
 import { withTouchModifier } from "../touchInput.js";
 
 // ---- One sidebar thumbnail ------------------------------------------
-export function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+// `src`: the picture to show (the page with its items on it, or the plain base thumbnail).
+export function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
   return (
     <div
       className={"ze-thumb" + (isSelected ? " is-selected" : "")}
@@ -12,7 +14,9 @@ export function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dr
       {...dragHandlers}
     >
       <div className="ze-thumb-img-wrap">
-        <img src={p.dataUrl} alt={p.isBlank ? "Blank page" : "Page " + p.pageNumber} />
+        {/* Not draggable itself (so a drag takes the whole thumbnail, to reorder pages, and never starts
+            dragging the picture); drawn at THUMB_SCALE but shown at THUMB_SHOWN_SCALE: see constants.js. */}
+        <img srcSet={src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x"} draggable="false" alt={p.isBlank ? "Blank page" : "Page " + p.pageNumber} />
       </div>
       <div className="ze-thumb-footer">
         <span className="ze-thumb-num">{idx + 1}</span>

@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-22 (drag pictures into Md to PDF and ZEditor; Md to PDF insert image; .znow saves on Android; see the cloud-session sections at the end).
+Last updated: 2026-11-22 (live, sharper page thumbnails in ZEditor; drag pictures into Md to PDF and ZEditor; Md to PDF insert image; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -112,7 +112,7 @@ Md to PDF Converter:
 3. Md-to-PDF rasterization with Markdown images (`![](url)`): cross-origin images could taint the canvas (`useCORS: true` is set, untested with remote images).
 4. Group drag/resize of multi-selected **annotations** was deliberately cut (only highlight + group Delete work).
 5. Old `.znow` files saved before per-page filters stored one global filter in `settings`; that is now ignored on load (those projects open with no filters).
-6. Sidebar thumbnails don't reflect filters (only the main canvas and export do).
+6. ~~Sidebar thumbnails don't reflect filters~~ fixed 2026-11-22: live thumbnails (see the cloud-session section at the end).
 7. Edge case: if an annotation was copied in-app (Ctrl+C) AND the OS clipboard also holds an image, Ctrl+V does both (duplicate + image paste).
 8. Md-to-PDF asks a ~3-page document to paginate twice (preview + export iframe) and Paged.js/html2canvas are slow; a progress indicator on the button would be a nice touch.
 
@@ -387,3 +387,13 @@ At the user's request every commit, branch and the `pre-modular-refactor` tag no
   - Md to PDF: wired in `ui/App.jsx` + `editor/droppedPictures.js` (queue, so a drop while the Typography tab shows switches to Editor first) + `EditorTab.jsx` (`insertDropped`): inserted at the text caret, or at the end if the editor was never clicked into; up to 12 pictures per drop.
   - ZEditor: wired in `ui/App.jsx`: on the selected page, centred on where it was dropped if that was on the page (zoom accounted for), else the page's middle (`addImageAnnotationFromFile(file, idx, { center })`); several pictures step 20 px apart; no document open shows an error.
   - Tested headless with synthetic DragEvents (files, HTML with an `<img>`) against two local servers standing in for websites (one with CORS, one without): all cases above behave. **Not tried with a real drag from a real website.**
+
+## Session 2026-11-22 (cloud session, later): live page thumbnails in ZEditor
+The Pages panel thumbnails used to be drawn once from the PDF page (or blank paper) and never showed items or filters. Now:
+- **Live thumbnails** (`state/useLiveThumbs.js`, called by `ui/sidebar/Sidebar.jsx`, drawn by `renderPageThumbWithItems` in `render/pageRender.js`). A page with items (or a page filter) gets a thumbnail with its filter and items painted over the cached base picture (`page.dataUrl`, which stays the plain PDF/blank thumbnail), so pdf.js isn't re-run. A page with neither keeps the plain thumbnail, so an untouched document costs nothing extra. `renderPageToCanvas`'s tail was split out as `paintPageContent` and is shared (export is unchanged).
+  - **Change detection by reference**: annotation lists and filters are replaced, never edited in place, so staleness is `annotations !== madeFrom.annotations` etc. (no hashing). Undo/redo works because restored pages are new objects.
+  - **Throttle**: the selected (edited) page redraws at most about 6 times a second (`SELECTED_GAP_MS` 150), longer if redraws are slow (waits 4x the last redraw time: the built-in safeguard instead of an off switch), with a final redraw when changes stop; other pages (e.g. a filter applied to several selected pages) go one after another, 25 ms apart. Decoded base is cached only for the edited page.
+  - **Pictures are blob URLs** held in the hook (not in `pages`), so undo history doesn't grow; replaced/removed URLs are revoked 1.5 s later. Page numbers are deliberately not drawn on thumbnails (they'd redraw every thumbnail after a reorder, and are ~3 px tall).
+- **Sharper**: `THUMB_SCALE` 0.3 -> 0.45 (pixels) with `THUMB_SHOWN_SCALE` 0.3 (CSS size): the `<img>` uses `srcset="url 1.5x"` so the on-screen size is unchanged (A5 126 x 178). The Thumbnail size slider (`zoom`) still works (50% -> 63 x 89).
+- **Dragging a thumbnail no longer drags the picture**: `<img draggable="false">` plus CSS `pointer-events: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none` (`styles/sidebar.css`). Before, a drag started on the `<img>` and carried `text/uri-list`, `text/html` and `Files` (a picture drag, droppable elsewhere); now it starts on the thumbnail `div` and carries no data. (Reordering itself already worked in headless tests before the change.)
+- Tested headless (Chromium, 1000 px tall window): untouched page keeps the base thumbnail; a drawn rectangle shows up on page 1 only; a 40-move drag redrew the thumbnail 8 times in 1.3 s; undo returns to the base thumbnail; Duotone on all 3 selected pages turned all three thumbnails yellow; Playwright mouse and `dragTo` both reorder pages. **Not tried on the tablet.** If long pages with huge photos or heavy filters feel laggy, raise `SELECTED_GAP_MS` or add a "Live page thumbnails" checkbox to the Display gear (decided to skip it for now).

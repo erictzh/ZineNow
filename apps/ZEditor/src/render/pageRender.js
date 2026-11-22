@@ -1,6 +1,7 @@
 // Renders whole pages: source PDF page or blank, items, filter, page number; thumbnails.
 
 import { MAIN_SCALE, THUMB_SCALE } from "../constants.js";
+import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { drawPageItem } from "./clipMask.js";
 import { applyPageFilter } from "./filters/applyFilter.js";
 import { resolvePageText } from "./pageText.js";
@@ -70,15 +71,33 @@ export async function renderPageToCanvas(page, pdfDocsRef, exportScale, pageFilt
   }
 
   const scaleFactor = exportScale / MAIN_SCALE; // annotation coords were recorded in the editor's on-screen canvas space
-  // The page filter treats the paper only (drawn before any annotation touches the canvas). Several
-  // filters paint a white sheet, so a see-through blank page, which has no paper, skips it.
-  if (!(transparent && page.isBlank)) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
+  // Several filters paint a white sheet, so a see-through blank page, which has no paper, skips the filter.
+  await paintPageContent(ctx, canvas, page, scaleFactor, pageFilter, transparent && page.isBlank);
+  if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
+  return canvas;
+}
+
+// Puts the page filter and then the page's items on a canvas that already holds the paper (a PDF page
+// or blank). The filter treats the paper only (it's drawn before any item touches the canvas).
+async function paintPageContent(ctx, canvas, page, scaleFactor, pageFilter, skipFilter) {
+  if (!skipFilter) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
   // The annotation list is the stacking order: first is the bottom layer.
   // Threaded stories and text wrap need the whole page (render/pageText.js).
   // A clipped image is cut to the layer below it (render/clipMask.js).
   const items = resolvePageText(page.annotations || []);
   for (let i = 0; i < items.length; i++) await drawPageItem(ctx, items, i, scaleFactor, pageFilter);
-  if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
+}
+
+// A sidebar thumbnail with the page's filter and items on it. `baseImage` is the page's cached base
+// thumbnail (the PDF page or blank paper, no filter, no items, at THUMB_SCALE), so pdf.js isn't run
+// again for every change. Resolves to a canvas.
+export async function renderPageThumbWithItems(page, baseImage) {
+  const canvas = document.createElement("canvas");
+  canvas.width = baseImage.naturalWidth;
+  canvas.height = baseImage.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(baseImage, 0, 0);
+  await paintPageContent(ctx, canvas, page, THUMB_SCALE / MAIN_SCALE, page.filter || DEFAULT_PAGE_FILTER, false);
   return canvas;
 }
 
