@@ -3,7 +3,8 @@
 
 import { applyToTextarea, replaceAllEdit } from "../../editor/applyToTextarea.js";
 import { CODE_LANGUAGES, languageForFile, languageLabel } from "../../editor/codeLanguages.js";
-import { blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../../editor/format.js";
+import { blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageUrl, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../../editor/format.js";
+import { imageFileToDataUrl } from "../../../../../shared/js/imageFiles.js";
 import { copyText, pickFile } from "../../io/filePickers.js";
 import { StatusLine } from "../fields.jsx";
 import { MOD } from "../shortcutKeys.js";
@@ -33,6 +34,12 @@ const CODE_FILE_MAX_BYTES = 512 * 1024;
 const CODE_FILE_EXTS = CODE_LANGUAGES.flatMap((l) => l.ext);
 const CODE_PICKER = { id: "md2pdf-code-file", description: "Code or text file", accept: { "text/plain": CODE_FILE_EXTS } };
 
+// Insert image: a picture from a file goes into the Markdown itself (shrunk to at most 1600 px, a
+// reference at the end of the text: editor/format.js insertImageFile), so a saved .md keeps it.
+const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+const IMAGE_PICKER = { id: "md2pdf-image-file", description: "Picture", accept: { "image/*": IMAGE_EXTS } };
+const IMAGE_MAX_SIDE = 1600;
+
 // Shortcuts that work while typing in the editor. Ctrl (⌘ on a Mac) plus the key; headings use
 // Ctrl+Alt+digit because browsers keep Ctrl+digit for switching tabs.
 function shortcutFor(e) {
@@ -60,6 +67,7 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
   const [blockKind, setBlockKind] = useState("p"); // the caret line's kind, for the toolbar
   const [codeLang, setCodeLangState] = useState(loadCodeLang);
   const codeFileInputRef = useRef(null);
+  const imageFileInputRef = useRef(null);
   const setCodeLang = (tag) => {
     setCodeLangState(tag);
     saveCodeLang(tag);
@@ -140,9 +148,49 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
     if (file) insertCodeFile(file);
   }
 
+  // "Insert image" (tool bar button, Insert menu): the native Open dialog where there is one, else
+  // the hidden file input (Android: the photo picker).
+  async function handleImageFile() {
+    setDocStatus(null);
+    const file = await pickFile(IMAGE_PICKER);
+    if (file === "fallback") {
+      if (imageFileInputRef.current) imageFileInputRef.current.click();
+      return;
+    }
+    if (file) await insertImage(file);
+  }
+
+  async function insertImage(file) {
+    const el = editorRef.current;
+    if (!el) return;
+    // Taken now: reading the picture takes a moment, and the caret shouldn't wander meanwhile.
+    const at = { start: el.selectionStart, end: el.selectionEnd };
+    setDocStatus({ type: "success", message: `Adding "${file.name}"…` });
+    let picture;
+    try {
+      picture = await imageFileToDataUrl(file, { maxSide: IMAGE_MAX_SIDE });
+    } catch (err) {
+      setDocStatus({ type: "error", message: `Could not add "${file.name}": ` + errorText(err) });
+      return;
+    }
+    const alt = (file.name || "image").replace(/\.[^.]+$/, "");
+    el.focus();
+    el.setSelectionRange(at.start, at.end);
+    applyToEditor(insertImageFile(el.value, at.start, at.end, alt, picture.src));
+    const kb = Math.round((picture.src.length * 3) / 4 / 1024);
+    setDocStatus({ type: "success", message: `Added "${file.name}" (${picture.width} × ${picture.height} px, ${kb} KB). Its data sits at the end of the text.` });
+  }
+
+  function handleImageFileSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (file) insertImage(file);
+  }
+
   // Runs one toolbar action (or shortcut) on the editor's current text and selection.
   function runAction(action, arg) {
     if (action === "codeFile") return handleCodeFile();
+    if (action === "imageFile") return handleImageFile();
     if (action === "save") return fileSave.onSave();
     if (action === "saveAs") return fileSave.onSaveAs();
     if (action === "copy") return handleCopyAll();
@@ -155,6 +203,7 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
     if (action === "inline") applyToEditor(toggleInline(text, s, e, arg));
     else if (action === "block") applyToEditor(setBlock(text, s, e, arg));
     else if (action === "link") applyToEditor(insertLink(text, s, e));
+    else if (action === "imageUrl") applyToEditor(insertImageUrl(text, s, e));
     else if (action === "codeBlock") {
       const lang = arg == null ? codeLang : arg;
       setCodeLang(lang);
@@ -182,6 +231,7 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
     <div className="h-full flex flex-col p-3">
       <FormatToolbar blockKind={blockKind} fileSave={fileSave} onAction={runAction} spaceLines={spaceLines} setSpaceLines={setSpaceLines} codeLang={codeLang} />
       <input ref={codeFileInputRef} type="file" accept={CODE_FILE_EXTS.join(",")} onChange={handleCodeFileSelected} className="hidden" />
+      <input ref={imageFileInputRef} type="file" accept={"image/*," + IMAGE_EXTS.join(",")} onChange={handleImageFileSelected} className="hidden" />
       <StatusLine status={docStatus} className="mb-2" />
       <textarea
         ref={editorRef}

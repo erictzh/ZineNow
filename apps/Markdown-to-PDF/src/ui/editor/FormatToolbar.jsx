@@ -45,6 +45,14 @@ const ICONS = {
       <path d="M9.2 6.8a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9" />
     </Svg>
   ),
+  // A picture: frame, sun, hill.
+  image: (
+    <Svg>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <circle cx="5.8" cy="6.4" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M14 10.5 10.8 7.4a1 1 0 0 0-1.4 0L3.5 13" />
+    </Svg>
+  ),
   ul: (
     <Svg>
       <path d="M6 4h8M6 8h8M6 12h8" />
@@ -201,6 +209,7 @@ export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSp
         <CodeLanguageMenu codeLang={codeLang} onAction={onAction} />
       </span>
       <ToolButton icon="link" title={`Link (${MOD}K)`} onPress={() => onAction("link")} />
+      <ToolButton icon="image" title="Insert image from a file (it's saved inside the Markdown). For a picture on the web: Insert ▾ › Image from web address" onPress={() => onAction("imageFile")} />
       <Divider />
       <ToolButton icon="ul" title={`Bulleted list (${MOD}${SHIFT}8)`} active={blockKind === "ul"} onPress={() => onAction("block", "ul")} />
       <ToolButton icon="ol" title={`Numbered list (${MOD}${SHIFT}7)`} active={blockKind === "ol"} onPress={() => onAction("block", "ol")} />
@@ -216,6 +225,8 @@ export function FormatToolbar({ blockKind, fileSave, onAction, spaceLines, setSp
             <MenuItem label="Divider line" hint="Inserts --- (a horizontal rule)" onClick={() => onAction("line", "---")} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem label="Code block" detail={codeLangName(codeLang)} shortcut={MOD + SHIFT + "E"} hint="Inserts a fenced code block (``` … ```); pick its language with the arrow next to the { } button" onClick={() => onAction("codeBlock", codeLang)} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem label="Code from file…" hint="Inserts a text file as a code block; the language comes from its extension" onClick={() => onAction("codeFile")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Image from file…" detail="png · jpg · gif · webp · svg" hint="Inserts a picture, shrunk to at most 1600 px and kept inside the Markdown (its data goes at the end of the text), so a saved .md keeps it" onClick={() => onAction("imageFile")} close={close} keepEditorFocus={keepEditorFocus} />
+            <MenuItem label="Image from web address" hint="Inserts ![image](https://) with the address selected: paste the picture's web address over it" onClick={() => onAction("imageUrl")} close={close} keepEditorFocus={keepEditorFocus} />
             <MenuItem
               label="Blank space"
               hint={"Inserts \\space{N}: empty space N body lines tall — room to paste an image into the PDF later"}
