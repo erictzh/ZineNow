@@ -64,7 +64,7 @@ var HARDCODED_FALLBACK_DEFAULTS = {
   paperSize: DEFAULT_PAPER_KEY,
   fontSize: 13.33, // px (= 10pt, the Anarchist Library / Amusewiki default for A5 zine pages)
   lineHeight: 1.6, // unitless
-  paragraphSpacing: '1rem', // CSS length (bottom margin on <p>)
+  paragraphSpacing: 16, // px (bottom margin on <p>)
   textAlign: 'left', // body text: left | center | right | justify
   // Per-heading alignment: blank = same as body text, or
   // left | center | right | justify. H4–H6 follow H3.

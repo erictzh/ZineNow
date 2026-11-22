@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-22 (ZEditor: Placeholder text row layout fixed; ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
+Last updated: 2026-11-22 (Md2PDF: - + on all Typography number boxes, paragraph spacing in px; ZEditor: Placeholder text row layout fixed; ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -463,3 +463,10 @@ Asked: when a document is created or opened, the page should sit in the middle o
 Reported: the Placeholder text row in ZEditor's Format - Text panel looked weird (the paragraph-count box was squeezed to a sliver once the - and + buttons were added).
 - `styles/format-panel.css`: in `.ze-format-inline` rows the dropdown shrinks (`flex: 1 1 0; min-width: 0`) and a number box with its buttons gets at least 112 px (`.ze-format-inline > .zn-num`). The paragraph count has `wrapClassName="ze-format-count"` (`ui/panels/TextPlaceholder.jsx`), fixed at 112 px.
 - Tested headless: default 264 px panel = dropdown 101 + number box with buttons 112 (no overflow), 400 px panel = 237 + 112; the + button steps 3 -> 4.
+
+## Session 2026-11-22 (cloud session, last): - + buttons on every Md2PDF Typography number box
+Asked: put - + on Md2PDF too, with a step that fits each unit; margins 0.125, paragraph spacing in px.
+- All Typography boxes are now `type="number"` (through `TextInput` -> `NumberBox`): Body Font Size and H1-H3 Size (px) step 1, min 1; Body Line Spacing and H1-H3 Line Height step 0.1, min 0.5; Margin Vertical/Horizontal (in) step 0.125, min 0; Paragraph Spacing (px) step 1, min 0; Page Start From step 1, min 1. (The per-element ToC boxes, blank-space lines, page jump and zoom already had buttons.)
+- **Paragraph Spacing is now a px number** (default 16, was the text `1rem`): `defaultConfig.json` and `defaults.js` hold 16; `normalizeConfig.js` `toCssLength(value, fallback, bareUnit)` treats a bare number as px for this field (still accepts `20px`, `1.5rem`, ...); the box shows an old saved `rem`/`em` value converted to px (x16). Paragraph spacing is no longer free text.
+- `shared/js/numberFields.js` `stepBy`: an empty box whose placeholder is a number (the default) steps from that default, not from 0/min; decimal steps are rounded to the step's decimals (no 0.1+0.1=0.2000...1).
+- Tested headless: margin 0.75 -> 0.875, 1, 1.125, back 1; paragraph 16 -> 17, 18, 19, 18 and the preview CSS var shows `18px`; body size, line spacing (1.6 -> 1.7 ...) OK. A margin of 0 still falls back to the default (`toMarginInches` treats <= 0 as blank): min stays 0 for now.

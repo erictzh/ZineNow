@@ -4,12 +4,20 @@ import { DEFAULTS } from "../../settings/defaults.js";
 import { BOLD_WEIGHT_OPTIONS } from "../../settings/initialConfig.js";
 import { AlignField, CollapsibleSection, ControlField, SelectInput, TextInput } from "../fields.jsx";
 
+// A saved value may still be a CSS length from before this box was in px: show it in px (1rem = 1em = 16px).
+function paragraphPx(v) {
+  const m = /^(-?\d*\.?\d+)(px|rem|em)?$/.exec(String(v == null ? "" : v).trim());
+  if (!m) return "";
+  return m[2] === "rem" || m[2] === "em" ? String(Number((Number(m[1]) * 16).toFixed(2))) : m[1];
+}
+
 export function BodyTextSection({ config, updateConfig }) {
   return (
     <CollapsibleSection label="Body Text">
       <div className="grid grid-cols-2 gap-3">
         <ControlField label="Body Font Size (px)" hint={`Default: ${DEFAULTS.fontSize}px`}>
           <TextInput
+            type="number" step="1" min="1"
             value={config.fontSize}
             onChange={(v) => updateConfig("fontSize", v)}
             placeholder={String(DEFAULTS.fontSize)}
@@ -18,6 +26,7 @@ export function BodyTextSection({ config, updateConfig }) {
         </ControlField>
         <ControlField label="Line Spacing" hint={`Default: ${DEFAULTS.lineHeight}`}>
           <TextInput
+            type="number" step="0.1" min="0.5"
             value={config.lineHeight}
             onChange={(v) => updateConfig("lineHeight", v)}
             placeholder={String(DEFAULTS.lineHeight)}
@@ -31,9 +40,10 @@ export function BodyTextSection({ config, updateConfig }) {
         onChange={(v) => updateConfig("textAlign", v)}
         hint="Code blocks and tables stay left-aligned."
       />
-      <ControlField label="Paragraph Spacing" hint={`Default: ${DEFAULTS.paragraphSpacing} (accepts px, rem, em…)`}>
+      <ControlField label="Paragraph Spacing (px)" hint={`Default: ${DEFAULTS.paragraphSpacing}px`}>
         <TextInput
-          value={config.paragraphSpacing}
+          type="number" step="1" min="0"
+          value={paragraphPx(config.paragraphSpacing)}
           onChange={(v) => updateConfig("paragraphSpacing", v)}
           placeholder={DEFAULTS.paragraphSpacing}
         />

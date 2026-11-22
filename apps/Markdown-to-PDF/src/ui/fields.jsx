@@ -212,6 +212,7 @@ export function HeadingLineControls({ level, config, updateConfig }) {
     <div>
       <ControlField label={`H${level} Line Height`} hint={`Default: ${DEFAULTS[lh]}`}>
         <TextInput
+          type="number" step="0.1" min="0.5"
           value={config[lh]}
           onChange={(v) => updateConfig(lh, v)}
           placeholder={String(DEFAULTS[lh])}

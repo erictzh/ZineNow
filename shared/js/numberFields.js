@@ -123,8 +123,14 @@ export function installNumberFields() {
   // One step the way the browser's spinner makes it; false at a limit (or if the box can't step).
   function stepBy(el, dir) {
     const before = el.value;
+    // An empty box that shows a default as its placeholder steps from that default, not from zero.
+    if (before === "" && el.placeholder !== "" && isFinite(Number(el.placeholder))) writeValue(el, el.placeholder);
+    const start = el.value;
     try { if (dir > 0) el.stepUp(); else el.stepDown(); } catch (err) { return false; }
-    if (el.value === before) return false;
+    // 0.1 + 0.1 style float noise: round to the step's decimals
+    const dec = (String(el.step).split(".")[1] || "").length;
+    if (dec && el.value !== "" && isFinite(Number(el.value))) writeValue(el, String(Number(Number(el.value).toFixed(dec))));
+    if (el.value === start && before !== "") return false;
     el.dispatchEvent(new Event("input", { bubbles: true })); // no inputType: how the browser's spinner reports it
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return true;

@@ -29,12 +29,12 @@ function toPositiveInteger(value, fallback) {
 }
 
 // Accepts a raw CSS length ("1.2rem", "20px", "2em") or a bare number
-// (treated as rem, matching the default unit used by paragraphSpacing).
-function toCssLength(value, fallback) {
+// (treated as bareUnit, rem by default).
+function toCssLength(value, fallback, bareUnit) {
   if (isBlank(value)) return fallback;
   var str = String(value).trim();
   if (/^-?\d*\.?\d+$/.test(str)) {
-    return str + 'rem';
+    return str + (bareUnit || 'rem');
   }
   if (/^-?\d*\.?\d+(px|rem|em|in|cm|mm|pt|%)$/.test(str)) {
     return str;
@@ -130,7 +130,7 @@ export function normalizeConfig(config) {
 
     fontSize: toPositiveNumber(config.fontSize, DEFAULTS.fontSize),
     lineHeight: toPositiveNumber(config.lineHeight, DEFAULTS.lineHeight),
-    paragraphSpacing: toCssLength(config.paragraphSpacing, DEFAULTS.paragraphSpacing),
+    paragraphSpacing: toCssLength(config.paragraphSpacing, DEFAULTS.paragraphSpacing + "px", "px"),
 
     h1Size: toPositiveNumber(config.h1Size, DEFAULTS.h1Size),
     h1Weight: toNumber(config.h1Weight, DEFAULTS.h1Weight),

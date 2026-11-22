@@ -19,6 +19,7 @@ export function PageSection({ config, updateConfig }) {
       <div className="grid grid-cols-2 gap-3">
         <ControlField label="Margin — Vertical (in)" hint={`Default: ${DEFAULTS.marginVerticalIn}in`}>
           <TextInput
+            type="number" step="0.125" min="0"
             value={config.marginVertical}
             onChange={(v) => updateConfig("marginVertical", v)}
             placeholder={String(DEFAULTS.marginVerticalIn)}
@@ -27,6 +28,7 @@ export function PageSection({ config, updateConfig }) {
         </ControlField>
         <ControlField label="Margin — Horizontal (in)" hint={`Default: ${DEFAULTS.marginHorizontalIn}in`}>
           <TextInput
+            type="number" step="0.125" min="0"
             value={config.marginHorizontal}
             onChange={(v) => updateConfig("marginHorizontal", v)}
             placeholder={String(DEFAULTS.marginHorizontalIn)}
