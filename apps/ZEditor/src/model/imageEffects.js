@@ -44,7 +44,7 @@ export const FEATHER_EFFECT = {
   label: "Feather",
   excludes: ["stroke"],
   controls: [
-    { kind: "slider", prop: "featherAmount", label: "Width (% of the short side)", min: 1, max: 50, fallback: 12 },
+    { kind: "slider", prop: "featherAmount", label: "Width (% of the short side)", min: 1, max: 100, fallback: 12, hint: "Above 50 the middle never gets fully solid: the fade is wider than half the picture." },
     { kind: "select", prop: "featherFade", label: "Fade", fallback: "smooth", options: [{ key: "smooth", label: "Smooth" }, { key: "linear", label: "Linear" }] },
     {
       kind: "select", prop: "featherSides", label: "Sides", fallback: "all",
