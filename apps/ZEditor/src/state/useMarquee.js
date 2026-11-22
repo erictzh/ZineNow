@@ -40,17 +40,18 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
         mode: mode || settings.action, targetId: sel.selectedAnnId,
       });
       if (result.notice) st.setNotice(result.notice);
-      if (!result.layer) return;
+      if (!result.layer && !result.fillOnly) return;
       // The page changed while the picture was being drawn: drop it rather than add it to another page.
       const now = latest.current.doc.selectedPage;
       if (!now || now.key !== page.key) return;
-      const newId = d.nextAnnIdRef.current++;
+      if (result.fillOnly && !result.cover && !result.sourcePatch) return;
+      const newId = result.layer ? d.nextAnnIdRef.current++ : null;
       const coverId = result.cover ? d.nextAnnIdRef.current++ : null;
       ed.updateAnnotationsFor(pageIdx, (anns) => applyMarqueeResult(anns, result, newId, coverId));
       // Show the new layer's own settings (the Format panel for an image) rather than the Marquee's. The
       // marquee stays on the page for when the tool is picked again (M).
       sel.selectTool("select");
-      sel.setSelectedAnnId(newId);
+      sel.setSelectedAnnId(result.layer ? newId : result.cover ? coverId : result.sourceId);
       sel.setSelectedAnnIds([]);
     } catch (err) {
       st.setErrorMsg("Couldn't make the layer: " + (err && err.message ? err.message : err));
@@ -82,5 +83,5 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  return { region, setRegion, makeLayer, busy, polygonOpen };
+  return { region, setRegion, makeLayer, makeFill: () => makeLayer("fill"), busy, polygonOpen };
 }

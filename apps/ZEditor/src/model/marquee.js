@@ -12,8 +12,11 @@ export { dragBox } from "./geometry.js";
 // source:       "visible" = everything you can see on the page; "layer" = only the selected layer.
 // includePaper: with "visible", whether the paper (a blank page's white, a PDF page's white backing) is part
 //               of the copy. Off leaves it transparent wherever only paper shows.
-// cutLeaves:    what a cut leaves behind in an image: "transparent", or "fill" (a solid colour).
-//               Cutting from everything visible can only cover the spot, so it always fills.
+// cutLeaves:    what a cut leaves behind in an image: "transparent", "fill" (a solid colour) or "surround" (made
+//               from the pixels round it, see fillStyle). Cutting from everything visible can only cover the
+//               spot, so there it is "fill" or "surround".
+// fillStyle:    how "surround" (and the Remove & fill button) fills: "smooth" (a blend of the edge colours) or
+//               "detail" (lines and edges run on through it); render/inpaint.js.
 // fillColor:    the colour of that fill (white, like paper).
 export const MARQUEE_DEFAULTS = {
   action: "copy",
@@ -21,6 +24,7 @@ export const MARQUEE_DEFAULTS = {
   source: "visible",
   includePaper: false,
   cutLeaves: "transparent",
+  fillStyle: "detail",
   fillColor: "#ffffff",
 };
 
@@ -123,7 +127,7 @@ export function applyMarqueeResult(annotations, result, newId, coverId) {
   const at = hasSource ? list.findIndex((a) => a.id === result.sourceId) + 1 || list.length : list.length;
   const added = [];
   if (result.cover) added.push({ ...result.cover, id: coverId });
-  added.push({ ...result.layer, id: newId });
+  if (result.layer) added.push({ ...result.layer, id: newId }); // none for "Remove & fill": the cover (or the patched layer) is all there is
   list.splice(at, 0, ...added);
   return list;
 }
