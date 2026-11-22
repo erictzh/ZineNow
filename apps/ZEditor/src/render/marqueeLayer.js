@@ -51,7 +51,7 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
   if (mode === "copy") return result;
   // "Remove & fill" always fills from the surroundings; a cut does when the panel says so.
   const surround = fillOnly || settings.cutLeaves === "surround";
-  const style = settings.fillStyle === "smooth" ? "smooth" : "detail";
+  const style = settings.fillStyle === "detail" ? "detail" : "smooth";
 
   if (fromLayer) {
     // Cutting takes the pixels out of the layer's own picture, so a text box or shape becomes an image first.

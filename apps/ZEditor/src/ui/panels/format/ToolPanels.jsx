@@ -106,9 +106,9 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
       </PanelSection>
       <PanelSection id="marquee.fill" title="Fill from surroundings" defaultOpen>
         <span className="ze-format-hint">Replaces what is inside the marquee with a fill made from the pixels round it, and makes no new layer. From a selected layer it changes that layer's picture; from All visible it puts the fill on top of the page as a new image.</span>
-        <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "smooth" ? "smooth" : "detail"} onChange={(e) => change({ fillStyle: e.target.value })}>
-          <option value="detail">Detailed: lines and edges run on through it</option>
+        <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" ? "detail" : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
           <option value="smooth">Smooth: a blend of the edge colours</option>
+          <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
         </select>
         <div className="ze-format-row">
           <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
