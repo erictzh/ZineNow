@@ -13,12 +13,16 @@ const { useState, useRef, useEffect } = React;
 //    (render/marqueeLayer.js) and adds it, with any cut, as one undo step. The new layer becomes the
 //    selected layer and the tool goes back to Move, so the Format panel shows its image settings.
 //    With no argument it uses the panel's Copy / Cut choice.
-export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
+export function useMarquee({ doc, selection, edits, toolDefaults, status, history }) {
   const [region, setRegion] = useState(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const latest = useRef(null);
-  latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee };
+  latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee, history };
+  // The last "Remove & fill": how deep the undo list was just after it, so "Try another" only undoes that very step.
+  const lastFill = useRef(null);
+  const undoDepth = history ? history.undoStack.length : 0;
+  useEffect(() => { if (lastFill.current && lastFill.current.depth === null) lastFill.current.depth = undoDepth; }, [undoDepth]);
 
   // A marquee belongs to the page it was drawn on, and to the shape it was drawn with.
   useEffect(() => { setRegion(null); }, [doc.selectedIdx, toolDefaults.marquee.shape]);
@@ -26,8 +30,9 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
   // A polygon is open while it is still being drawn.
   const polygonOpen = selection.tool === "marquee" && Boolean(region) && region.kind === "polygon" && !region.closed;
 
-  async function makeLayer(mode) {
-    const { doc: d, selection: sel, edits: ed, status: st, region: m, settings } = latest.current;
+  async function makeLayer(mode, settingsOverride) {
+    const { doc: d, selection: sel, edits: ed, status: st, region: m } = latest.current;
+    const settings = settingsOverride ? { ...latest.current.settings, ...settingsOverride } : latest.current.settings;
     if (busyRef.current || !d.selectedPage) return;
     if (!isUsableMarquee(m)) { st.setNotice("Draw a marquee on the page first (Marquee tool, M)."); return; }
     const page = d.selectedPage, pageIdx = d.selectedIdx;
@@ -48,6 +53,7 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
       const newId = result.layer ? d.nextAnnIdRef.current++ : null;
       const coverId = result.cover ? d.nextAnnIdRef.current++ : null;
       ed.updateAnnotationsFor(pageIdx, (anns) => applyMarqueeResult(anns, result, newId, coverId));
+      lastFill.current = mode === "fill" ? { depth: null, pageKey: page.key } : null; // depth is filled in by the effect above once the step is in
       // Show the new layer's own settings (the Format panel for an image) rather than the Marquee's. The
       // marquee stays on the page for when the tool is picked again (M).
       sel.selectTool("select");
@@ -83,5 +89,18 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  return { region, setRegion, makeLayer, makeFill: () => makeLayer("fill"), busy, polygonOpen };
+  // Undoes the fill just made (if nothing was done since) and fills again with another variation: other patches get copied.
+  function tryAnotherFill() {
+    const { history: hist, settings } = latest.current;
+    const seed = (settings.fillSeed || 0) + 1;
+    const last = lastFill.current;
+    const canUndo = hist && last && last.depth !== null && last.depth === hist.undoStack.length && last.pageKey === (latest.current.doc.selectedPage || {}).key;
+    toolDefaultsSetSeed(seed);
+    if (canUndo) hist.handleUndo();
+    // let the undo land before the new fill reads the page
+    setTimeout(() => makeLayer("fill", { fillSeed: seed }), canUndo ? 120 : 0);
+  }
+  const toolDefaultsSetSeed = (seed) => toolDefaults.setMarquee((cur) => ({ ...cur, fillSeed: seed }));
+
+  return { region, setRegion, makeLayer, makeFill: () => makeLayer("fill"), tryAnotherFill, busy, polygonOpen };
 }

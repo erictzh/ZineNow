@@ -16,7 +16,7 @@ import { MAX_HOLE_SIDE, patchFill } from "./patchFill.js";
 const LAYER_NAMES = { copy: "Layer via Copy", cut: "Layer via Cut" };
 const COVER_NAME = "Cut fill";
 const FILL_NAME = "Filled area";
-const FILL_CONTEXT_PX = 40; // pixels of the surroundings handed to the fill, round the region
+const FILL_CONTEXT_PX = 40; // pixels of the surroundings handed to the fill, round the region (at least; more when the panel's "copy from" reach is bigger)
 
 // Works out what "make layer" does, without changing anything. Returns
 //   { layer, cover, sourceId, sourcePatch, notice }
@@ -54,6 +54,16 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
   const surround = fillOnly || settings.cutLeaves === "surround";
   const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : "smooth";
   const fillInfo = { fellBack: false }; // set when "pattern" could not be used and Smooth was used instead
+  const num = (v, fallback, lo, hi) => (Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : fallback);
+  const fillOpts = { // the panel's fine-tune settings (model/marquee.js)
+    style,
+    grainAmount: settings.fillGrain === false ? 0 : num(settings.fillGrainAmount, 100, 0, 300) / 100,
+    half: (Math.round(num(settings.fillPatch, 15, 5, 41)) - 1) >> 1,
+    reach: num(settings.fillReach, 80, 20, 600),
+    mix: num(settings.fillMix, 100, 0, 100) / 100,
+    grow: Math.round(num(settings.fillGrow, 0, 0, 40)),
+    seed: Math.round(num(settings.fillSeed, 0, 0, 1e6)),
+  };
 
   if (fromLayer) {
     // Cutting takes the pixels out of the layer's own picture, so a text box or shape becomes an image first.
@@ -65,13 +75,13 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
       if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
       base = { ...target, ...rasterized };
     }
-    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null, settings.fillGrain !== false, fillInfo) };
+    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? fillOpts : null, fillInfo) };
     if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
   } else {
     // Everything visible can't be erased as one picture, so the spot is covered instead: the cover hides
     // whatever lay there (any kind of layer), and the new layer sits on top of it.
     result.cover = surround
-      ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, settings.fillGrain !== false, fillInfo)
+      ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, fillOpts, fillInfo)
       : await coverForRegion(marquee, settings.fillColor, scale);
     if (surround && !result.cover) return { notice: "There is nothing around the marquee to fill it from." };
     if (surround && fillOnly) result.sourceId = null; // on top of everything
@@ -164,7 +174,7 @@ function layerFromRegion(picture, marquee, scale, name) {
 // The image's own pixels with the region taken out (transparent) or painted over (fill). The page-px
 // outline is mapped into the image's pixels with imagePixelAt, which allows for the image's rotation,
 // scale and crop. Returns a PNG data URL.
-async function cutFromImage(image, polygon, settings, surroundStyle, grain, fillInfo) {
+async function cutFromImage(image, polygon, settings, fillOpts, fillInfo) {
   const source = await loadImageElement(image.src);
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth || source.naturalWidth;
@@ -177,11 +187,11 @@ async function cutFromImage(image, polygon, settings, surroundStyle, grain, fill
     if (i === 0) ctx.moveTo(at.x, at.y); else ctx.lineTo(at.x, at.y);
   });
   ctx.closePath();
-  if (surroundStyle) {
+  if (fillOpts) {
     // Replaced from the pixels round the region, in the image's own pixels
     const points = polygon.map(([px, py]) => { const at = imagePixelAt(image, px, py); return [at.x, at.y]; });
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-    await fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle, grain, fillInfo);
+    await fillCanvasRegion(ctx, canvas.width, canvas.height, points, fillOpts, fillInfo);
     ctx.restore();
     return canvas.toDataURL("image/png");
   }
@@ -232,10 +242,13 @@ async function coverForRegion(marquee, color, scale) {
 // Replaces the pixels inside `points` (a polygon, in this canvas's pixels) with a fill made from the pixels round it
 // (render/inpaint.js). Only the polygon's box and a margin are read and written back. Returns false when there was
 // nothing to fill from.
-async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style, grain, fillInfo) {
+async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, opts, fillInfo) {
+  const { style } = opts;
+  const grow = opts.grow || 0;
+  const around = Math.max(FILL_CONTEXT_PX, style === "pattern" ? opts.reach + 8 : 0) + grow;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-  const sx = Math.max(0, Math.floor(Math.min(...xs)) - FILL_CONTEXT_PX), sy = Math.max(0, Math.floor(Math.min(...ys)) - FILL_CONTEXT_PX);
-  const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + FILL_CONTEXT_PX), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + FILL_CONTEXT_PX);
+  const sx = Math.max(0, Math.floor(Math.min(...xs)) - around), sy = Math.max(0, Math.floor(Math.min(...ys)) - around);
+  const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + around), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + around);
   const w = ex - sx, h = ey - sy;
   if (w <= 0 || h <= 0) return false;
   // The polygon as a mask: any pixel it touches at all is part of the hole, so no rim of the old pixels is left.
@@ -247,32 +260,38 @@ async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style, g
   points.forEach(([x, y], i) => (i === 0 ? mctx.moveTo(x - sx, y - sy) : mctx.lineTo(x - sx, y - sy)));
   mctx.closePath();
   mctx.fill();
-  mctx.lineWidth = 2; mctx.strokeStyle = "#000"; mctx.stroke();
+  mctx.lineWidth = 2 + 2 * grow; mctx.lineJoin = "round"; mctx.strokeStyle = "#000"; mctx.stroke(); // "grow": the area is that much bigger all round
   const alpha = mctx.getImageData(0, 0, w, h).data;
   const hole = new Uint8Array(w * h);
   for (let i = 0; i < hole.length; i++) hole[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
   const data = ctx.getImageData(sx, sy, w, h);
   // Pattern copies real texture from the rest of the picture (render/patchFill.js); when it can't (the area is too big, or
-  // there is nothing to copy from) the smooth fill is used instead, with grain.
+  // there is nothing to copy from) the smooth fill is used instead. "Mix" blends the pattern with the smooth fill.
   let done = false;
   if (style === "pattern") {
-    done = await patchFill(data.data, w, h, hole);
+    const smooth = opts.mix < 1 ? data.data.slice() : null;
+    done = await patchFill(data.data, w, h, hole, { half: opts.half, reach: opts.reach, seed: opts.seed });
     if (!done && fillInfo) fillInfo.fellBack = true;
+    if (done && smooth) {
+      if (fillFromSurroundings(smooth, w, h, hole, "smooth", { grainAmount: opts.grainAmount })) {
+        for (let i = 0; i < hole.length; i++) if (hole[i]) for (let c = 0; c < 4; c++) data.data[i * 4 + c] = data.data[i * 4 + c] * opts.mix + smooth[i * 4 + c] * (1 - opts.mix);
+      }
+    }
   }
-  if (!done && !fillFromSurroundings(data.data, w, h, hole, style === "detail" ? "detail" : "smooth", { grain })) return false;
+  if (!done && !fillFromSurroundings(data.data, w, h, hole, style === "detail" ? "detail" : "smooth", { grainAmount: opts.grainAmount })) return false;
   ctx.putImageData(data, sx, sy);
   return true;
 }
 
 // The picture that covers the spot after a cut (or "Remove & fill") from everything visible, with the spot filled from
 // what is round it: an image of the region's box, see-through outside the region's outline. Null when it can't be filled.
-async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, grain, fillInfo) {
+async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, fillOpts, fillInfo) {
   // The page as it looks, paper included, so the fill sees the paper too.
   const picture = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, false);
   const polygon = regionPolygon(marquee);
   const points = polygon.map(([x, y]) => [x * scale, y * scale]);
   const ctx = picture.getContext("2d");
-  if (!(await fillCanvasRegion(ctx, picture.width, picture.height, points, style, grain, fillInfo))) return null;
+  if (!(await fillCanvasRegion(ctx, picture.width, picture.height, points, fillOpts, fillInfo))) return null;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
   const right = Math.min(picture.width, Math.ceil(Math.max(...xs))), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)));

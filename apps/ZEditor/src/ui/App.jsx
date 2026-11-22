@@ -53,7 +53,7 @@ export function App() {
   const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
   const magic = useMagicErase({ doc, selection, edits, toolDefaults });
   const imageTrace = useImageTrace({ doc, selection, edits });
-  const marquee = useMarquee({ doc, selection, edits, toolDefaults, status });
+  const marquee = useMarquee({ doc, selection, edits, toolDefaults, status, history });
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
