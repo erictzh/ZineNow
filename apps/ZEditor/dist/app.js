@@ -16090,12 +16090,21 @@
     const lastEnd = useRef25(0);
     const lastMs = useRef25(0);
     const alive = useRef25(true);
+    const [on, setOn] = useState33(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const onRef = useRef25(on);
+    onRef.current = on;
     latest.current = { pages, selectedKey };
+    useEffect23(() => {
+      const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
+      window.addEventListener("zn-display-prefs", listener);
+      return () => window.removeEventListener("zn-display-prefs", listener);
+    }, []);
     const isStale = (p) => {
       const m = madeFrom.current.get(p.key);
       return !m || m.annotations !== p.annotations || m.filter !== p.filter || m.base !== p.dataUrl;
     };
     function nextStale() {
+      if (!onRef.current) return null;
       const { pages: ps, selectedKey: sel } = latest.current;
       let first = null;
       for (const p of ps) {
@@ -16140,7 +16149,7 @@
       lastMs.current = performance.now() - started;
       lastEnd.current = performance.now();
       running.current = false;
-      if (!alive.current) return;
+      if (!alive.current || !onRef.current) return;
       madeFrom.current.set(p.key, from);
       if (blob && latest.current.pages.some((q) => q.key === p.key)) {
         const old = urlsRef.current[p.key];
@@ -16151,7 +16160,7 @@
       schedule();
     }
     useEffect23(() => {
-      const wanted = new Set(pages.filter(needsLive).map((p) => p.key));
+      const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
         if (wanted.has(Number(k))) continue;
@@ -16165,7 +16174,7 @@
         setUrls(next);
       }
       schedule();
-    }, [pages, selectedKey]);
+    }, [pages, selectedKey, on]);
     useEffect23(() => {
       alive.current = true;
       return () => {
@@ -16174,8 +16183,9 @@
         for (const url of Object.values(urlsRef.current)) URL.revokeObjectURL(url);
       };
     }, []);
-    return urls;
+    return on ? urls : NO_THUMBS;
   }
+  var NO_THUMBS = {};
 
   // apps/ZEditor/src/ui/sidebar/PageGap.jsx
   function PageGap({ onInsert }) {
@@ -16547,7 +16557,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5e9bf58"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5a2c8b0"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -16931,6 +16941,9 @@
         { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) }
       ],
       groups: [
+        { title: "Pages panel", checks: [
+          { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." }
+        ] },
         { title: "Show", checks: [
           { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" }
         ], choices: [

@@ -13,6 +13,9 @@
 //   - the pictures are blob URLs kept out of the page data, so undo history doesn't grow, and old ones
 //     are released.
 //
+// It can be switched off in the Display gear ("Live page thumbnails", ui/displaySettings.js): then nothing
+// is drawn or scheduled, the pictures made so far are released, and the plain thumbnails show.
+//
 // Returns { [page.key]: url } for the pages that have a live thumbnail.
 
 import { renderPageThumbWithItems } from "../render/pageRender.js";
@@ -38,7 +41,17 @@ export function useLiveThumbs(pages, selectedKey) {
   const lastEnd = useRef(0);
   const lastMs = useRef(0);
   const alive = useRef(true);
+  // The Display gear's tick box: html.ze-static-thumbs means off. The gear applies its classes before the
+  // first render and announces every change with a window event.
+  const [on, setOn] = useState(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+  const onRef = useRef(on);
+  onRef.current = on;
   latest.current = { pages, selectedKey };
+  useEffect(() => {
+    const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
+    window.addEventListener("zn-display-prefs", listener);
+    return () => window.removeEventListener("zn-display-prefs", listener);
+  }, []);
 
   const isStale = (p) => {
     const m = madeFrom.current.get(p.key);
@@ -46,6 +59,7 @@ export function useLiveThumbs(pages, selectedKey) {
   };
   // The page to draw next: the selected one if it needs it, else the first that does.
   function nextStale() {
+    if (!onRef.current) return null;
     const { pages: ps, selectedKey: sel } = latest.current;
     let first = null;
     for (const p of ps) {
@@ -90,7 +104,7 @@ export function useLiveThumbs(pages, selectedKey) {
     lastMs.current = performance.now() - started;
     lastEnd.current = performance.now();
     running.current = false;
-    if (!alive.current) return;
+    if (!alive.current || !onRef.current) return; // unmounted, or switched off while this was drawing
     // Recorded even when drawing failed, so the same state isn't retried in a loop.
     madeFrom.current.set(p.key, from);
     if (blob && latest.current.pages.some((q) => q.key === p.key)) {
@@ -104,7 +118,7 @@ export function useLiveThumbs(pages, selectedKey) {
 
   useEffect(() => {
     // Pages that were deleted, or no longer have anything on them, go back to the base thumbnail.
-    const wanted = new Set(pages.filter(needsLive).map((p) => p.key));
+    const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []); // off: none, so all are released
     let next = null;
     for (const k of Object.keys(urlsRef.current)) {
       if (wanted.has(Number(k))) continue;
@@ -115,7 +129,7 @@ export function useLiveThumbs(pages, selectedKey) {
     for (const k of [...madeFrom.current.keys()]) if (!wanted.has(k)) madeFrom.current.delete(k);
     if (next) { urlsRef.current = next; setUrls(next); }
     schedule();
-  }, [pages, selectedKey]);
+  }, [pages, selectedKey, on]);
 
   useEffect(() => {
     alive.current = true;
@@ -126,5 +140,7 @@ export function useLiveThumbs(pages, selectedKey) {
     };
   }, []);
 
-  return urls;
+  return on ? urls : NO_THUMBS;
 }
+
+const NO_THUMBS = {};

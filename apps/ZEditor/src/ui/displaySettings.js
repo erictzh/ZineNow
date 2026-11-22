@@ -4,6 +4,8 @@
 //     contents and the gear + touch bar group (styles/display.css). Not the canvas or rulers (they
 //     have their own zoom and measure in screen pixels) and not the floating Layers panel.
 //   - Thumbnail size: --ze-thumb-zoom on the page thumbnails, 30-100% of their usual size.
+//   - Live page thumbnails: ticked by default; unticked, ze-static-thumbs on <html> and the Pages panel
+//     shows the plain page thumbnails again, with no extra work (state/useLiveThumbs.js).
 //   - Show: ze-hide-topbar on <html>, and a Side panels dropdown (both, Pages only, Format only)
 //     that sets ze-hide-pages / -format (styles/display.css).
 // No dark paper here on purpose: ZEditor is where colours are picked, and an inverted page would
@@ -23,6 +25,9 @@ export function installZeditorDisplaySettings() {
       { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) },
     ],
     groups: [
+      { title: "Pages panel", checks: [
+        { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." },
+      ] },
       { title: "Show", checks: [
         { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
       ], choices: [
