@@ -7,6 +7,7 @@ import { ellipseOutline, isEllipse } from "./outlines.js";
 export const STROKE_EFFECT = {
   key: "stroke",
   label: "Stroke",
+  excludes: ["feather"], // a stroke on a faded edge looks wrong, so turning one on turns the other off
   controls: [
     { kind: "color", prop: "strokeColor", label: "Color", fallback: "#000000" },
     { kind: "slider", prop: "strokeThickness", label: "Thickness (px)", min: 1, max: 40, fallback: 4 },
@@ -35,7 +36,52 @@ export const TEXTURE_EFFECT = {
     { kind: "slider", prop: "textureVariation", label: "Variation", min: 0, max: 100, fallback: 0 },
   ],
 };
-export const IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+
+// Feather: the edge fades to see-through. Not an edge shape: it works with Rounded, Ellipse, Torn Edge and Scissor cut (the
+// fade follows whichever is on). A stroke would sit on a faded edge, so the two switch each other off.
+export const FEATHER_EFFECT = {
+  key: "feather",
+  label: "Feather",
+  excludes: ["stroke"],
+  controls: [
+    { kind: "slider", prop: "featherAmount", label: "Width (% of the short side)", min: 1, max: 50, fallback: 12 },
+    { kind: "select", prop: "featherFade", label: "Fade", fallback: "smooth", options: [{ key: "smooth", label: "Smooth" }, { key: "linear", label: "Linear" }] },
+    {
+      kind: "select", prop: "featherSides", label: "Sides", fallback: "all",
+      options: [{ key: "all", label: "All round" }, { key: "tb", label: "Top and bottom" }, { key: "lr", label: "Left and right" }, { key: "top", label: "Top only" }, { key: "bottom", label: "Bottom only" }, { key: "left", label: "Left only" }, { key: "right", label: "Right only" }],
+      hint: "With an edge shape on (Rounded, Ellipse...) the fade is always all round.",
+    },
+  ],
+};
+
+// Lomo: contrast, colour, a cross-process tint, vignette and grain in one look (render/lomo.js). The presets set all of
+// its numbers at once; changing any number after that makes it "Custom".
+const lomoPreset = (key, label, v) => ({ key, label, values: { lomoStrength: 100, lomoContrast: 40, lomoSaturation: 30, lomoTint: 40, lomoShadowTint: "#0e5a73", lomoHighlightTint: "#ffb35c", lomoVignette: 55, lomoVignetteSize: 50, lomoVignetteRound: 50, lomoGrain: 20, ...v } });
+export const LOMO_CONTROLS = [
+  { kind: "slider", prop: "lomoStrength", label: "Strength (%)", min: 0, max: 100, fallback: 100 },
+  { kind: "slider", prop: "lomoContrast", label: "Contrast", min: 0, max: 100, fallback: 40 },
+  { kind: "slider", prop: "lomoSaturation", label: "Saturation boost", min: -50, max: 100, fallback: 30 },
+  { kind: "slider", prop: "lomoTint", label: "Colour shift", min: 0, max: 100, fallback: 40 },
+  { kind: "color", prop: "lomoShadowTint", label: "Shadow colour", fallback: "#0e5a73" },
+  { kind: "color", prop: "lomoHighlightTint", label: "Highlight colour", fallback: "#ffb35c" },
+  { kind: "slider", prop: "lomoVignette", label: "Vignette: darkness", min: 0, max: 100, fallback: 55 },
+  { kind: "slider", prop: "lomoVignetteSize", label: "Vignette: how far in", min: 0, max: 100, fallback: 50 },
+  { kind: "slider", prop: "lomoVignetteRound", label: "Vignette: round ↔ fits the picture", min: 0, max: 100, fallback: 50 },
+  { kind: "slider", prop: "lomoGrain", label: "Grain", min: 0, max: 100, fallback: 20 },
+];
+export const LOMO_EFFECT = {
+  key: "lomo",
+  label: "Lomo",
+  controls: LOMO_CONTROLS,
+  presets: [
+    lomoPreset("classic", "Classic", {}),
+    lomoPreset("warm", "Warm", { lomoShadowTint: "#6b2d0f", lomoHighlightTint: "#ffd27a", lomoSaturation: 20, lomoGrain: 25 }),
+    lomoPreset("teal", "Teal & orange", { lomoShadowTint: "#0a6a78", lomoHighlightTint: "#ff9a4d", lomoTint: 60, lomoContrast: 50 }),
+    lomoPreset("faded", "Faded", { lomoContrast: 10, lomoSaturation: -10, lomoTint: 30, lomoShadowTint: "#3a4a6b", lomoHighlightTint: "#f2d8b0", lomoVignette: 35, lomoGrain: 35 }),
+  ],
+};
+
+export const IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
 
 // The active edge shape's outline, or null for a plain rectangle.
 export function imageEdgeOutline(ann) {

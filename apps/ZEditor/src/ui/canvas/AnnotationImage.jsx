@@ -1,15 +1,17 @@
 // One placed image on the page, including crop mode.
 
 import { hexToRgb } from "../../model/color.js";
-import { angleOf, controlValues } from "../../model/controls.js";
+import { angleOf, controlValues, effectSettings } from "../../model/controls.js";
 import { resizedCrop } from "../../model/crop.js";
 import { MIN_RESIZE_SIZE, resizedBox } from "../../model/geometry.js";
-import { imageEdgeOutline } from "../../model/imageEffects.js";
+import { FEATHER_EFFECT, LOMO_CONTROLS, imageEdgeOutline } from "../../model/imageEffects.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, effectiveImageFilter } from "../../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS, hasPhotoAdjust } from "../../model/photoAdjust.js";
 import { loadImageElement } from "../../render/drawImage.js";
 import { applyPageFilter } from "../../render/filters/applyFilter.js";
 import { LUMINANCE_MATRIX_VALUES } from "../../render/filters/luma.js";
+import { applyFeather } from "../../render/feather.js";
+import { applyLomo } from "../../render/lomo.js";
 import { applyPhotoAdjust } from "../../render/photoAdjust.js";
 import { BoxEffectOverlays } from "./BoxEffectOverlays.jsx";
 import { boxGroupStyle, boxOuterStyle } from "./boxStyles.js";
@@ -101,9 +103,11 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
   // Photo adjustments are per-pixel too, so an adjusted image is drawn on
   // the canvas as well (adjusted first, then filtered).
   const adjusted = hasPhotoAdjust(ann);
-  const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted;
+  // Lomo and Feather are pixel looks too (render/lomo.js, render/feather.js), applied in the same canvas: adjustments, Lomo, filter, then Feather.
+  const lomoOn = Boolean(ann.lomo), featherOn = Boolean(ann.feather);
+  const usesFilterCanvas = Boolean(FILTER_CONTROLS[filterType]) || adjusted || lomoOn || featherOn;
   const filterCanvasKey = usesFilterCanvas
-    ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null])
+    ? JSON.stringify([imgFilter, adjusted ? controlValues(ann, PHOTO_ADJUST_CONTROLS) : null, lomoOn ? controlValues(ann, LOMO_CONTROLS) : null, featherOn ? [effectSettings(ann, FEATHER_EFFECT), imageEdgeOutline(ann)] : null])
     : null;
 
   useEffect(() => {
@@ -121,7 +125,9 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
       const ctx = canvas.getContext("2d");
       ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
       if (adjusted) applyPhotoAdjust(ctx, canvas, ann);
+      if (lomoOn) applyLomo(ctx, canvas, ann);
       applyPageFilter(ctx, canvas, imgFilter, 1);
+      if (featherOn) applyFeather(ctx, canvas, ann, imageEdgeOutline(ann), w / ann.width);
     })();
     return () => { cancelled = true; };
   }, [filterCanvasKey, isCropping, ann.src, ann.width, ann.height, cropX, cropY, cropW, cropH]);
