@@ -205,8 +205,12 @@ export function teleaFill(img, msk, w, h) {
       return [gx, gy];
     };
     const [gtx, gty] = gradT(x, y);
-    tmp[0] = tmp[1] = tmp[2] = tmp[3] = 0;
-    let sw = 0;
+    // Colour and brightness are carried apart: the brightness gradient (luma) is carried along an edge and the colour
+    // is only scaled by it, so a sharp edge can't push the channels in different ways (that gave colour streaks on a
+    // dark branch against sky). Alpha has its own gradient.
+    const luma = (jj) => 0.299 * img[jj * 4] + 0.587 * img[jj * 4 + 1] + 0.114 * img[jj * 4 + 2];
+    const samples = [];
+    let sw = 0, lLo = 255, lHi = 0, aLo = 255, aHi = 0;
     for (let qy = y - RADIUS; qy <= y + RADIUS; qy++) for (let qx = x - RADIUS; qx <= x + RADIUS; qx++) {
       const j = at(qx, qy);
       if (j < 0 || flag[j] === INSIDE) continue;
@@ -216,16 +220,32 @@ export function teleaFill(img, msk, w, h) {
       let dir = Math.abs(rx * gtx + ry * gty);
       if (dir < 0.01) dir = 1e-6;
       const w8 = dir * (1 / dist) * (1 / (1 + Math.abs(T[i] - T[j])));
-      // the known pixel's colour carried to here along its own gradient
+      // the known pixel's brightness and alpha carried to here along their own gradients
       const gl = at(qx - 1, qy), gr = at(qx + 1, qy), gu = at(qx, qy - 1), gd = at(qx, qy + 1);
-      for (let c = 0; c < 4; c++) {
-        const v = (jj) => img[jj * 4 + c];
-        const l = gl >= 0 && flag[gl] !== INSIDE, r = gr >= 0 && flag[gr] !== INSIDE, u = gu >= 0 && flag[gu] !== INSIDE, dn = gd >= 0 && flag[gd] !== INSIDE;
-        const gx = l && r ? (v(gr) - v(gl)) / 2 : r ? v(gr) - v(j) : l ? v(j) - v(gl) : 0;
-        const gy = u && dn ? (v(gd) - v(gu)) / 2 : dn ? v(gd) - v(j) : u ? v(j) - v(gu) : 0;
-        tmp[c] += w8 * (v(j) + gx * rx + gy * ry);
-      }
+      const l = gl >= 0 && flag[gl] !== INSIDE, r = gr >= 0 && flag[gr] !== INSIDE, u = gu >= 0 && flag[gu] !== INSIDE, dn = gd >= 0 && flag[gd] !== INSIDE;
+      const grad = (f) => [
+        l && r ? (f(gr) - f(gl)) / 2 : r ? f(gr) - f(j) : l ? f(j) - f(gl) : 0,
+        u && dn ? (f(gd) - f(gu)) / 2 : dn ? f(gd) - f(j) : u ? f(j) - f(gu) : 0,
+      ];
+      const lj = luma(j), aj = img[j * 4 + 3];
+      const [lgx, lgy] = grad(luma), [agx, agy] = grad((jj) => img[jj * 4 + 3]);
+      samples.push({ w: w8, j, lj, lc: lj + lgx * rx + lgy * ry, ac: aj + agx * rx + agy * ry });
+      if (lj < lLo) lLo = lj; if (lj > lHi) lHi = lj;
+      if (aj < aLo) aLo = aj; if (aj > aHi) aHi = aj;
       sw += w8;
+    }
+    // A carried value never goes far outside the range the known pixels round here have (a little room, so a smooth
+    // gradient still runs on through the hole).
+    const lRoom = 0.3 * (lHi - lLo) + 2, aRoom = 0.3 * (aHi - aLo) + 2;
+    tmp[0] = tmp[1] = tmp[2] = tmp[3] = 0;
+    for (const sm of samples) {
+      const lc = Math.max(lLo - lRoom, Math.min(lHi + lRoom, sm.lc));
+      const scaled = sm.lj > 8;
+      for (let c = 0; c < 3; c++) {
+        const base = img[sm.j * 4 + c];
+        tmp[c] += sm.w * Math.max(0, Math.min(255, scaled ? base * (lc / sm.lj) : base + (lc - sm.lj)));
+      }
+      tmp[3] += sm.w * Math.max(0, Math.min(255, Math.max(aLo - aRoom, Math.min(aHi + aRoom, sm.ac))));
     }
     for (let c = 0; c < 4; c++) img[i * 4 + c] = sw > 0 ? Math.max(0, Math.min(255, tmp[c] / sw)) : 0;
   };

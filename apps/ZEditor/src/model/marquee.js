@@ -15,8 +15,8 @@ export { dragBox } from "./geometry.js";
 // cutLeaves:    what a cut leaves behind in an image: "transparent", "fill" (a solid colour) or "surround" (made
 //               from the pixels round it, see fillStyle). Cutting from everything visible can only cover the
 //               spot, so there it is "fill" or "surround".
-// fillStyle:    how "surround" (and the Remove & fill button) fills: "smooth" (a blend of the edge colours) or
-//               "detail" (lines and edges run on through it); render/inpaint.js.
+// fillStyle:    how "surround" (and the Remove & fill button) fills: "smooth" (a blend of the edge colours, the
+//               default) or "detail" (lines and edges run on through it); render/inpaint.js.
 // fillColor:    the colour of that fill (white, like paper).
 export const MARQUEE_DEFAULTS = {
   action: "copy",
@@ -24,7 +24,7 @@ export const MARQUEE_DEFAULTS = {
   source: "visible",
   includePaper: false,
   cutLeaves: "transparent",
-  fillStyle: "detail",
+  fillStyle: "smooth",
   fillColor: "#ffffff",
 };
 

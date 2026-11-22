@@ -78,5 +78,31 @@ for (const style of ["smooth", "detail"]) {
   ok(Math.abs(px(img, BW, 900, 200)[0] - 30) <= 3 && Math.abs(px(img, BW, 900, 200)[2] - 90) <= 3, "smooth: a 1500 x 200 hole in a flat picture is filled (" + (Date.now() - t0) + " ms)");
 }
 
+// 6. at a sharp edge the fill must stay on the colours that are there: a dark branch against blue sky (the case that
+// once gave a rainbow starburst). Every filled pixel has to lie near the line from the sky colour to the branch colour.
+{
+  const sky = [40, 110, 230], dark = [10, 10, 10];
+  const BW = 90, BH = 70;
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const f = (x, y) => {
+    const onBranch = Math.abs(y - (35 + (x - 45) * 0.3)) <= 2 && x > 45; // a branch coming in from the right and ending
+    const base = onBranch ? dark : sky;
+    const n = (rnd() - 0.5) * 6;
+    return [base[0] + n, base[1] + n, base[2] + n];
+  };
+  const img = make(BW, BH, f);
+  const hole = holeAt(BW, BH, 30, 22, 62, 46);
+  for (let i = 0; i < hole.length; i++) if (hole[i]) img.set([255, 0, 255, 255], i * 4);
+  fillFromSurroundings(img, BW, BH, hole, "detail");
+  const dseg = (c) => { // distance from colour c to the segment sky..dark
+    const d = [sky[0] - dark[0], sky[1] - dark[1], sky[2] - dark[2]], len2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    let t = ((c[0] - dark[0]) * d[0] + (c[1] - dark[1]) * d[1] + (c[2] - dark[2]) * d[2]) / len2; t = Math.max(0, Math.min(1, t));
+    return Math.hypot(c[0] - (dark[0] + d[0] * t), c[1] - (dark[1] + d[1] * t), c[2] - (dark[2] + d[2] * t));
+  };
+  let worst = 0;
+  for (let i = 0; i < hole.length; i++) if (hole[i]) worst = Math.max(worst, dseg([img[i * 4], img[i * 4 + 1], img[i * 4 + 2]]));
+  ok(worst < 40, "detail: a fill beside a sharp edge stays on the sky-to-branch colours (worst distance " + worst.toFixed(1) + ")");
+}
+
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
