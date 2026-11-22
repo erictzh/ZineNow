@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-21 (SVG files in ZEditor Insert Image; see "Session 2026-11-21 (cloud session): SVG in Insert Image" at the end).
+Last updated: 2026-11-22 (Layers panel header over a ruler no longer makes guides by touch; SVG button in ZEditor; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -375,3 +375,8 @@ At the user's request every commit, branch and the `pre-modular-refactor` tag no
 - **So there is a separate SVG button** in the tool bar, after Insert Image (`ToolBar.jsx`, label "SVG"; `handleSvgToolClick` / `handleSvgFileChosen` in `state/useAnnotationEdits.js`, second hidden input `svgInputRef` in `App.jsx`). Its input has **no `accept`**, so Android should open the Files browser. Whatever comes back: an SVG (by type/name, or `<svg` in the first 4 KB when a file browser drops the name) is inserted; another picture is inserted as usual; anything else gets an alert. Tested headless (an SVG, an SVG without extension, a PNG, a .txt); **not yet confirmed on the tablet** that Files opens.
 - **An SVG is turned into a PNG as it's inserted** (`svgFileToPng` in `io/images.js`, called from `addImageAnnotationFromFile` in `state/useAnnotationEdits.js`, so pasted SVGs too): its longest side is drawn at 2048 px, and it starts at its own size (width/height with px/pt/pc/in/cm/mm converted, else the viewBox, else 300 x 150), capped at 260 px wide like other pictures. Why a PNG and not the SVG itself: an SVG with only a viewBox has no size of its own (the browser draws it at 0 x 0), and the eraser, filters, crop, Vectorize and PDF export all work on pixels anyway (PDF export rasterises the page). An unreadable SVG shows an alert and adds nothing.
 - Tested headless: a viewBox-only SVG and a 40 x 20 mm one insert at 100 x 50 and 151 x 76 px with 2048 px pixels; a broken file alerts. - This cloud container commits as **erictzh <59077352+erictzh@users.noreply.github.com>** (repo-local git config), per the author-rename note above.
+
+## Session 2026-11-22 (cloud session): Layers panel header over the ruler
+- **Bug:** with the floating Layers panel's header over a ruler, a finger drag on the header made a guide instead of moving the panel (and the header's buttons there were stolen too). `ui/touchInput.js` treats a finger within 12 px of a ruler as on it (`rulerNear`) and replaced the press target with the ruler whatever was on top.
+- **Fix:** the ruler slop now applies only when the finger's real target is inside the canvas area (`.ze-ruler-frame`) and not in something floating over the rulers (`OVER_RULERS`: `.ze-layers-panel`, `.ze-bottom-left` gear + touch bar). Mouse presses were never affected (they hit the top element).
+- Tested headless with synthetic touch: before the fix, dragging the header over the top ruler left the panel put and made guides; after it, the panel moves and no guide appears; a finger just under the ruler on the canvas still makes a guide.

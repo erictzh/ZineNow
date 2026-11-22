@@ -37,6 +37,8 @@ const DRAG_SURFACES = ".ze-page, .ze-ruler, .ze-ruler-guide, .ze-layers-head";
 const NATIVE_TARGETS = "input, textarea, select, button, [contenteditable], .ze-typeset-surface";
 // Where two fingers scroll the canvas (the pane, the page in it, and the rulers around it).
 const SCROLL_AREA = ".ze-ruler-frame";
+// Things that float over the rulers and take their own presses (see onPointerDown).
+const OVER_RULERS = ".ze-layers-panel, .ze-bottom-left";
 
 const FINGER_HOLD_MS = 120; // how long a finger press waits for a possible second finger
 const RULER_SLOP_PX = 12; // a finger this close below/beside a ruler counts as on it
@@ -152,7 +154,10 @@ export function installTouchInput() {
     const isFinger = e.pointerType === "touch";
     let target = e.target instanceof Element ? e.target : null;
     if (!target) return;
-    if (isFinger) {
+    // A finger just off a ruler counts as on it, but only where nothing else is on top: the
+    // floating Layers panel (its header can sit over a ruler) and the gear / touch bar keep their
+    // own presses, so dragging the panel doesn't make a guide.
+    if (isFinger && target.closest(SCROLL_AREA) && !target.closest(OVER_RULERS)) {
       const ruler = rulerNear(e.clientX, e.clientY);
       if (ruler) target = ruler;
     }
