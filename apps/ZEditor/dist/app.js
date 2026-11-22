@@ -11127,6 +11127,157 @@
     return true;
   }
 
+  // apps/ZEditor/src/render/patchFill.js
+  var DEFAULT_HALF = 7;
+  var MARGIN2 = 80;
+  var MAX_HOLE_SIDE = 360;
+  var MAX_CANDIDATES = 3e3;
+  async function patchFill(rgba, width, height, hole, options = {}) {
+    const HALF = options.half || DEFAULT_HALF;
+    let x0 = width, y0 = height, x1 = -1, y1 = -1;
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      if (!hole[y * width + x]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    if (x1 < 0 || x1 - x0 + 1 > MAX_HOLE_SIDE || y1 - y0 + 1 > MAX_HOLE_SIDE) return false;
+    const bx = Math.max(0, x0 - MARGIN2), by = Math.max(0, y0 - MARGIN2);
+    const w = Math.min(width, x1 + 1 + MARGIN2) - bx, h = Math.min(height, y1 + 1 + MARGIN2) - by;
+    const img = new Float32Array(w * h * 4);
+    const known = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const s = (by + y) * width + bx + x, d = y * w + x;
+      known[d] = hole[s] ? 0 : 1;
+      for (let c = 0; c < 4; c++) img[d * 4 + c] = rgba[s * 4 + c];
+    }
+    const startKnown = known.slice();
+    const sat = new Int32Array((w + 1) * (h + 1));
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) sat[(y + 1) * (w + 1) + x + 1] = (known[y * w + x] ? 0 : 1) + sat[y * (w + 1) + x + 1] + sat[(y + 1) * (w + 1) + x] - sat[y * (w + 1) + x];
+    const holesIn = (ax, ay, bxx, byy) => sat[(byy + 1) * (w + 1) + bxx + 1] - sat[ay * (w + 1) + bxx + 1] - sat[(byy + 1) * (w + 1) + ax] + sat[ay * (w + 1) + ax];
+    const all = [];
+    for (let y = HALF; y < h - HALF; y++) for (let x = HALF; x < w - HALF; x++) if (holesIn(x - HALF, y - HALF, x + HALF, y + HALF) === 0) all.push(y * w + x);
+    if (!all.length) return false;
+    const stepEvery = Math.max(1, Math.ceil(all.length / (options.candidates || MAX_CANDIDATES)));
+    const cands = [];
+    for (let i = 0; i < all.length; i += stepEvery) cands.push(all[i]);
+    const conf = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) conf[i] = known[i] ? 1 : 0;
+    const luma = (i) => 0.299 * img[i * 4] + 0.587 * img[i * 4 + 1] + 0.114 * img[i * 4 + 2];
+    const at = (x, y) => x < 0 || y < 0 || x >= w || y >= h ? -1 : y * w + x;
+    const isFront = (i) => {
+      if (known[i]) return false;
+      const x = i % w, y = (i - x) / w;
+      return x > 0 && known[i - 1] || x < w - 1 && known[i + 1] || y > 0 && known[i - w] || y < h - 1 && known[i + w];
+    };
+    const prio = new Float32Array(w * h);
+    const priorityAt = (i) => {
+      const x = i % w, y = (i - x) / w;
+      let sum = 0, n = 0;
+      for (let yy = Math.max(0, y - HALF); yy <= Math.min(h - 1, y + HALF); yy++) for (let xx = Math.max(0, x - HALF); xx <= Math.min(w - 1, x + HALF); xx++) {
+        sum += conf[yy * w + xx];
+        n++;
+      }
+      const confidence = sum / n;
+      let gx = 0, gy = 0, best = 0;
+      for (let yy = y - 1; yy <= y + 1; yy++) for (let xx = x - 1; xx <= x + 1; xx++) {
+        const j = at(xx, yy);
+        if (j < 0 || !known[j]) continue;
+        const l = at(xx - 1, yy), r = at(xx + 1, yy), u = at(xx, yy - 1), d = at(xx, yy + 1);
+        if (l < 0 || r < 0 || u < 0 || d < 0 || !known[l] || !known[r] || !known[u] || !known[d]) continue;
+        const dx = (luma(r) - luma(l)) / 2, dy = (luma(d) - luma(u)) / 2, m = dx * dx + dy * dy;
+        if (m > best) {
+          best = m;
+          gx = dx;
+          gy = dy;
+        }
+      }
+      let nx = 0, ny = 0;
+      for (let yy = -1; yy <= 1; yy++) for (let xx = -1; xx <= 1; xx++) {
+        const j = at(x + xx, y + yy);
+        const k = j >= 0 && known[j] ? 1 : 0;
+        nx += xx * k;
+        ny += yy * k;
+      }
+      const nl = Math.hypot(nx, ny) || 1;
+      const data = Math.abs(-gy * (nx / nl) + gx * (ny / nl)) / 255 + 1e-3;
+      return confidence * data;
+    };
+    const front = /* @__PURE__ */ new Set();
+    for (let i = 0; i < w * h; i++) if (isFront(i)) {
+      front.add(i);
+      prio[i] = priorityAt(i);
+    }
+    const side = 2 * HALF + 1;
+    let lastYield = Date.now();
+    while (front.size) {
+      let pi = -1, bp = -1;
+      for (const i of front) if (prio[i] > bp) {
+        bp = prio[i];
+        pi = i;
+      }
+      const px = pi % w, py = (pi - px) / w;
+      const tOff = [], tRgb = [];
+      for (let dy = -HALF; dy <= HALF; dy++) for (let dx = -HALF; dx <= HALF; dx++) {
+        const j = at(px + dx, py + dy);
+        if (j < 0 || !known[j]) continue;
+        tOff.push(dy * w + dx);
+        tRgb.push(img[j * 4], img[j * 4 + 1], img[j * 4 + 2]);
+      }
+      let bestC = -1, bestD = Infinity;
+      for (let k = 0; k < cands.length; k++) {
+        const c = cands[k];
+        let d = 0;
+        for (let t = 0; t < tOff.length && d < bestD; t++) {
+          const o = (c + tOff[t]) * 4;
+          const a = img[o] - tRgb[t * 3], b = img[o + 1] - tRgb[t * 3 + 1], e = img[o + 2] - tRgb[t * 3 + 2];
+          d += a * a + b * b + e * e;
+        }
+        if (d < bestD) {
+          bestD = d;
+          bestC = c;
+        }
+      }
+      if (bestC < 0) return false;
+      const cf = conf[pi] > 0 ? conf[pi] : prio[pi];
+      const cx = bestC % w, cy = (bestC - cx) / w;
+      const touched = [];
+      for (let dy = -HALF; dy <= HALF; dy++) for (let dx = -HALF; dx <= HALF; dx++) {
+        const j = at(px + dx, py + dy);
+        if (j < 0 || known[j]) continue;
+        const src = (cy + dy) * w + cx + dx;
+        for (let c = 0; c < 4; c++) img[j * 4 + c] = img[src * 4 + c];
+        known[j] = 1;
+        conf[j] = Math.min(1, Math.max(cf, 0.05));
+        front.delete(j);
+        touched.push(j);
+      }
+      for (let dy = -HALF - 1; dy <= HALF + 1; dy++) for (let dx = -HALF - 1; dx <= HALF + 1; dx++) {
+        const j = at(px + dx, py + dy);
+        if (j < 0) continue;
+        if (isFront(j)) front.add(j);
+        else front.delete(j);
+      }
+      for (let dy = -side; dy <= side; dy++) for (let dx = -side; dx <= side; dx++) {
+        const j = at(px + dx, py + dy);
+        if (j >= 0 && front.has(j)) prio[j] = priorityAt(j);
+      }
+      if (Date.now() - lastYield > 30) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        lastYield = Date.now();
+        if (options.shouldStop && options.shouldStop()) return false;
+      }
+    }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const d = y * w + x;
+      if (startKnown[d]) continue;
+      const s = (by + y) * width + bx + x;
+      for (let c = 0; c < 4; c++) rgba[s * 4 + c] = img[d * 4 + c];
+    }
+    return true;
+  }
+
   // apps/ZEditor/src/render/marqueeLayer.js
   var LAYER_NAMES = { copy: "Layer via Copy", cut: "Layer via Cut" };
   var COVER_NAME = "Cut fill";
@@ -11148,7 +11299,8 @@
     const result = { layer, fillOnly, cover: null, sourceId: target ? target.id : null, sourcePatch: null, notice: null };
     if (mode === "copy") return result;
     const surround = fillOnly || settings.cutLeaves === "surround";
-    const style = settings.fillStyle === "detail" ? "detail" : "smooth";
+    const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : "smooth";
+    const fillInfo = { fellBack: false };
     if (fromLayer) {
       let base = target;
       let rasterized = null;
@@ -11158,13 +11310,14 @@
         if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
         base = { ...target, ...rasterized };
       }
-      result.sourcePatch = { ...rasterized || {}, src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null, settings.fillGrain !== false) };
+      result.sourcePatch = { ...rasterized || {}, src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? style : null, settings.fillGrain !== false, fillInfo) };
       if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
     } else {
-      result.cover = surround ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, settings.fillGrain !== false) : await coverForRegion(marquee, settings.fillColor, scale);
+      result.cover = surround ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, settings.fillGrain !== false, fillInfo) : await coverForRegion(marquee, settings.fillColor, scale);
       if (surround && !result.cover) return { notice: "There is nothing around the marquee to fill it from." };
       if (surround && fillOnly) result.sourceId = null;
     }
+    if (fillInfo.fellBack) result.notice = (result.notice ? result.notice + " " : "") + "Pattern fill could not be used here (the area is bigger than " + MAX_HOLE_SIDE + " px, or there is nothing clear of it to copy from), so Smooth was used.";
     return result;
   }
   async function drawLayerAlone(page, pdfDocsRef, pageFilter, target) {
@@ -11225,7 +11378,7 @@
       // the page's filter is already in these pixels
     };
   }
-  async function cutFromImage(image, polygon, settings, surroundStyle, grain) {
+  async function cutFromImage(image, polygon, settings, surroundStyle, grain, fillInfo) {
     const source = await loadImageElement(image.src);
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth || source.naturalWidth;
@@ -11246,7 +11399,7 @@
       });
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle, grain);
+      await fillCanvasRegion(ctx, canvas.width, canvas.height, points, surroundStyle, grain, fillInfo);
       ctx.restore();
       return canvas.toDataURL("image/png");
     }
@@ -11301,7 +11454,7 @@
       filter: { type: "none" }
     };
   }
-  function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style, grain) {
+  async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, style, grain, fillInfo) {
     const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
     const sx = Math.max(0, Math.floor(Math.min(...xs)) - FILL_CONTEXT_PX), sy = Math.max(0, Math.floor(Math.min(...ys)) - FILL_CONTEXT_PX);
     const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + FILL_CONTEXT_PX), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + FILL_CONTEXT_PX);
@@ -11323,16 +11476,21 @@
     const hole = new Uint8Array(w * h);
     for (let i = 0; i < hole.length; i++) hole[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
     const data = ctx.getImageData(sx, sy, w, h);
-    if (!fillFromSurroundings(data.data, w, h, hole, style, { grain })) return false;
+    let done = false;
+    if (style === "pattern") {
+      done = await patchFill(data.data, w, h, hole);
+      if (!done && fillInfo) fillInfo.fellBack = true;
+    }
+    if (!done && !fillFromSurroundings(data.data, w, h, hole, style === "detail" ? "detail" : "smooth", { grain })) return false;
     ctx.putImageData(data, sx, sy);
     return true;
   }
-  async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, grain) {
+  async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, style, grain, fillInfo) {
     const picture = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, false);
     const polygon = regionPolygon(marquee);
     const points = polygon.map(([x, y]) => [x * scale, y * scale]);
     const ctx = picture.getContext("2d");
-    if (!fillCanvasRegion(ctx, picture.width, picture.height, points, style, grain)) return null;
+    if (!await fillCanvasRegion(ctx, picture.width, picture.height, points, style, grain, fillInfo)) return null;
     const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
     const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
     const right = Math.min(picture.width, Math.ceil(Math.max(...xs))), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)));
@@ -15792,7 +15950,7 @@
     const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Vectorized" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", leaves, (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", leaves, (v) => change({ cutLeaves: v })), radio("marquee-leaves", "surround", "Fill it from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Made from the colours and pattern round it (see Fill from surroundings below).")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.fill", title: "Fill from surroundings", defaultOpen: true }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Replaces what is inside the marquee with a fill made from the pixels round it, and makes no new layer. From a selected layer it changes that layer's picture; from All visible it puts the fill on top of the page as a new image."), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Fill style", value: settings.fillStyle === "detail" ? "detail" : "smooth", onChange: (e) => change({ fillStyle: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "smooth" }, "Smooth: a blend of the edge colours"), /* @__PURE__ */ React.createElement("option", { value: "detail" }, "Detailed: lines and edges run on through it (small marks only)")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.fillGrain !== false, onChange: (e) => change({ fillGrain: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Match the grain"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Adds noise like the picture's own, so the fill is not a flat patch.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Detailed suits scratches, small marks and text on a photo; Smooth suits plain paper and soft backgrounds. A big area looks blurry; try a smaller marquee.")));
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Make layer turns what is inside it into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.make", title: "Make layer", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Layer via Copy", settings.action, (v) => change({ action: v }), "The original stays as it is."), radio("marquee-action", "cut", "Layer via Cut", settings.action, (v) => change({ action: v }), "The box is taken out of the original.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "Ctrl+J: Layer via Copy. Ctrl+Shift+J: Layer via Cut.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Take it from", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Take it from" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.cut", title: "When cutting", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "Leave it transparent", leaves, (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "Fill it with a colour", leaves, (v) => change({ cutLeaves: v })), radio("marquee-leaves", "surround", "Fill it from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Made from the colours and pattern round it (see Fill from surroundings below).")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Fill colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.fill", title: "Fill from surroundings", defaultOpen: true }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Replaces what is inside the marquee with a fill made from the pixels round it, and makes no new layer. From a selected layer it changes that layer's picture; from All visible it puts the fill on top of the page as a new image."), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Fill style", value: settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth", onChange: (e) => change({ fillStyle: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "smooth" }, "Smooth: a blend of the edge colours"), /* @__PURE__ */ React.createElement("option", { value: "pattern" }, "Pattern: copies texture from the rest of the picture"), /* @__PURE__ */ React.createElement("option", { value: "detail" }, "Detailed: lines and edges run on through it (small marks only)")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.fillGrain !== false, onChange: (e) => change({ fillGrain: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Match the grain"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Adds noise like the picture's own, so the fill is not a flat patch.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy), onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? "Draw a marquee on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern suits grass, foliage, brick, road and other texture (areas up to about 350 px of the picture; it takes a moment); Smooth suits plain paper and soft backgrounds; Detailed suits thin lines and small marks.")));
   }
   function TextToolPanel({ toolDefaults: t }) {
     const setters = {
@@ -17272,7 +17430,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "24a7280"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "edfb645"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
