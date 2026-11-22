@@ -1,5 +1,6 @@
 // The page list: selecting, drag-to-reorder with edge auto-scroll, adding pages.
 
+import { useLiveThumbs } from "../../state/useLiveThumbs.js";
 import { PageGap } from "./PageGap.jsx";
 import { Thumbnail } from "./Thumbnail.jsx";
 const { useState, useRef, useEffect } = React;
@@ -9,6 +10,7 @@ const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
 export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
+  const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null); // page key -> thumbnail with its items on it
   const dragIndexRef = useRef(null);
   const bodyRef = useRef(null);
   const scrollDirRef = useRef(0); // -1 up, 0 idle, 1 down
@@ -118,6 +120,7 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
                 <div className="ze-thumb-slot">
                   <Thumbnail
                     p={p}
+                    src={liveThumbs[p.key] || p.dataUrl}
                     idx={idx}
                     isSelected={idx === selectedIdx || selectedPageIndices.includes(idx)}
                     onSelect={onSelect}

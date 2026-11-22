@@ -83,7 +83,12 @@
     padding: 10px;
     min-height: 60px;
 }
-.ze-thumb-img-wrap img { max-width: 100%; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+/* The picture takes no pointer events and can't be dragged or selected: a press or drag on it belongs to the
+   thumbnail (select, drag to reorder), and on a tablet a long press doesn't offer "Save image". */
+.ze-thumb-img-wrap img {
+    max-width: 100%; display: block; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    pointer-events: none; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none;
+}
 
 .ze-thumb-footer {
     display: flex;

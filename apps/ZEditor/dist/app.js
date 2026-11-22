@@ -4766,7 +4766,8 @@
   }
 
   // apps/ZEditor/src/constants.js
-  var THUMB_SCALE = 0.3;
+  var THUMB_SCALE = 0.45;
+  var THUMB_SHOWN_SCALE = 0.3;
   var MAIN_SCALE = 1.1;
   var DEFAULT_PAGE_SIZE = { width: 420, height: 594 };
   var NEW_DOCUMENT_PRESETS = [
@@ -8086,10 +8087,22 @@
       await pdfPage.render(transparent ? { canvasContext: ctx, viewport, background: "rgba(0,0,0,0)" } : { canvasContext: ctx, viewport }).promise;
     }
     const scaleFactor = exportScale / MAIN_SCALE;
-    if (!(transparent && page.isBlank)) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
+    await paintPageContent(ctx, canvas, page, scaleFactor, pageFilter, transparent && page.isBlank);
+    if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
+    return canvas;
+  }
+  async function paintPageContent(ctx, canvas, page, scaleFactor, pageFilter, skipFilter) {
+    if (!skipFilter) applyPageFilter(ctx, canvas, pageFilter, scaleFactor);
     const items = resolvePageText(page.annotations || []);
     for (let i = 0; i < items.length; i++) await drawPageItem(ctx, items, i, scaleFactor, pageFilter);
-    if (numberSpec) drawPageNumber(ctx, numberSpec, w, h, exportScale);
+  }
+  async function renderPageThumbWithItems(page, baseImage) {
+    const canvas = document.createElement("canvas");
+    canvas.width = baseImage.naturalWidth;
+    canvas.height = baseImage.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(baseImage, 0, 0);
+    await paintPageContent(ctx, canvas, page, THUMB_SCALE / MAIN_SCALE, page.filter || DEFAULT_PAGE_FILTER, false);
     return canvas;
   }
   function makeBlankThumb(width, height, rotation, scale) {
@@ -16058,6 +16071,112 @@
     );
   }
 
+  // apps/ZEditor/src/state/useLiveThumbs.js
+  var { useState: useState33, useEffect: useEffect23, useRef: useRef25 } = React;
+  var SELECTED_GAP_MS = 150;
+  var OTHER_GAP_MS = 25;
+  var SLOW_FACTOR = 4;
+  var filterOn = (f) => Boolean(f && f.type && f.type !== "none");
+  var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
+  var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
+  function useLiveThumbs(pages, selectedKey) {
+    const [urls, setUrls] = useState33({});
+    const urlsRef = useRef25({});
+    const madeFrom = useRef25(/* @__PURE__ */ new Map());
+    const baseCache = useRef25(null);
+    const latest = useRef25({ pages, selectedKey });
+    const timer = useRef25(0);
+    const running = useRef25(false);
+    const lastEnd = useRef25(0);
+    const lastMs = useRef25(0);
+    const alive = useRef25(true);
+    latest.current = { pages, selectedKey };
+    const isStale = (p) => {
+      const m = madeFrom.current.get(p.key);
+      return !m || m.annotations !== p.annotations || m.filter !== p.filter || m.base !== p.dataUrl;
+    };
+    function nextStale() {
+      const { pages: ps, selectedKey: sel } = latest.current;
+      let first = null;
+      for (const p of ps) {
+        if (!needsLive(p) || !isStale(p)) continue;
+        if (p.key === sel) return p;
+        if (!first) first = p;
+      }
+      return first;
+    }
+    async function drawBlob(p) {
+      let cached = baseCache.current;
+      if (!cached || cached.key !== p.key || cached.src !== p.dataUrl) {
+        const image = new Image();
+        image.src = p.dataUrl;
+        await image.decode();
+        cached = { key: p.key, src: p.dataUrl, image };
+        if (p.key === latest.current.selectedKey) baseCache.current = cached;
+      }
+      const canvas = await renderPageThumbWithItems(p, cached.image);
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    }
+    function schedule() {
+      if (running.current || timer.current || !alive.current) return;
+      const p = nextStale();
+      if (!p) return;
+      const edited = p.key === latest.current.selectedKey;
+      const gap = edited ? Math.max(SELECTED_GAP_MS, lastMs.current * SLOW_FACTOR) : Math.max(OTHER_GAP_MS, lastMs.current);
+      timer.current = setTimeout(run2, Math.max(0, lastEnd.current + gap - performance.now()));
+    }
+    async function run2() {
+      timer.current = 0;
+      const p = nextStale();
+      if (!p || !alive.current) return;
+      running.current = true;
+      const from = { annotations: p.annotations, filter: p.filter, base: p.dataUrl };
+      const started = performance.now();
+      let blob = null;
+      try {
+        blob = await drawBlob(p);
+      } catch (err) {
+      }
+      lastMs.current = performance.now() - started;
+      lastEnd.current = performance.now();
+      running.current = false;
+      if (!alive.current) return;
+      madeFrom.current.set(p.key, from);
+      if (blob && latest.current.pages.some((q) => q.key === p.key)) {
+        const old = urlsRef.current[p.key];
+        urlsRef.current = { ...urlsRef.current, [p.key]: URL.createObjectURL(blob) };
+        setUrls(urlsRef.current);
+        if (old) revokeLater(old);
+      }
+      schedule();
+    }
+    useEffect23(() => {
+      const wanted = new Set(pages.filter(needsLive).map((p) => p.key));
+      let next = null;
+      for (const k of Object.keys(urlsRef.current)) {
+        if (wanted.has(Number(k))) continue;
+        next = next || { ...urlsRef.current };
+        revokeLater(next[k]);
+        delete next[k];
+      }
+      for (const k of [...madeFrom.current.keys()]) if (!wanted.has(k)) madeFrom.current.delete(k);
+      if (next) {
+        urlsRef.current = next;
+        setUrls(next);
+      }
+      schedule();
+    }, [pages, selectedKey]);
+    useEffect23(() => {
+      alive.current = true;
+      return () => {
+        alive.current = false;
+        clearTimeout(timer.current);
+        for (const url of Object.values(urlsRef.current)) URL.revokeObjectURL(url);
+      };
+    }, []);
+    return urls;
+  }
+
   // apps/ZEditor/src/ui/sidebar/PageGap.jsx
   function PageGap({ onInsert }) {
     return /* @__PURE__ */ React.createElement(
@@ -16081,7 +16200,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
-  function Thumbnail({ p, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+  function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
     return /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -16090,7 +16209,7 @@
         onClick: (e) => onSelect(idx, withTouchModifier("shift", e)),
         ...dragHandlers
       },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { src: p.dataUrl, alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { srcSet: src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x", draggable: "false", alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
       /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
         "button",
         {
@@ -16120,15 +16239,16 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState33, useRef: useRef25, useEffect: useEffect23 } = React;
+  var { useState: useState34, useRef: useRef26, useEffect: useEffect24 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
-    const dragIndexRef = useRef25(null);
-    const bodyRef = useRef25(null);
-    const scrollDirRef = useRef25(0);
-    const rafRef = useRef25(null);
-    const [dragOverInfo, setDragOverInfo] = useState33(null);
+    const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
+    const dragIndexRef = useRef26(null);
+    const bodyRef = useRef26(null);
+    const scrollDirRef = useRef26(0);
+    const rafRef = useRef26(null);
+    const [dragOverInfo, setDragOverInfo] = useState34(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -16147,7 +16267,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect23(() => stopAutoScroll, []);
+    useEffect24(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -16197,6 +16317,7 @@
       Thumbnail,
       {
         p,
+        src: liveThumbs[p.key] || p.dataUrl,
         idx,
         isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
         onSelect,
@@ -16257,21 +16378,21 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState34, useEffect: useEffect24 } = React;
+  var { useState: useState35, useEffect: useEffect25 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState34(false);
-    const [alt, setAlt] = useState34(false);
-    useEffect24(() => {
+    const [shift, setShift] = useState35(false);
+    const [alt, setAlt] = useState35(false);
+    useEffect25(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect24(() => {
+    useEffect25(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect24(() => () => {
+    useEffect25(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
     }, []);
@@ -16410,9 +16531,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState35 } = React;
+  var { useState: useState36 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState35(null);
+    const [customizing, setCustomizing] = useState36(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -16426,7 +16547,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5febdb9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5e9bf58"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

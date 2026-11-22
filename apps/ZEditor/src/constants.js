@@ -1,6 +1,10 @@
 // Editor-wide numbers: render scales, page size fallback, paper presets, zoom limits, export DPI.
 
-export const THUMB_SCALE = 0.3;
+// Sidebar thumbnails are drawn at THUMB_SCALE (pixels per PDF point) but shown at THUMB_SHOWN_SCALE
+// (CSS pixels per point): 1.5x the pixels, so they stay sharp on a high-density screen. The <img> says so
+// through `srcset` (ui/sidebar/Thumbnail.jsx), which keeps the on-screen size as it was.
+export const THUMB_SCALE = 0.45;
+export const THUMB_SHOWN_SCALE = 0.3;
 export const MAIN_SCALE = 1.1;
 export const DEFAULT_PAGE_SIZE = { width: 420, height: 594 }; // used only if no PDF has been loaded yet
 // Paper sizes for starting a new blank document, in PDF points (1/72 in),
