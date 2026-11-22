@@ -19,6 +19,7 @@ const APPS = [
   { dir: "Markdown-to-PDF", mark: "Md" },
   { dir: "ZEditor", mark: "ZE" },
   { dir: "ZineArranger", mark: "Z|A" },
+  { dir: "AiToolsLocal", mark: "AI" },
 ];
 const ICONS = [
   { file: "icon-192.png", size: 192, maskable: false },
