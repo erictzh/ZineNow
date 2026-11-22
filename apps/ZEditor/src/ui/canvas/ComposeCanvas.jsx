@@ -43,10 +43,7 @@ export function ComposeCanvas({
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
-  // Centre the page in the view when it opens, and again once its real size is known (the
-  // background renders after the page is picked). Not on zoom: useZoom keeps its own anchor.
   const artboardRef = useRef(null);
-  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height]);
   // The outer canvas round the page (styles/layout.css) is as big as the view shows at the lowest zoom, in page
   // terms, so everything seen there stays reachable by scrolling when zoomed in. It needs the page's size, the zoom
   // and the lowest zoom; set on the wrapper (this layout effect runs before useZoom's, which scrolls after a zoom).
@@ -58,6 +55,10 @@ export function ComposeCanvas({
     wrapper.style.setProperty("--ze-board-zoom", String(zoom));
     wrapper.style.setProperty("--ze-min-zoom", String(ZOOM_PERCENT.min / 100));
   }, [zoom, canvasSize.width, canvasSize.height]);
+  // Centre the page in the view when it opens, and again once its real size is known (the background renders after
+  // the page is picked). Not on zoom: useZoom keeps its own anchor. After the sizes above, never before: centring
+  // measures where the page sits, which depends on them.
+  useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height]);
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
