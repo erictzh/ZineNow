@@ -2,7 +2,6 @@
 
 import { TEXT_COLOR_SWATCHES, TEXT_FILL_ALPHA_CONTROL } from "../../model/text/textControls.js";
 import { ptToPx, pxToPt } from "../../model/text/textLook.js";
-import { sizeStepPatch } from "../../model/text/textSize.js";
 import { ControlList } from "../controls/ControlList.jsx";
 import { FontCombobox } from "../controls/FontCombobox.jsx";
 import { CustomColorInput } from "../controls/inputs.jsx";
@@ -19,14 +18,7 @@ const VERTICAL_ALIGNS = [
   { key: "bottom", label: "Align bottom", path: "M4 20h16M12 4v12M8 12l4 4 4-4" },
 ];
 
-// `onStepSize(deltaPt)`: what T- / T+ do for a text box (its own size and any letter sizes move together,
-// ui/panels/format/TextFormat.jsx); without it (the Text tool's defaults) they change the font size alone.
-export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, fontSize, bold, italic, underline, align, verticalAlign, frameHeight, color, fillAlphaSource, onFillAlpha, onChange, onStepSize }) {
-  const stepSize = (deltaPt) => {
-    if (onStepSize) { onStepSize(deltaPt); return; }
-    const patch = sizeStepPatch({ fontSize }, deltaPt);
-    if (patch) onChange(patch);
-  };
+export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, fontSize, bold, italic, underline, align, verticalAlign, frameHeight, color, fillAlphaSource, onFillAlpha, onChange }) {
   return (
     <PanelSection id="text.basic" title="Text/Character" defaultOpen>
       <div className="ze-format-field">
@@ -42,10 +34,6 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
             onChange={(e) => { const pt = Number(e.target.value); if (pt > 0) onChange({ fontSize: Math.round(ptToPx(pt) * 1000) / 1000 }); }}
           />
           <span className="ze-format-hint" style={{ margin: 0 }}>pt</span>
-          <span className="ze-format-group">
-            <button type="button" className="ze-format-toggle ze-format-sizestep" aria-label="Smaller text" title="Smaller: takes 1 pt off the whole text box" onClick={() => stepSize(-1)}>T−</button>
-            <button type="button" className="ze-format-toggle ze-format-sizestep" aria-label="Bigger text" title="Bigger: adds 1 pt to the whole text box" onClick={() => stepSize(1)}>T+</button>
-          </span>
           <span className="ze-format-group">
             <button type="button" className={"ze-format-toggle" + (bold ? " active" : "")} title="Bold" onClick={() => onChange({ bold: !bold })}><strong>B</strong></button>
             <button type="button" className={"ze-format-toggle" + (italic ? " active" : "")} title="Italic" onClick={() => onChange({ italic: !italic })}><em>I</em></button>

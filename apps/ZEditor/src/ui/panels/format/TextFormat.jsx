@@ -5,7 +5,6 @@ import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HY
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
-import { sizeStepPatch } from "../../../model/text/textSize.js";
 import { TextBasicSection } from "../TextBasicSection.jsx";
 import { TextPhotoFill } from "../TextPhotoFill.jsx";
 import { TextPlaceholder } from "../TextPlaceholder.jsx";
@@ -29,7 +28,6 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, style
         align={ann.align} verticalAlign={ann.verticalAlign || null} frameHeight={ann.frameHeight} color={ann.color}
         fillAlphaSource={ann} onFillAlpha={patch}
         onChange={patch}
-        onStepSize={(deltaPt) => { const stepped = sizeStepPatch(ann, deltaPt); if (stepped) patch(stepped); }}
       />
       <PanelSection
         id="text.paragraph" title="Paragraph" onReset={() => patch(resetPatch(ALL_PARAGRAPH_CONTROLS))}
