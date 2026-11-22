@@ -25,7 +25,7 @@ export function TextPlaceholder({ ann, patch }) {
             {PLACEHOLDER_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
           <NumberBox
-            className="ze-format-number" min="1" max={MAX_PLACEHOLDER_PARAGRAPHS} step="1"
+            wrapClassName="ze-format-count" className="ze-format-number" min="1" max={MAX_PLACEHOLDER_PARAGRAPHS} step="1"
             aria-label="Paragraphs" title="Number of paragraphs" value={count}
             onChange={(e) => setCount(e.target.value)}
             onBlur={() => setCount(Math.max(1, Math.min(MAX_PLACEHOLDER_PARAGRAPHS, Math.round(Number(count)) || 1)))}

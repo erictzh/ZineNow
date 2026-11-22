@@ -4,7 +4,7 @@ Read this first when resuming on another machine. It covers what the project is,
 
 New to the code? Start with **[docs/MAINTAINING.md](docs/MAINTAINING.md)** (how to work on it, where things are, recipes) and **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (structure and rules).
 
-Last updated: 2026-11-22 (ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
+Last updated: 2026-11-22 (ZEditor: Placeholder text row layout fixed; ZEditor: a created or opened document starts at 100% with the page centred; clipping masks work off the page; zoom 10-600%; browser zoom shortcuts zoom the page; real - and + buttons beside every number box; see the cloud-session sections at the end).
 
 ## 1. Project overview
 
@@ -458,3 +458,8 @@ Asked: when a document is created or opened, the page should sit in the middle o
 - **`announceDocumentOpened()`** (`state/useZoom.js`, fires `DOCUMENT_OPENED_EVENT` on window) is called after a document is replaced: `handleFile` and `handleCreateBlankDocument` in `state/useDocumentFiles.js` (Load PDF, New document) and `handleLoadProjectFile` in `state/useProject.js` (Open project, and the reload-keeping-work restore). A window event because `useZoom()` is created after those hooks in `ui/App.jsx`. **Not** fired by Insert PDF, inserting a blank page, or any page edit: the view of a document being worked on is left alone.
 - **`useZoom` handles it** (`onDocumentOpened`): finishes with the toolbar zoom box if it is being typed in, drops any pending anchor/request, sets the zoom to 100% (`ZOOM_PERCENT.initial`) and bumps **`viewKey`**; App passes `viewKey` to `ComposeCanvas`, whose centring effect has it in its deps, so the page is centred after the zoom change, with the outer-canvas variables already set for 100% (effect order: sizes, then centring). The centring still runs again when the page's real size is known.
 - Tested headless: a PDF opened while at 300% and scrolled away -> 100%, page centre within 2 px of the view's centre; a new blank document created after being at 25% (the pages were deleted first, because the New Document button only shows with no pages) -> 100%, centred; a saved project opened while at 400% and scrolled -> 100%, centred; a page added at 200% -> stays 200%. The earlier outer-canvas, zoom-key and wheel tests still pass.
+
+## Session 2026-11-22 (cloud session, last): Placeholder text row layout
+Reported: the Placeholder text row in ZEditor's Format - Text panel looked weird (the paragraph-count box was squeezed to a sliver once the - and + buttons were added).
+- `styles/format-panel.css`: in `.ze-format-inline` rows the dropdown shrinks (`flex: 1 1 0; min-width: 0`) and a number box with its buttons gets at least 112 px (`.ze-format-inline > .zn-num`). The paragraph count has `wrapClassName="ze-format-count"` (`ui/panels/TextPlaceholder.jsx`), fixed at 112 px.
+- Tested headless: default 264 px panel = dropdown 101 + number box with buttons 112 (no overflow), 400 px panel = 237 + 112; the + button steps 3 -> 4.
