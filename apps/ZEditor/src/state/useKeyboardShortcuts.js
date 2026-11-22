@@ -1,6 +1,5 @@
 // Keyboard shortcuts and pasting images from the clipboard (the list shown to users is ui/dialogs/shortcuts.js).
 
-import { ZOOM_PERCENT } from "../constants.js";
 import { translatedAnnotation } from "../model/annotations.js";
 import { angleOf } from "../model/controls.js";
 import { standaloneCopy } from "../model/text/threads.js";
@@ -35,7 +34,7 @@ export function useKeyboardShortcuts(app) {
         const dir = e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? 1 : e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" ? -1 : e.key === "0" || e.code === "Numpad0" ? 0 : null;
         if (dir !== null) {
           e.preventDefault();
-          if (dir === 0) zoom.handleZoomChange(ZOOM_PERCENT.initial); else zoom.zoomStep(dir);
+          if (dir === 0) zoom.zoomReset(); else zoom.zoomStep(dir);
           return;
         }
       }

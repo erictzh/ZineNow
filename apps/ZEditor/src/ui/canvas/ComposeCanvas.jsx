@@ -24,6 +24,7 @@ import { pressPolygon, startMarqueeDraw } from "./marqueeGesture.js";
 import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 import { centerArtboard } from "../../state/useZoom.js";
+import { ZOOM_PERCENT } from "../../constants.js";
 
 const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
 
@@ -46,6 +47,17 @@ export function ComposeCanvas({
   // background renders after the page is picked). Not on zoom: useZoom keeps its own anchor.
   const artboardRef = useRef(null);
   useLayoutEffect(() => { centerArtboard(artboardRef.current); }, [page && page.key, canvasSize.width, canvasSize.height]);
+  // The outer canvas round the page (styles/layout.css) is as big as the view shows at the lowest zoom, in page
+  // terms, so everything seen there stays reachable by scrolling when zoomed in. It needs the page's size, the zoom
+  // and the lowest zoom; set on the wrapper (this layout effect runs before useZoom's, which scrolls after a zoom).
+  useLayoutEffect(() => {
+    const wrapper = artboardRef.current && artboardRef.current.parentElement;
+    if (!wrapper) return;
+    wrapper.style.setProperty("--ze-board-w", canvasSize.width + "px");
+    wrapper.style.setProperty("--ze-board-h", canvasSize.height + "px");
+    wrapper.style.setProperty("--ze-board-zoom", String(zoom));
+    wrapper.style.setProperty("--ze-min-zoom", String(ZOOM_PERCENT.min / 100));
+  }, [zoom, canvasSize.width, canvasSize.height]);
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);

@@ -8,7 +8,7 @@ import { createPinchGate } from "../../../../shared/js/pinchGate.js";
 const { useState, useRef, useLayoutEffect, useEffect } = React;
 
 // The steps Ctrl + and Ctrl - move through (percent).
-const ZOOM_STEPS = [25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400];
+const ZOOM_STEPS = [10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500, 600];
 
 // Fired on window by ui/touchInput.js while two fingers are on the canvas:
 //   detail: { phase: "start" | "move" | "end", scale, x, y }
@@ -68,12 +68,20 @@ export function useZoom() {
     setZoomPercent(percent);
   }
 
+  // Zooming by wheel or key while the toolbar's zoom box is being typed in: finish with the box (it would keep showing
+  // the typed number), so it shows the new zoom.
+  function leaveZoomBox() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest(".ze-zoom-control")) active.blur();
+  }
+
   // Zooms to `raw` percent (within the limits), keeping the page point at (fx, fy) in the pane where it is.
   function zoomAt(raw, fx, fy) {
     const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
     floatRef.current = clamped;
     const percent = Math.round(clamped);
     if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
+    leaveZoomBox();
     // Wheel events can come faster than the page is redrawn: until it is, keep the page point first asked for.
     const waiting = zoomAnchorRef.current;
     zoomAnchorRef.current = { ...(waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy)), fx, fy };
@@ -83,6 +91,7 @@ export function useZoom() {
 
   // Ctrl+ and Ctrl- (the browser's own zoom keys, which ZEditor takes over for the page): the next step in or out.
   function zoomStep(direction) {
+    leaveZoomBox();
     const current = zoomRef.current;
     const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
     handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
@@ -142,5 +151,11 @@ export function useZoom() {
     return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, []);
 
-  return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep };
+  // Ctrl 0: back to 100%.
+  function zoomReset() {
+    leaveZoomBox();
+    handleZoomChange(ZOOM_PERCENT.initial);
+  }
+
+  return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep, zoomReset };
 }
