@@ -3,14 +3,16 @@
 
 import { applyToTextarea, replaceAllEdit } from "../../editor/applyToTextarea.js";
 import { CODE_LANGUAGES, languageForFile, languageLabel } from "../../editor/codeLanguages.js";
-import { blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageUrl, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../../editor/format.js";
+import { DROPPED_EVENT, takeDropped } from "../../editor/droppedPictures.js";
+import { blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageLink, insertImageUrl, insertLink, setBlock, toggleCodeBlock, toggleInline } from "../../editor/format.js";
+import { fetchImageFile } from "../../../../../shared/js/dropImages.js";
 import { imageFileToDataUrl } from "../../../../../shared/js/imageFiles.js";
 import { copyText, pickFile } from "../../io/filePickers.js";
 import { StatusLine } from "../fields.jsx";
 import { MOD } from "../shortcutKeys.js";
 import { FormatToolbar } from "./FormatToolbar.jsx";
 
-const { useState, useRef } = React;
+const { useState, useRef, useEffect } = React;
 
 // The code block language picked last, remembered in this browser (a convenience: it starts as JSON
 // when storage is blocked or empty).
@@ -39,6 +41,7 @@ const CODE_PICKER = { id: "md2pdf-code-file", description: "Code or text file", 
 const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
 const IMAGE_PICKER = { id: "md2pdf-image-file", description: "Picture", accept: { "image/*": IMAGE_EXTS } };
 const IMAGE_MAX_SIDE = 1600;
+const DROP_MAX_FILES = 12; // pictures taken from one drop
 
 // Shortcuts that work while typing in the editor. Ctrl (⌘ on a Mac) plus the key; headings use
 // Ctrl+Alt+digit because browsers keep Ctrl+digit for switching tabs.
@@ -68,6 +71,8 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
   const [codeLang, setCodeLangState] = useState(loadCodeLang);
   const codeFileInputRef = useRef(null);
   const imageFileInputRef = useRef(null);
+  const touchedRef = useRef(false); // the textarea has been clicked into: its caret is somewhere the user put it
+  const dropRef = useRef(null); // the latest insertDropped, for the listener below
   const setCodeLang = (tag) => {
     setCodeLangState(tag);
     saveCodeLang(tag);
@@ -160,7 +165,7 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
     if (file) await insertImage(file);
   }
 
-  async function insertImage(file) {
+  async function insertImage(file, altText) {
     const el = editorRef.current;
     if (!el) return;
     // Taken now: reading the picture takes a moment, and the caret shouldn't wander meanwhile.
@@ -173,13 +178,48 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
       setDocStatus({ type: "error", message: `Could not add "${file.name}": ` + errorText(err) });
       return;
     }
-    const alt = (file.name || "image").replace(/\.[^.]+$/, "");
+    const alt = altText || (file.name || "image").replace(/\.[^.]+$/, "");
     el.focus();
     el.setSelectionRange(at.start, at.end);
     applyToEditor(insertImageFile(el.value, at.start, at.end, alt, picture.src));
     const kb = Math.round((picture.src.length * 3) / 4 / 1024);
     setDocStatus({ type: "success", message: `Added "${file.name}" (${picture.width} × ${picture.height} px, ${kb} KB). Its data sits at the end of the text.` });
   }
+
+  // Pictures dropped on the page (App.jsx hands them over): files from the file manager, or a
+  // picture's web address from another site. At the caret; before the editor was ever clicked into,
+  // at the end of the text. A site that doesn't allow copying its pictures gets a web link instead.
+  async function insertDropped({ files, url, alt }) {
+    const el = editorRef.current;
+    if (!el) return;
+    setDocStatus(null);
+    if (!touchedRef.current) el.setSelectionRange(el.value.length, el.value.length);
+    if (files.length) {
+      const taken = files.slice(0, DROP_MAX_FILES);
+      for (const file of taken) await insertImage(file);
+      if (files.length > taken.length) setDocStatus({ type: "error", message: `Added the first ${taken.length} pictures; ${files.length - taken.length} more were left out.` });
+      return;
+    }
+    setDocStatus({ type: "success", message: "Fetching the picture…" });
+    const file = await fetchImageFile(url);
+    if (file) {
+      await insertImage(file, alt);
+      return;
+    }
+    // The site doesn't let this page copy its picture: link to it instead. It then only shows while
+    // the site keeps it online (and lets other pages show it).
+    el.focus();
+    el.setSelectionRange(Math.min(el.selectionStart, el.value.length), Math.min(el.selectionEnd, el.value.length));
+    applyToEditor(insertImageLink(el.value, el.selectionStart, el.selectionEnd, alt, url));
+    setDocStatus({ type: "success", message: "That website doesn't allow copying its pictures, so it is added as a web link. It shows only while the site keeps it online. To keep the picture inside your text, save it to your computer (right-click › Save image as…) and drop the file instead." });
+  }
+  dropRef.current = insertDropped;
+  useEffect(() => {
+    const run = () => { const drop = takeDropped(); if (drop && dropRef.current) dropRef.current(drop); };
+    run(); // a drop that arrived while this tab wasn't showing
+    window.addEventListener(DROPPED_EVENT, run);
+    return () => window.removeEventListener(DROPPED_EVENT, run);
+  }, []);
 
   function handleImageFileSelected(e) {
     const file = e.target.files && e.target.files[0];
@@ -235,6 +275,7 @@ export function EditorTab({ markdown, setMarkdown, editorRef, fileSave, docStatu
       <StatusLine status={docStatus} className="mb-2" />
       <textarea
         ref={editorRef}
+        onFocus={() => { touchedRef.current = true; }}
         onKeyDown={handleEditorKeyDown}
         onSelect={refreshBlockKind}
         className={

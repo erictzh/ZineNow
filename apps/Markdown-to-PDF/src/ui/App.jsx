@@ -2,7 +2,9 @@
 
 import { warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
 import { sendPdfToZineArranger } from "../../../../shared/js/zineArrangerHandoff.js";
+import { installImageDrop } from "../../../../shared/js/dropImages.js";
 import { applyToTextarea, replaceAllEdit } from "../editor/applyToTextarea.js";
+import { DROPPED_EVENT, queueDropped } from "../editor/droppedPictures.js";
 import { DOCUMENT_INPUT_ACCEPT, DOCUMENT_PICKER_TYPES, documentToMarkdown } from "../editor/importDocument.js";
 import { pickFile, saveTextFile, writeTextToHandle } from "../io/filePickers.js";
 import { exportToPdf } from "../export/printExport.js";
@@ -88,6 +90,20 @@ export function App() {
   const editorRef = useRef(null); // the editor's <textarea>, while the Editor tab is showing
   const documentFileInputRef = useRef(null);
   const errorText = (err) => (err && err.message ? err.message : String(err));
+
+  // Pictures dragged in from the file manager or another website (shared/js/dropImages.js): the
+  // editor puts them in the text. Switches to the Editor tab first so there is an editor to take it.
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  useEffect(() => installImageDrop({
+    label: "Drop a picture to add it to your text",
+    onDrop: (drop) => {
+      queueDropped(drop);
+      if (activeTabRef.current !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
+      window.dispatchEvent(new Event(DROPPED_EVENT));
+    },
+    onOther: () => setDocStatus({ type: "error", message: "That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file." }),
+  }), []);
 
   // Replaces the whole text as one typed edit, so Ctrl+Z brings the old text back. Switches to the
   // Editor tab first, so the text being replaced is on screen (and the textarea exists to edit).

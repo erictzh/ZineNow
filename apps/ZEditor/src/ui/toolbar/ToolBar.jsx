@@ -23,9 +23,6 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
             <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" />
           </svg>
         </button>
-        <button type="button" className="ze-tool-icon-btn" title="Insert SVG file: opens your files (on Android, Files instead of the photo gallery)" aria-label="Insert SVG file" onClick={edits.handleSvgToolClick}>
-          <span className="ze-tool-icon-text ze-tool-icon-svg">SVG</span>
-        </button>
         <button type="button" className={"ze-tool-icon-btn" + (tool === "rect" ? " active" : "")} title="Rectangle (R)" onClick={() => selectTool("rect")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
             <rect x="3.5" y="6" width="17" height="12" />

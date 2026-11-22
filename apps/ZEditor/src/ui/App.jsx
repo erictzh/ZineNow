@@ -1,5 +1,6 @@
 // The editor: creates the state hooks (state/) and lays out the screen. No logic of its own.
 
+import { fetchImageFile, installImageDrop } from "../../../../shared/js/dropImages.js";
 import { pageNumberSpec } from "../model/pageNumbers.js";
 import { resolvePageText } from "../render/pageText.js";
 import { useAnnotationEdits } from "../state/useAnnotationEdits.js";
@@ -60,6 +61,34 @@ export function App() {
   const exporter = useExport({ doc, status, view, project, selection });
   const zoom = useZoom();
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
+  // Pictures dragged in from the file manager or another website (shared/js/dropImages.js) go on the
+  // selected page: where they were dropped if that was on the page, else in its middle.
+  const dropCtx = React.useRef(null);
+  dropCtx.current = { selectedIdx: doc.selectedIdx, addImage: edits.addImageAnnotationFromFile, status };
+  React.useEffect(() => installImageDrop({
+    label: "Drop a picture to add it to the page",
+    onDrop: async ({ files, url, x, y }) => {
+      const { selectedIdx, addImage, status: st } = dropCtx.current;
+      if (selectedIdx === null) { st.setErrorMsg("Open a PDF or start a new document first, then drop the picture on a page."); return; }
+      st.setErrorMsg(null);
+      let list = files;
+      if (!list.length) {
+        const file = await fetchImageFile(url);
+        if (!file) {
+          st.setErrorMsg("That website doesn't let other pages copy its pictures. Save the picture to your computer (right-click › Save image as…), then drop the file here.");
+          return;
+        }
+        list = [file];
+      }
+      // Where on the page (page pixels), from the page's on-screen box: it may be zoomed.
+      const pageEl = document.querySelector(".ze-page");
+      const box = pageEl && pageEl.getBoundingClientRect();
+      const onPage = box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom && pageEl.offsetWidth > 0;
+      const scale = onPage ? box.width / pageEl.offsetWidth : 1;
+      list.slice(0, 12).forEach((file, i) => addImage(file, selectedIdx, onPage ? { center: { x: (x - box.left) / scale + i * 20, y: (y - box.top) / scale + i * 20 } } : undefined));
+    },
+    onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file."),
+  }), []);
   const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
   useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen });
 
@@ -236,8 +265,7 @@ export function App() {
       <input ref={files.fileInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleFileInputChange} />
       {/* Insert Image: pictures (on Android this opens the photo picker, which doesn't list SVGs). */}
       <input ref={edits.imageInputRef} type="file" accept="image/*,.svg,image/svg+xml" style={{ display: "none" }} onChange={edits.handleImageFileChosen} />
-      {/* The SVG button: no accept, so Android opens its Files browser (useAnnotationEdits.js). */}
-      <input ref={edits.svgInputRef} type="file" style={{ display: "none" }} onChange={edits.handleSvgFileChosen} />
+
       <input ref={files.insertPdfInputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={files.handleInsertPdfInputChange} />
       {/* .json too: projects saved on Android before 2026-11-22 came out as "Name.znow.json". On Android a
           .znow file has no known type, hence application/octet-stream, so it isn't greyed out. */}

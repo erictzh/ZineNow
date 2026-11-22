@@ -274,6 +274,15 @@ export function insertImageFile(text, start, end, alt, url) {
   return { from: start, to: text.length, insert: full.slice(start), selStart: line.selStart, selEnd: line.selEnd };
 }
 
+// A picture linked by its web address, `![alt](url)` on its own line at the caret (a dropped picture
+// from a site that doesn't allow copying it). Brackets in `alt` are dropped; spaces and brackets
+// in the address are %-encoded so they can't end the link early.
+export function insertImageLink(text, start, end, alt, url) {
+  const cleanAlt = String(alt || "image").replace(/[\[\]\n]/g, " ").replace(/\s+/g, " ").trim() || "image";
+  const safeUrl = String(url).trim().replace(/ /g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29");
+  return insertBlockLine(text, start, end, "![" + cleanAlt + "](" + safeUrl + ")");
+}
+
 // A picture from the web: `![alt text](https://)` on its own line with "https://" selected, ready
 // to paste the address over.
 export function insertImageUrl(text, start, end) {
