@@ -14,7 +14,7 @@
   }
 
   // shared/js/numberFields.js
-  var STRIP_PX = 28;
+  var STEP_PX = 29;
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
   var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
@@ -78,10 +78,10 @@
     function buttonAt(el, x, y) {
       if (el.hasAttribute("data-no-steppers")) return 0;
       const r = el.getBoundingClientRect();
-      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom) return 0;
-      const strip = STRIP_PX * (r.width / el.offsetWidth);
-      if (x >= r.left && x <= r.left + strip) return -1;
-      if (x <= r.right && x >= r.right - strip) return 1;
+      if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
+      const fromRight = (r.right - x) / (r.width / el.offsetWidth);
+      if (fromRight <= STEP_PX) return 1;
+      if (fromRight <= STEP_PX * 2) return -1;
       return 0;
     }
     function stepBy(el, dir) {
@@ -5370,7 +5370,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build e7ef6ca";
+    subtitle.textContent += " · build 7aec2d3";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();
