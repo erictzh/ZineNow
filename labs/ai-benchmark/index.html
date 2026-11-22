@@ -163,32 +163,55 @@ function toNCHW(canvas, asFloat) {
 function tensorToCanvas(t) {
   const n = SIZE * SIZE; const d = t.data; const c = document.createElement("canvas"); c.width = c.height = SIZE;
   const g = c.getContext("2d"); const im = g.createImageData(SIZE, SIZE);
-  let max = 0; for (let i = 0; i < Math.min(d.length, 5000); i++) max = Math.max(max, Math.abs(d[i]));
-  const isUnit = t.type === "float32" && max <= 1.5; // -1..1 or 0..1
+  let min = Infinity, max = -Infinity; for (let i = 0; i < Math.min(d.length, 20000); i++) { if (d[i] < min) min = d[i]; if (d[i] > max) max = d[i]; }
+  // what range the numbers use: -1..1 (most models), 0..1, or already 0..255
+  const mode = t.type !== "float32" ? "byte" : (min < -0.01 && max <= 1.5) ? "signed" : (max <= 1.5 ? "unit" : "byte");
   for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) {
-    let v = d[k * n + i];
-    if (t.type === "float32") v = isUnit ? (v < 0 ? (v + 1) * 127.5 : v <= 1 ? v * 255 : v) : v;
-    im.data[i * 4 + k] = v;
+    const v = d[k * n + i];
+    im.data[i * 4 + k] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v;
   }
   for (let i = 0; i < n; i++) im.data[i * 4 + 3] = 255;
-  g.putImageData(im, 0, 0); return c;
+  g.putImageData(im, 0, 0); c.dataset.range = mode; return c;
 }
 
-async function runOne(ort, session, scene, polarity) {
-  const { img, msk } = pickInputs(session);
-  const meta = session.inputMetadata || {}; const mi = Array.isArray(meta) ? meta.find((q) => q.name === img) : meta[img];
-  const asFloat = mi && mi.type === "float32";
-  const imgT = new ort.Tensor(asFloat ? "float32" : "uint8", toNCHW(scene.canvas, asFloat), [1, 3, SIZE, SIZE]);
-  const mm = new Uint8Array(SIZE * SIZE);
-  for (let i = 0; i < mm.length; i++) mm[i] = (polarity === "hole255" ? scene.mask[i] : 1 - scene.mask[i]) ? 255 : 0;
-  const mmi = Array.isArray(meta) ? meta.find((q) => q.name === msk) : meta[msk];
-  const maskT = (mmi && mmi.type === "float32")
-    ? new ort.Tensor("float32", Float32Array.from(mm, (v) => v / 255), [1, 1, SIZE, SIZE])
-    : new ort.Tensor("uint8", mm, [1, 1, SIZE, SIZE]);
+// Keeps the model's picture only where the hole was; everywhere else the original pixels stay.
+function pasteHole(outCanvas, scene) {
+  const o = outCanvas.getContext("2d"); const od = o.getImageData(0, 0, SIZE, SIZE); const sd = scene.canvas.getContext("2d").getImageData(0, 0, SIZE, SIZE).data;
+  for (let i = 0; i < scene.mask.length; i++) if (!scene.mask[i]) for (let k = 0; k < 3; k++) od.data[i * 4 + k] = sd[i * 4 + k];
+  o.putImageData(od, 0, 0); return outCanvas;
+}
+
+// `variant`: for the 4-channel model, "plus" puts (known - 0.5) in the mask channel and "minus" puts (0.5 - known);
+// for a two-input model, "hole255" / "hole0" say which mask value means "remove".
+async function runOne(ort, session, scene, variant) {
+  const n = SIZE * SIZE;
+  const metaOf = (name) => { const m = session.inputMetadata || {}; return Array.isArray(m) ? m.find((q) => q.name === name) : m[name]; };
+  const first = session.inputNames[0]; const fm = metaOf(first); const shape = fm && (fm.shape || fm.dimensions);
+  let feeds;
+  if (session.inputNames.length === 1 && shape && shape[1] === 4) {
+    // MI-GAN style: one input = [mask channel, the picture with the hole blanked], picture scaled to -1..1
+    const rgb = toNCHW(scene.canvas, true); const x = new Float32Array(4 * n);
+    for (let i = 0; i < n; i++) {
+      const known = scene.mask[i] ? 0 : 1;
+      x[i] = variant === "plus" ? known - 0.5 : 0.5 - known;
+      for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = rgb[c * n + i] * known;
+    }
+    feeds = { [first]: new ort.Tensor("float32", x, [1, 4, SIZE, SIZE]) };
+  } else {
+    const { img, msk } = pickInputs(session);
+    const mi = metaOf(img); const asFloat = mi && mi.type === "float32";
+    const imgT = new ort.Tensor(asFloat ? "float32" : "uint8", toNCHW(scene.canvas, asFloat), [1, 3, SIZE, SIZE]);
+    const mm = new Uint8Array(n);
+    for (let i = 0; i < n; i++) mm[i] = (variant === "hole0" ? 1 - scene.mask[i] : scene.mask[i]) ? 255 : 0;
+    const mmi = metaOf(msk);
+    const maskT = (mmi && mmi.type === "float32") ? new ort.Tensor("float32", Float32Array.from(mm, (v) => v / 255), [1, 1, SIZE, SIZE]) : new ort.Tensor("uint8", mm, [1, 1, SIZE, SIZE]);
+    feeds = { [img]: imgT, [msk]: maskT };
+  }
   const t = performance.now();
-  const out = await session.run({ [img]: imgT, [msk]: maskT });
+  const out = await session.run(feeds);
   const time = ms(t);
-  return { time, canvas: tensorToCanvas(out[session.outputNames[0]]) };
+  const canvas = pasteHole(tensorToCanvas(out[session.outputNames[0]]), scene);
+  return { time, canvas, range: canvas.dataset.range };
 }
 
 function show(label, canvasOrImg) {
@@ -209,16 +232,17 @@ async function testBackend(ort, bytes, scene, provider) {
   try { session = await ort.InferenceSession.create(bytes, { executionProviders: [provider], graphOptimizationLevel: "all" }); }
   catch (e) { log("[" + label + "] could not start: " + e.message); return false; }
   log("[" + label + "] model started in " + ms(t0) + " ms");
-  if (provider !== "webgpu") describe(session);
-  else describe(session);
-  for (const pol of ["hole255", "hole0"]) {
+  describe(session);
+  const four = session.inputNames.length === 1;
+  const variants = four ? [["plus", "mask channel = known - 0.5"], ["minus", "mask channel = 0.5 - known"]] : [["hole255", "mask: hole = 255"], ["hole0", "mask: hole = 0"]];
+  for (const [variant, name] of variants) {
     try {
-      status(label + ": removing the blob (" + (pol === "hole255" ? "try 1" : "try 2") + ")…");
-      const r = await runOne(ort, session, scene, pol);
-      log("[" + label + "] run (" + (pol === "hole255" ? "mask: hole = 255" : "mask: hole = 0") + "): " + r.time + " ms (" + (r.time / 1000).toFixed(1) + " s)");
-      show(label + " · " + (pol === "hole255" ? "hole = 255" : "hole = 0") + " · " + (r.time / 1000).toFixed(1) + " s", r.canvas);
-      if (pol === "hole255") { try { const again = performance.now(); await runOne(ort, session, scene, pol); log("[" + label + "] second run (model already warm): " + ms(again) + " ms"); } catch (e) { /* not needed */ } }
-    } catch (e) { log("[" + label + "] run failed (" + (pol === "hole255" ? "hole = 255" : "hole = 0") + "): " + e.message); }
+      status(label + ": removing the object (" + name + ")…");
+      const r = await runOne(ort, session, scene, variant);
+      log("[" + label + "] run (" + name + "): " + r.time + " ms (" + (r.time / 1000).toFixed(1) + " s), numbers in the " + r.range + " range");
+      show(label + " · " + name + " · " + (r.time / 1000).toFixed(1) + " s", r.canvas);
+      if (variant === variants[0][0]) { try { const again = performance.now(); await runOne(ort, session, scene, variant); log("[" + label + "] second run (model already warm): " + ms(again) + " ms"); } catch (e) { /* not needed */ } }
+    } catch (e) { log("[" + label + "] run failed (" + name + "): " + e.message); }
   }
   try { await session.release(); } catch (e) { /* ignore */ }
   return true;
@@ -237,7 +261,7 @@ $("run").onclick = async () => {
     show("what it should look like", scene.clean);
     if (dev.webgpu) await testBackend(ort, bytes, scene, "webgpu"); else log("[GPU] skipped: not available on this device/browser");
     await testBackend(ort, bytes, scene, "wasm");
-    status("Done. Look at the pictures: one of the two tries per mode should show the red object gone. Then send me the report below.");
+    status("Done. Look at the pictures: one of the two tries per mode should show the red object gone (the other may look odd: that tells us the model's mask sign). Then send me the report below.");
     log("", "== DONE ==");
   } catch (e) {
     log("ERROR: " + e.message); status("Something went wrong: " + e.message);
