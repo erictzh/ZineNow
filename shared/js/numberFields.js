@@ -11,14 +11,15 @@
 //    the box, which looks like a last digit that can't be deleted. So while a box is held empty it also
 //    refuses those write-backs; only the person typing changes it.
 //
-// 2. − and + buttons on every number box (drawn in shared/styles/numberFields.css): the left strip of the box
-//    steps down, the right strip steps up, holding repeats. Chrome on Android has no spinner of its own, and
-//    this one is big enough for a finger. Pressing a button doesn't focus the box, so the keyboard doesn't
+// 2. − and + buttons on every number box, after the number: ( 12 )( − )( + ) (drawn in
+//    shared/styles/numberFields.css): the strip at the right edge of the box has the + at the very edge and the −
+//    just before it; each steps its way, holding repeats. Chrome on Android has no spinner of its own, and
+//    these are big enough for a finger. Pressing a button doesn't focus the box, so the keyboard doesn't
 //    open. It steps the way the browser's own spinner does (min, max, step), and tells the app the way the
 //    spinner does: an `input` event without an inputType, then `change`. Mouse and touch alike. A box that
 //    must stay plain says data-no-steppers.
 
-const STRIP_PX = 28; // width of each button, as in the stylesheet (--zn-step-w)
+const STEP_PX = 29; // hit area of each button, as in the stylesheet (--zn-step-w)
 const HOLD_MS = 450; // before holding a button repeats
 const REPEAT_MS = 80;
 
@@ -89,14 +90,15 @@ export function installNumberFields() {
   }, true);
 
   // ---- 2. Up and down buttons ------------------------------------------------------------------
-  // Which button (+1 right, -1 left) a press at (x, y) on `el` lands on, or 0 between them.
+  // Which button a press at (x, y) on `el` lands on: +1 for the + (the last 29 px at the right edge), -1 for the −
+  // (the 29 px before it), or 0 on the number itself.
   function buttonAt(el, x, y) {
     if (el.hasAttribute("data-no-steppers")) return 0;
     const r = el.getBoundingClientRect();
-    if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom) return 0;
-    const strip = STRIP_PX * (r.width / el.offsetWidth); // the Interface size setting zooms the controls
-    if (x >= r.left && x <= r.left + strip) return -1;
-    if (x <= r.right && x >= r.right - strip) return 1;
+    if (!r.width || !el.offsetWidth || y < r.top || y > r.bottom || x > r.right) return 0;
+    const fromRight = (r.right - x) / (r.width / el.offsetWidth); // the Interface size setting zooms the controls
+    if (fromRight <= STEP_PX) return 1;
+    if (fromRight <= STEP_PX * 2) return -1;
     return 0;
   }
 

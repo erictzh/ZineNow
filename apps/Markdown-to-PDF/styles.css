@@ -420,7 +420,7 @@ button.md2ebook-menu-trigger.md2ebook-fmt-menu-trigger.md2ebook-fmt-split-trigge
   color: var(--ui-fg-muted);
 }
 .md2ebook-menu-space input[type="number"] {
-  width: 88px; /* room for the - and + buttons (shared/styles/numberFields.css) */
+  width: 100px; /* room for the - and + buttons (shared/styles/numberFields.css) */
   padding: 2px 4px;
   font-size: 12px;
 }
@@ -521,7 +521,7 @@ select.md2ebook-statusbar-select option {
   gap: 5px;
 }
 .md2ebook-page-jump input[type="number"] {
-  width: 84px; /* room for the - and + buttons (shared/styles/numberFields.css) */
+  width: 96px; /* room for the - and + buttons (shared/styles/numberFields.css) */
   padding: 2px 4px 2px 6px;
   font-size: 12px;
   text-align: right;
@@ -547,7 +547,7 @@ select.md2ebook-statusbar-select option {
   gap: 3px;
 }
 .md2ebook-zoom-number input[type="number"] {
-  width: 92px; /* room for the - and + buttons (shared/styles/numberFields.css) */
+  width: 108px; /* room for the - and + buttons (shared/styles/numberFields.css) */
   padding: 2px 4px 2px 6px;
   font-size: 12px;
   text-align: right;

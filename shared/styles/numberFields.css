@@ -1,23 +1,22 @@
-/* − and + buttons on every number box (shared/js/numberFields.js makes them work). A "−" sits inside the left
-   edge of the box and a "+" inside the right edge, each the full height of the box, drawn as background pictures;
-   the browser's own up/down spinner is hidden so there is only one set. Boxes that must stay plain say
-   data-no-steppers. The buttons are --zn-step-w wide; the script reads the same variable. A narrow box needs
-   room for them (about 90 px for three digits): see the width rules in each app's CSS. */
+/* − and + buttons on every number box, after the number: ( 12 )( − )( + ). They are two small button tiles drawn as
+   background pictures inside the right edge of the box, each with a hit area --zn-step-w wide and the full height
+   of the box; shared/js/numberFields.js makes them work. The browser's own up/down spinner is hidden so there is only
+   one set. Boxes that must stay plain say data-no-steppers. A narrow box needs room for the tiles (about 100 px for
+   three digits): see the width rules in each app's CSS. */
 
 :root {
-  --zn-step-w: 28px;
+  --zn-step-w: 29px; /* one button's hit area; the script uses the same number (STEP_PX) */
 }
 
 input[type="number"]:not([data-no-steppers]) {
-  padding-left: var(--zn-step-w) !important; /* room for the buttons, whatever padding the box had */
-  padding-right: var(--zn-step-w) !important;
+  padding-right: calc(var(--zn-step-w) * 2 + 4px) !important; /* room for the two tiles, whatever padding the box had */
   text-align: center !important;
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none' stroke='%23c9ccd6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M9 14h10'/%3E%3Cpath d='M27.5 7v14' stroke-width='1' opacity='.3'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28' fill='none' stroke='%23c9ccd6' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M9 14h10M14 9v10'/%3E%3Cpath d='M.5 7v14' stroke-width='1' opacity='.3'/%3E%3C/svg%3E");
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6' fill='%23fff' fill-opacity='.07' stroke='%23fff' stroke-opacity='.22'/%3E%3Cpath d='M7 12h10' stroke='%23d6d8e0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='.5' y='.5' width='23' height='23' rx='6' fill='%23fff' fill-opacity='.07' stroke='%23fff' stroke-opacity='.22'/%3E%3Cpath d='M7 12h10M12 7v10' stroke='%23d6d8e0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat, no-repeat;
-  background-position: left center, right center;
-  background-size: 28px 28px, 28px 28px;
+  background-position: right 31px center, right 3px center; /* minus, then plus at the very edge */
+  background-size: 24px 24px, 24px 24px;
   -moz-appearance: textfield;
   appearance: textfield;
   touch-action: manipulation;
