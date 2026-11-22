@@ -12,6 +12,31 @@
     setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
 
+  // shared/js/imageHandoff.js
+  var ZEDITOR_READY_MESSAGE = "zeditor-ready";
+  var HANDOFF_IMAGE_MESSAGE = "zinenow-handoff-image";
+  async function sendImageToZEditor(getBlob, filename) {
+    const win = window.open("../ZEditor/index.html", "_blank");
+    if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
+    const ready = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        reject(new Error("ZEditor didn't answer. It may still be loading: try again in a moment."));
+      }, 2e4);
+      function onMessage(e) {
+        if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== ZEDITOR_READY_MESSAGE) return;
+        clearTimeout(timer);
+        window.removeEventListener("message", onMessage);
+        resolve();
+      }
+      window.addEventListener("message", onMessage);
+    });
+    const blob = await getBlob();
+    const buffer = await blob.arrayBuffer();
+    await ready;
+    win.postMessage({ type: HANDOFF_IMAGE_MESSAGE, buffer, filename, mime: blob.type || "image/png" }, location.origin, [buffer]);
+  }
+
   // shared/js/numberFields.js
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
@@ -288,6 +313,69 @@
       }
     }
   }
+  function labelPieces(mask, w, h) {
+    const labels = new Int32Array(w * h);
+    const boxes = [];
+    const stack = [];
+    for (let start = 0; start < labels.length; start++) {
+      if (!mask[start] || labels[start]) continue;
+      const id = boxes.length + 1;
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      labels[start] = id;
+      stack.push(start);
+      while (stack.length) {
+        const i = stack.pop();
+        const x = i % w, y = (i - x) / w;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+            const j = yy * w + xx;
+            if (mask[j] && !labels[j]) {
+              labels[j] = id;
+              stack.push(j);
+            }
+          }
+        }
+      }
+      boxes.push({ x0, y0, x1, y1 });
+    }
+    return { labels, boxes };
+  }
+  var overlaps = (a, b) => a.x < b.x + b.side && b.x < a.x + a.side && a.y < b.y + b.side && b.y < a.y + a.side;
+  function groupPieces(boxes, w, h) {
+    let groups = boxes.map((b, i) => ({ ids: [i + 1], bounds: { ...b } }));
+    for (const g of groups) g.crop = cropWindow(g.bounds, w, h);
+    let merged = true;
+    while (merged && groups.length > 1) {
+      merged = false;
+      outer: for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const a = groups[i], b = groups[j];
+          if (a.crop && b.crop && !overlaps(a.crop, b.crop)) continue;
+          const bounds = { x0: Math.min(a.bounds.x0, b.bounds.x0), y0: Math.min(a.bounds.y0, b.bounds.y0), x1: Math.max(a.bounds.x1, b.bounds.x1), y1: Math.max(a.bounds.y1, b.bounds.y1) };
+          const g = { ids: [...a.ids, ...b.ids], bounds, crop: cropWindow(bounds, w, h) };
+          groups = groups.filter((_, k) => k !== i && k !== j);
+          groups.push(g);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+    return groups.sort((p, q) => p.bounds.y0 - q.bounds.y0 || p.bounds.x0 - q.bounds.x0);
+  }
+  function groupMask(labels, ids) {
+    const wanted = new Set(ids);
+    const out = new Uint8Array(labels.length);
+    for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
+    return out;
+  }
 
   // apps/AiToolsLocal/src/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
@@ -446,7 +534,7 @@
   }
   function updateButtons() {
     const has = hasPicture();
-    for (const id of ["save", "clear", "fill", "compare"]) $(id).disabled = !has || busy;
+    for (const id of ["save", "send", "clear", "fill", "compare"]) $(id).disabled = !has || busy;
     $("undo").disabled = !undoStack.length || busy;
     $("redo").disabled = !redoStack.length || busy;
   }
@@ -622,6 +710,39 @@
     refreshModelInfo();
     return session;
   }
+  var MAX_OBJECTS = 12;
+  async function fillOne(mask, crop, w) {
+    const sess = await ensureSession();
+    const win = document.createElement("canvas");
+    win.width = win.height = MODEL_SIZE;
+    const wx = win.getContext("2d", { willReadFrequently: true });
+    wx.imageSmoothingQuality = "high";
+    wx.drawImage(imgC, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
+    const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
+    const hole = windowMask(mask, w, crop);
+    let answer;
+    try {
+      answer = await runModel(sess.session, rgba, hole);
+    } catch (e) {
+      if (sess.backend !== "gpu") throw e;
+      status("The graphics chip failed; trying the processor…");
+      session = await createSession(modelBytes, false);
+      answer = await runModel(session.session, rgba, hole);
+      refreshModelInfo();
+    }
+    const ac = document.createElement("canvas");
+    ac.width = ac.height = MODEL_SIZE;
+    ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
+    const sc = document.createElement("canvas");
+    sc.width = sc.height = crop.side;
+    const sx = sc.getContext("2d", { willReadFrequently: true });
+    sx.imageSmoothingQuality = "high";
+    sx.drawImage(ac, 0, 0, crop.side, crop.side);
+    const scaled = sx.getImageData(0, 0, crop.side, crop.side).data;
+    const region = imgX.getImageData(crop.x, crop.y, crop.side, crop.side);
+    paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, scaled, blendWeights(mask, w, crop, FEATHER));
+    imgX.putImageData(region, crop.x, crop.y);
+  }
   async function removeObject() {
     if (busy || !hasPicture()) return;
     const w = imgC.width, h = imgC.height;
@@ -631,56 +752,40 @@
       return;
     }
     const mask = dilate(marked, w, h, Math.max(0, Math.round(settings.grow)));
-    const crop = cropWindow(holeBounds(mask, w, h), w, h);
-    if (!crop) {
+    const { labels, boxes } = labelPieces(mask, w, h);
+    const groups = groupPieces(boxes, w, h);
+    if (groups.some((g) => !g.crop)) {
       status("That area is too big for the AI: mark a smaller part, or do it in two or three steps.", "bad");
+      return;
+    }
+    if (groups.length > MAX_OBJECTS) {
+      status("That is " + groups.length + " separate marks: do at most " + MAX_OBJECTS + " at a time.", "bad");
       return;
     }
     busy = true;
     updateButtons();
     const t0 = performance.now();
+    let before = null;
     try {
-      const sess = await ensureSession();
-      status("Removing it… (" + (sess.backend === "gpu" ? "graphics chip" : "processor, slower") + ")");
-      await new Promise((r) => setTimeout(r, 30));
-      const win = document.createElement("canvas");
-      win.width = win.height = MODEL_SIZE;
-      const wx = win.getContext("2d", { willReadFrequently: true });
-      wx.imageSmoothingQuality = "high";
-      wx.drawImage(imgC, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
-      const hole = windowMask(mask, w, crop);
-      let answer;
-      try {
-        answer = await runModel(sess.session, rgba, hole);
-      } catch (e) {
-        if (sess.backend !== "gpu") throw e;
-        status("The graphics chip failed; trying the processor…");
-        session = await createSession(modelBytes, false);
-        answer = await runModel(session.session, rgba, hole);
-        refreshModelInfo();
+      before = await createImageBitmap(imgC);
+      for (let i = 0; i < groups.length; i++) {
+        status((groups.length > 1 ? "Removing object " + (i + 1) + " of " + groups.length + "… " : "Removing it… ") + (session ? session.backend === "gpu" ? "(graphics chip)" : "(processor, slower)" : ""));
+        await new Promise((r) => setTimeout(r, 30));
+        await fillOne(groups.length === 1 ? mask : groupMask(labels, groups[i].ids), groups[i].crop, w);
       }
-      const ac = document.createElement("canvas");
-      ac.width = ac.height = MODEL_SIZE;
-      ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
-      const sc = document.createElement("canvas");
-      sc.width = sc.height = crop.side;
-      const sx = sc.getContext("2d", { willReadFrequently: true });
-      sx.imageSmoothingQuality = "high";
-      sx.drawImage(ac, 0, 0, crop.side, crop.side);
-      const scaled = sx.getImageData(0, 0, crop.side, crop.side).data;
-      const region = imgX.getImageData(crop.x, crop.y, crop.side, crop.side);
-      const before = await createImageBitmap(imgC);
-      paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, scaled, blendWeights(mask, w, crop, FEATHER));
-      imgX.putImageData(region, crop.x, crop.y);
       undoStack.push(before);
       if (undoStack.length > MAX_UNDO) undoStack.shift().close();
       redoStack = [];
       maskX.clearRect(0, 0, maskC.width, maskC.height);
-      status("Done in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s. Not right? Undo, mark a bit differently, or press Remove object again.", "ok");
+      status("Done in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s" + (groups.length > 1 ? " (" + groups.length + " objects)" : "") + ". Not right? Undo, mark a bit differently, or press Remove object again.", "ok");
     } catch (e) {
       $("prog").hidden = true;
-      status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+      if (before) {
+        imgX.clearRect(0, 0, w, h);
+        imgX.drawImage(before, 0, 0);
+        before.close();
+      }
+      status("Something went wrong: " + (e && e.message ? e.message : e) + " The picture was left as it was.", "bad");
     } finally {
       busy = false;
       updateButtons();
@@ -710,6 +815,17 @@
       if (blob) downloadBlob(blob, fileName + "-filled.png");
       else status("Couldn't save the picture.", "bad");
     }, "image/png");
+  });
+  var toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't make the picture.")), "image/png"));
+  $("send").addEventListener("click", async () => {
+    if (!hasPicture()) return;
+    status("Opening ZEditor…");
+    try {
+      await sendImageToZEditor(toBlob, fileName + "-filled.png");
+      status("Sent to ZEditor (it opened in a new tab).", "ok");
+    } catch (e) {
+      status("Couldn't send it: " + (e && e.message ? e.message : e), "bad");
+    }
   });
   $("open").addEventListener("click", () => $("file").click());
   $("empty-open").addEventListener("click", () => $("file").click());

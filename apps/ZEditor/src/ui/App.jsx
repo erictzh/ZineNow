@@ -23,6 +23,7 @@ import { useViewSettings } from "../state/useViewSettings.js";
 import { useZoom } from "../state/useZoom.js";
 import { useCanvasGrow } from "../state/useCanvasGrow.js";
 import { useGroupFiles } from "../state/useGroupFiles.js";
+import { useImageHandoff } from "../state/useImageHandoff.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
 import { Rulers } from "./canvas/Rulers.jsx";
 import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
@@ -62,6 +63,7 @@ export function App() {
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });
   const groupFiles = useGroupFiles({ doc, edits, selection, status });
+  useImageHandoff({ doc, files, edits }); // a picture sent from Ai Tools (Local) opens as a new canvas document
   const zoom = useZoom();
   useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });

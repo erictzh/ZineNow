@@ -1,5 +1,5 @@
 // The AI remover's picture maths (apps/AiToolsLocal/src/fill.js).
-import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, holeBounds, outputToRgba, paste, windowMask } from "../apps/AiToolsLocal/src/fill.js";
+import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, groupMask, groupPieces, holeBounds, labelPieces, outputToRgba, paste, windowMask } from "../apps/AiToolsLocal/src/fill.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -60,6 +60,26 @@ const image = new Uint8ClampedArray(100 * 100 * 4).fill(10);
 const answer = new Uint8ClampedArray(60 * 60 * 4).fill(250);
 paste(image, 100, c2, answer, w0);
 ok(image[(35 * 100 + 35) * 4] === 250 && image[(20 * 100 + 20) * 4] === 10, "pasting changes the area and leaves the rest of the picture alone");
+
+// ---- several objects
+{
+  const W2 = 3000, H2 = 2000;
+  const m = new Uint8Array(W2 * H2);
+  const blob = (x0, y0, w, h) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) m[y * W2 + x] = 1; };
+  blob(200, 200, 30, 30); blob(2600, 1700, 30, 30);
+  const { labels, boxes } = labelPieces(m, W2, H2);
+  ok(boxes.length === 2 && boxes[0].x0 === 200 && boxes[1].y1 === 1729, "two separate marks are two pieces");
+  const groups = groupPieces(boxes, W2, H2);
+  ok(groups.length === 2 && groups.every((g) => g.crop), "far apart: two groups, each with its own window");
+  const g0 = groupMask(labels, groups[0].ids);
+  let n0 = 0; for (let i = 0; i < g0.length; i++) n0 += g0[i]; ok(n0 === 900, "a group's mask holds only its own piece (" + n0 + " pixels)");
+  blob(600, 220, 20, 20); // 370 px from the first: its 512 window overlaps the first one's
+  const l2 = labelPieces(m, W2, H2);
+  const g2 = groupPieces(l2.boxes, W2, H2);
+  ok(l2.boxes.length === 3 && g2.length === 2, "marks whose windows overlap are filled together (3 pieces, " + g2.length + " groups)");
+  const d = new Uint8Array(100 * 100); d[10 * 100 + 10] = 1; d[11 * 100 + 11] = 1;
+  ok(labelPieces(d, 100, 100).boxes.length === 1, "pixels touching at a corner are one piece");
+}
 
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);

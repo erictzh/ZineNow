@@ -142,3 +142,68 @@ export function paste(image, w, crop, answer, weights) {
     }
   }
 }
+
+// ---- several separate objects -------------------------------------------------------------------------------
+// Marks that are far apart are filled one after the other, each with its own window; marks whose windows would overlap are filled
+// together, so a window never contains marked pixels it is not filling.
+
+// Splits the marked pixels into separate pieces (pixels touching, corners included, belong together).
+// Returns { labels: Int32Array (0 = not marked, else the piece's number, from 1), boxes: [{ x0, y0, x1, y1 }] (box i is piece i + 1) }.
+export function labelPieces(mask, w, h) {
+  const labels = new Int32Array(w * h);
+  const boxes = [];
+  const stack = [];
+  for (let start = 0; start < labels.length; start++) {
+    if (!mask[start] || labels[start]) continue;
+    const id = boxes.length + 1;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    labels[start] = id; stack.push(start);
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % w, y = (i - x) / w;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy; if (yy < 0 || yy >= h) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx; if (xx < 0 || xx >= w) continue;
+          const j = yy * w + xx;
+          if (mask[j] && !labels[j]) { labels[j] = id; stack.push(j); }
+        }
+      }
+    }
+    boxes.push({ x0, y0, x1, y1 });
+  }
+  return { labels, boxes };
+}
+
+const overlaps = (a, b) => a.x < b.x + b.side && b.x < a.x + a.side && a.y < b.y + b.side && b.y < a.y + a.side;
+
+// Groups the pieces so that each group can be filled with one window. Returns [{ ids: [piece numbers], bounds, crop }]; `crop` is
+// null for a group too big for one window (the app tells the user).
+export function groupPieces(boxes, w, h) {
+  let groups = boxes.map((b, i) => ({ ids: [i + 1], bounds: { ...b } }));
+  for (const g of groups) g.crop = cropWindow(g.bounds, w, h);
+  let merged = true;
+  while (merged && groups.length > 1) {
+    merged = false;
+    outer: for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i], b = groups[j];
+        if (a.crop && b.crop && !overlaps(a.crop, b.crop)) continue;
+        const bounds = { x0: Math.min(a.bounds.x0, b.bounds.x0), y0: Math.min(a.bounds.y0, b.bounds.y0), x1: Math.max(a.bounds.x1, b.bounds.x1), y1: Math.max(a.bounds.y1, b.bounds.y1) };
+        const g = { ids: [...a.ids, ...b.ids], bounds, crop: cropWindow(bounds, w, h) };
+        groups = groups.filter((_, k) => k !== i && k !== j); groups.push(g);
+        merged = true; break outer;
+      }
+    }
+  }
+  return groups.sort((p, q) => p.bounds.y0 - q.bounds.y0 || p.bounds.x0 - q.bounds.x0);
+}
+
+// The mask of just one group's pieces.
+export function groupMask(labels, ids) {
+  const wanted = new Set(ids);
+  const out = new Uint8Array(labels.length);
+  for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
+  return out;
+}
