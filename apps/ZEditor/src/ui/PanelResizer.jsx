@@ -20,7 +20,22 @@ export function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min,
     const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
     return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
   };
-  const apply = (px, save) => {
+  // The page sits in padding worked out from the pane's width (styles/layout.css: the outer canvas), so a pane that gets a
+  // little wider would slide the page along by several times as much. This measures where the page is before the
+  // change, makes the change, and scrolls the pane by the difference, so the page stays exactly where it was.
+  const keepCanvasStill = (change) => {
+    const pane = document.querySelector(".preview-pane");
+    const board = pane && pane.querySelector(".ze-artboard-zoom");
+    if (!board) { change(); return; }
+    const where = () => { const p = pane.getBoundingClientRect(), b = board.getBoundingClientRect(); return [b.left - p.left, b.top - p.top]; };
+    const before = where();
+    change();
+    const after = where(); // reading it makes the browser lay the page out again with the new width
+    pane.scrollLeft += after[0] - before[0];
+    pane.scrollTop += after[1] - before[1];
+  };
+  const apply = (px, save) => keepCanvasStill(() => applyWidth(px, save));
+  const applyWidth = (px, save) => {
     const root = document.documentElement;
     if (px == null) {
       widthRef.current = null;
