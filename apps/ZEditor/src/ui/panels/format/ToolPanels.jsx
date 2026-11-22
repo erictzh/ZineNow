@@ -82,63 +82,56 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         )}
       </PanelSection>
 
-      <PanelSection id="marquee.action" title="Action" defaultOpen>
+      <div className="ze-marquee-box">
+        <div className="ze-marquee-box-title">Action</div>
         <select className="ze-format-select" aria-label="Action" value={fillMode ? "fill" : "layer"} onChange={(e) => change({ mode: e.target.value })}>
           <option value="layer">Make a new layer</option>
           <option value="fill">Remove &amp; fill</option>
         </select>
-      </PanelSection>
 
-      {!fillMode && (
-        <React.Fragment>
-          <PanelSection id="marquee.make" title="Make a new layer" defaultOpen>
+        {!fillMode && (
+          <React.Fragment>
             <span className="ze-format-hint">Turns what is inside the area into a new image layer, so you can give just that part a filter or effect.</span>
             <div className="ze-format-radio-group" role="radiogroup" aria-label="Make layer">
               {radio("marquee-action", "copy", "Copy to a new layer", settings.action, (v) => change({ action: v }), "The original stays as it is. (Ctrl+J)")}
               {radio("marquee-action", "cut", "Cut to a new layer", settings.action, (v) => change({ action: v }), "The area is taken out of the original. (Ctrl+Shift+J)")}
             </div>
+            {settings.action === "cut" && (
+              <React.Fragment>
+                <div className="ze-marquee-box-title">What a cut leaves behind</div>
+                <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
+                  {radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
+                  {radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v }))}
+                  {radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers saved for Remove & fill.")}
+                </div>
+                {leaves === "fill" && (
+                  <div className="ze-format-row">
+                    <span className="ze-format-label">Colour</span>
+                    <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff"} onChange={(color) => change({ fillColor: color })} />
+                  </div>
+                )}
+                <span className="ze-format-hint">A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.</span>
+              </React.Fragment>
+            )}
             <div className="ze-format-row">
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
             </div>
             <span className="ze-format-hint">
               {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "The new layer is selected and the Move tool takes over."}
             </span>
-          </PanelSection>
-          {settings.action === "cut" && (
-            <PanelSection id="marquee.cut" title="What a cut leaves behind" defaultOpen>
-              <div className="ze-format-radio-group" role="radiogroup" aria-label="A cut leaves">
-                {radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? undefined : "Needs one selected layer to cut from.", !fromLayer)}
-                {radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v }))}
-                {radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers saved for Remove & fill.")}
-              </div>
-              {leaves === "fill" && (
-                <div className="ze-format-row">
-                  <span className="ze-format-label">Colour</span>
-                  <CustomColorInput value={/^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff"} onChange={(color) => change({ fillColor: color })} />
-                </div>
-              )}
-              <span className="ze-format-hint">A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.</span>
-            </PanelSection>
-          )}
-        </React.Fragment>
-      )}
+          </React.Fragment>
+        )}
 
-      {fillMode && (
-        <React.Fragment>
-          <PanelSection id="marquee.fill" title="Remove & fill" defaultOpen>
+        {fillMode && (
+          <React.Fragment>
             <span className="ze-format-hint">Replaces what is inside the area with a fill made from the pixels around it. No new layer is made.</span>
             <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
               <option value="pattern">Pattern: copies texture from the rest of the picture</option>
               <option value="smooth">Smooth: a blend of the edge colours</option>
               <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
             </select>
-            <div className="ze-format-row">
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
-            </div>
-            <span className="ze-format-hint">{!ready ? "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks."}</span>
-          </PanelSection>
-          <PanelSection id="marquee.fillTune.v2" title="Fine-tune">
+            <span className="ze-format-hint">Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks.</span>
+            <div className="ze-marquee-box-title">Fine-tune</div>
             <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture.</span>
             {[
               { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
@@ -153,9 +146,14 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
                 <span className="ze-format-hint">{f.hint}</span>
               </div>
             ))}
-          </PanelSection>
-        </React.Fragment>
-      )}
+            <div className="ze-format-row">
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
+            </div>
+            <span className="ze-format-hint">{!ready ? "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Not right? Try another, or change a number above and fill again."}</span>
+          </React.Fragment>
+        )}
+      </div>
     </FormatPanelShell>
   );
 }
