@@ -54,11 +54,15 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status, histor
       const coverId = result.cover ? d.nextAnnIdRef.current++ : null;
       ed.updateAnnotationsFor(pageIdx, (anns) => applyMarqueeResult(anns, result, newId, coverId));
       lastFill.current = mode === "fill" ? { depth: null, pageKey: page.key } : null; // depth is filled in by the effect above once the step is in
-      // Show the new layer's own settings (the Format panel for an image) rather than the Marquee's. The
-      // marquee stays on the page for when the tool is picked again (M).
-      sel.selectTool("select");
-      sel.setSelectedAnnId(result.layer ? newId : result.cover ? coverId : result.sourceId);
-      sel.setSelectedAnnIds([]);
+      // A new layer is shown with its own settings (the Format panel for an image) rather than the Marquee's; the
+      // marquee stays on the page for when the tool is picked again (M). "Remove & fill" makes no layer: it stays in
+      // the Marquee tool with everything selected as it was, so the panel keeps its fill settings for the next try
+      // (Try another, a new number) and the selected layer is still the one to work on.
+      if (result.layer) {
+        sel.selectTool("select");
+        sel.setSelectedAnnId(newId);
+        sel.setSelectedAnnIds([]);
+      }
     } catch (err) {
       st.setErrorMsg("Couldn't make the layer: " + (err && err.message ? err.message : err));
     } finally {
