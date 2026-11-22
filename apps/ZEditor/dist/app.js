@@ -9584,13 +9584,22 @@
     const clipboardRef = useRef5(null);
     useEffect2(() => {
       function handleKeyDown(e) {
-        const { doc, history, selection, edits, pageOps, project, marquee, modalOpen } = appRef.current;
+        const { doc, history, selection, edits, pageOps, project, marquee, modalOpen, zoom } = appRef.current;
         const { pages, selectedIdx, selectedPageIndices, setSelectedIdx, setSelectedPageIndices, nextAnnIdRef } = doc;
         const { selectedAnnId, selectedAnnIds, setSelectedAnnId, selectTool } = selection;
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
           e.preventDefault();
           if (!modalOpen) project.handleSaveProject({ saveAs: e.shiftKey });
           return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && !modalOpen && selectedIdx !== null) {
+          const dir = e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? 1 : e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" ? -1 : e.key === "0" || e.code === "Numpad0" ? 0 : null;
+          if (dir !== null) {
+            e.preventDefault();
+            if (dir === 0) zoom.handleZoomChange(ZOOM_PERCENT.initial);
+            else zoom.zoomStep(dir);
+            return;
+          }
         }
         const tag = e.target && e.target.tagName || "";
         if (tag === "INPUT" || tag === "TEXTAREA" || e.target && e.target.isContentEditable) return;
@@ -11753,6 +11762,7 @@
 
   // apps/ZEditor/src/state/useZoom.js
   var { useState: useState15, useRef: useRef11, useLayoutEffect, useEffect: useEffect9 } = React;
+  var ZOOM_STEPS = [25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400];
   var PINCH_EVENT = "ze-pinch";
   var TOP_GAP = 40;
   function centerArtboard(board) {
@@ -11768,6 +11778,9 @@
     const zoomAnchorRef = useRef11(null);
     const zoomRef = useRef11(zoomPercent);
     zoomRef.current = zoomPercent;
+    const floatRef = useRef11(zoomPercent);
+    if (Math.round(floatRef.current) !== zoomPercent) floatRef.current = zoomPercent;
+    const requestedRef = useRef11(null);
     function artboardElement() {
       return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
     }
@@ -11788,7 +11801,23 @@
       }
       setZoomPercent(percent);
     }
+    function zoomAt(raw, fx, fy) {
+      const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
+      floatRef.current = clamped;
+      const percent = Math.round(clamped);
+      if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
+      const waiting = zoomAnchorRef.current;
+      zoomAnchorRef.current = { ...waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy), fx, fy };
+      requestedRef.current = percent;
+      setZoomPercent(percent);
+    }
+    function zoomStep(direction) {
+      const current = zoomRef.current;
+      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
+      handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
+    }
     useLayoutEffect(() => {
+      requestedRef.current = null;
       const anchor = zoomAnchorRef.current;
       if (!anchor || !artboardElement()) return;
       zoomAnchorRef.current = null;
@@ -11822,7 +11851,21 @@
       window.addEventListener(PINCH_EVENT, onPinch);
       return () => window.removeEventListener(PINCH_EVENT, onPinch);
     }, []);
-    return { zoomPercent, previewPaneRef, handleZoomChange };
+    useEffect9(() => {
+      function onWheel(e) {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const pane = previewPaneRef.current;
+        if (!pane || !(e.target instanceof Element) || !e.target.closest(".ze-ruler-frame") || !artboardElement()) return;
+        e.preventDefault();
+        const r = pane.getBoundingClientRect();
+        const fx = Math.min(r.width, Math.max(0, e.clientX - r.left)), fy = Math.min(r.height, Math.max(0, e.clientY - r.top));
+        const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
+        zoomAt(floatRef.current * Math.exp(-Math.max(-25, Math.min(25, pixels)) * 8e-3), fx, fy);
+      }
+      window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+      return () => window.removeEventListener("wheel", onWheel, { capture: true });
+    }, []);
+    return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep };
   }
 
   // apps/ZEditor/src/ui/pointer.js
@@ -14118,6 +14161,14 @@
         ["Double-click text", "Edit it (Move tool)"],
         ["Esc", "Finish editing and keep the text selected"],
         ["Enter / Esc", "Magic eraser preview: apply it / cancel it (Ctrl + Z also cancels)"]
+      ]
+    },
+    {
+      group: "View",
+      rows: [
+        ["Ctrl + mouse wheel, or a pinch on a touchpad", "Zoom the page at the pointer (over the page area), instead of the browser zooming the whole window"],
+        ["Ctrl + +  /  Ctrl + -", "Zoom the page in / out"],
+        ["Ctrl + 0", "Zoom the page to 100%"]
       ]
     },
     {
@@ -16556,7 +16607,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "d2c9368"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "628115d"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -17021,7 +17072,7 @@
       onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file.")
     }), []);
     const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
-    useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen });
+    useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
     const t = toolDefaults;

@@ -1,10 +1,14 @@
 // Zoom level of the page view, keeping a point of the page in place while it changes: the middle
-// of the view for the zoom controls, the spot between two fingers for a pinch.
+// of the view for the zoom controls and keys, the spot between two fingers for a pinch, the pointer for
+// Ctrl + wheel (a touchpad pinch on a PC arrives as Ctrl + wheel too).
 
 import { ZOOM_PERCENT } from "../constants.js";
 import { createPinchGate } from "../../../../shared/js/pinchGate.js";
 
 const { useState, useRef, useLayoutEffect, useEffect } = React;
+
+// The steps Ctrl + and Ctrl - move through (percent).
+const ZOOM_STEPS = [25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400];
 
 // Fired on window by ui/touchInput.js while two fingers are on the canvas:
 //   detail: { phase: "start" | "move" | "end", scale, x, y }
@@ -35,6 +39,9 @@ export function useZoom() {
   const zoomAnchorRef = useRef(null);
   const zoomRef = useRef(zoomPercent);
   zoomRef.current = zoomPercent;
+  const floatRef = useRef(zoomPercent); // the wheel's unrounded zoom, so a touchpad pinch's tiny steps add up
+  if (Math.round(floatRef.current) !== zoomPercent) floatRef.current = zoomPercent; // changed some other way
+  const requestedRef = useRef(null); // a zoom asked for by the wheel and not drawn yet
 
   function artboardElement() {
     return previewPaneRef.current && previewPaneRef.current.querySelector(".ze-artboard-zoom");
@@ -61,7 +68,28 @@ export function useZoom() {
     setZoomPercent(percent);
   }
 
+  // Zooms to `raw` percent (within the limits), keeping the page point at (fx, fy) in the pane where it is.
+  function zoomAt(raw, fx, fy) {
+    const clamped = Math.min(ZOOM_PERCENT.max, Math.max(ZOOM_PERCENT.min, raw));
+    floatRef.current = clamped;
+    const percent = Math.round(clamped);
+    if (percent === (requestedRef.current != null ? requestedRef.current : zoomRef.current)) return;
+    // Wheel events can come faster than the page is redrawn: until it is, keep the page point first asked for.
+    const waiting = zoomAnchorRef.current;
+    zoomAnchorRef.current = { ...(waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy)), fx, fy };
+    requestedRef.current = percent;
+    setZoomPercent(percent);
+  }
+
+  // Ctrl+ and Ctrl- (the browser's own zoom keys, which ZEditor takes over for the page): the next step in or out.
+  function zoomStep(direction) {
+    const current = zoomRef.current;
+    const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current) : [...ZOOM_STEPS].reverse().find((s) => s < current);
+    handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
+  }
+
   useLayoutEffect(() => {
+    requestedRef.current = null;
     const anchor = zoomAnchorRef.current;
     if (!anchor || !artboardElement()) return;
     zoomAnchorRef.current = null;
@@ -95,5 +123,24 @@ export function useZoom() {
     return () => window.removeEventListener(PINCH_EVENT, onPinch);
   }, []);
 
-  return { zoomPercent, previewPaneRef, handleZoomChange };
+  // Ctrl (or Cmd) + wheel over the page area zooms the page at the pointer, instead of the browser zooming the
+  // whole window (panels, rulers and all). A touchpad pinch on a PC arrives the same way. Only while a page is
+  // open; elsewhere (the panels, the welcome screen) the browser's own zoom is left alone.
+  useEffect(() => {
+    function onWheel(e) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const pane = previewPaneRef.current;
+      if (!pane || !(e.target instanceof Element) || !e.target.closest(".ze-ruler-frame") || !artboardElement()) return;
+      e.preventDefault();
+      const r = pane.getBoundingClientRect();
+      const fx = Math.min(r.width, Math.max(0, e.clientX - r.left)), fy = Math.min(r.height, Math.max(0, e.clientY - r.top));
+      const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY; // lines or pages -> pixels
+      // A mouse wheel notch (100) counts as 25: about 22% per notch; a pinch's small steps add up smoothly.
+      zoomAt(floatRef.current * Math.exp(-Math.max(-25, Math.min(25, pixels)) * 0.008), fx, fy);
+    }
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
+  }, []);
+
+  return { zoomPercent, previewPaneRef, handleZoomChange, zoomStep };
 }

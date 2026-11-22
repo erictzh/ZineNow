@@ -1,5 +1,6 @@
 // Keyboard shortcuts and pasting images from the clipboard (the list shown to users is ui/dialogs/shortcuts.js).
 
+import { ZOOM_PERCENT } from "../constants.js";
 import { translatedAnnotation } from "../model/annotations.js";
 import { angleOf } from "../model/controls.js";
 import { standaloneCopy } from "../model/text/threads.js";
@@ -17,7 +18,7 @@ export function useKeyboardShortcuts(app) {
 
   useEffect(() => {
     function handleKeyDown(e) {
-      const { doc, history, selection, edits, pageOps, project, marquee, modalOpen } = appRef.current;
+      const { doc, history, selection, edits, pageOps, project, marquee, modalOpen, zoom } = appRef.current;
       const { pages, selectedIdx, selectedPageIndices, setSelectedIdx, setSelectedPageIndices, nextAnnIdRef } = doc;
       const { selectedAnnId, selectedAnnIds, setSelectedAnnId, selectTool } = selection;
       // Save works even mid-typing in a field; the browser's own "Save
@@ -26,6 +27,17 @@ export function useKeyboardShortcuts(app) {
         e.preventDefault();
         if (!modalOpen) project.handleSaveProject({ saveAs: e.shiftKey });
         return;
+      }
+      // The browser's zoom keys zoom the page instead of the whole window (which would scale the panels and rulers
+      // too): Ctrl + / Ctrl - step in and out, Ctrl 0 goes to 100%. Works while typing in a field as well; only
+      // while a page is open and no pop-up is showing, otherwise the browser's own zoom is left alone.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !modalOpen && selectedIdx !== null) {
+        const dir = e.key === "+" || e.key === "=" || e.code === "NumpadAdd" ? 1 : e.key === "-" || e.key === "_" || e.code === "NumpadSubtract" ? -1 : e.key === "0" || e.code === "Numpad0" ? 0 : null;
+        if (dir !== null) {
+          e.preventDefault();
+          if (dir === 0) zoom.handleZoomChange(ZOOM_PERCENT.initial); else zoom.zoomStep(dir);
+          return;
+        }
       }
       const tag = (e.target && e.target.tagName) || "";
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable)) return; // let native undo/typing run inside text fields
