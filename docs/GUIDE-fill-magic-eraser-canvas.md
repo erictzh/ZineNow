@@ -368,6 +368,7 @@ The same job as Remove & fill in ZEditor (take something out of a picture and fi
 5. **Remove object.** The first time, the app downloads the AI model (about 28 MB) and keeps it, so after that it works with no internet. A fill takes about 2.5–4 seconds on a tablet's graphics chip, or 6–7 seconds on its processor.
 6. **Undo / Redo**, **Hold to compare** (shows the original while you hold the button) and **Save PNG**.
 7. **Send to ZEditor** opens ZEditor in a new tab with your picture on a new **unlimited canvas** page, ready to lay out.
+   - **From ZEditor to Ai Tools and back:** select an image layer in ZEditor, open its **Ai Tools (Local)** section and press **Open in Ai Tools (remove objects)**. Ai Tools opens with that picture (crop, adjustments and effects included). When you are done press **Send back to ZEditor** (the same button): the result arrives in the ZEditor tab you came from as a **new layer exactly over the original**, named "… (AI)". You can hide or delete the original, or compare the two.
 8. **Several objects at once:** mark them all, then press Remove object once. Objects far apart are done one after another, and a single Undo brings all of them back.
 9. **"Model and device"** at the bottom of the panel shows whether the model is saved, and whether the graphics chip is being used. **Forget the saved model** removes it from the device.
 
@@ -421,7 +422,7 @@ A **neural network** is a very large pile of numbers (about 7 million of them he
 - Your brush size and Grow setting, in the browser's local storage.
 - **Nothing is uploaded.** Your pictures never leave the device.
 
-The code lives in `apps/AiToolsLocal/src/`: `main.js` (the screen and the buttons), `fill.js` (the picture maths: windows, masks, grouping, pasting; tested in `tests/aitools-fill.test.js`), `runtime.js` (loading and running the model) and `modelStore.js` (downloading and saving the model). The hand-off is in `shared/js/imageHandoff.js` and `apps/ZEditor/src/state/useImageHandoff.js`.
+The code lives in `apps/AiToolsLocal/src/`: `main.js` (the screen and the buttons), `fill.js` (the picture maths: windows, masks, grouping, pasting; tested in `tests/aitools-fill.test.js`), `runtime.js` (loading and running the model) and `modelStore.js` (downloading and saving the model). The hand-off between the two apps is in `shared/js/imageHandoff.js` and `apps/ZEditor/src/state/useImageHandoff.js`. It uses the browser's `postMessage`: one tab sends a message with the picture's bytes to the other tab, which only accepts messages from the same website.
 
 ---
 

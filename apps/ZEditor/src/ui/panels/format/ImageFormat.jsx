@@ -13,7 +13,7 @@ import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 const { useState } = React;
 
-export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, imageTrace }) {
+export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace }) {
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
   const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -71,6 +71,15 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
       <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
+      <PanelSection
+        id="image.aitools"
+        title="Ai Tools (Local)"
+        hint="Opens this picture (with its crop, adjustments and effects) in Ai Tools (Local), the AI object remover that runs on your device. When you press Send back to ZEditor there, the result arrives here as a new layer. Nothing is uploaded."
+      >
+        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={isCroppingThis} onClick={() => onOpenInAiTools(ann)}>
+          Open in Ai Tools (remove objects)
+        </button>
+      </PanelSection>
       <PanelSection
         id="image.flatten"
         title="Flatten"

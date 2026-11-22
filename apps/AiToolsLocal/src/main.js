@@ -4,7 +4,7 @@
 // src/modelStore.js downloads and keeps the model file).
 
 import { downloadBlob } from "../../../shared/js/download.js";
-import { sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
+import { AITOOLS_READY_MESSAGE, hasOpener, listenForHandoffImage, sendImageToOpener, sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
 import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
 import { MODEL_SIZE, blendWeights, dilate, groupMask, groupPieces, holeBounds, labelPieces, paste, windowMask } from "./fill.js";
 import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "./modelStore.js";
@@ -34,6 +34,8 @@ let tool = "brush";
 let busy = false;
 let undoStack = [], redoStack = [];
 let session = null, modelBytes = null, maskSign = null;
+let cameFromZEditor = false; // the picture was sent here by ZEditor, which is still open
+let handoffMeta; // what ZEditor sent along (the layer's place), handed back with the result
 
 function status(text, kind) { const s = $("status"); s.textContent = text; s.className = kind || ""; }
 let loaded = false;
@@ -289,10 +291,16 @@ $("save").addEventListener("click", () => {
 const toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => (b ? resolve(b) : reject(new Error("Couldn't make the picture."))), "image/png"));
 $("send").addEventListener("click", async () => {
   if (!hasPicture()) return;
-  status("Opening ZEditor…");
-  try { await sendImageToZEditor(toBlob, fileName + "-filled.png"); status("Sent to ZEditor (it opened in a new tab).", "ok"); }
-  catch (e) { status("Couldn't send it: " + (e && e.message ? e.message : e), "bad"); }
+  try {
+    // a picture that came from ZEditor goes back to that same tab (as a new layer in its document); otherwise ZEditor opens in a new tab
+    if (cameFromZEditor && hasOpener()) { await sendImageToOpener(toBlob, fileName + "-filled.png", handoffMeta); status("Sent back to ZEditor: a new layer in the document it came from.", "ok"); return; }
+    status("Opening ZEditor…");
+    await sendImageToZEditor(toBlob, fileName + "-filled.png"); status("Sent to ZEditor (it opened in a new tab).", "ok");
+  } catch (e) { status("Couldn't send it: " + (e && e.message ? e.message : e), "bad"); }
 });
+
+// a picture sent from ZEditor ("Open in Ai Tools") opens straight away
+listenForHandoffImage(AITOOLS_READY_MESSAGE, async (file, fromOpener, meta) => { await openFile(file); cameFromZEditor = fromOpener; handoffMeta = meta; if (fromOpener) $("send").textContent = "Send back to ZEditor"; });
 
 // ---- opening pictures: button, drop, paste, keys -----------------------------------------------------
 $("open").addEventListener("click", () => $("file").click());
