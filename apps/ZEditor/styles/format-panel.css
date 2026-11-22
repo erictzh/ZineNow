@@ -294,6 +294,12 @@
 .ze-format-inline { display: flex; align-items: center; gap: 6px; }
 .ze-format-inline .ze-format-number { flex: 1 1 auto; min-width: 0; }
 .ze-format-inline .ze-format-toggle { flex: 0 0 auto; }
+/* The Size & style row wraps by groups: the size box with its T-/T+ buttons, then Bold / Italic / Underline,
+   so on a narrow panel B I U drop to a second line together. */
+.ze-format-inline-wrap { flex-wrap: wrap; row-gap: 6px; }
+.ze-format-inline-wrap .ze-format-number { flex: 1 1 64px; min-width: 64px; }
+.ze-format-group { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.ze-format-sizestep { font-weight: 700; font-size: 12px; letter-spacing: -0.03em; }
 
 
 /* ---- Magic eraser preview bar (Apply / Cancel) --------------------------- */
