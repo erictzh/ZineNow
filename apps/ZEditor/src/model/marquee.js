@@ -19,6 +19,7 @@ export { dragBox } from "./geometry.js";
 //               fell back to when pattern can't be used), "pattern" (the default) (texture copied from elsewhere in the picture) or "detail"; fillGrain: add noise like the surroundings' so the fill is not flat (lines and edges run on through it); render/inpaint.js.
 // fillColor:    the colour of that fill (white, like paper).
 export const MARQUEE_DEFAULTS = {
+  mode: "layer", // which job the panel shows: "layer" (Make layer) or "fill" (Remove & fill)
   action: "copy",
   shape: "rect",
   source: "visible",
