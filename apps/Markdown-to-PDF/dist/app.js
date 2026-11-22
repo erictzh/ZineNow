@@ -53,6 +53,267 @@
     win.postMessage({ type: HANDOFF_PDF_MESSAGE, buffer, filename }, "*", [buffer]);
   }
 
+  // shared/js/imageFiles.js
+  function isSvgFile(file) {
+    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
+  }
+  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+  function svgLength(value) {
+    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
+    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
+  }
+  function svgSize(svgEl) {
+    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
+    let width = svgLength(svgEl.getAttribute("width"));
+    let height = svgLength(svgEl.getAttribute("height"));
+    if (hasViewBox) {
+      if (!width && !height) {
+        width = vb[2];
+        height = vb[3];
+      } else if (!width) width = height * (vb[2] / vb[3]);
+      else if (!height) height = width * (vb[3] / vb[2]);
+    }
+    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
+  }
+  function svgFileToPng(file, maxSide = 2048) {
+    return file.text().then((text) => new Promise((resolve, reject) => {
+      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+      const svg = doc.documentElement;
+      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
+        reject(new Error("That SVG file couldn't be read."));
+        return;
+      }
+      const size = svgSize(svg);
+      const scale = maxSide / Math.max(size.width, size.height);
+      const outW = Math.max(1, Math.round(size.width * scale));
+      const outH = Math.max(1, Math.round(size.height * scale));
+      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
+      svg.setAttribute("width", String(outW));
+      svg.setAttribute("height", String(outH));
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      const img = new Image();
+      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
+        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
+      };
+      img.src = url;
+    }));
+  }
+  async function imageFileToDataUrl(file, { maxSide = 1600, quality = 0.85 } = {}) {
+    const url = isSvgFile(file) ? (await svgFileToPng(file, maxSide)).src : await readAsDataUrl(file);
+    const img = await loadImage(url);
+    const shrink = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const width = Math.max(1, Math.round(img.naturalWidth * shrink));
+    const height = Math.max(1, Math.round(img.naturalHeight * shrink));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, width, height);
+    const png = hasTransparency(ctx, width, height);
+    return { src: png ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality), width, height };
+  }
+  function readAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(`Couldn't read "${file.name}".`));
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("That file isn't a picture the browser can open."));
+      img.onload = () => resolve(img);
+      img.src = src;
+    });
+  }
+  function hasTransparency(ctx, width, height) {
+    const data = ctx.getImageData(0, 0, width, height).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
+    return false;
+  }
+
+  // shared/js/dropImages.js
+  var IMAGE_NAME = /\.(png|jpe?g|gif|webp|svg|svgz|bmp|avif|ico)$/i;
+  var IMAGE_URL = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)(\?[^#]*)?(#.*)?$/i;
+  function isImageFile(file) {
+    return Boolean(file) && ((file.type || "").startsWith("image/") || IMAGE_NAME.test(file.name || "") || isSvgFile(file));
+  }
+  function decodeEntities(s) {
+    return s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d))).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  }
+  function attribute(tag, name) {
+    const m = new RegExp("\\s" + name + `\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+    return m ? decodeEntities(m[1] ?? m[2] ?? m[3] ?? "") : "";
+  }
+  function getData(dt, type) {
+    try {
+      return dt.getData(type) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function usableUrl(url) {
+    const u = String(url || "").trim();
+    if (/^data:image\//i.test(u)) return u;
+    if (u.startsWith("//")) return "https:" + u;
+    return /^https?:\/\//i.test(u) ? u : null;
+  }
+  function readDrop(dt) {
+    const files = Array.from(dt && dt.files || []).filter(isImageFile);
+    if (files.length) return { files, url: null, alt: "" };
+    if (!dt) return null;
+    const html = getData(dt, "text/html");
+    const tag = /<img\b[^>]*>/i.exec(html);
+    if (tag) {
+      const url = usableUrl(attribute(tag[0], "src"));
+      if (url) return { files: [], url, alt: attribute(tag[0], "alt") };
+    }
+    const link = getData(dt, "text/uri-list").split(/\r?\n/).map((l) => l.trim()).find((l) => l && !l.startsWith("#"));
+    const plain = getData(dt, "text/plain").trim();
+    for (const candidate of [link, /^\S+$/.test(plain) ? plain : ""]) {
+      const url = usableUrl(candidate);
+      if (url && (/^data:/i.test(url) || IMAGE_URL.test(url))) return { files: [], url, alt: "" };
+    }
+    return null;
+  }
+  function nameFromUrl(url, type) {
+    const ext = ((type || "").split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
+    if (!/^https?:/i.test(url)) return "dropped-picture." + ext;
+    let last = "";
+    try {
+      last = decodeURIComponent(new URL(url).pathname.split("/").pop() || "");
+    } catch (e) {
+    }
+    last = last.replace(/[\\/:*?"<>|]+/g, "_").trim();
+    if (!last) return "dropped-picture." + ext;
+    return IMAGE_NAME.test(last) ? last : last + "." + ext;
+  }
+  async function fetchImageFile(url) {
+    try {
+      const res = await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!(blob.type || "").startsWith("image/")) return null;
+      return new File([blob], nameFromUrl(url, blob.type), { type: blob.type });
+    } catch (e) {
+      return null;
+    }
+  }
+  var isEditable = (el) => el instanceof Element && Boolean(el.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
+  function makeOverlay(text) {
+    const overlay = document.createElement("div");
+    overlay.setAttribute("aria-hidden", "true");
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      right: "0",
+      bottom: "0",
+      zIndex: "2147483000",
+      display: "none",
+      alignItems: "center",
+      justifyContent: "center",
+      pointerEvents: "none",
+      boxSizing: "border-box",
+      background: "rgba(221, 83, 26, 0.12)",
+      border: "3px dashed var(--ui-accent, #dd531a)"
+    });
+    const label = document.createElement("div");
+    label.textContent = text;
+    Object.assign(label.style, {
+      padding: "14px 22px",
+      borderRadius: "10px",
+      background: "#201918",
+      color: "var(--ui-fg, #e9e9ee)",
+      border: "1px solid var(--ui-border, #3f3634)",
+      boxShadow: "0 10px 24px rgba(0, 0, 0, 0.45)",
+      font: "600 17px var(--ui-font, system-ui, sans-serif)"
+    });
+    overlay.appendChild(label);
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+  function installImageDrop({ label, onDrop, onOther }) {
+    let internal = false;
+    let depth = 0;
+    let overlay = null;
+    const types = (e) => Array.from(e.dataTransfer && e.dataTransfer.types || []);
+    const ours = (e) => {
+      const t = types(e);
+      if (t.includes("Files")) {
+        internal = false;
+        return true;
+      }
+      return !internal && (t.includes("text/uri-list") || t.includes("text/html") || t.includes("text/x-moz-url"));
+    };
+    const show = () => {
+      if (!overlay) overlay = makeOverlay(label);
+      overlay.style.display = "flex";
+    };
+    const hide = () => {
+      depth = 0;
+      if (overlay) overlay.style.display = "none";
+    };
+    const onDragStart = () => {
+      internal = true;
+    };
+    const onDragEnd = () => {
+      internal = false;
+      hide();
+    };
+    const onDragEnter = (e) => {
+      if (ours(e)) {
+        depth++;
+        show();
+      }
+    };
+    const onDragLeave = (e) => {
+      if (!ours(e)) return;
+      depth = Math.max(0, depth - 1);
+      const outside = e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
+      if (depth === 0 || outside) hide();
+    };
+    const onDragOver = (e) => {
+      if (!ours(e)) return;
+      if (!isEditable(e.target) || types(e).includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    };
+    const onDropEvent = (e) => {
+      const wasOurs = ours(e);
+      hide();
+      internal = false;
+      if (!wasOurs) return;
+      const found = readDrop(e.dataTransfer);
+      if (!found) {
+        const others = Array.from(e.dataTransfer && e.dataTransfer.files || []);
+        if (others.length) {
+          e.preventDefault();
+          if (onOther) onOther(others);
+        } else if (!isEditable(e.target)) e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onDrop({ ...found, x: e.clientX, y: e.clientY, target: e.target });
+    };
+    const listeners = [["dragstart", onDragStart], ["dragend", onDragEnd], ["dragenter", onDragEnter], ["dragleave", onDragLeave], ["dragover", onDragOver], ["drop", onDropEvent]];
+    for (const [type, fn] of listeners) document.addEventListener(type, fn, true);
+    return () => {
+      for (const [type, fn] of listeners) document.removeEventListener(type, fn, true);
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+  }
+
   // apps/Markdown-to-PDF/src/editor/format.js
   var INLINE = {
     bold: "**",
@@ -250,6 +511,11 @@
     const full = tail + "\n\n[" + ref + "]: " + url + "\n";
     return { from: start, to: text.length, insert: full.slice(start), selStart: line.selStart, selEnd: line.selEnd };
   }
+  function insertImageLink(text, start, end, alt, url) {
+    const cleanAlt = String(alt || "image").replace(/[\[\]\n]/g, " ").replace(/\s+/g, " ").trim() || "image";
+    const safeUrl = String(url).trim().replace(/ /g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29");
+    return insertBlockLine(text, start, end, "![" + cleanAlt + "](" + safeUrl + ")");
+  }
   function insertImageUrl(text, start, end) {
     const line = "![" + (text.slice(start, end).replace(/[\[\]\n]/g, " ").trim() || "image") + "](https://)";
     const edit = insertBlockLine(text, start, end, line);
@@ -294,6 +560,18 @@
   }
   function replaceAllEdit(el, text) {
     return { from: 0, to: el.value.length, insert: text, selStart: 0, selEnd: 0 };
+  }
+
+  // apps/Markdown-to-PDF/src/editor/droppedPictures.js
+  var DROPPED_EVENT = "md2pdf-dropped-pictures";
+  var pending = null;
+  function queueDropped(drop) {
+    pending = drop;
+  }
+  function takeDropped() {
+    const drop = pending;
+    pending = null;
+    return drop;
   }
 
   // apps/Markdown-to-PDF/src/convert/requireGlobal.js
@@ -1261,7 +1539,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "a56bd57"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "8df72d4"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -1823,93 +2101,6 @@
     return String(value || "").trim().toLowerCase().replace(/[\s`]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
   }
 
-  // shared/js/imageFiles.js
-  function isSvgFile(file) {
-    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
-  }
-  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
-  function svgLength(value) {
-    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
-    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
-  }
-  function svgSize(svgEl) {
-    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
-    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
-    let width = svgLength(svgEl.getAttribute("width"));
-    let height = svgLength(svgEl.getAttribute("height"));
-    if (hasViewBox) {
-      if (!width && !height) {
-        width = vb[2];
-        height = vb[3];
-      } else if (!width) width = height * (vb[2] / vb[3]);
-      else if (!height) height = width * (vb[3] / vb[2]);
-    }
-    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
-  }
-  function svgFileToPng(file, maxSide = 2048) {
-    return file.text().then((text) => new Promise((resolve, reject) => {
-      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
-      const svg = doc.documentElement;
-      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
-        reject(new Error("That SVG file couldn't be read."));
-        return;
-      }
-      const size = svgSize(svg);
-      const scale = maxSide / Math.max(size.width, size.height);
-      const outW = Math.max(1, Math.round(size.width * scale));
-      const outH = Math.max(1, Math.round(size.height * scale));
-      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
-      svg.setAttribute("width", String(outW));
-      svg.setAttribute("height", String(outH));
-      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
-      const img = new Image();
-      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = outW;
-        canvas.height = outH;
-        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
-        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
-      };
-      img.src = url;
-    }));
-  }
-  async function imageFileToDataUrl(file, { maxSide = 1600, quality = 0.85 } = {}) {
-    const url = isSvgFile(file) ? (await svgFileToPng(file, maxSide)).src : await readAsDataUrl(file);
-    const img = await loadImage(url);
-    const shrink = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-    const width = Math.max(1, Math.round(img.naturalWidth * shrink));
-    const height = Math.max(1, Math.round(img.naturalHeight * shrink));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, width, height);
-    const png = hasTransparency(ctx, width, height);
-    return { src: png ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", quality), width, height };
-  }
-  function readAsDataUrl(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error(`Couldn't read "${file.name}".`));
-      reader.onload = () => resolve(reader.result);
-      reader.readAsDataURL(file);
-    });
-  }
-  function loadImage(src) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("That file isn't a picture the browser can open."));
-      img.onload = () => resolve(img);
-      img.src = src;
-    });
-  }
-  function hasTransparency(ctx, width, height) {
-    const data = ctx.getImageData(0, 0, width, height).data;
-    for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true;
-    return false;
-  }
-
   // apps/Markdown-to-PDF/src/ui/fields.jsx
   function SectionLabel({ children }) {
     return /* @__PURE__ */ React.createElement("h3", { className: "md2pdf-section-label" }, children);
@@ -2285,7 +2476,7 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/editor/EditorTab.jsx
-  var { useState: useState3, useRef: useRef4 } = React;
+  var { useState: useState3, useRef: useRef4, useEffect: useEffect3 } = React;
   var CODE_LANG_KEY = "md2pdf.codeLang";
   function loadCodeLang() {
     try {
@@ -2307,6 +2498,7 @@
   var IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
   var IMAGE_PICKER = { id: "md2pdf-image-file", description: "Picture", accept: { "image/*": IMAGE_EXTS } };
   var IMAGE_MAX_SIDE = 1600;
+  var DROP_MAX_FILES = 12;
   function shortcutFor(e) {
     if (!(e.ctrlKey || e.metaKey) || e.getModifierState && e.getModifierState("AltGraph")) return null;
     const k = e.key.toLowerCase();
@@ -2328,6 +2520,8 @@
     const [codeLang, setCodeLangState] = useState3(loadCodeLang);
     const codeFileInputRef = useRef4(null);
     const imageFileInputRef = useRef4(null);
+    const touchedRef = useRef4(false);
+    const dropRef = useRef4(null);
     const setCodeLang = (tag) => {
       setCodeLangState(tag);
       saveCodeLang(tag);
@@ -2404,7 +2598,7 @@
       }
       if (file) await insertImage(file);
     }
-    async function insertImage(file) {
+    async function insertImage(file, altText) {
       const el = editorRef.current;
       if (!el) return;
       const at = { start: el.selectionStart, end: el.selectionEnd };
@@ -2416,13 +2610,45 @@
         setDocStatus({ type: "error", message: `Could not add "${file.name}": ` + errorText(err) });
         return;
       }
-      const alt = (file.name || "image").replace(/\.[^.]+$/, "");
+      const alt = altText || (file.name || "image").replace(/\.[^.]+$/, "");
       el.focus();
       el.setSelectionRange(at.start, at.end);
       applyToEditor(insertImageFile(el.value, at.start, at.end, alt, picture.src));
       const kb = Math.round(picture.src.length * 3 / 4 / 1024);
       setDocStatus({ type: "success", message: `Added "${file.name}" (${picture.width} × ${picture.height} px, ${kb} KB). Its data sits at the end of the text.` });
     }
+    async function insertDropped({ files, url, alt }) {
+      const el = editorRef.current;
+      if (!el) return;
+      setDocStatus(null);
+      if (!touchedRef.current) el.setSelectionRange(el.value.length, el.value.length);
+      if (files.length) {
+        const taken = files.slice(0, DROP_MAX_FILES);
+        for (const file2 of taken) await insertImage(file2);
+        if (files.length > taken.length) setDocStatus({ type: "error", message: `Added the first ${taken.length} pictures; ${files.length - taken.length} more were left out.` });
+        return;
+      }
+      setDocStatus({ type: "success", message: "Fetching the picture…" });
+      const file = await fetchImageFile(url);
+      if (file) {
+        await insertImage(file, alt);
+        return;
+      }
+      el.focus();
+      el.setSelectionRange(Math.min(el.selectionStart, el.value.length), Math.min(el.selectionEnd, el.value.length));
+      applyToEditor(insertImageLink(el.value, el.selectionStart, el.selectionEnd, alt, url));
+      setDocStatus({ type: "success", message: "That website doesn't allow copying its pictures, so it is added as a web link. It shows only while the site keeps it online. To keep the picture inside your text, save it to your computer (right-click › Save image as…) and drop the file instead." });
+    }
+    dropRef.current = insertDropped;
+    useEffect3(() => {
+      const run = () => {
+        const drop = takeDropped();
+        if (drop && dropRef.current) dropRef.current(drop);
+      };
+      run();
+      window.addEventListener(DROPPED_EVENT, run);
+      return () => window.removeEventListener(DROPPED_EVENT, run);
+    }, []);
     function handleImageFileSelected(e) {
       const file = e.target.files && e.target.files[0];
       e.target.value = "";
@@ -2466,6 +2692,9 @@
       "textarea",
       {
         ref: editorRef,
+        onFocus: () => {
+          touchedRef.current = true;
+        },
         onKeyDown: handleEditorKeyDown,
         onSelect: refreshBlockKind,
         className: "md2ebook-editor-textarea flex-1 w-full min-h-[60vh] rounded-md border border-line\n                         bg-ink p-3 text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent",
@@ -2729,17 +2958,17 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/FontCombobox.jsx
-  var { useState: useState4, useEffect: useEffect3, useRef: useRef6, useMemo: useMemo3 } = React;
+  var { useState: useState4, useEffect: useEffect4, useRef: useRef6, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState4(value || "");
     const [open, setOpen] = useState4(false);
     const [status, setStatus] = useState4(null);
     const [loadingFonts, setLoadingFonts] = useState4(false);
     const containerRef = useRef6(null);
-    useEffect3(() => {
+    useEffect4(() => {
       setQuery(value || "");
     }, [value]);
-    useEffect3(() => {
+    useEffect4(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           setOpen(false);
@@ -2904,7 +3133,7 @@
   }
 
   // apps/Markdown-to-PDF/src/ui/App.jsx
-  var { useEffect: useEffect4, useState: useState6, useRef: useRef7, useCallback } = React;
+  var { useEffect: useEffect5, useState: useState6, useRef: useRef7, useCallback } = React;
   var DOCUMENT_PICKER_ID = "md2ebook-document";
   function App() {
     const [markdown, setMarkdown] = useState6(SAMPLE_MARKDOWN);
@@ -2917,7 +3146,7 @@
     const bodyRef = useRef7(null);
     const markdownRef = useRef7(markdown);
     markdownRef.current = markdown;
-    useEffect4(() => {
+    useEffect5(() => {
       warnBeforeLeaving(() => markdownRef.current.trim() !== "" && markdownRef.current !== SAMPLE_MARKDOWN);
     }, []);
     const tocPagesRef = useRef7(null);
@@ -2959,6 +3188,17 @@
     const editorRef = useRef7(null);
     const documentFileInputRef = useRef7(null);
     const errorText = (err) => err && err.message ? err.message : String(err);
+    const activeTabRef = useRef7(activeTab);
+    activeTabRef.current = activeTab;
+    useEffect5(() => installImageDrop({
+      label: "Drop a picture to add it to your text",
+      onDrop: (drop) => {
+        queueDropped(drop);
+        if (activeTabRef.current !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
+        window.dispatchEvent(new Event(DROPPED_EVENT));
+      },
+      onOther: () => setDocStatus({ type: "error", message: "That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file." })
+    }), []);
     function replaceAllText(text) {
       if (activeTab !== "editor") ReactDOM.flushSync(() => setActiveTab("editor"));
       const el = editorRef.current;
@@ -3036,7 +3276,7 @@
     }
     const fileShortcutsRef = useRef7(null);
     fileShortcutsRef.current = { o: handleOpenFile, s: handleQuickSave, "shift+s": handleSaveMarkdown };
-    useEffect4(() => {
+    useEffect5(() => {
       function onKeyDown(e) {
         if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
         const action = fileShortcutsRef.current[(e.shiftKey ? "shift+" : "") + e.key.toLowerCase()];

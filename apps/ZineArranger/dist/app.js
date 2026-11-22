@@ -5232,7 +5232,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build ca7b25b";
+    subtitle.textContent += " · build 87fc727";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

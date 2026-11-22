@@ -1,5 +1,5 @@
 // Markdown-to-PDF's editor toolbar edits (Markdown-to-PDF/src/editor/format.js).
-import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageUrl, insertLink, nextImageRef, setBlock, toggleCodeBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
+import { applyEdit, blockAt, clampSpaceLines, insertBlockLine, insertCodeBlock, insertImageFile, insertImageLink, insertImageUrl, insertLink, nextImageRef, setBlock, toggleCodeBlock, toggleInline } from "../apps/Markdown-to-PDF/src/editor/format.js";
 import { cleanLanguageTag, languageForFile } from "../apps/Markdown-to-PDF/src/editor/codeLanguages.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
@@ -63,6 +63,8 @@ eq(run("A|\n\n[image-1]: data:x\n", insertImageFile, "dog [2]", "data:y"),
 eq(run("|", insertImageFile, "", "data:z"), "![image][image-1]|\n\n[image-1]: data:z\n", "...into an empty document, alt defaults to image");
 eq(run("See [a map] here", insertImageUrl), "See \n\n![a map]([https://])\n\n here", "image from the web: selected text becomes the alt, https:// selected");
 eq(run("|", insertImageUrl), "![image]([https://])", "...with nothing selected");
+eq(run("Hi|", insertImageLink, "a [b]", "https://x.test/a b(1).png"), "Hi\n\n![a b](https://x.test/a%20b%281%29.png)|", "linked picture: alt cleaned, address kept safe");
+eq(run("|", insertImageLink, "", "https://x.test/p.jpg"), "![image](https://x.test/p.jpg)|", "...empty alt becomes image");
 
 const F = "```";
 eq(run("one|", toggleCodeBlock, "json"), "one\n\n" + F + "json\n|\n" + F, "nothing selected: an empty block with the caret inside");

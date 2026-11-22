@@ -25,5 +25,5 @@ export function readPhotoFile(file) {
   });
 }
 
-// SVG files (Insert Image, the SVG button): shared with Markdown-to-PDF.
+// SVG files (Insert Image, dropped files): shared with Markdown-to-PDF.
 export { isSvgFile, svgFileToPng, svgSize } from "../../../../shared/js/imageFiles.js";

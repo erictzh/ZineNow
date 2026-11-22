@@ -4513,6 +4513,232 @@
     }
   });
 
+  // shared/js/imageFiles.js
+  function isSvgFile(file) {
+    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
+  }
+  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+  function svgLength(value) {
+    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
+    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
+  }
+  function svgSize(svgEl) {
+    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
+    let width = svgLength(svgEl.getAttribute("width"));
+    let height = svgLength(svgEl.getAttribute("height"));
+    if (hasViewBox) {
+      if (!width && !height) {
+        width = vb[2];
+        height = vb[3];
+      } else if (!width) width = height * (vb[2] / vb[3]);
+      else if (!height) height = width * (vb[3] / vb[2]);
+    }
+    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
+  }
+  function svgFileToPng(file, maxSide = 2048) {
+    return file.text().then((text) => new Promise((resolve, reject) => {
+      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+      const svg = doc.documentElement;
+      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
+        reject(new Error("That SVG file couldn't be read."));
+        return;
+      }
+      const size = svgSize(svg);
+      const scale = maxSide / Math.max(size.width, size.height);
+      const outW = Math.max(1, Math.round(size.width * scale));
+      const outH = Math.max(1, Math.round(size.height * scale));
+      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
+      svg.setAttribute("width", String(outW));
+      svg.setAttribute("height", String(outH));
+      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+      const img = new Image();
+      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
+        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
+      };
+      img.src = url;
+    }));
+  }
+
+  // shared/js/dropImages.js
+  var IMAGE_NAME = /\.(png|jpe?g|gif|webp|svg|svgz|bmp|avif|ico)$/i;
+  var IMAGE_URL = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)(\?[^#]*)?(#.*)?$/i;
+  function isImageFile(file) {
+    return Boolean(file) && ((file.type || "").startsWith("image/") || IMAGE_NAME.test(file.name || "") || isSvgFile(file));
+  }
+  function decodeEntities(s) {
+    return s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d))).replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  }
+  function attribute(tag, name) {
+    const m = new RegExp("\\s" + name + `\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+    return m ? decodeEntities(m[1] ?? m[2] ?? m[3] ?? "") : "";
+  }
+  function getData(dt, type) {
+    try {
+      return dt.getData(type) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+  function usableUrl(url) {
+    const u = String(url || "").trim();
+    if (/^data:image\//i.test(u)) return u;
+    if (u.startsWith("//")) return "https:" + u;
+    return /^https?:\/\//i.test(u) ? u : null;
+  }
+  function readDrop(dt) {
+    const files = Array.from(dt && dt.files || []).filter(isImageFile);
+    if (files.length) return { files, url: null, alt: "" };
+    if (!dt) return null;
+    const html = getData(dt, "text/html");
+    const tag = /<img\b[^>]*>/i.exec(html);
+    if (tag) {
+      const url = usableUrl(attribute(tag[0], "src"));
+      if (url) return { files: [], url, alt: attribute(tag[0], "alt") };
+    }
+    const link = getData(dt, "text/uri-list").split(/\r?\n/).map((l) => l.trim()).find((l) => l && !l.startsWith("#"));
+    const plain = getData(dt, "text/plain").trim();
+    for (const candidate of [link, /^\S+$/.test(plain) ? plain : ""]) {
+      const url = usableUrl(candidate);
+      if (url && (/^data:/i.test(url) || IMAGE_URL.test(url))) return { files: [], url, alt: "" };
+    }
+    return null;
+  }
+  function nameFromUrl(url, type) {
+    const ext = ((type || "").split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
+    if (!/^https?:/i.test(url)) return "dropped-picture." + ext;
+    let last = "";
+    try {
+      last = decodeURIComponent(new URL(url).pathname.split("/").pop() || "");
+    } catch (e) {
+    }
+    last = last.replace(/[\\/:*?"<>|]+/g, "_").trim();
+    if (!last) return "dropped-picture." + ext;
+    return IMAGE_NAME.test(last) ? last : last + "." + ext;
+  }
+  async function fetchImageFile(url) {
+    try {
+      const res = await fetch(url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!(blob.type || "").startsWith("image/")) return null;
+      return new File([blob], nameFromUrl(url, blob.type), { type: blob.type });
+    } catch (e) {
+      return null;
+    }
+  }
+  var isEditable = (el) => el instanceof Element && Boolean(el.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
+  function makeOverlay(text) {
+    const overlay = document.createElement("div");
+    overlay.setAttribute("aria-hidden", "true");
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      right: "0",
+      bottom: "0",
+      zIndex: "2147483000",
+      display: "none",
+      alignItems: "center",
+      justifyContent: "center",
+      pointerEvents: "none",
+      boxSizing: "border-box",
+      background: "rgba(221, 83, 26, 0.12)",
+      border: "3px dashed var(--ui-accent, #dd531a)"
+    });
+    const label = document.createElement("div");
+    label.textContent = text;
+    Object.assign(label.style, {
+      padding: "14px 22px",
+      borderRadius: "10px",
+      background: "#201918",
+      color: "var(--ui-fg, #e9e9ee)",
+      border: "1px solid var(--ui-border, #3f3634)",
+      boxShadow: "0 10px 24px rgba(0, 0, 0, 0.45)",
+      font: "600 17px var(--ui-font, system-ui, sans-serif)"
+    });
+    overlay.appendChild(label);
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+  function installImageDrop({ label, onDrop, onOther }) {
+    let internal = false;
+    let depth = 0;
+    let overlay = null;
+    const types = (e) => Array.from(e.dataTransfer && e.dataTransfer.types || []);
+    const ours = (e) => {
+      const t = types(e);
+      if (t.includes("Files")) {
+        internal = false;
+        return true;
+      }
+      return !internal && (t.includes("text/uri-list") || t.includes("text/html") || t.includes("text/x-moz-url"));
+    };
+    const show = () => {
+      if (!overlay) overlay = makeOverlay(label);
+      overlay.style.display = "flex";
+    };
+    const hide = () => {
+      depth = 0;
+      if (overlay) overlay.style.display = "none";
+    };
+    const onDragStart = () => {
+      internal = true;
+    };
+    const onDragEnd = () => {
+      internal = false;
+      hide();
+    };
+    const onDragEnter = (e) => {
+      if (ours(e)) {
+        depth++;
+        show();
+      }
+    };
+    const onDragLeave = (e) => {
+      if (!ours(e)) return;
+      depth = Math.max(0, depth - 1);
+      const outside = e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight;
+      if (depth === 0 || outside) hide();
+    };
+    const onDragOver = (e) => {
+      if (!ours(e)) return;
+      if (!isEditable(e.target) || types(e).includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    };
+    const onDropEvent = (e) => {
+      const wasOurs = ours(e);
+      hide();
+      internal = false;
+      if (!wasOurs) return;
+      const found = readDrop(e.dataTransfer);
+      if (!found) {
+        const others = Array.from(e.dataTransfer && e.dataTransfer.files || []);
+        if (others.length) {
+          e.preventDefault();
+          if (onOther) onOther(others);
+        } else if (!isEditable(e.target)) e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onDrop({ ...found, x: e.clientX, y: e.clientY, target: e.target });
+    };
+    const listeners2 = [["dragstart", onDragStart], ["dragend", onDragEnd], ["dragenter", onDragEnter], ["dragleave", onDragLeave], ["dragover", onDragOver], ["drop", onDropEvent]];
+    for (const [type, fn] of listeners2) document.addEventListener(type, fn, true);
+    return () => {
+      for (const [type, fn] of listeners2) document.removeEventListener(type, fn, true);
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+  }
+
   // apps/ZEditor/src/model/pageNumbers.js
   var DEFAULT_PAGE_NUMBERS = { on: false, from: 1, to: 0, first: 1, position: "bottom-outside", format: "n", size: 10, color: "#1a1a1a", marginIn: 0.4 };
   var PAGE_NUMBER_POSITIONS = [
@@ -7890,58 +8116,6 @@
     return canvas.toDataURL();
   }
 
-  // shared/js/imageFiles.js
-  function isSvgFile(file) {
-    return Boolean(file) && (file.type === "image/svg+xml" || /\.svgz?$/i.test(file.name || ""));
-  }
-  var UNIT_PX = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
-  function svgLength(value) {
-    const m = /^\s*([\d.]+)\s*(px|pt|pc|in|cm|mm)?\s*$/i.exec(value || "");
-    return m ? parseFloat(m[1]) * UNIT_PX[(m[2] || "px").toLowerCase()] : null;
-  }
-  function svgSize(svgEl) {
-    const vb = (svgEl.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
-    const hasViewBox = vb.length === 4 && vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0;
-    let width = svgLength(svgEl.getAttribute("width"));
-    let height = svgLength(svgEl.getAttribute("height"));
-    if (hasViewBox) {
-      if (!width && !height) {
-        width = vb[2];
-        height = vb[3];
-      } else if (!width) width = height * (vb[2] / vb[3]);
-      else if (!height) height = width * (vb[3] / vb[2]);
-    }
-    return { width: width || 300, height: height || 150, viewBox: hasViewBox ? vb : null };
-  }
-  function svgFileToPng(file, maxSide = 2048) {
-    return file.text().then((text) => new Promise((resolve, reject) => {
-      const doc = new DOMParser().parseFromString(text, "image/svg+xml");
-      const svg = doc.documentElement;
-      if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) {
-        reject(new Error("That SVG file couldn't be read."));
-        return;
-      }
-      const size = svgSize(svg);
-      const scale = maxSide / Math.max(size.width, size.height);
-      const outW = Math.max(1, Math.round(size.width * scale));
-      const outH = Math.max(1, Math.round(size.height * scale));
-      if (!size.viewBox) svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
-      svg.setAttribute("width", String(outW));
-      svg.setAttribute("height", String(outH));
-      const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
-      const img = new Image();
-      img.onerror = () => reject(new Error("That SVG file couldn't be drawn."));
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = outW;
-        canvas.height = outH;
-        canvas.getContext("2d").drawImage(img, 0, 0, outW, outH);
-        resolve({ src: canvas.toDataURL("image/png"), width: size.width, height: size.height });
-      };
-      img.src = url;
-    }));
-  }
-
   // apps/ZEditor/src/io/images.js
   function readPhotoFile(file) {
     return new Promise((resolve, reject) => {
@@ -8039,7 +8213,6 @@
       handleSelectAnnotation
     } = selection;
     const imageInputRef = useRef(null);
-    const svgInputRef = useRef(null);
     function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
       recordUndoCheckpoint(coalesceKey);
       setPages((prev) => prev.map((p, i) => i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p));
@@ -8197,7 +8370,7 @@
       if (selectedIdx === null) return;
       imageInputRef.current && imageInputRef.current.click();
     }
-    function addImageAnnotationFromFile(file, pageIdx) {
+    function addImageAnnotationFromFile(file, pageIdx, opts = {}) {
       if (!file || pageIdx === null) return;
       const pageAtChooseTime = pages[pageIdx];
       if (isSvgFile(file)) {
@@ -8217,8 +8390,9 @@
           const width = baseW * scale;
           const height = baseH * scale;
           const display2 = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
-          const x = Math.max(0, (display2.width - width) / 2);
-          const y = Math.max(0, (display2.height - height) / 2);
+          const c = opts.center;
+          const x = c ? Math.min(Math.max(0, c.x - width / 2), Math.max(0, display2.width - width)) : Math.max(0, (display2.width - width) / 2);
+          const y = c ? Math.min(Math.max(0, c.y - height / 2), Math.max(0, display2.height - height)) : Math.max(0, (display2.height - height) / 2);
           const id = nextAnnIdRef.current++;
           updateAnnotationsFor(pageIdx, (anns) => [...anns, {
             id,
@@ -8236,22 +8410,6 @@
         };
         img.src = src;
       }
-    }
-    function handleSvgToolClick() {
-      if (selectedIdx === null) return;
-      svgInputRef.current && svgInputRef.current.click();
-    }
-    async function handleSvgFileChosen(e) {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (!file) return;
-      if (isSvgFile(file) || file.type.startsWith("image/") && file.type !== "image/svg+xml") {
-        addImageAnnotationFromFile(file, selectedIdx);
-        return;
-      }
-      const head = await file.slice(0, 4096).text().catch(() => "");
-      if (/<svg[\s>]/i.test(head)) addImageAnnotationFromFile(new File([file], (file.name || "image") + ".svg", { type: "image/svg+xml" }), selectedIdx);
-      else window.alert("That isn't an SVG or picture file. Choose a file ending in .svg.");
     }
     function handleImageFileChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -8361,9 +8519,6 @@
       handleImageToolClick,
       addImageAnnotationFromFile,
       handleImageFileChosen,
-      svgInputRef,
-      handleSvgToolClick,
-      handleSvgFileChosen,
       handleUpdateAnnotation,
       handleSetLayerLook,
       handleFlattenImage,
@@ -16056,7 +16211,7 @@
   function ToolBar({ selection, edits, view, zoom, dialogs }) {
     const { tool, selectTool, selectedAnnId } = selection;
     const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert SVG file: opens your files (on Android, Files instead of the photo gallery)", "aria-label": "Insert SVG file", onClick: edits.handleSvgToolClick }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text ze-tool-icon-svg" }, "SVG")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "marquee" ? " active" : ""), title: "Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)", onClick: () => selectTool("marquee") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "5.5", width: "16", height: "13", strokeDasharray: "2.6 2.6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (U): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "marquee" ? " active" : ""), title: "Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)", onClick: () => selectTool("marquee") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "5.5", width: "16", height: "13", strokeDasharray: "2.6 2.6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (U): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -16271,7 +16426,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "49b02e3"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5febdb9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -16704,6 +16859,34 @@
     const exporter = useExport({ doc, status, view, project, selection });
     const zoom = useZoom();
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
+    const dropCtx = React.useRef(null);
+    dropCtx.current = { selectedIdx: doc.selectedIdx, addImage: edits.addImageAnnotationFromFile, status };
+    React.useEffect(() => installImageDrop({
+      label: "Drop a picture to add it to the page",
+      onDrop: async ({ files: files2, url, x, y }) => {
+        const { selectedIdx: selectedIdx2, addImage, status: st } = dropCtx.current;
+        if (selectedIdx2 === null) {
+          st.setErrorMsg("Open a PDF or start a new document first, then drop the picture on a page.");
+          return;
+        }
+        st.setErrorMsg(null);
+        let list = files2;
+        if (!list.length) {
+          const file = await fetchImageFile(url);
+          if (!file) {
+            st.setErrorMsg("That website doesn't let other pages copy its pictures. Save the picture to your computer (right-click › Save image as…), then drop the file here.");
+            return;
+          }
+          list = [file];
+        }
+        const pageEl = document.querySelector(".ze-page");
+        const box = pageEl && pageEl.getBoundingClientRect();
+        const onPage = box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom && pageEl.offsetWidth > 0;
+        const scale = onPage ? box.width / pageEl.offsetWidth : 1;
+        list.slice(0, 12).forEach((file, i) => addImage(file, selectedIdx2, onPage ? { center: { x: (x - box.left) / scale + i * 20, y: (y - box.top) / scale + i * 20 } } : void 0));
+      },
+      onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file.")
+    }), []);
     const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
     useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
@@ -16866,7 +17049,7 @@
         onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
         onReorder: edits.handleReorderLayers
       }
-    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*,.svg,image/svg+xml", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: edits.svgInputRef, type: "file", style: { display: "none" }, onChange: edits.handleSvgFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow,.json,application/json,application/octet-stream", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement("input", { ref: files.fileInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleFileInputChange }), /* @__PURE__ */ React.createElement("input", { ref: edits.imageInputRef, type: "file", accept: "image/*,.svg,image/svg+xml", style: { display: "none" }, onChange: edits.handleImageFileChosen }), /* @__PURE__ */ React.createElement("input", { ref: files.insertPdfInputRef, type: "file", accept: "application/pdf", style: { display: "none" }, onChange: files.handleInsertPdfInputChange }), /* @__PURE__ */ React.createElement("input", { ref: project.projectInputRef, type: "file", accept: ".znow,.json,application/json,application/octet-stream", style: { display: "none" }, onChange: project.handleProjectInputChange }), /* @__PURE__ */ React.createElement(
       InsertPdfDialog,
       {
         file: files.pendingInsertFile,

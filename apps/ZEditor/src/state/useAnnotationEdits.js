@@ -40,7 +40,6 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     selectedAnnotationIds, currentAnnotations, handleSelectAnnotation,
   } = selection;
   const imageInputRef = useRef(null);
-  const svgInputRef = useRef(null); // the tool bar's SVG button: any file, so Android opens Files
 
   function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
     recordUndoCheckpoint(coalesceKey);
@@ -238,7 +237,9 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   // the page to drop it on.
   // An SVG is drawn into a PNG first (io/images.js svgFileToPng); it starts at its own size,
   // as another picture would, while its pixels are high resolution for printing.
-  function addImageAnnotationFromFile(file, pageIdx) {
+  // `opts.center` ({ x, y } in page pixels): put its middle there (kept on the page) instead of in
+  // the middle of the page, e.g. where a picture was dropped.
+  function addImageAnnotationFromFile(file, pageIdx, opts = {}) {
     if (!file || pageIdx === null) return;
     const pageAtChooseTime = pages[pageIdx];
     if (isSvgFile(file)) {
@@ -262,8 +263,9 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
         const width = baseW * scale;
         const height = baseH * scale;
         const display = await getPageDisplaySize(pageAtChooseTime, pdfDocsRef, MAIN_SCALE);
-        const x = Math.max(0, (display.width - width) / 2);
-        const y = Math.max(0, (display.height - height) / 2);
+        const c = opts.center;
+        const x = c ? Math.min(Math.max(0, c.x - width / 2), Math.max(0, display.width - width)) : Math.max(0, (display.width - width) / 2);
+        const y = c ? Math.min(Math.max(0, c.y - height / 2), Math.max(0, display.height - height)) : Math.max(0, (display.height - height) / 2);
         const id = nextAnnIdRef.current++;
         updateAnnotationsFor(pageIdx, (anns) => [...anns, {
           id, type: "image", x, y, width, height,
@@ -274,28 +276,6 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
       };
       img.src = src;
     }
-  }
-
-  // The SVG button. Its file input names no types on purpose: on Android, Chrome opens the photo
-  // picker for any image-only `accept` (SVG included), and that never lists .svg files; with no
-  // types it opens the Files browser. So any file can come back: an SVG is inserted, another
-  // picture is too, anything else gets a message.
-  function handleSvgToolClick() {
-    if (selectedIdx === null) return;
-    svgInputRef.current && svgInputRef.current.click();
-  }
-  async function handleSvgFileChosen(e) {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    if (isSvgFile(file) || (file.type.startsWith("image/") && file.type !== "image/svg+xml")) {
-      addImageAnnotationFromFile(file, selectedIdx);
-      return;
-    }
-    // No .svg name or type (some file browsers drop them): look inside.
-    const head = await file.slice(0, 4096).text().catch(() => "");
-    if (/<svg[\s>]/i.test(head)) addImageAnnotationFromFile(new File([file], (file.name || "image") + ".svg", { type: "image/svg+xml" }), selectedIdx);
-    else window.alert("That isn't an SVG or picture file. Choose a file ending in .svg.");
   }
 
   function handleImageFileChosen(e) {
@@ -428,7 +408,6 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
-    svgInputRef, handleSvgToolClick, handleSvgFileChosen,
     handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
