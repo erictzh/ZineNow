@@ -35,3 +35,8 @@ export async function getModelBytes(url, onProgress, signal, cacheName = CACHE_N
 export async function forgetModel(cacheName = CACHE_NAME) {
   try { await caches.delete(cacheName); } catch (e) { /* nothing to forget */ }
 }
+
+// Deletes one saved model (its file only), leaving the others in the same cache.
+export async function forgetModelUrl(url, cacheName = CACHE_NAME) {
+  try { await (await caches.open(cacheName)).delete(url); } catch (e) { /* nothing to forget */ }
+}

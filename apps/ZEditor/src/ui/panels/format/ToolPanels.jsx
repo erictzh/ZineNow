@@ -7,6 +7,7 @@ import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/s
 import { ControlList } from "../../controls/ControlList.jsx";
 import { CustomColorInput } from "../../controls/inputs.jsx";
 import { BRUSH_MAX_SIZE, BRUSH_MIN_SIZE, MARQUEE_DEFAULTS, isUsableMarquee } from "../../../model/marquee.js";
+import { useAiFeatures } from "../../../state/useAiFeatures.js";
 import { useAiModel } from "../../../state/useAiModel.js";
 import { AiModelDialog } from "../../dialogs/AiModelDialog.jsx";
 import { SliderNumberInput, StepperNumberInput } from "../../controls/inputs.jsx";
@@ -39,8 +40,9 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   const change = (patch) => setMarquee((cur) => ({ ...cur, ...patch }));
   const ai = useAiModel(); // the AI style needs the model on this device (an opt-in download)
   const [aiDialog, setAiDialog] = React.useState(null); // "download" | "delete" | null
-  const useAi = settings.fillStyle === "ai";
-  const chosen = ["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle); // no style is picked until the user picks one
+  const aiOn = useAiFeatures(); // the gear's "Experimental AI features": off hides every AI option
+  const useAi = aiOn && settings.fillStyle === "ai";
+  const chosen = ["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle) && (settings.fillStyle !== "ai" || aiOn); // no style is picked until the user picks one
   const changeFillStyle = (value) => change({ fillStyle: value });
   const fromLayer = settings.source === "layer";
   // Cutting from everything visible can only cover the spot, so it always fills.
@@ -154,9 +156,11 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
             <span className="ze-format-hint">Replaces what is inside the area with a fill made from the pixels around it. No new layer is made.</span>
             <select className="ze-format-select" aria-label="Fill style" value={chosen ? settings.fillStyle : ""} onChange={(e) => changeFillStyle(e.target.value)}>
               <option value="" disabled>Choose how to fill…</option>
-              <optgroup label="With AI model">
-                <option value="ai">AI (on-device): the best for removing objects</option>
-              </optgroup>
+              {aiOn && (
+                <optgroup label="With AI model">
+                  <option value="ai">AI (on-device): the best for removing objects</option>
+                </optgroup>
+              )}
               <optgroup label="With math algorithm (classic)">
                 <option value="pattern">Pattern: copies texture from the rest of the picture</option>
                 <option value="smooth">Smooth: a blend of the edge colours</option>
@@ -212,7 +216,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
             </label>
             <div className="ze-format-row">
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || (settings.fillStyle === "ai" && ai.phase === "ready"))} onClick={() => marquee.tryAnotherFill()}>Try another</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || (useAi && ai.phase === "ready"))} onClick={() => marquee.tryAnotherFill()}>Try another</button>
             </div>
             <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."}</span>
           </React.Fragment>

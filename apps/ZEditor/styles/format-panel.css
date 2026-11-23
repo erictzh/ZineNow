@@ -145,6 +145,8 @@
 }
 
 .ze-format-hint.is-error { color: #ff9b81; }
+.ze-format-hint.is-required { color: #ff4d4d; font-weight: 600; }
+.ze-format-field[aria-disabled="true"] .ze-format-label { opacity: .5; }
 
 /* ---- Thickness slider --------------------------------------------------- */
 .ze-format-slider {

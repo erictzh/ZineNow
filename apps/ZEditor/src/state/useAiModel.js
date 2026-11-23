@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 
 // { phase: "checking" | "none" | "ready" | "downloading", plan: { gpu, modelMb, runtimeMb, totalMb } | null, doneMb, totalMb, error }
 // `which`: "fill" (the AI fill style) or "background" (Remove background in the Image panel).
-export function useAiModel(which = "fill") {
+export function useAiModel(which = "fill", modelKey = "u2netp") {
   const bg = which === "background";
   const [state, setState] = useState({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
   const abortRef = useRef(null);
@@ -17,17 +17,17 @@ export function useAiModel(which = "fill") {
 
   const refresh = useCallback(async () => {
     try {
-      const [saved, plan] = await Promise.all(bg ? [bgSaved(), bgPlan()] : [aiSaved(), downloadPlan()]);
+      const [saved, plan] = await Promise.all(bg ? [bgSaved(modelKey), bgPlan(modelKey)] : [aiSaved(), downloadPlan()]);
       set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
     } catch (e) { set({ phase: "none", error: e && e.message ? e.message : String(e) }); }
-  }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+  }, [modelKey]);
+  useEffect(() => { set({ phase: "checking", error: null }); refresh(); }, [refresh]);
 
   async function download() {
     const ctl = new AbortController(); abortRef.current = ctl;
     set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
     try {
-      await downloadAi({ which, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+      await downloadAi({ which, model: modelKey, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
       await refresh();
     } catch (e) {
       await refresh();
@@ -35,6 +35,6 @@ export function useAiModel(which = "fill") {
     } finally { abortRef.current = null; }
   }
   const cancel = () => { if (abortRef.current) abortRef.current.abort(); };
-  async function remove() { await (bg ? deleteBg() : deleteAi()); await refresh(); }
+  async function remove() { await (bg ? deleteBg(modelKey) : deleteAi()); await refresh(); }
   return { ...state, download, cancel, remove };
 }

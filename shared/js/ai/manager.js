@@ -4,10 +4,10 @@
 // A download = the model file (kept by modelStore.js in the Cache API) + the AI runtime (onnxruntime-web: a small script plus a
 // large .wasm file, fetched from a CDN; the app's service worker keeps them, shared/js/pwa/sw-core.js).
 
-import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "./modelStore.js";
+import { DEFAULT_MODEL_URL, forgetModel, forgetModelUrl, getModelBytes, isModelSaved } from "./modelStore.js";
 import { ORT_VERSION, gpuUsable } from "./runtime.js";
 import { releaseSession } from "./session.js";
-import { BG_CACHE, BG_MODEL_MB, BG_MODEL_URL } from "./bgModel.js";
+import { BG_CACHE, BG_MODELS, bgModel } from "./bgModel.js";
 import { releaseBgSession } from "./bgSession.js";
 
 const CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
@@ -35,11 +35,11 @@ export async function aiSaved() {
 
 // Downloads whatever is missing. `onProgress(doneMb, totalMb)`; `signal` (an AbortSignal) cancels it (the model is only kept once it
 // is complete). Resolves when both parts are saved. `which`: "fill" (MI-GAN, the default) or "background" (U²-Netp).
-export async function downloadAi({ onProgress, signal, which = "fill" } = {}) {
+export async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
   const bg = which === "background";
   const plan = await downloadPlan();
-  const saved = bg ? await bgSaved() : await aiSaved();
-  const modelMb = bg ? BG_MODEL_MB : plan.modelMb;
+  const saved = bg ? await bgSaved(model) : await aiSaved();
+  const modelMb = bg ? bgModel(model).mb : plan.modelMb;
   const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
   let doneMb = 0;
   const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -57,21 +57,28 @@ export async function downloadAi({ onProgress, signal, which = "fill" } = {}) {
     }
   }
   if (!saved.model) {
-    if (bg) await getModelBytes(BG_MODEL_URL, (got) => report(got / 1048576), signal, BG_CACHE);
+    if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
     else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
   }
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* the browser decides */ }
   onProgress && onProgress(total, total);
 }
 
-// The background-removal model: { gpu, modelMb, runtimeMb, totalMb } (it shares the runtime with the fill model).
-export async function bgPlan() {
+// A background-removal model (key "u2netp" or "modnet"): { gpu, modelMb, runtimeMb, totalMb } (the runtime is shared with the others).
+export async function bgPlan(key) {
   const plan = await downloadPlan();
-  return { gpu: plan.gpu, modelMb: BG_MODEL_MB, runtimeMb: plan.runtimeMb, totalMb: Math.round(BG_MODEL_MB + plan.runtimeMb) };
+  const mb = bgModel(key).mb;
+  return { gpu: plan.gpu, modelMb: mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(mb + plan.runtimeMb) };
 }
-export async function bgSaved() {
+export async function bgSaved(key) {
   const saved = await aiSaved();
-  return { model: await isModelSaved(BG_MODEL_URL, BG_CACHE), runtime: saved.runtime };
+  return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
+}
+// Is any AI model saved (the fill model or a background-removal one)? The runtime is only deleted when none is.
+async function anyModelSaved(except) {
+  if (except !== "fill" && (await isModelSaved(DEFAULT_MODEL_URL))) return true;
+  for (const m of BG_MODELS) if (m.key !== except && (await isModelSaved(m.url, BG_CACHE))) return true;
+  return false;
 }
 
 async function deleteRuntime() {
@@ -83,16 +90,16 @@ async function deleteRuntime() {
   } catch (e) { /* nothing more to delete */ }
 }
 
-// Deletes the background-removal model. The runtime is only deleted too when the fill model is not saved (it needs the runtime).
-export async function deleteBg() {
+// Deletes one background-removal model. The runtime goes too only when no other AI model is saved.
+export async function deleteBg(key) {
   releaseBgSession();
-  await forgetModel(BG_CACHE);
-  if (!(await isModelSaved(DEFAULT_MODEL_URL))) await deleteRuntime();
+  await forgetModelUrl(bgModel(key).url, BG_CACHE);
+  if (!(await anyModelSaved(key))) await deleteRuntime();
 }
 
 // Deletes the model and the AI runtime files from this device (the other app that uses them will download them again if needed).
 export async function deleteAi() {
   releaseSession();
   await forgetModel();
-  if (!(await isModelSaved(BG_MODEL_URL, BG_CACHE))) await deleteRuntime();
+  if (!(await anyModelSaved("fill"))) await deleteRuntime();
 }

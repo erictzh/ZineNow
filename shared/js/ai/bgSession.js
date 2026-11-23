@@ -1,50 +1,52 @@
-// "Remove background": starts the model (once, released after a quiet minute) and cuts the subject out of a picture.
+// "AI Background Removal": starts a model (once per model, released after a quiet minute) and cuts the subject out of a picture.
 // The model must already be saved (shared/js/ai/manager.js); nothing here downloads by itself.
 
-import { BG_CACHE, BG_MODEL_URL } from "./bgModel.js";
+import { BG_CACHE, bgModel } from "./bgModel.js";
 import { getModelBytes, isModelSaved } from "./modelStore.js";
 import { createSession, loadOrt } from "./runtime.js";
-import { SEG_SIZE, maskToAlpha, segInput, segMask } from "./segment.js";
+import { SEG_PREP, maskToAlpha, segInput, segMask } from "./segment.js";
 
 const IDLE_MS = 60000;
-let current = null, starting = null, timer = 0;
+const sessions = new Map(); // model key -> session, or the promise while it starts
+let timer = 0;
 
 export function releaseBgSession() {
   clearTimeout(timer);
-  const c = current; current = null; starting = null;
-  if (c && c.release) { try { c.release(); } catch (e) { /* already gone */ } }
+  const all = [...sessions.values()]; sessions.clear();
+  for (const s of all) Promise.resolve(s).then((x) => { if (x && x.release) { try { x.release(); } catch (e) { /* already gone */ } } }, () => {});
 }
 const touch = () => { clearTimeout(timer); timer = setTimeout(releaseBgSession, IDLE_MS); };
 
-async function acquire(onStatus) {
-  if (current) { touch(); return current; }
-  if (!starting) {
-    starting = (async () => {
-      if (!(await isModelSaved(BG_MODEL_URL, BG_CACHE))) throw new Error("The background-removal model is not downloaded. Download it first (Image panel, Remove background).");
-      onStatus && onStatus("Starting the model…");
-      const { bytes } = await getModelBytes(BG_MODEL_URL, undefined, undefined, BG_CACHE);
-      // the small model is quick on the processor; the graphics chip would spend longer compiling than it saves
-      current = (await createSession(bytes, false)).session;
-      return current;
-    })().catch((e) => { starting = null; throw e; });
+function acquire(key, onStatus) {
+  touch();
+  if (!sessions.has(key)) {
+    const m = bgModel(key);
+    sessions.set(key, (async () => {
+      if (!(await isModelSaved(m.url, BG_CACHE))) throw new Error(m.name + " is not downloaded. Download it first (Image panel, AI Background Removal).");
+      onStatus && onStatus("Starting " + m.name + "…");
+      const { bytes } = await getModelBytes(m.url, undefined, undefined, BG_CACHE);
+      // these models are quick on the processor; the graphics chip would spend longer compiling than it saves (and some operations are unsupported there)
+      return (await createSession(bytes, false)).session;
+    })().catch((e) => { sessions.delete(key); throw e; }));
   }
-  const s = await starting; touch(); return s;
+  return sessions.get(key);
 }
 
-// The subject mask of `canvas`: { mask: Float32Array (0..1, side x side), side }.
-export async function segmentCanvas(canvas, onStatus) {
-  const session = await acquire(onStatus);
+// The subject mask of `canvas` for model `key`: { mask: Float32Array (0..1, side x side), side }.
+export async function segmentCanvas(canvas, key, onStatus) {
+  const prep = SEG_PREP[bgModel(key).key];
+  const session = await acquire(key, onStatus);
   const ort = await loadOrt();
-  const small = document.createElement("canvas"); small.width = small.height = SEG_SIZE;
+  const small = document.createElement("canvas"); small.width = small.height = prep.size;
   const sx = small.getContext("2d", { willReadFrequently: true });
-  sx.imageSmoothingQuality = "high"; sx.drawImage(canvas, 0, 0, SEG_SIZE, SEG_SIZE);
-  const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, SEG_SIZE, SEG_SIZE).data), [1, 3, SEG_SIZE, SEG_SIZE]);
+  sx.imageSmoothingQuality = "high"; sx.drawImage(canvas, 0, 0, prep.size, prep.size);
+  const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
   onStatus && onStatus("Finding the subject…");
   const out = await session.run({ [session.inputNames[0]]: input });
   const first = out[session.outputNames[0]];
   const side = Math.round(Math.sqrt(first.data.length));
   touch();
-  return { mask: segMask(first.data), side };
+  return { mask: segMask(first.data, prep.mask), side };
 }
 
 // A copy of `canvas` where only the subject is left (everything else see-through). cutoff 0..1, soft 0..1 (see segment.js softCut).

@@ -356,7 +356,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
 
   // Remove background (Image panel): bakes the picture as it looks, finds the subject with the on-device model (the model must be
   // downloaded, shared/js/ai/manager.js), and replaces the picture with the subject only (everything else see-through). One undo step.
-  // opts: { cutoff 0..1, soft 0..1 }. `onStatus(text)` for the slow parts.
+  // opts: { model: "u2netp" | "modnet", cutoff 0..1, soft 0..1 }. `onStatus(text)` for the slow parts.
   async function handleRemoveBackground(ann, opts, onStatus) {
     const pageIdx = selectedIdx;
     const patch = await flattenedImagePatch(ann, pageFilter);
@@ -364,7 +364,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("Couldn't read the picture.")); i.src = patch.src; });
     const canvas = document.createElement("canvas"); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
     canvas.getContext("2d").drawImage(img, 0, 0);
-    const { mask, side } = await segmentCanvas(canvas, onStatus);
+    const { mask, side } = await segmentCanvas(canvas, opts.model, onStatus);
     const out = cutOutCanvas(canvas, mask, side, opts.cutoff, opts.soft);
     updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch, src: out.toDataURL("image/png") } : a)));
   }
