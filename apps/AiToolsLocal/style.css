@@ -94,3 +94,6 @@ body.debug-open .shell { height: 58vh; }
 
 .model-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .model-size { margin-left: auto; white-space: nowrap; color: var(--ui-fg-muted); font-size: 13px; }
+
+.ocr-text { width: 100%; box-sizing: border-box; background: #100d0c; color: var(--ui-fg); border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px; font: 14px/1.4 var(--ui-font); resize: vertical; }
+select { width: 100%; box-sizing: border-box; min-height: 42px; background: #100d0c; color: var(--ui-fg); border: 1px solid var(--ui-border); border-radius: 8px; padding: 6px 10px; font: 15px var(--ui-font); }

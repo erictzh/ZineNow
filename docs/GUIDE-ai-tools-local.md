@@ -42,6 +42,17 @@ Hides faces with Blur, Pixelate or a Black box. It uses a tiny face detector, **
 
 Limits: very small, turned away, covered or blurry faces can be missed (draw a box). The detector looks at a 640 pixel version of the picture, so tiny faces in a big group photo may need a crop first (use Remove background's Crop, or crop before you open it).
 
+## Text from image (OCR)
+
+Reads the text in a picture on your device and lets you copy it or save it as a .txt file. It uses **Tesseract.js** (Apache-2.0), with one language file per language (from cdn.jsdelivr.net).
+
+1. Pick the **Language** (English, Malay, Indonesian, Chinese simplified or traditional, Tamil) and download it (the language file is 1 to 3 MB; the reader's code, about 4 MB, is downloaded with the first language and shared).
+2. Pick **How the page is laid out**: Automatic for normal pages with paragraphs, **Scattered text** for posters, signs and zine pages, One block, or One line.
+3. Press **Read text** (or Enter). To read only part of the picture, press **Read only an area (draw a box)** and drag; **Read the whole picture again** clears the area.
+4. The text appears in the box (you can fix mistakes in it). **Copy text** or **Save as .txt**. The words it found are boxed on the picture: green = sure, yellow = unsure, red = very unsure (untick the box to hide them).
+
+Limits: it works best on clean printed text. Handwriting and decorative fonts read poorly. After the language is downloaded it works offline. The Models page lists each language file and the reader's code with their sizes; **Delete** removes a language, and the reader's code goes with the last one.
+
 ## Send to ZEditor
 
 **Send to ZEditor** opens the picture in ZEditor as a new document. A picture that came from ZEditor ("Open in Ai Tools") goes back to that same ZEditor as a new layer.
