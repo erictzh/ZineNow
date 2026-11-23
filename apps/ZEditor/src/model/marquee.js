@@ -25,7 +25,7 @@ export const MARQUEE_DEFAULTS = {
   source: "visible",
   includePaper: false,
   cutLeaves: "transparent",
-  fillStyle: "ai", // the AI style is the first choice (it needs its opt-in download, see the AI model box in the panel)
+  fillStyle: "", // none chosen at first (on purpose, and not remembered): "ai" | "pattern" | "smooth" | "detail"
   fillGrain: true,
   fillMix: 100, // Pattern: how much of the result is the texture copy (the rest is the smooth blend), %
   fillPatch: 15, // Pattern: the size of the patches copied, px of the picture

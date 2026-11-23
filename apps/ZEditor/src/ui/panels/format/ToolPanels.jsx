@@ -40,11 +40,13 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   const ai = useAiModel(); // the AI style needs the model on this device (an opt-in download)
   const [aiDialog, setAiDialog] = React.useState(null); // "download" | "delete" | null
   const useAi = settings.fillStyle === "ai";
+  const chosen = ["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle); // no style is picked until the user picks one
+  const changeFillStyle = (value) => change({ fillStyle: value });
   const fromLayer = settings.source === "layer";
   // Cutting from everything visible can only cover the spot, so it always fills.
   const leaves = settings.cutLeaves === "surround" ? "surround" : (settings.cutLeaves === "fill" || !fromLayer) ? "fill" : "transparent";
   // a cut that is filled from the surroundings uses the Remove & fill style: with AI chosen it needs the model
-  const cutNeedsAi = settings.action === "cut" && leaves === "surround" && useAi && ai.phase !== "ready";
+  const cutNeedsAi = settings.action === "cut" && leaves === "surround" && (!chosen || (useAi && ai.phase !== "ready"));
   const needsLayer = fromLayer && !targetLayer;
   const fillMode = settings.mode === "fill"; // which of the two jobs the panel shows: "layer" (Make layer) or "fill" (Remove & fill)
   const radio = (name, value, label, current, onPick, hint, disabled) => (
@@ -142,7 +144,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || cutNeedsAi || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
             </div>
             <span className="ze-format-hint">
-              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : cutNeedsAi ? "This cut is filled with the AI style, which needs its model: switch Marquee Action to Remove & fill to download it, or choose another style there." : "The new layer is selected and the Move tool takes over."}
+              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : cutNeedsAi ? "This cut is filled from the surroundings with the style chosen under Remove & fill: choose one there first (and, for the AI style, download its model)." : "The new layer is selected and the Move tool takes over."}
             </span>
           </React.Fragment>
         )}
@@ -150,11 +152,16 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         {fillMode && (
           <React.Fragment>
             <span className="ze-format-hint">Replaces what is inside the area with a fill made from the pixels around it. No new layer is made.</span>
-            <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" || settings.fillStyle === "ai" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
-              <option value="ai">AI (on-device): the best for removing objects</option>
-              <option value="pattern">Pattern: copies texture from the rest of the picture</option>
-              <option value="smooth">Smooth: a blend of the edge colours</option>
-              <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
+            <select className="ze-format-select" aria-label="Fill style" value={chosen ? settings.fillStyle : ""} onChange={(e) => changeFillStyle(e.target.value)}>
+              <option value="" disabled>Choose how to fill…</option>
+              <optgroup label="With AI model">
+                <option value="ai">AI (on-device): the best for removing objects</option>
+              </optgroup>
+              <optgroup label="With math algorithm (classic)">
+                <option value="pattern">Pattern: copies texture from the rest of the picture</option>
+                <option value="smooth">Smooth: a blend of the edge colours</option>
+                <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
+              </optgroup>
             </select>
             <span className="ze-format-hint">AI: removes objects the way a person would paint them out (needs a one-time download). Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks.</span>
             {useAi && (
@@ -183,16 +190,15 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
                 {ai.error && <span className="ze-format-hint is-error">{ai.error}</span>}
               </div>
             )}
-            {!useAi && <div className="ze-marquee-box-title">Fine-tune</div>}
-            {useAi && <div className="ze-marquee-box-title">Fine-tune</div>}
-            <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture.</span>
+            {chosen && <div className="ze-marquee-box-title">Fine-tune</div>}
+            {chosen && <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture.</span>}
             {[
               { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
               { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: !useAi && (settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100)) },
-            ].filter((f) => f.show).map((f) => (
+            ].filter((f) => chosen && f.show).map((f) => (
               <div className="ze-format-field" key={f.key}>
                 <span className="ze-format-label">{f.label}</span>
                 <StepperNumberInput min={f.min} max={f.max} step={f.step} label={f.label} value={settings[f.key] === undefined ? MARQUEE_DEFAULTS[f.key] : settings[f.key]} onChange={(v) => change({ [f.key]: v })} />
@@ -200,10 +206,10 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               </div>
             ))}
             <div className="ze-format-row">
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail" || useAi} onClick={() => marquee.tryAnotherFill()}>Try another</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle !== "pattern"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
             </div>
-            <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."}</span>
+            <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."}</span>
           </React.Fragment>
         )}
       </div>

@@ -27,8 +27,8 @@ Use this to take a thing out of a picture (a stray object, a mark, a bit of text
 
 The **Marquee Action** dropdown chooses between **Make a new layer** and **Remove & fill**, and the panel shows only the options for the one you picked. For **Remove & fill**:
 
-- **Style**
-  - **Pattern** (default): copies real texture from the rest of the picture. Best for grass, leaves, road, brick, walls, sky with grain, anything with texture. Works on areas up to about 130 px of the page. A bigger area switches to Smooth by itself and tells you so.
+- **Style**: starts on "Choose how to fill…" (not remembered after a reload); Remove & fill is greyed out until you pick one. Groups: **With AI model** and **With math algorithm (classic)**.
+  - **Pattern**: copies real texture from the rest of the picture. Best for grass, leaves, road, brick, walls, sky with grain, anything with texture. Works on areas up to about 130 px of the page. A bigger area switches to Smooth by itself and tells you so.
   - **Smooth**: blends the colours round the edge. Best for plain paper, flat colours and soft backgrounds. It also works on big areas.
   - **Detailed**: carries thin lines and edges through the gap. Only good for small marks and scratches.
 - **Remove & fill**: does it. A big area takes a moment; the button says "Filling…".

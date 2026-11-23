@@ -52,6 +52,7 @@ export function useToolDefaults() {
   const [softEraser, setSoftEraser] = useState(SOFT_ERASER_DEFAULTS);
   const [magicEraser, setMagicEraser] = useState(MAGIC_ERASER_DEFAULTS);
   // Marquee: how "make layer" works (Copy or Cut, what it samples, what a cut leaves). See model/marquee.js.
+  // The fill style starts empty every time (the user picks one; it is not remembered after a reload).
   const [marquee, setMarquee] = useState(MARQUEE_DEFAULTS);
   const [highlighterColor, setHighlighterColor] = useState(HIGHLIGHTER_DEFAULTS.color);
   const [highlighterWidth, setHighlighterWidth] = useState(HIGHLIGHTER_DEFAULTS.width);

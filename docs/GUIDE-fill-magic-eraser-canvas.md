@@ -45,8 +45,8 @@ You have a picture with something you don't want in it: a stray person, a mark, 
    - **All visible**: everything you can see on the page, treated as one picture. The fill becomes a **new layer called "Filled area"** on top. Your original is untouched, so hide or delete that layer to get it back.
    - **Selected layer**: only the layer you selected first (select it with the Move tool before pressing M). That layer's own picture is changed.
 4. **Set Marquee Action to "Remove & fill".**
-5. **Pick a Style:**
-   - **Pattern** (the default): copies real texture from elsewhere in the picture. Best for grass, leaves, brick, road and walls.
+5. **Pick a Style.** The list starts on "Choose how to fill…" (nothing is chosen on purpose, and it is not remembered after a reload); Remove & fill stays greyed out until you pick. It has two groups, **With AI model** (AI on-device) and **With math algorithm (classic)**:
+   - **Pattern**: copies real texture from elsewhere in the picture. Best for grass, leaves, brick, road and walls.
    - **Smooth**: blends the colours around the edge. Best for plain paper, flat colours and soft backgrounds.
    - **Detailed**: carries thin lines through the gap. Only good for small marks.
 6. **Press "Remove & fill".** A big area takes a moment ("Filling…").
