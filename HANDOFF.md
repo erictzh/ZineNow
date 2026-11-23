@@ -562,3 +562,5 @@ The 4th app, named by the user: remove an object from a picture with an AI model
 
 - `MARQUEE_DEFAULTS.fillStyle` is `""`; the Style dropdown shows a disabled "Choose how to fill…" and two groups: "With AI model" (ai) and "With math algorithm (classic)" (pattern, smooth, detail). Deliberately NOT remembered across reloads.
 - Remove & fill, Try another, Fine-tune, the AI box and cut-filled-from-surroundings are disabled/hidden until a style is chosen; `useMarquee.makeLayer` guards with a notice for the shortcut.
+
+- 2026-11-23: the Image panel's "Ai Tools (Local)" section is hidden (`SHOW_AI_TOOLS_SECTION = false` in `ImageFormat.jsx`); set true to bring it back.

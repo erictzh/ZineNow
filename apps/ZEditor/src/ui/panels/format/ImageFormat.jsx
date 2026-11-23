@@ -13,6 +13,9 @@ import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 const { useState } = React;
 
+// Hidden for now (Ai Tools (Local) is still experimental). Set to true to show the section again.
+const SHOW_AI_TOOLS_SECTION = false;
+
 export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace }) {
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
@@ -71,6 +74,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
       <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
+      {SHOW_AI_TOOLS_SECTION && (
       <PanelSection
         id="image.aitools"
         title="Ai Tools (Local)"
@@ -80,6 +84,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
           Open in Ai Tools (remove objects)
         </button>
       </PanelSection>
+      )}
       <PanelSection
         id="image.flatten"
         title="Flatten"
