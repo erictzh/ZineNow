@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-<h1>AI background removal speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 4 · cut-off slider now 0-100</span></h1>
+<h1>AI background removal speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 5 · cut-off slider steps of 0.125%</span></h1>
 <p>A throw-away test page (not part of the apps). It downloads small open-source "find the subject" models once (U²-Netp, about 5 MB, Apache-2.0; MODNet, about 25 MB, Apache-2.0), cuts the background out of a picture, and times it on this device. Nothing is uploaded: your picture never leaves this page.</p>
 
 <div class="card">
@@ -60,7 +60,7 @@
 
 <div class="card" id="results" hidden>
   <b>Pictures</b> <span style="font-size:13px;color:var(--mut)">(checkerboard = see-through)</span>
-  <div class="row"><label style="margin:0">Edge cut-off (threshold) <input type="range" id="thr" min="0" max="100" value="50"> <span id="thrv">50</span>%</label></div>
+  <div class="row"><label style="margin:0">Edge cut-off (threshold) <input type="range" id="thr" min="0" max="100" step="0.125" value="50"> <span id="thrv">50</span>%</label></div>
   <div class="imgs" id="imgs"></div>
 </div>
 
@@ -231,7 +231,7 @@ $("thr").oninput = drawResults;
 
 $("run").onclick = async () => {
   $("run").disabled = true; results.length = 0; $("imgs").textContent = ""; $("results").hidden = true;
-  lines.length = 0; log("ZineNow background-removal test · build 4 · runtime " + ORT_VERSION + " · " + new Date().toISOString());
+  lines.length = 0; log("ZineNow background-removal test · build 5 · runtime " + ORT_VERSION + " · " + new Date().toISOString());
   try {
     const dev = await deviceInfo();
     if (!self.ort) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = ORT_URL; s.onload = res; s.onerror = () => rej(new Error("Could not load the AI runtime from the internet.")); document.head.append(s); });
