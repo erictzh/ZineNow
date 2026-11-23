@@ -4,12 +4,13 @@ import { MAIN_SCALE } from "../constants.js";
 import { translatedAnnotation } from "../model/annotations.js";
 import { titleToFileName } from "../model/documentTitle.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
+import { buildEmbeddedFonts } from "../io/fontEmbed.js";
 import { itemsBounds, readGroupFile, serializeGroup } from "../io/groupFile.js";
 import { saveFile } from "../io/fileSave.js";
 
 const { useRef } = React;
 
-export function useGroupFiles({ doc, edits, selection, status }) {
+export function useGroupFiles({ doc, edits, selection, status, view }) {
   const { pages, selectedIdx, pdfDocsRef, nextAnnIdRef, ids } = doc;
   const inputRef = useRef(null);
 
@@ -21,7 +22,9 @@ export function useGroupFiles({ doc, edits, selection, status }) {
     status.setErrorMsg(null);
     try {
       const name = items.find((a) => a.groupName) ? items.find((a) => a.groupName).groupName : "Group";
-      const json = serializeGroup(name, items);
+      // the project's "Embed system fonts" setting also applies to a group file
+      const embedded = view && view.embedFonts ? await buildEmbeddedFonts([{ annotations: items }], view.embedFontsSkip) : { fonts: [] };
+      const json = serializeGroup(name, items, embedded.fonts);
       const handle = await saveFile(json, titleToFileName(name, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
       if (handle !== "cancelled") status.setNotice("Saved the group as " + (handle && handle.name ? handle.name : titleToFileName(name, ".znow")) + ". Open it on its own, or bring it into any document with Import group.");
     } catch (err) {

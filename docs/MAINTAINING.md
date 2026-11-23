@@ -507,7 +507,7 @@ compare the new code against it.
 | Term | Meaning |
 |---|---|
 | **Annotation / item** | Anything placed on a ZEditor page: text box, image, rectangle/ellipse, pen/highlighter stroke. Stored in `page.annotations`, bottom layer first. |
-| **`.znow`** | A ZEditor project file: JSON with the source PDFs embedded (base64), pages, items and settings. |
+| **`.znow`** | A ZEditor project file: JSON with the source PDFs embedded (base64), pages, items, settings, the uploaded fonts and, if Project > Embed Fonts… is on, the system fonts the text uses. |
 | **Imposition** | Arranging a document's pages on printer sheets so that, after folding (and cutting), they read in order. |
 | **Sheet / sheet side** | One piece of paper; double-sided layouts have two sides per sheet. |
 | **Signature** | A group of sheets folded together and nested; long zines are split into several. |

@@ -2,6 +2,7 @@
 
 import { stripExtension, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, writeFileHandle } from "../io/fileSave.js";
+import { buildEmbeddedFonts } from "../io/fontEmbed.js";
 import { readProjectFile, serializeProject } from "../io/projectFile.js";
 import { saveReloadSnapshot, takeReloadSnapshot } from "../io/reloadSnapshot.js";
 import { allowNextUnload, warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
@@ -11,7 +12,7 @@ const { useEffect, useState, useRef } = React;
 
 export function useProject({ doc, history, status, view, toolDefaults }) {
   const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, nextDocIdRef, pageSizeRef } = doc;
-  const { setLoading, setErrorMsg } = status;
+  const { setLoading, setErrorMsg } = status; // status.setNotice: an information line (e.g. which fonts were embedded)
   const projectInputRef = useRef(null);
   const [savingProject, setSavingProject] = useState(false);
   // The .znow file this project was last saved to or opened from, so
@@ -46,12 +47,22 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
     setErrorMsg(null);
     setSavingProject(true);
     try {
+      // Project > Embed Fonts…: the system fonts the text uses go inside the file (needs the browser's font access; the ones it can't read are named)
+      let embeddedFonts = [];
+      if (view.embedFonts) {
+        const r = await buildEmbeddedFonts(pages, view.embedFontsSkip);
+        embeddedFonts = r.fonts;
+        status.setNotice(r.missing.length
+          ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ")
+          : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file." : null);
+      }
       const json = serializeProject({
         title: docTitle,
         pdfDocs: pdfDocsRef.current,
         pages,
         textStyles: toolDefaults.textStyles,
         settings: view.settingsForSave(),
+        embeddedFonts,
       });
       if (!saveAs && projectFile) {
         try {

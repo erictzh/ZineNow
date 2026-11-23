@@ -30,6 +30,7 @@ import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
 import { ConfirmDialog } from "./dialogs/ConfirmDialog.jsx";
 import { InsertPdfDialog } from "./dialogs/InsertPdfDialog.jsx";
 import { NewDocumentDialog } from "./dialogs/NewDocumentDialog.jsx";
+import { EmbedFontsDialog } from "./dialogs/EmbedFontsDialog.jsx";
 import { ShortcutsDialog } from "./dialogs/ShortcutsDialog.jsx";
 import { WelcomeDialog } from "./dialogs/WelcomeDialog.jsx";
 import { FormatPanel } from "./panels/FormatPanel.jsx";
@@ -62,7 +63,7 @@ export function App() {
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });
-  const groupFiles = useGroupFiles({ doc, edits, selection, status });
+  const groupFiles = useGroupFiles({ doc, edits, selection, status, view });
   useImageHandoff({ doc, files, edits, selection }); // a picture sent from Ai Tools (Local) opens as a new canvas document
   const zoom = useZoom();
   useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
@@ -95,7 +96,7 @@ export function App() {
     },
     onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file."),
   }), []);
-  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
+  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
   useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
@@ -310,6 +311,7 @@ export function App() {
         onClose={() => setWelcomeDismissed(true)}
       />
       <ShortcutsDialog open={dialogs.shortcutsOpen} onClose={() => dialogs.setShortcutsOpen(false)} />
+      <EmbedFontsDialog open={dialogs.embedFontsOpen} startConfirm={dialogs.embedFontsAskFirst} onClose={() => dialogs.closeEmbedFonts()} pages={doc.pages} view={view} />
       <ConfirmDialog
         step={dialogs.confirmAction ? dialogs.confirmStep : 0}
         onProceed={dialogs.handleConfirmProceed}

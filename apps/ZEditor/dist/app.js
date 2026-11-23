@@ -9330,6 +9330,16 @@
     const [newDocOpen, setNewDocOpen] = useState(false);
     const [newDocFromProject, setNewDocFromProject] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const [embedFontsOpen, setEmbedFontsOpen] = useState(false);
+    const [embedFontsAskFirst, setEmbedFontsAskFirst] = useState(false);
+    function openEmbedFonts(askFirst = false) {
+      setEmbedFontsAskFirst(askFirst);
+      setEmbedFontsOpen(true);
+    }
+    function closeEmbedFonts() {
+      setEmbedFontsOpen(false);
+      setEmbedFontsAskFirst(false);
+    }
     const [confirmAction, setConfirmAction] = useState(null);
     const [confirmStep, setConfirmStep] = useState(1);
     function openNewDocDialog(fromProject) {
@@ -9369,6 +9379,10 @@
       openNewDocDialog,
       shortcutsOpen,
       setShortcutsOpen,
+      embedFontsOpen,
+      embedFontsAskFirst,
+      openEmbedFonts,
+      closeEmbedFonts,
       confirmAction,
       confirmStep,
       handleNewProjectClick,
@@ -9810,8 +9824,8 @@
 
   // apps/ZEditor/src/io/customFonts.js
   var customFontStore = [];
-  async function registerCustomFont(family, bytes) {
-    const face = new FontFace(family, bytes.slice(0));
+  async function registerCustomFont(family, bytes, style = {}) {
+    const face = new FontFace(family, bytes.slice(0), { weight: style.bold ? "700" : "400", style: style.italic ? "italic" : "normal" });
     await face.load();
     document.fonts.add(face);
   }
@@ -9860,10 +9874,11 @@
       const key = `${family}|${bold ? "b" : ""}${italic ? "i" : ""}`;
       if (bytesCache.has(key)) return bytesCache.get(key);
       let found = null;
-      const uploaded = customFontStore.find((f) => f.family === family);
-      if (uploaded && !bold && !italic) {
-        found = { key, bytes: base64ToArrayBuffer(uploaded.data) };
-      } else if (!uploaded) {
+      const exact = customFontStore.find((f) => f.family === family && Boolean(f.bold) === Boolean(bold) && Boolean(f.italic) === Boolean(italic));
+      const keptUploaded = customFontStore.some((f) => f.family === family && f.source !== "system");
+      if (exact) {
+        found = { key, bytes: base64ToArrayBuffer(exact.data) };
+      } else if (!keptUploaded) {
         const wantWeight = bold ? "bold" : "regular";
         const faces = (await localFonts()).filter((f) => f.family.toLowerCase() === family.toLowerCase());
         const face = faces.find((f) => {
@@ -13185,17 +13200,101 @@
     return { handleRotate, handleInsertBlank, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
   }
 
+  // apps/ZEditor/src/io/fontEmbed.js
+  var faceKey = (family, bold, italic) => family + "|" + (bold ? "b" : "") + (italic ? "i" : "");
+  var faceLabel = (f) => f.family + " — " + (f.bold || f.italic ? [f.bold ? "Bold" : "", f.italic ? "Italic" : ""].filter(Boolean).join(" ") : "Regular");
+  var GENERIC = /* @__PURE__ */ new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace"]);
+  function usedFaces(pages) {
+    const map = /* @__PURE__ */ new Map();
+    const add = (family, bold, italic) => {
+      if (!family) return;
+      const key = faceKey(family, bold, italic);
+      if (!map.has(key)) map.set(key, { key, family, bold: Boolean(bold), italic: Boolean(italic) });
+    };
+    for (const p of pages || []) {
+      for (const a of resolvePageText(p.annotations || [])) {
+        if (a.type !== "text") continue;
+        add(a.fontFamily, a.bold, a.italic);
+        for (const r of a.colorRuns || []) {
+          if (r.fontFamily == null && r.bold == null && r.italic == null) continue;
+          add(r.fontFamily != null ? r.fontFamily : a.fontFamily, r.bold != null ? r.bold : a.bold, r.italic != null ? r.italic : a.italic);
+        }
+      }
+    }
+    return [...map.values()].sort((a, b) => a.family.localeCompare(b.family) || a.bold - b.bold || a.italic - b.italic);
+  }
+  function faceKind(face, store = customFontStore) {
+    const exact = store.find((f) => f.family === face.family && Boolean(f.bold) === face.bold && Boolean(f.italic) === face.italic);
+    if (exact) return exact.source === "system" ? "embedded" : "uploaded";
+    if (store.some((f) => f.family === face.family && f.source !== "system")) return "uploaded";
+    if (GENERIC.has(face.family.toLowerCase())) return "generic";
+    return "system";
+  }
+  async function describeFaces(pages, resolver = createFontResolver()) {
+    const out = [];
+    for (const f of usedFaces(pages)) {
+      const kind = faceKind(f);
+      let bytes = null;
+      if (kind === "system") {
+        try {
+          const r = await resolver.find(f.family, f.bold, f.italic);
+          bytes = r ? r.bytes.byteLength : null;
+        } catch (e) {
+          bytes = null;
+        }
+      }
+      out.push({ ...f, label: faceLabel(f), kind, bytes });
+    }
+    return out;
+  }
+  async function buildEmbeddedFonts(pages, skip = [], resolver = createFontResolver()) {
+    const fonts = [], missing = [];
+    let total = 0;
+    for (const f of usedFaces(pages)) {
+      if (faceKind(f) !== "system" || skip.includes(f.key)) continue;
+      let found = null;
+      try {
+        found = await resolver.find(f.family, f.bold, f.italic);
+      } catch (e) {
+        found = null;
+      }
+      if (!found) {
+        missing.push(faceLabel(f));
+        continue;
+      }
+      total += found.bytes.byteLength;
+      fonts.push({ family: f.family, data: arrayBufferToBase64(found.bytes), ...f.bold ? { bold: true } : {}, ...f.italic ? { italic: true } : {}, source: "system" });
+    }
+    return { fonts, missing, total };
+  }
+  var formatBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  var canReadSystemFonts = () => typeof window !== "undefined" && "queryLocalFonts" in window;
+  var SEEN_KEY = "zeditor.fontEmbedLicenceSeen";
+  function fontLicenceSeen() {
+    try {
+      return localStorage.getItem(SEEN_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+  function setFontLicenceSeen() {
+    try {
+      localStorage.setItem(SEEN_KEY, "1");
+    } catch (e) {
+    }
+  }
+
   // apps/ZEditor/src/io/projectFile.js
-  function serializeProject({ title, pdfDocs, pages, textStyles, settings }) {
+  function serializeProject({ title, pdfDocs, pages, textStyles, settings, embeddedFonts = [] }) {
     const docs = {};
     for (const docId of Object.keys(pdfDocs)) {
       docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
     }
-    const usedFamilies = /* @__PURE__ */ new Set();
-    pages.forEach((p) => (p.annotations || []).forEach((a) => {
-      if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily);
-    }));
+    const usedFamilies = new Set(usedFaces(pages).map((f) => f.family));
     const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
+    for (const e of embeddedFonts) {
+      if (!fonts.some((f) => f.family === e.family && Boolean(f.bold) === Boolean(e.bold) && Boolean(f.italic) === Boolean(e.italic))) fonts.push(e);
+    }
     const project = {
       version: 2,
       // 2: the annotation list is the stacking order
@@ -13220,13 +13319,14 @@
     }
     const loadedFamilies = [];
     for (const font of project.fonts || []) {
-      if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) {
+      const bold = Boolean(font.bold), italic = Boolean(font.italic);
+      if (customFontStore.some((f) => f.family === font.family && f.data === font.data && Boolean(f.bold) === bold && Boolean(f.italic) === italic)) {
         loadedFamilies.push(font.family);
         continue;
       }
       try {
-        await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
-        customFontStore.push({ family: font.family, data: font.data });
+        await registerCustomFont(font.family, base64ToArrayBuffer(font.data), { bold, italic });
+        customFontStore.push({ family: font.family, data: font.data, ...bold ? { bold: true } : {}, ...italic ? { italic: true } : {}, ...font.source === "system" ? { source: "system" } : {} });
         loadedFamilies.push(font.family);
       } catch (err) {
       }
@@ -13359,12 +13459,19 @@
       setErrorMsg(null);
       setSavingProject(true);
       try {
+        let embeddedFonts = [];
+        if (view.embedFonts) {
+          const r = await buildEmbeddedFonts(pages, view.embedFontsSkip);
+          embeddedFonts = r.fonts;
+          status.setNotice(r.missing.length ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ") : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file." : null);
+        }
         const json = serializeProject({
           title: docTitle,
           pdfDocs: pdfDocsRef.current,
           pages,
           textStyles: toolDefaults.textStyles,
-          settings: view.settingsForSave()
+          settings: view.settingsForSave(),
+          embeddedFonts
         });
         if (!saveAs && projectFile) {
           try {
@@ -13849,6 +13956,8 @@
     const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
+    const [embedFonts, setEmbedFonts] = useState15(false);
+    const [embedFontsSkip, setEmbedFontsSkip] = useState15([]);
     function settingsForSave() {
       return {
         guidesOn,
@@ -13862,7 +13971,9 @@
         rulersOn,
         rulerUnit,
         rulerGuides,
-        snapToGuidesOn
+        snapToGuidesOn,
+        embedFonts,
+        embedFontsSkip
       };
     }
     function applySavedSettings(s) {
@@ -13877,6 +13988,8 @@
       if (s.rulersOn !== void 0) setRulersOn(s.rulersOn);
       if (s.rulerUnit !== void 0) setRulerUnit(s.rulerUnit);
       if (s.snapToGuidesOn !== void 0) setSnapToGuidesOn(s.snapToGuidesOn);
+      setEmbedFonts(s.embedFonts === true);
+      setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
       setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
     }
     return {
@@ -13910,6 +14023,10 @@
       setRulerGuides,
       snapToGuidesOn,
       setSnapToGuidesOn,
+      embedFonts,
+      setEmbedFonts,
+      embedFontsSkip,
+      setEmbedFontsSkip,
       settingsForSave,
       applySavedSettings
     };
@@ -13999,7 +14116,7 @@
     }
     return Number.isFinite(x0) ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
   }
-  function serializeGroup(name, items) {
+  function serializeGroup(name, items, embeddedFonts = []) {
     const b = itemsBounds(items);
     if (!b) throw new Error("There is nothing in that group to save.");
     const dx = PAD - b.x, dy = PAD - b.y;
@@ -14016,7 +14133,7 @@
       height: Math.ceil(b.height + 2 * PAD) / MAIN_SCALE,
       annotations: moved
     };
-    return serializeProject({ title: name, pdfDocs: {}, pages: [page], textStyles: [], settings: {} });
+    return serializeProject({ title: name, pdfDocs: {}, pages: [page], textStyles: [], settings: {}, embeddedFonts });
   }
   async function readGroupFile(file, nextPageKey) {
     const project = await readProjectFile(file, nextPageKey);
@@ -14028,7 +14145,7 @@
 
   // apps/ZEditor/src/state/useGroupFiles.js
   var { useRef: useRef13 } = React;
-  function useGroupFiles({ doc, edits, selection, status }) {
+  function useGroupFiles({ doc, edits, selection, status, view }) {
     const { pages, selectedIdx, pdfDocsRef, nextAnnIdRef, ids } = doc;
     const inputRef = useRef13(null);
     async function handleExportGroup(groupId) {
@@ -14039,7 +14156,8 @@
       status.setErrorMsg(null);
       try {
         const name = items.find((a) => a.groupName) ? items.find((a) => a.groupName).groupName : "Group";
-        const json = serializeGroup(name, items);
+        const embedded = view && view.embedFonts ? await buildEmbeddedFonts([{ annotations: items }], view.embedFontsSkip) : { fonts: [] };
+        const json = serializeGroup(name, items, embedded.fonts);
         const handle = await saveFile(json, titleToFileName(name, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
         if (handle !== "cancelled") status.setNotice("Saved the group as " + (handle && handle.name ? handle.name : titleToFileName(name, ".znow")) + ". Open it on its own, or bring it into any document with Import group.");
       } catch (err) {
@@ -16507,6 +16625,80 @@
     )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in).`, custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : "", " You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width, height, pageCount, canvas: noPaper }) }, "Create"))));
   }
 
+  // apps/ZEditor/src/ui/dialogs/EmbedFontsDialog.jsx
+  var { useState: useState23, useEffect: useEffect19 } = React;
+  var STATUS = {
+    uploaded: "Uploaded font: always inside the project",
+    embedded: "Embedded in this project",
+    generic: "Only a name (there is no font file)"
+  };
+  function EmbedFontsDialog({ open, startConfirm, onClose, pages, view }) {
+    const [rows, setRows] = useState23(null);
+    const [asking, setAsking] = useState23(false);
+    const [granted, setGranted] = useState23(true);
+    const supported = canReadSystemFonts();
+    async function load2() {
+      setRows(null);
+      if (supported && navigator.permissions && navigator.permissions.query) {
+        try {
+          setGranted((await navigator.permissions.query({ name: "local-fonts" })).state === "granted");
+        } catch (e) {
+          setGranted(true);
+        }
+      }
+      setRows(await describeFaces(pages));
+    }
+    useEffect19(() => {
+      if (open) {
+        setAsking(Boolean(startConfirm));
+        load2();
+      }
+    }, [open]);
+    if (!open) return null;
+    async function allowFonts() {
+      try {
+        await window.queryLocalFonts();
+      } catch (e) {
+      }
+      load2();
+    }
+    const skip = view.embedFontsSkip;
+    const toggleFace = (key, on) => view.setEmbedFontsSkip(on ? skip.filter((k) => k !== key) : [...skip, key]);
+    const system = (rows || []).filter((r) => r.kind === "system");
+    const total = system.filter((r) => !skip.includes(r.key) && r.bytes != null).reduce((a, r) => a + r.bytes, 0);
+    const unreadable = system.filter((r) => !skip.includes(r.key) && r.bytes == null).length;
+    const close = () => onClose();
+    if (asking) {
+      return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: () => startConfirm ? close() : setAsking(false) }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": "Embed system fonts?", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "Embed system fonts?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "The fonts this project uses will be saved ", /* @__PURE__ */ React.createElement("b", null, "inside the project file"), ", so it looks the same on a computer that doesn't have them."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Only embed fonts you are allowed to share."), " A font file inside a project is a copy of the font, and anyone with the project can take it out. Many fonts' licences (including most that come with Windows or macOS) do not allow this; open fonts (SIL Open Font License, Apache, MIT) do."), /* @__PURE__ */ React.createElement("li", null, "It needs a browser that can read this computer's fonts (Chrome or Edge), and each font adds about 100 KB to several MB to the file."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: () => startConfirm ? close() : setAsking(false) }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => {
+        setFontLicenceSeen();
+        view.setEmbedFonts(true);
+        if (startConfirm) close();
+        else setAsking(false);
+      } }, "Enable"))));
+    }
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: close }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-embed-modal", role: "dialog", "aria-label": "Embed fonts", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "Embed Fonts"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-check ze-embed-master" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "checkbox",
+        checked: view.embedFonts,
+        disabled: !supported,
+        onChange: (e) => {
+          if (!e.target.checked) view.setEmbedFonts(false);
+          else {
+            try {
+              if (localStorage.getItem("zeditor.fontEmbedLicenceSeen") === "1") {
+                view.setEmbedFonts(true);
+                return;
+              }
+            } catch (err) {
+            }
+            setAsking(true);
+          }
+        }
+      }
+    ), /* @__PURE__ */ React.createElement("span", null, "Embed system fonts when saving this project"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "The choice is saved in the project file, so Save keeps embedding.")), !supported && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint is-error" }, "This browser can't read this computer's fonts. Use Chrome or Edge to embed system fonts. Fonts you upload are always inside the project."), supported && !granted && /* @__PURE__ */ React.createElement("div", { className: "ze-embed-allow" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "ZEditor needs your permission to read the fonts on this computer."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: allowFonts }, "Allow reading this computer's fonts")), /* @__PURE__ */ React.createElement("div", { className: "ze-embed-list", role: "list" }, rows === null && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Looking at the fonts the text uses…"), rows && rows.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "No text in this project uses a font yet."), rows && rows.map((r) => /* @__PURE__ */ React.createElement("label", { key: r.key, role: "listitem", className: "ze-embed-row" + (r.kind === "system" ? "" : " is-fixed") }, r.kind === "system" ? /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !skip.includes(r.key), disabled: !supported, onChange: (e) => toggleFace(r.key, e.target.checked) }) : /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: true, disabled: true }), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-name" }, r.label), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-status" + (r.kind === "system" && r.bytes == null ? " is-bad" : "") }, r.kind === "system" ? r.bytes != null ? formatBytes(r.bytes) : "Can't read it here (allow font access, or it isn't installed on this computer)" : STATUS[r.kind])))), rows && system.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint ze-embed-total" }, view.embedFonts ? "Will be embedded when you save: " + formatBytes(total) + " in " + system.filter((r) => !skip.includes(r.key) && r.bytes != null).length + " font file(s)." : "Switched off: nothing will be embedded.", view.embedFonts && unreadable > 0 ? " " + unreadable + " could not be read." : ""), /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Only embed fonts you are allowed to share. Styles of a font that the text does not use (for example Italic) are not embedded.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: close }, "Done"))));
+  }
+
   // apps/ZEditor/src/ui/dialogs/shortcuts.js
   var KEYBOARD_SHORTCUTS = [
     {
@@ -16571,9 +16763,9 @@
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect19 } = React;
+  var { useEffect: useEffect20 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect19(() => {
+    useEffect20(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -16586,14 +16778,14 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
-  var { useEffect: useEffect20, useState: useState23 } = React;
+  var { useEffect: useEffect21, useState: useState24 } = React;
   var OPEN_KINDS = [
     { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
     { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
   ];
   function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
-    const [kind, setKind] = useState23("project");
-    useEffect20(() => {
+    const [kind, setKind] = useState24("project");
+    useEffect21(() => {
       if (!open) return void 0;
       const onKey = (e) => {
         if (e.key === "Escape") onClose();
@@ -16607,9 +16799,9 @@
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState24 } = React;
+  var { useState: useState25 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState24(null);
+    const [draft, setDraft] = useState25(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -16669,7 +16861,7 @@
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState25, useRef: useRef22, useEffect: useEffect21 } = React;
+  var { useState: useState26, useRef: useRef22, useEffect: useEffect22 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -16689,13 +16881,13 @@
     const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState25(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState26(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
     const wasChecked = useRef22(checked);
-    useEffect21(() => {
+    useEffect22(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -16960,13 +17152,13 @@
   }
 
   // apps/ZEditor/src/state/useAiModel.js
-  var { useState: useState26, useEffect: useEffect22, useRef: useRef23, useCallback } = React;
+  var { useState: useState27, useEffect: useEffect23, useRef: useRef23, useCallback } = React;
   function useAiModel(which = "fill", modelKey = "u2netp") {
     const bg = which === "background";
-    const [state, setState] = useState26({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
+    const [state, setState] = useState27({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
     const abortRef = useRef23(null);
     const alive = useRef23(true);
-    useEffect22(() => () => {
+    useEffect23(() => () => {
       alive.current = false;
     }, []);
     const set = (patch) => {
@@ -16980,7 +17172,7 @@
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
       }
     }, [modelKey]);
-    useEffect22(() => {
+    useEffect23(() => {
       set({ phase: "checking", error: null });
       refresh();
     }, [refresh]);
@@ -17009,10 +17201,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/format/RemoveBackgroundSection.jsx
-  var { useState: useState27 } = React;
+  var { useState: useState28 } = React;
   var DEFAULT_CUTOFF = 0.1;
   function DecimalBox({ value, onChange, min, max, step, label, disabled }) {
-    const [draft, setDraft] = useState27(null);
+    const [draft, setDraft] = useState28(null);
     return /* @__PURE__ */ React.createElement(
       NumberBox,
       {
@@ -17033,14 +17225,14 @@
     );
   }
   function RemoveBackgroundSection({ ann, onRemoveBackground, disabled }) {
-    const [modelKey, setModelKey] = useState27(BG_MODELS[0].key);
+    const [modelKey, setModelKey] = useState28(BG_MODELS[0].key);
     const info = bgModel(modelKey);
     const ai = useAiModel("background", modelKey);
-    const [dialog, setDialog] = useState27(null);
-    const [cutoff, setCutoff] = useState27(DEFAULT_CUTOFF);
-    const [soft, setSoft] = useState27(10);
-    const [busy, setBusy] = useState27("");
-    const [error, setError] = useState27("");
+    const [dialog, setDialog] = useState28(null);
+    const [cutoff, setCutoff] = useState28(DEFAULT_CUTOFF);
+    const [soft, setSoft] = useState28(10);
+    const [busy, setBusy] = useState28("");
+    const [error, setError] = useState28("");
     const ready = ai.phase === "ready";
     const run2 = async () => {
       setError("");
@@ -17089,10 +17281,10 @@
   }
 
   // apps/ZEditor/src/state/useAiFeatures.js
-  var { useState: useState28, useEffect: useEffect23 } = React;
+  var { useState: useState29, useEffect: useEffect24 } = React;
   function useAiFeatures() {
-    const [on, setOn] = useState28(aiFeaturesOn());
-    useEffect23(() => {
+    const [on, setOn] = useState29(aiFeaturesOn());
+    useEffect24(() => {
       const h = (e) => setOn(Boolean(e.detail && e.detail.aiFeatures));
       window.addEventListener("zn-display-prefs", h);
       setOn(aiFeaturesOn());
@@ -17102,7 +17294,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  var { useState: useState29 } = React;
+  var { useState: useState30 } = React;
   var SHOW_AI_TOOLS_SECTION = false;
   function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
     const aiOn = useAiFeatures();
@@ -17176,7 +17368,7 @@
     ));
   }
   function ImageTraceSection({ ann, imageTrace, disabled }) {
-    const [preset, setPreset] = useState29(DEFAULT_TRACE_PRESET);
+    const [preset, setPreset] = useState30(DEFAULT_TRACE_PRESET);
     const busy = imageTrace.busyId === ann.id;
     return /* @__PURE__ */ React.createElement(
       PanelSection,
@@ -17304,25 +17496,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState30, useRef: useRef24, useEffect: useEffect24, useMemo: useMemo3 } = React;
+  var { useState: useState31, useRef: useRef24, useEffect: useEffect25, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState30(value || "");
-    const [typed, setTyped] = useState30(false);
-    const [open, setOpen] = useState30(false);
-    const [highlight, setHighlight] = useState30(-1);
+    const [query, setQuery] = useState31(value || "");
+    const [typed, setTyped] = useState31(false);
+    const [open, setOpen] = useState31(false);
+    const [highlight, setHighlight] = useState31(-1);
     const previewFromRef = useRef24(null);
     const listRef = useRef24(null);
-    const [status, setStatus] = useState30(null);
-    const [loadingFonts, setLoadingFonts] = useState30(false);
+    const [status, setStatus] = useState31(null);
+    const [loadingFonts, setLoadingFonts] = useState31(false);
     const containerRef = useRef24(null);
     const uploadInputRef = useRef24(null);
-    useEffect24(() => {
+    useEffect25(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect24(() => {
+    useEffect25(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -17336,7 +17528,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect24(() => {
+    useEffect25(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -17487,10 +17679,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState31, useRef: useRef25 } = React;
+  var { useState: useState32, useRef: useRef25 } = React;
   function TextPhotoFill({ ann, patch }) {
     const inputRef = useRef25(null);
-    const [error, setError] = useState31(null);
+    const [error, setError] = useState32(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -17579,10 +17771,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState32 } = React;
+  var { useState: useState33 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState32("latin");
-    const [count, setCount] = useState32(3);
+    const [kind, setKind] = useState33("latin");
+    const [count, setCount] = useState33(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -17613,7 +17805,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState33 } = React;
+  var { useState: useState34 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -17621,7 +17813,7 @@
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState33(null);
+    const [message, setMessage] = useState34(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -17658,7 +17850,7 @@
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState33(null);
+    const [sizeDraft, setSizeDraft] = useState34(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -17692,11 +17884,11 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState34 } = React;
+  var { useState: useState35 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState34("");
-    const [basedOn, setBasedOn] = useState34("");
-    const [message, setMessage] = useState34(null);
+    const [name, setName] = useState35("");
+    const [basedOn, setBasedOn] = useState35("");
+    const [message, setMessage] = useState35(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -18069,11 +18261,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState35, useRef: useRef26, useEffect: useEffect25, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState36, useRef: useRef26, useEffect: useEffect26, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState35(false);
+    const [open, setOpen] = useState36(false);
     const containerRef = useRef26(null);
-    useEffect25(() => {
+    useEffect26(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -18368,7 +18560,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState36, useRef: useRef27, useEffect: useEffect26 } = React;
+  var { useState: useState37, useRef: useRef27, useEffect: useEffect27 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -18434,11 +18626,11 @@
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
-    const [renamingId, setRenamingId] = useState36(null);
-    const [menuOpen, setMenuOpen] = useState36(false);
+    const [renamingId, setRenamingId] = useState37(null);
+    const [menuOpen, setMenuOpen] = useState37(false);
     const menuRef = useRef27(null);
-    const [dropInfo, setDropInfo] = useState36(null);
-    const [, setCollapseTick] = useState36(0);
+    const [dropInfo, setDropInfo] = useState37(null);
+    const [, setCollapseTick] = useState37(0);
     const dragIdRef = useRef27(null);
     const listRef = useRef27(null);
     const panelRef = useRef27(null);
@@ -18447,9 +18639,9 @@
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState36(null);
+    const [rowMenu, setRowMenu] = useState37(null);
     const rowMenuRef = useRef27(null);
-    useEffect26(() => {
+    useEffect27(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
         setMenuOpen(false);
@@ -18499,7 +18691,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect26(() => {
+    useEffect27(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -18544,7 +18736,7 @@
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     }
-    useEffect26(() => {
+    useEffect27(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -18927,7 +19119,7 @@
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState37, useEffect: useEffect27, useRef: useRef29 } = React;
+  var { useState: useState38, useEffect: useEffect28, useRef: useRef29 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -18935,7 +19127,7 @@
   var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
-    const [urls, setUrls] = useState37({});
+    const [urls, setUrls] = useState38({});
     const urlsRef = useRef29({});
     const madeFrom = useRef29(/* @__PURE__ */ new Map());
     const baseCache = useRef29(null);
@@ -18945,11 +19137,11 @@
     const lastEnd = useRef29(0);
     const lastMs = useRef29(0);
     const alive = useRef29(true);
-    const [on, setOn] = useState37(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const [on, setOn] = useState38(() => !document.documentElement.classList.contains("ze-static-thumbs"));
     const onRef = useRef29(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
-    useEffect27(() => {
+    useEffect28(() => {
       const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
       window.addEventListener("zn-display-prefs", listener);
       return () => window.removeEventListener("zn-display-prefs", listener);
@@ -19014,7 +19206,7 @@
       }
       schedule();
     }
-    useEffect27(() => {
+    useEffect28(() => {
       const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
@@ -19030,7 +19222,7 @@
       }
       schedule();
     }, [pages, selectedKey, on]);
-    useEffect27(() => {
+    useEffect28(() => {
       alive.current = true;
       return () => {
         alive.current = false;
@@ -19104,7 +19296,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState38, useRef: useRef30, useEffect: useEffect28 } = React;
+  var { useState: useState39, useRef: useRef30, useEffect: useEffect29 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
@@ -19113,7 +19305,7 @@
     const bodyRef = useRef30(null);
     const scrollDirRef = useRef30(0);
     const rafRef = useRef30(null);
-    const [dragOverInfo, setDragOverInfo] = useState38(null);
+    const [dragOverInfo, setDragOverInfo] = useState39(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -19132,7 +19324,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect28(() => stopAutoScroll, []);
+    useEffect29(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -19243,21 +19435,21 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState39, useEffect: useEffect29 } = React;
+  var { useState: useState40, useEffect: useEffect30 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState39(false);
-    const [alt, setAlt] = useState39(false);
-    useEffect29(() => {
+    const [shift, setShift] = useState40(false);
+    const [alt, setAlt] = useState40(false);
+    useEffect30(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect29(() => {
+    useEffect30(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect29(() => () => {
+    useEffect30(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
     }, []);
@@ -19394,9 +19586,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState40 } = React;
+  var { useState: useState41 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState40(null);
+    const [customizing, setCustomizing] = useState41(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -19410,7 +19602,8 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "d6cd0a5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    const canReadFonts = canReadSystemFonts();
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "fb84d27"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -19561,6 +19754,30 @@
         onClick: dialogs.handleLoadProjectClick,
         hint: "Reopen a saved ZEditor project file"
       }
+    ), /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-row" + (pages.length === 0 || !canReadFonts ? " disabled" : ""), title: canReadFonts ? "Saves the fonts this project uses inside the file, so it looks the same on a computer without them" : "Needs a browser that can read this computer's fonts (Chrome or Edge)" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, "Embed system fonts"), /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, "in the saved project")), /* @__PURE__ */ React.createElement("label", { className: "toggle-switch" }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "checkbox",
+        checked: view.embedFonts,
+        disabled: pages.length === 0 || !canReadFonts,
+        onChange: (e) => {
+          if (!e.target.checked) view.setEmbedFonts(false);
+          else if (fontLicenceSeen()) view.setEmbedFonts(true);
+          else {
+            close();
+            dialogs.openEmbedFonts(true);
+          }
+        }
+      }
+    ), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
+        label: "Embed Fonts…",
+        disabled: pages.length === 0,
+        onClick: () => dialogs.openEmbedFonts(false),
+        hint: "See which fonts this project uses, which are inside the file, and choose which system fonts to embed"
+      }
     ))), /* @__PURE__ */ React.createElement(TopMenu, { label: exporting ? "Exporting…" : sendingToArranger ? "Sending…" : "Export", solid: true }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
@@ -19632,7 +19849,7 @@
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
     const exporter = useExport({ doc, status, view, project, selection });
-    const groupFiles = useGroupFiles({ doc, edits, selection, status });
+    const groupFiles = useGroupFiles({ doc, edits, selection, status, view });
     useImageHandoff({ doc, files, edits, selection });
     const zoom = useZoom();
     useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 });
@@ -19665,7 +19882,7 @@
       },
       onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file.")
     }), []);
-    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen);
+    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
     useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
@@ -19861,7 +20078,7 @@
         onOpenPdf: files.handleLoadClick,
         onClose: () => setWelcomeDismissed(true)
       }
-    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(EmbedFontsDialog, { open: dialogs.embedFontsOpen, startConfirm: dialogs.embedFontsAskFirst, onClose: () => dialogs.closeEmbedFonts(), pages: doc.pages, view }), /* @__PURE__ */ React.createElement(
       ConfirmDialog,
       {
         step: dialogs.confirmAction ? dialogs.confirmStep : 0,

@@ -21,7 +21,7 @@ export function itemsBounds(items) {
 }
 
 // The .znow text for `items` (bottom layer first, as on the page), called `name`.
-export function serializeGroup(name, items) {
+export function serializeGroup(name, items, embeddedFonts = []) {
   const b = itemsBounds(items);
   if (!b) throw new Error("There is nothing in that group to save.");
   const dx = PAD - b.x, dy = PAD - b.y;
@@ -35,7 +35,7 @@ export function serializeGroup(name, items) {
     width: Math.ceil(b.width + 2 * PAD) / MAIN_SCALE, height: Math.ceil(b.height + 2 * PAD) / MAIN_SCALE,
     annotations: moved,
   };
-  return serializeProject({ title: name, pdfDocs: {}, pages: [page], textStyles: [], settings: {} });
+  return serializeProject({ title: name, pdfDocs: {}, pages: [page], textStyles: [], settings: {}, embeddedFonts });
 }
 
 // The items (all pages, bottom layer first) and the name of a .znow file. Registers its fonts on the way.
