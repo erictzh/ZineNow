@@ -78,3 +78,13 @@ export const canReadSystemFonts = () => typeof window !== "undefined" && "queryL
 const SEEN_KEY = "zeditor.fontEmbedLicenceSeen";
 export function fontLicenceSeen() { try { return localStorage.getItem(SEEN_KEY) === "1"; } catch (e) { return false; } }
 export function setFontLicenceSeen() { try { localStorage.setItem(SEEN_KEY, "1"); } catch (e) { /* asked again next time */ } }
+
+// Before saving with "Embed system fonts" on: if the text uses system fonts and the browser has not been asked yet, ask now (the Save click is the user action the
+// browser needs for its permission question). Does nothing when the answer is already known.
+export async function ensureFontAccess(pages) {
+  if (!canReadSystemFonts() || !usedFaces(pages).some((f) => faceKind(f) === "system")) return;
+  try {
+    const state = await navigator.permissions.query({ name: "local-fonts" });
+    if (state.state === "prompt") await window.queryLocalFonts();
+  } catch (e) { /* refused, or this browser cannot say: the save names the fonts it could not embed */ }
+}
