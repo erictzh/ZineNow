@@ -5,6 +5,8 @@ import { aiSaved, downloadPlan } from "../../../shared/js/ai/manager.js";
 import { ORT_VERSION } from "../../../shared/js/ai/runtime.js";
 import { MODEL_ROWS } from "../../../shared/js/ai/modelList.js";
 import { OCR_ENGINE } from "../../../shared/js/ai/ocrLangs.js";
+import { licenceUrl } from "../../../shared/js/ai/licences.js";
+import { ABOUT, POLICY_URL } from "../../../shared/js/about.js";
 import { ocrEngineSaved } from "../../../shared/js/ai/ocr.js";
 import { modelBox, modelControl, onModelsChanged } from "./models.js";
 
@@ -43,8 +45,18 @@ export function createModelsPage(host) {
     const tHead = el("div", "model-title"); tHead.append(el("b", "", OCR_ENGINE.name), el("span", "model-size", "about " + OCR_ENGINE.mb + " MB"));
     const tFacts = el("span", "hint", OCR_ENGINE.licence + " licence. Downloaded from " + OCR_ENGINE.repo + " the first time you download a language, then kept. It is removed automatically when the last language is deleted.");
     const tState = el("span", "hint");
-    const tBox = el("div", "model-box"); tBox.append(tHead, tFacts, tState); tess.append(tBox);
+    const tLic = el("span", "hint model-licence"); tLic.append("Made by " + OCR_ENGINE.author + " · Licence ");
+    const tA = el("a", "", OCR_ENGINE.licence); tA.href = licenceUrl(OCR_ENGINE.licence); tA.target = "_blank"; tA.rel = "noopener"; tLic.append(tA, " · ");
+    const tH = el("a", "", "Project page"); tH.href = OCR_ENGINE.homepage; tH.target = "_blank"; tH.rel = "noopener"; tLic.append(tH);
+    const tBox = el("div", "model-box"); tBox.append(tHead, tFacts, tLic, tState); tess.append(tBox);
     host.append(tess);
+
+    // the source code and the notes about what this is built on (small, at the bottom)
+    const foot = el("p", "hint model-about");
+    foot.append(ABOUT.text + " ");
+    for (const l of [...ABOUT.links, { label: "AI model policy", href: POLICY_URL }]) { const a = el("a", "", l.label); a.href = l.href; a.target = "_blank"; a.rel = "noopener"; foot.append(a, " · "); }
+    foot.lastChild.remove();
+    host.append(foot);
 
     async function updateTotals() {
       const saved = await aiSaved();

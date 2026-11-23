@@ -28,6 +28,7 @@ const tidy = (v) => Math.round(v * 1000) / 1000;
  *                                     it wants once that spot exists (ZEditor, after React renders).
  *                                     Either way the settings apply at once.
  * @param {Array} [options.sliders]    { key, label, min, max, step, initial, unit, cssVar, cssValue(v) }
+ * @param {{text: string, links: {label, href}[]}} [options.about]  Small grey text with links at the bottom of the pop-up.
  * @param {Array} [options.groups]     { title, checks: [{ key, label, hint, htmlClass, showMeans }],
  *                                       choices: [{ label, hint, initial, flags: [{ key, htmlClass }],
  *                                                   options: [{ label, values: { key: bool } }] }] }
@@ -188,6 +189,12 @@ export function installDisplaySettings(options) {
     '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
     "</svg>";
 
+  if (options.about) { // a small grey line with links at the bottom of the pop-up (e.g. where the source code is)
+    const about = el("div", "zn-display-about");
+    about.append(options.about.text + " ");
+    (options.about.links || []).forEach((l, i) => { if (i) about.append(" · "); const a = el("a", "", { href: l.href, target: "_blank", rel: "noopener" }); a.textContent = l.label; about.append(a); });
+    panel.appendChild(about);
+  }
   wrap.append(panel, gear);
   if (floating) document.body.appendChild(wrap);
   else if (options.mount) options.mount.appendChild(wrap);

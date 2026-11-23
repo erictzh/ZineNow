@@ -9,10 +9,12 @@
 // settings saved then still apply.
 
 import { installDisplaySettings } from "../../../../shared/js/displaySettings.js";
+import { ABOUT } from "../../../../shared/js/about.js";
 
 export function installMd2pdfDisplaySettings() {
   return installDisplaySettings({
     storageKey: "md2ebook-ui-prefs",
+    about: ABOUT, // where the source code is (a small line in the gear pop-up)
     sliders: [
       { key: "editorFontSize", label: "Editor text size", min: 10, max: 28, step: 0.5, initial: 13.5, unit: "px", cssVar: "--md2ebook-editor-font-size", cssValue: (v) => v + "px" },
       { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },

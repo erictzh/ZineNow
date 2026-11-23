@@ -7,6 +7,7 @@ import { OCR_LANGS, OCR_ENGINE_MB } from "../../../shared/js/ai/ocrLangs.js";
 import { deleteOcrLang, downloadOcr, ocrEngineSaved, ocrLangSaved } from "../../../shared/js/ai/ocr.js";
 import { MODEL_ROWS } from "../../../shared/js/ai/modelList.js";
 import { confirmDialog, rich } from "./dialog.js";
+import { OPENNESS, licenceUrl } from "../../../shared/js/ai/licences.js";
 
 const controls = new Map();
 const globalListeners = new Set();
@@ -103,7 +104,16 @@ export function modelBox(id, { compact = false, deletable = true, showSize = fal
   if (showSize) title.append(el("span", "model-size", sizeLabel(m.mb)));
   const facts = el("span", "hint", (compact ? "" : m.about + " ") + m.licence + " licence (free and open source). About " + Math.round(m.mb * 10) / 10 + " MB, downloaded from " + m.repo + ". Runs on your device; nothing is uploaded.");
   const live = el("div", "model-live");
-  box.append(title, facts, live);
+  box.append(title, facts);
+  if (showSize && m.author) { // the Models page: who made it, the licence (a link to its text), how open it is, and the project page
+    const l = el("span", "hint model-licence");
+    l.append("Made by " + m.author + " · Licence ");
+    const a = el("a", "", m.licence); a.href = licenceUrl(m.licence); a.target = "_blank"; a.rel = "noopener"; l.append(a);
+    l.append(" · " + OPENNESS[m.openness || "weights"] + " · ");
+    const h = el("a", "", "Project page"); h.href = m.homepage; h.target = "_blank"; h.rel = "noopener"; l.append(h);
+    box.append(l);
+  }
+  box.append(live);
   function draw(s) {
     live.textContent = "";
     if (s.phase === "checking") live.append(el("span", "hint", "Checking…"));

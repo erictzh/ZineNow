@@ -5,7 +5,7 @@ export const TJS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSIO
 export const WORKER_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/worker.min.js";
 export const CORE_URL = "https://cdn.jsdelivr.net/npm/tesseract.js-core@" + CORE_VERSION;
 export const OCR_ENGINE_MB = 4.1; // the reader's code (the core about 3.9 MB, the worker 0.12 MB, the loader 0.07 MB)
-export const OCR_ENGINE = { name: "Tesseract.js reader", licence: "Apache-2.0", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION, mb: OCR_ENGINE_MB };
+export const OCR_ENGINE = { name: "Tesseract.js reader", licence: "Apache-2.0", author: "Naptha (Tesseract.js)", homepage: "https://github.com/naptha/tesseract.js", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION, mb: OCR_ENGINE_MB };
 
 export const OCR_LANGS = [
   { code: "eng", name: "English", mb: 2.95 },
@@ -23,6 +23,7 @@ export function ocrModel(l) {
   return {
     key: "ocr-" + l.code, name: l.name, kind: "Text reading (OCR)", label: l.name + " (Text reading)",
     mb: l.mb, licence: "Apache-2.0", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/@tesseract.js-data/" + l.code,
+    author: "The Tesseract OCR project", homepage: "https://github.com/tesseract-ocr/tessdata_best", openness: "weights",
     about: "The " + l.name + " language file for the Tesseract text reader.",
   };
 }

@@ -341,7 +341,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "b831faf" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "5220a47" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -812,6 +812,9 @@
       licence: "Apache-2.0",
       host: "huggingface.co",
       repo: "huggingface.co/edgetools/u2netp",
+      author: "Xuebin Qin et al. (U²-Net)",
+      homepage: "https://github.com/xuebinqin/U-2-Net",
+      openness: "weights",
       url: "https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx",
       about: "Any single subject: an object, an animal or a person. Edges are a little rough."
     },
@@ -824,6 +827,9 @@
       licence: "Apache-2.0",
       host: "huggingface.co",
       repo: "huggingface.co/Xenova/modnet",
+      author: "Zhanghan Ke et al. (MODNet)",
+      homepage: "https://github.com/ZHKKKe/MODNet",
+      openness: "weights",
       url: "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx",
       about: "Photos of people (head and shoulders): soft hair edges. Not for objects or animals."
     }
@@ -1036,6 +1042,9 @@
     licence: "MIT",
     host: "huggingface.co",
     repo: "huggingface.co/opencv/face_detection_yunet",
+    author: "Shiqi Yu et al. (YuNet, OpenCV Zoo)",
+    homepage: "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet",
+    openness: "weights",
     url: "https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",
     about: "Finds where faces are (boxes only). It does not recognise or identify anyone."
   };
@@ -1165,6 +1174,9 @@
     licence: "Apache-2.0",
     host: "huggingface.co",
     repo: "huggingface.co/Acly/MobileSAM",
+    author: "Chaoning Zhang et al. (MobileSAM)",
+    homepage: "https://github.com/ChaoningZhang/MobileSAM",
+    openness: "weights",
     encoderUrl: "https://huggingface.co/Acly/MobileSAM/resolve/main/mobile_sam_image_encoder.onnx",
     encoderMb: 28.2,
     decoderUrl: "https://huggingface.co/Acly/MobileSAM/resolve/main/sam_mask_decoder_single.onnx",
@@ -1316,6 +1328,9 @@
     licence: "BSD-3-Clause",
     host: "huggingface.co",
     repo: "huggingface.co/OwlMaster/AllFilesRope",
+    author: "Xintao Wang et al. (Real-ESRGAN)",
+    homepage: "https://github.com/xinntao/Real-ESRGAN",
+    openness: "weights",
     url: "https://huggingface.co/OwlMaster/AllFilesRope/resolve/main/realesr-general-x4v3.onnx",
     about: "Enlarges a picture 2 or 4 times and adds believable detail. It works piece by piece, so big pictures are slow."
   };
@@ -1626,7 +1641,7 @@
   var WORKER_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/worker.min.js";
   var CORE_URL = "https://cdn.jsdelivr.net/npm/tesseract.js-core@" + CORE_VERSION;
   var OCR_ENGINE_MB = 4.1;
-  var OCR_ENGINE = { name: "Tesseract.js reader", licence: "Apache-2.0", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION, mb: OCR_ENGINE_MB };
+  var OCR_ENGINE = { name: "Tesseract.js reader", licence: "Apache-2.0", author: "Naptha (Tesseract.js)", homepage: "https://github.com/naptha/tesseract.js", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION, mb: OCR_ENGINE_MB };
   var OCR_LANGS = [
     { code: "eng", name: "English", mb: 2.95 },
     { code: "msa", name: "Malay (Bahasa Melayu)", mb: 1.18 },
@@ -1647,6 +1662,9 @@
       licence: "Apache-2.0",
       host: "cdn.jsdelivr.net",
       repo: "cdn.jsdelivr.net/npm/@tesseract.js-data/" + l.code,
+      author: "The Tesseract OCR project",
+      homepage: "https://github.com/tesseract-ocr/tessdata_best",
+      openness: "weights",
       about: "The " + l.name + " language file for the Tesseract text reader."
     };
   }
@@ -1831,6 +1849,9 @@
     host: "huggingface.co",
     repo: "huggingface.co/lxfater/inpaint-web",
     url: DEFAULT_MODEL_URL,
+    author: "Picsart AI Research (MI-GAN)",
+    homepage: "https://github.com/Picsart-AI-Research/MI-GAN",
+    openness: "weights",
     about: "Fills the area you mark with what would plausibly be behind it."
   };
   var MODEL_ROWS = [
@@ -1907,6 +1928,13 @@
     }
     return s;
   }
+
+  // shared/js/ai/licences.js
+  var licenceUrl = (spdx) => "https://spdx.org/licenses/" + encodeURIComponent(spdx) + ".html";
+  var OPENNESS = {
+    weights: "Open weights: the model file is free under this licence; the training data and recipe are not included",
+    full: "Fully open: the model file, the training data and the training code are all public"
+  };
 
   // apps/AiToolsLocal/src/models.js
   var controls = /* @__PURE__ */ new Map();
@@ -2022,7 +2050,24 @@
     if (showSize) title.append(el("span", "model-size", sizeLabel(m.mb)));
     const facts = el("span", "hint", (compact ? "" : m.about + " ") + m.licence + " licence (free and open source). About " + Math.round(m.mb * 10) / 10 + " MB, downloaded from " + m.repo + ". Runs on your device; nothing is uploaded.");
     const live = el("div", "model-live");
-    box.append(title, facts, live);
+    box.append(title, facts);
+    if (showSize && m.author) {
+      const l = el("span", "hint model-licence");
+      l.append("Made by " + m.author + " · Licence ");
+      const a = el("a", "", m.licence);
+      a.href = licenceUrl(m.licence);
+      a.target = "_blank";
+      a.rel = "noopener";
+      l.append(a);
+      l.append(" · " + OPENNESS[m.openness || "weights"] + " · ");
+      const h = el("a", "", "Project page");
+      h.href = m.homepage;
+      h.target = "_blank";
+      h.rel = "noopener";
+      l.append(h);
+      box.append(l);
+    }
+    box.append(live);
     function draw(s) {
       live.textContent = "";
       if (s.phase === "checking") live.append(el("span", "hint", "Checking…"));
@@ -2060,6 +2105,17 @@
     box.dispose = off;
     return box;
   }
+
+  // shared/js/about.js
+  var REPO_URL = "https://github.com/erictzh/ZineNow";
+  var ABOUT = {
+    text: "ZineNow is free software (AGPL-3.0-or-later).",
+    links: [
+      { label: "Source code", href: REPO_URL },
+      { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" }
+    ]
+  };
+  var POLICY_URL = REPO_URL + "/blob/main/docs/AI-MODELS-POLICY.md";
 
   // apps/AiToolsLocal/src/modelsPage.js
   var el2 = (tag, cls, text) => {
@@ -2103,10 +2159,33 @@
       tHead.append(el2("b", "", OCR_ENGINE.name), el2("span", "model-size", "about " + OCR_ENGINE.mb + " MB"));
       const tFacts = el2("span", "hint", OCR_ENGINE.licence + " licence. Downloaded from " + OCR_ENGINE.repo + " the first time you download a language, then kept. It is removed automatically when the last language is deleted.");
       const tState = el2("span", "hint");
+      const tLic = el2("span", "hint model-licence");
+      tLic.append("Made by " + OCR_ENGINE.author + " · Licence ");
+      const tA = el2("a", "", OCR_ENGINE.licence);
+      tA.href = licenceUrl(OCR_ENGINE.licence);
+      tA.target = "_blank";
+      tA.rel = "noopener";
+      tLic.append(tA, " · ");
+      const tH = el2("a", "", "Project page");
+      tH.href = OCR_ENGINE.homepage;
+      tH.target = "_blank";
+      tH.rel = "noopener";
+      tLic.append(tH);
       const tBox = el2("div", "model-box");
-      tBox.append(tHead, tFacts, tState);
+      tBox.append(tHead, tFacts, tLic, tState);
       tess.append(tBox);
       host.append(tess);
+      const foot = el2("p", "hint model-about");
+      foot.append(ABOUT.text + " ");
+      for (const l of [...ABOUT.links, { label: "AI model policy", href: POLICY_URL }]) {
+        const a = el2("a", "", l.label);
+        a.href = l.href;
+        a.target = "_blank";
+        a.rel = "noopener";
+        foot.append(a, " · ");
+      }
+      foot.lastChild.remove();
+      host.append(foot);
       async function updateTotals() {
         const saved = await aiSaved();
         const plan = await downloadPlan();

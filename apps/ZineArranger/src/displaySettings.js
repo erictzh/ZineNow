@@ -6,10 +6,12 @@
 // No text size (there is no text box) and no dark paper (left out by choice).
 
 import { installDisplaySettings } from "../../../shared/js/displaySettings.js";
+import { ABOUT } from "../../../shared/js/about.js";
 
 export function installArrangerDisplaySettings() {
     return installDisplaySettings({
         storageKey: "zinearranger.displayPrefs",
+        about: ABOUT, // where the source code is (a small line in the gear pop-up)
         sliders: [
             { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: function (v) { return String(v / 100); } },
         ],

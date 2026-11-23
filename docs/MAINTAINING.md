@@ -23,6 +23,7 @@ pages: no server is needed, and every page works opened straight from disk.
 | **ZEditor** | Edit PDF pages: text, images, shapes, drawing, filters, page management. Saves `.znow` projects. | `apps/ZEditor/src/` (React) |
 | **Markdown-to-PDF** | Markdown → a paginated PDF book, with typography settings and a live preview. | `apps/Markdown-to-PDF/src/` (React) |
 | **ZineArranger** | Lays a PDF's pages out on printable sheets so they fold into a zine (imposition). | `apps/ZineArranger/src/` (plain JS) |
+| **AI model rules** | Which models may be added (the FOSS check), and the notices. | `docs/AI-MODELS-POLICY.md`, `THIRD-PARTY-NOTICES.md` |
 | **Launcher** | The home page with a card per app. | `index.html`, `launcher/`, `config/apps-config.js` |
 
 **First hour on the project**
