@@ -601,3 +601,5 @@ Tested headless with a stand-in ONNX model only (download flow, dialog, 90 % of 
 - Tested headless with stand-in ONNX models: off by default (nothing AI visible), gear pop-up Cancel / Enable, remembered after reload, both models download / run (90 % / 98 % made see-through at a 50 % cut-off) / undo, deleting MODNet keeps U²-Netp, typing 0.05 and the + button (0.125). Real models: both were confirmed working in `labs/ai-bg-benchmark` by the user (CPU ~1.2-1.6 s on a PC); not yet tried inside ZEditor.
 
 - 2026-11-23: the plan for turning Ai Tools (Local) into a hub of six on-device AI tools is in `docs/PLAN-ai-tools-hub.md` (plan only; waiting for the user to choose the layout and say go for Phase 1).
+
+- 2026-11-23: `docs/PLAN-ai-tools-hub.md` now has the decisions (tools list on the left; Phases 1 and 2 together) and a detailed step-by-step breakdown with checkboxes. Still waiting for the user's go before building.
