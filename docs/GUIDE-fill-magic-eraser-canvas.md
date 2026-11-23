@@ -378,6 +378,17 @@ The same job as Remove & fill in ZEditor (take something out of a picture and fi
 - If the result looks smudged, **Undo**, mark slightly differently, and try again. The AI is not random, so pressing the button again on the same marks gives the same result.
 - It is great at removing things from **busy backgrounds**; it is weaker at **people's faces and text**, which it can't know.
 
+## The same AI inside ZEditor (optional download)
+
+ZEditor has the same model built in as a fifth style in the Marquee panel. Set **Marquee Action** to **Remove & fill** and **Style** to **AI (on-device)**:
+
+- **Nothing downloads until you choose.** The **AI model** box says "Not downloaded". Press **Download AI model (about N MB)**, and a short window tells you what is downloaded and from where, that it is a local AI model and nothing leaves your device, and that it may lag a lower-end device. Press **Confirm Download** or **Cancel**.
+- While it downloads you see a progress bar and **Cancel download**.
+- When it is saved, the box says "Downloaded". **Delete model (frees about N MB)** removes it again (after a confirmation).
+- Remove & fill is switched off for this style until the model is downloaded. After that it works like the other styles on **All visible** or **Selected layer**, with **Grow**. There is no "Try another" (the model gives the same answer for the same marks).
+- ZEditor and Ai Tools (Local) are on the same website, so they **share one downloaded copy**: download it in either one and the other can use it. Deleting it in one deletes it for both.
+- The model is only held in memory while you use it, and released after about a minute of not using it, to keep a big document responsive.
+
 ## How it works
 
 ### What an "AI model" is, in plain words

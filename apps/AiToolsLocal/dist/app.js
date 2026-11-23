@@ -223,7 +223,7 @@
     }
   }
 
-  // apps/AiToolsLocal/src/fill.js
+  // shared/js/ai/fill.js
   var MODEL_SIZE = 512;
   var CONTEXT = 1.5;
   function holeBounds(mask, w, h) {
@@ -458,7 +458,7 @@
     return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
   }
 
-  // apps/AiToolsLocal/src/modelStore.js
+  // shared/js/ai/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
   var CACHE_NAME = "zinenow-ai-tools-model";
   async function isModelSaved(url) {
@@ -468,7 +468,7 @@
       return false;
     }
   }
-  async function getModelBytes(url, onProgress) {
+  async function getModelBytes(url, onProgress, signal) {
     let cache = null;
     try {
       cache = await caches.open(CACHE_NAME);
@@ -478,7 +478,7 @@
       const saved = await cache.match(url);
       if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
     }
-    const res = await fetch(url);
+    const res = await fetch(url, signal ? { signal } : void 0);
     if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
     const total = Number(res.headers.get("content-length")) || 0;
     const reader = res.body.getReader();
@@ -512,7 +512,7 @@
     }
   }
 
-  // apps/AiToolsLocal/src/runtime.js
+  // shared/js/ai/runtime.js
   var ORT_VERSION = "1.31.1";
   var ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
   var ortPromise = null;

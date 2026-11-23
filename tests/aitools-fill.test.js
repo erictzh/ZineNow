@@ -1,5 +1,5 @@
 // The AI remover's picture maths (apps/AiToolsLocal/src/fill.js).
-import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, findMaskSign, groupMask, groupPieces, holeBounds, labelPieces, outputToRgba, paste, windowMask } from "../apps/AiToolsLocal/src/fill.js";
+import { MODEL_SIZE, blendWeights, buildInput, cropWindow, dilate, findMaskSign, groupMask, groupPieces, holeBounds, labelPieces, outputToRgba, paste, windowMask } from "../shared/js/ai/fill.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 

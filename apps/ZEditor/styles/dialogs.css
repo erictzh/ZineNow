@@ -134,3 +134,7 @@ button.ze-welcome-option:hover { border-color: var(--ui-accent); background: var
 .ze-welcome-option-text > span { font-size: 12px; color: var(--ui-fg-muted); line-height: 1.4; }
 .ze-welcome-open-row { display: flex; gap: 8px; margin-top: 8px; }
 .ze-welcome-open-row .ze-format-select { flex: 1 1 auto; min-width: 0; }
+
+/* The AI model download / delete dialog: a short list. */
+.ze-ai-points { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+.ze-ai-points li { margin: 0 0 8px; }

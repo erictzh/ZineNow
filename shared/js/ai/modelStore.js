@@ -8,14 +8,14 @@ export async function isModelSaved(url) {
 }
 
 // The model's bytes. `onProgress(doneBytes, totalBytes)` while it downloads; not called when it is already saved.
-export async function getModelBytes(url, onProgress) {
+export async function getModelBytes(url, onProgress, signal) {
   let cache = null;
   try { cache = await caches.open(CACHE_NAME); } catch (e) { /* no cache storage: it downloads every time */ }
   if (cache) {
     const saved = await cache.match(url);
     if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
   }
-  const res = await fetch(url);
+  const res = await fetch(url, signal ? { signal } : undefined);
   if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
   const total = Number(res.headers.get("content-length")) || 0;
   const reader = res.body.getReader();
