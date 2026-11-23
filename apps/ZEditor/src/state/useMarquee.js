@@ -33,6 +33,12 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status, histor
   async function makeLayer(mode, settingsOverride) {
     const { doc: d, selection: sel, edits: ed, status: st, region: m } = latest.current;
     const settings = settingsOverride ? { ...latest.current.settings, ...settingsOverride } : latest.current.settings;
+    // a fill (or a cut filled from the surroundings) needs a style picked first: none is chosen until the user chooses
+    const action = mode || settings.action;
+    if ((action === "fill" || (action === "cut" && settings.cutLeaves === "surround")) && !["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle)) {
+      latest.current.status.setNotice("Choose how to fill first (Marquee panel: Remove & fill, Style list).");
+      return;
+    }
     if (busyRef.current || !d.selectedPage) return;
     if (!isUsableMarquee(m)) { st.setNotice("Draw a marquee on the page first (Marquee tool, M)."); return; }
     const page = d.selectedPage, pageIdx = d.selectedIdx;
