@@ -587,3 +587,5 @@ Tested headless with a stand-in ONNX model only (download flow, dialog, 90 % of 
 - 2026-11-23: `labs/ai-bg-benchmark` bug fixed: MODNet got pixel values 0..255 instead of 0..1 (the divisor was 1 unless the model scales by its brightest value), so its cut-out was empty on a real photo. U²-Netp was unaffected. Real-photo result for U²-Netp (CPU, ~1.4 s): clean face and hair outline, but parts of a patterned shirt were dropped (a typical weakness; the cut-off slider helps). Both models' WebGPU runs fail on that PC (unsupported kernels), so the CPU path (used by the ZEditor feature) is right.
 
 - `labs/ai-bg-benchmark` shows a **build number** next to its title and at the top of the report (now build 3). Bump it in the page whenever the page changes, so the user can tell a refresh happened.
+
+- `labs/ai-bg-benchmark` build 4: the Edge cut-off slider goes 0-100 (was 5-95); the soft edge narrows near the ends so 100 keeps only the surest pixels and 0 keeps everything.
