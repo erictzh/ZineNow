@@ -42,11 +42,15 @@ export async function segmentCanvas(canvas, key, onStatus) {
   sx.imageSmoothingQuality = "high"; sx.drawImage(canvas, 0, 0, prep.size, prep.size);
   const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
   onStatus && onStatus("Finding the subject…");
+  const t0 = performance.now();
   const out = await session.run({ [session.inputNames[0]]: input });
   const first = out[session.outputNames[0]];
   const side = Math.round(Math.sqrt(first.data.length));
   touch();
-  return { mask: segMask(first.data, prep.mask), side };
+  let rawMin = Infinity, rawMax = -Infinity; for (let i = 0; i < first.data.length; i++) { const v = first.data[i]; if (v < rawMin) rawMin = v; if (v > rawMax) rawMax = v; }
+  // `info`: what the model took and gave, for the debug window
+  const info = { model: key, prep: prep.mask + ", size " + prep.size, inputName: session.inputNames[0], outputNames: session.outputNames.join(","), outputDims: first.dims.join("x"), outputType: first.type, rawMin, rawMax, runMs: Math.round(performance.now() - t0) };
+  return { mask: segMask(first.data, prep.mask), side, info };
 }
 
 // A copy of `canvas` where only the subject is left (everything else see-through). cutoff 0..1, soft 0..1 (see segment.js softCut).

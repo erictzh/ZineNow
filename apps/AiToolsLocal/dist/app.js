@@ -223,6 +223,162 @@
     }
   }
 
+  // apps/AiToolsLocal/src/debug.js
+  var lines = [];
+  var MAX_LINES = 600;
+  var stamp = () => (/* @__PURE__ */ new Date()).toISOString().slice(11, 23);
+  var num = (v) => typeof v === "number" ? Number.isInteger(v) ? String(v) : Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : String(Math.round(v * 1e6) / 1e6) : String(v);
+  function fmt(obj, indent = "  ") {
+    const out = [];
+    for (const [k, v] of Object.entries(obj)) {
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        out.push(indent + k + ":");
+        out.push(fmt(v, indent + "  "));
+      } else if (Array.isArray(v)) out.push(indent + k + ": " + v.map((x) => x && typeof x === "object" ? Object.entries(x).map(([a, b]) => a + " " + num(b)).join(" ") : num(x)).join(" | "));
+      else out.push(indent + k + ": " + num(v));
+    }
+    return out.join("\n");
+  }
+  var debug = {
+    log(text) {
+      lines.push(stamp() + "  " + text);
+      if (lines.length > MAX_LINES) lines.shift();
+      if (refresh) refresh();
+    },
+    section(title, obj) {
+      this.log(title + "\n" + fmt(obj));
+    },
+    // like section(), but at the very top (the device information comes first)
+    head(title, obj) {
+      lines.unshift(stamp() + "  " + title + "\n" + fmt(obj));
+      if (refresh) refresh();
+    },
+    clear() {
+      lines.length = 0;
+      if (refresh) refresh();
+    },
+    get body() {
+      return lines.join("\n");
+    }
+  };
+  var refresh = null;
+  function alphaStats(canvas) {
+    const w = canvas.width, h = canvas.height;
+    const d = canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    let clear = 0, part = 0, solid = 0;
+    for (let i = 3; i < d.length; i += 4) {
+      const a = d[i];
+      if (a === 0) clear++;
+      else if (a === 255) solid++;
+      else part++;
+    }
+    const n = w * h;
+    return { size: w + "x" + h, transparentPct: Math.round(1e3 * clear / n) / 10, partlyPct: Math.round(1e3 * part / n) / 10, opaquePct: Math.round(1e3 * solid / n) / 10 };
+  }
+  async function describePng(blob) {
+    const head = new Uint8Array(await blob.slice(0, 33).arrayBuffer());
+    const colorType = head.length > 25 ? head[25] : -1;
+    const names = { 0: "grey", 2: "RGB (no transparency)", 3: "palette", 4: "grey + alpha", 6: "RGBA (has transparency)" };
+    const out = { bytes: blob.size, type: blob.type, pngColourType: colorType + " = " + (names[colorType] || "unknown") };
+    try {
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement("canvas");
+      c.width = bmp.width;
+      c.height = bmp.height;
+      c.getContext("2d").drawImage(bmp, 0, 0);
+      out.decoded = alphaStats(c);
+    } catch (e) {
+      out.decoded = "could not decode: " + e.message;
+    }
+    return out;
+  }
+  function installDebug({ button, getState, getCanvas }) {
+    const win = document.createElement("div");
+    win.className = "debug-win";
+    win.hidden = true;
+    const bar = document.createElement("div");
+    bar.className = "debug-bar";
+    const title = document.createElement("b");
+    title.textContent = "Debug (copy this and send it)";
+    const mk = (label, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    const ta = document.createElement("textarea");
+    ta.readOnly = true;
+    ta.spellcheck = false;
+    const note = document.createElement("span");
+    note.className = "hint";
+    const copy = mk("Copy", async () => {
+      try {
+        await navigator.clipboard.writeText(ta.value);
+        note.textContent = "Copied.";
+      } catch (e) {
+        ta.focus();
+        ta.select();
+        note.textContent = document.execCommand && document.execCommand("copy") ? "Copied." : "Select the text and copy it by hand.";
+      }
+    });
+    bar.append(title, copy, mk("Snapshot", () => snapshot()), mk("Clear", () => {
+      debug.clear();
+      header();
+    }), mk("Close", () => toggle(false)), note);
+    win.append(bar, ta);
+    document.body.append(win);
+    refresh = () => {
+      ta.value = debug.body;
+      ta.scrollTop = ta.scrollHeight;
+    };
+    async function header() {
+      const info = {
+        app: "Ai Tools (Local) build " + (true ? "2b31b91" : "?"),
+        time: (/* @__PURE__ */ new Date()).toISOString(),
+        browser: navigator.userAgent,
+        screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
+        cpuThreads: navigator.hardwareConcurrency || "?",
+        memoryGB: navigator.deviceMemory || "?",
+        crossOriginIsolated: Boolean(self.crossOriginIsolated),
+        webgpu: Boolean(navigator.gpu),
+        online: navigator.onLine,
+        serviceWorker: navigator.serviceWorker && navigator.serviceWorker.controller ? "controlling this page" : "none"
+      };
+      try {
+        if (navigator.storage && navigator.storage.estimate) {
+          const e = await navigator.storage.estimate();
+          info.storage = Math.round((e.usage || 0) / 1048576) + " MB used of " + Math.round((e.quota || 0) / 1048576) + " MB";
+        }
+      } catch (e) {
+      }
+      debug.head("== Ai Tools (Local) debug ==", info);
+    }
+    async function snapshot() {
+      debug.section("Snapshot", { ...getState ? getState() : {}, picture: getCanvas && getCanvas() && getCanvas().width ? alphaStats(getCanvas()) : "no picture" });
+    }
+    let first = true;
+    async function toggle(open) {
+      win.hidden = !open;
+      document.body.classList.toggle("debug-open", open);
+      if (open && first) {
+        first = false;
+        await header();
+        await snapshot();
+      } else if (open) await snapshot();
+      refresh();
+    }
+    button.addEventListener("click", () => toggle(win.hidden));
+    document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        toggle(win.hidden);
+      }
+    });
+    window.addEventListener("error", (e) => debug.log("ERROR: " + e.message + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : "")));
+    window.addEventListener("unhandledrejection", (e) => debug.log("ERROR (promise): " + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+  }
+
   // shared/js/ai/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
   var CACHE_NAME = "zinenow-ai-tools-model";
@@ -725,6 +881,64 @@
     for (let i = 0; i < mask.length; i++) out[i] = Math.round(softCut(mask[i], cutoff, soft) * 255);
     return out;
   }
+  var BUCKETS = [1e-4, 1e-3, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0000001];
+  function maskStats(mask) {
+    const n = mask.length;
+    let lo = Infinity, hi = -Infinity, sum = 0;
+    const counts = new Array(BUCKETS.length).fill(0);
+    const BINS = 2e3, hist = new Float64Array(BINS);
+    for (let i = 0; i < n; i++) {
+      const v = mask[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+      sum += v;
+      let b = 0;
+      while (v >= BUCKETS[b]) b++;
+      counts[b]++;
+      hist[Math.min(BINS - 1, Math.floor(v * BINS))]++;
+    }
+    const pct = (p) => {
+      let acc = 0;
+      for (let b = 0; b < BINS; b++) {
+        acc += hist[b];
+        if (acc >= p * n) return (b + 0.5) / BINS;
+      }
+      return 1;
+    };
+    const h2 = new Float64Array(256);
+    for (let b = 0; b < BINS; b++) h2[Math.min(255, Math.floor(b * 256 / BINS))] += hist[b];
+    let total = 0, wsum = 0;
+    for (let b = 0; b < 256; b++) {
+      total += h2[b];
+      wsum += b * h2[b];
+    }
+    let wB = 0, sB = 0, best = 0, bestT = 0;
+    for (let t = 0; t < 256; t++) {
+      wB += h2[t];
+      if (!wB) continue;
+      const wF = total - wB;
+      if (!wF) break;
+      sB += t * h2[t];
+      const mB = sB / wB, mF = (wsum - sB) / wF, between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > best) {
+        best = between;
+        bestT = t;
+      }
+    }
+    return {
+      n,
+      min: lo,
+      max: hi,
+      mean: sum / n,
+      below: BUCKETS.map((lt, i) => ({ lt: i === BUCKETS.length - 1 ? 1 : lt, share: counts[i] / n })),
+      p5: pct(0.05),
+      p25: pct(0.25),
+      p50: pct(0.5),
+      p75: pct(0.75),
+      p95: pct(0.95),
+      otsu: (bestT + 1) / 256
+    };
+  }
 
   // shared/js/ai/bgSession.js
   var IDLE_MS2 = 6e4;
@@ -775,11 +989,19 @@
     sx.drawImage(canvas, 0, 0, prep.size, prep.size);
     const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
     onStatus && onStatus("Finding the subject…");
+    const t0 = performance.now();
     const out = await session.run({ [session.inputNames[0]]: input });
     const first = out[session.outputNames[0]];
     const side = Math.round(Math.sqrt(first.data.length));
     touch2();
-    return { mask: segMask(first.data, prep.mask), side };
+    let rawMin = Infinity, rawMax = -Infinity;
+    for (let i = 0; i < first.data.length; i++) {
+      const v = first.data[i];
+      if (v < rawMin) rawMin = v;
+      if (v > rawMax) rawMax = v;
+    }
+    const info = { model: key, prep: prep.mask + ", size " + prep.size, inputName: session.inputNames[0], outputNames: session.outputNames.join(","), outputDims: first.dims.join("x"), outputType: first.type, rawMin, rawMax, runMs: Math.round(performance.now() - t0) };
+    return { mask: segMask(first.data, prep.mask), side, info };
   }
   function cutOutCanvas(canvas, mask, side, cutoff, soft) {
     const m = document.createElement("canvas");
@@ -1007,7 +1229,7 @@
       Object.assign(state, patch);
       emit();
     };
-    async function refresh() {
+    async function refresh2() {
       try {
         const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
         set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
@@ -1021,9 +1243,9 @@
       set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
       try {
         await downloadAi({ which: isFill ? "fill" : "background", model: isFill ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
-        await refresh();
+        await refresh2();
       } catch (e) {
-        await refresh();
+        await refresh2();
         if (!(e && e.name === "AbortError")) set({ error: "The download didn't finish: " + (e && e.message ? e.message : e) });
       } finally {
         abort = null;
@@ -1034,14 +1256,14 @@
     };
     async function remove() {
       await (isFill ? deleteAi() : deleteBg(row.model.key));
-      await refresh();
+      await refresh2();
     }
-    const ctl = { id, row, state, refresh, download, cancel, remove, subscribe(fn) {
+    const ctl = { id, row, state, refresh: refresh2, download, cancel, remove, subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
     } };
     controls.set(id, ctl);
-    refresh();
+    refresh2();
     return ctl;
   }
   async function askDownload(ctl) {
@@ -1553,7 +1775,7 @@
           picture2.setPointerHandler(null);
         }
         drawCrop();
-        refresh();
+        refresh2();
       }
       const discard = () => {
         found = null;
@@ -1562,7 +1784,7 @@
         picture2.canvas.style.visibility = "visible";
         if (crop && mounted) picture2.setPointerHandler(cropHandler);
         drawCrop();
-        refresh();
+        refresh2();
       };
       function drawPreview() {
         raf = 0;
@@ -1588,13 +1810,15 @@
           ctx2.status("Starting " + bgModel(modelKey).name + "…");
           const t0 = performance.now();
           const { canvas: src, region } = regionCanvas();
-          const { mask, side } = await segmentCanvas(src, modelKey, (t) => ctx2.status(t));
+          const { mask, side, info } = await segmentCanvas(src, modelKey, (t) => ctx2.status(t));
           found = { mask, side, depth: picture2.depth, region, src };
+          ctx2.debug.section("Find subject", { model: bgModel(modelKey).label, picture: picture2.width + "x" + picture2.height, region: region.w + "x" + region.h + " at " + region.x + "," + region.y, maskSide: side, ...info, edgeCutoffPct: cutoff, softEdgePct: soft, maskStats: maskStats(mask) });
           picture2.setPointerHandler(null);
           previewC.style.display = "";
           picture2.canvas.style.visibility = "hidden";
           drawPreview();
           drawCrop();
+          ctx2.debug.section("Preview at the current cut-off", alphaStats(previewC));
           ctx2.status("Found the subject in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s. Adjust the Edge cut-off if needed, then press Apply." + (crop ? " The picture will become the cropped area." : ""), "ok");
         } catch (e) {
           ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
@@ -1609,13 +1833,14 @@
         const cropped = found.region.w !== picture2.width || found.region.h !== picture2.height;
         picture2.replaceWith(out);
         picture2.commit(before);
+        ctx2.debug.section("Apply", { edgeCutoffPct: cutoff, softEdgePct: soft, cropped, pictureNow: alphaStats(picture2.canvas) });
         crop = null;
         drag = null;
         picture2.setPointerHandler(null);
         discard();
         ctx2.status(cropped ? "Applied: the picture is now the cropped area. Undo brings the whole picture back." : "Applied. Not right? Undo, then change the Edge cut-off or the model and find the subject again.", "ok");
       }
-      function refresh() {
+      function refresh2() {
         if (!mounted) return;
         const ready = ctl().state.phase === "ready", has = picture2.loaded, idle = !picture2.busy;
         for (const k of ["cutoff", "soft"]) {
@@ -1668,7 +1893,7 @@
               modelKey = m.key;
               discard();
               drawModelBox();
-              refresh();
+              refresh2();
             });
             lab.append(r, el3("span", "", " " + m.label + " · " + m.mb + " MB"));
             radios.append(lab);
@@ -1694,7 +1919,7 @@
           secC.append(ui.cropToggle, ui.cropBox);
           const sec2 = el3("section");
           sec2.append(el3("h2", "", "3. Cut out"));
-          const num = (label, key, min, max, step, value, onInput) => {
+          const num2 = (label, key, min, max, step, value, onInput) => {
             const f = el3("label", "field");
             f.append(el3("span", "", label));
             const i = document.createElement("input");
@@ -1720,11 +1945,11 @@
             return p;
           };
           ui.need = [need(), need()];
-          const f1 = num("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
+          const f1 = num2("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
           const h1 = el3("p", "hint", "Higher keeps less of the edge (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
-          const f2 = num("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => {
+          const f2 = num2("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
           ui.find = el3("button", "btn-solid big", "Find subject");
@@ -1743,10 +1968,10 @@
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
           panel.append(sec1, secC, sec2);
           drawModelBox();
-          for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh));
+          for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh2));
           if (crop) picture2.setPointerHandler(cropHandler);
           drawCrop();
-          refresh();
+          refresh2();
         },
         unmount() {
           mounted = false;
@@ -1769,7 +1994,7 @@
             picture2.setPointerHandler(null);
             drawCrop();
           }
-          refresh();
+          refresh2();
         },
         primary() {
           if (found) apply();
@@ -2130,6 +2355,7 @@
     const s = $("status");
     s.textContent = text;
     s.className = kind || "";
+    debug.log("[" + (kind || "info") + "] " + text);
   }
   var cameFromZEditor = false;
   var handoffMeta;
@@ -2157,7 +2383,7 @@
     }
     status("Picture opened (" + r.width + " × " + r.height + ")." + (r.shrunk ? " It was shrunk so it fits in memory." : "") + " Pick a tool on the left.");
   }
-  var ctx = { picture, status, openModels: () => select("models") };
+  var ctx = { picture, status, debug, openModels: () => select("models") };
   registerTool(removeObjectTool);
   registerTool(removeBackgroundTool);
   var instances = /* @__PURE__ */ new Map();
@@ -2211,7 +2437,9 @@
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) compare.addEventListener(ev, () => picture.showOriginal(false));
   $("save").addEventListener("click", async () => {
     try {
-      downloadBlob(await picture.toBlob(), picture.name + "-edited.png");
+      const blob = await picture.toBlob();
+      downloadBlob(blob, picture.name + "-edited.png");
+      debug.section("Save PNG (what was exported)", await describePng(blob));
     } catch (e) {
       status("Couldn't save the picture.", "bad");
     }
@@ -2264,6 +2492,17 @@
     if (!tool) return;
     if (tool.onKey && tool.onKey(e)) return;
     if (e.key === "Enter" && picture.loaded && tool.primary) tool.primary();
+  });
+  installDebug({
+    button: $("debug"),
+    getCanvas: () => picture.canvas,
+    getState: () => ({
+      pictureLoaded: picture.loaded,
+      pictureSize: picture.width + "x" + picture.height,
+      undoSteps: picture.depth,
+      tool: active ? active.id : "none",
+      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet"].map((id) => [id, modelControl(id).state.phase]))
+    })
   });
   select("remove-object");
 })();

@@ -84,3 +84,10 @@ button[hidden] { display: none; }
   .center { flex: 1 1 46%; min-height: 220px; }
   .panel { flex: 1 1 42%; border-left: 0; border-top: 1px solid var(--ui-border); }
 }
+
+/* the debug window: a sheet along the bottom with copyable text */
+.debug-win { position: fixed; left: 0; right: 0; bottom: 0; height: 42vh; z-index: 90000; display: flex; flex-direction: column; background: var(--ui-bg-alt); border-top: 2px solid var(--ui-accent); }
+.debug-win[hidden] { display: none; }
+.debug-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; }
+.debug-win textarea { flex: 1 1 auto; margin: 0 10px 10px; resize: none; background: #100d0c; color: #e9e2de; border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px; font: 12px/1.4 var(--ui-mono, monospace); white-space: pre; overflow: auto; }
+body.debug-open .shell { height: 58vh; }

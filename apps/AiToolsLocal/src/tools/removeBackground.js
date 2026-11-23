@@ -4,6 +4,8 @@
 
 import { BG_MODELS, bgModel } from "../../../../shared/js/ai/bgModel.js";
 import { cutOutCanvas, segmentCanvas } from "../../../../shared/js/ai/bgSession.js";
+import { maskStats } from "../../../../shared/js/ai/segment.js";
+import { alphaStats } from "../debug.js";
 import { wrapNumberInput } from "../../../../shared/js/numberFields.js";
 import { modelBox, modelControl } from "../models.js";
 
@@ -123,11 +125,13 @@ export const removeBackgroundTool = {
         ctx.status("Starting " + bgModel(modelKey).name + "…");
         const t0 = performance.now();
         const { canvas: src, region } = regionCanvas();
-        const { mask, side } = await segmentCanvas(src, modelKey, (t) => ctx.status(t));
+        const { mask, side, info } = await segmentCanvas(src, modelKey, (t) => ctx.status(t));
         found = { mask, side, depth: picture.depth, region, src };
+        ctx.debug.section("Find subject", { model: bgModel(modelKey).label, picture: picture.width + "x" + picture.height, region: region.w + "x" + region.h + " at " + region.x + "," + region.y, maskSide: side, ...info, edgeCutoffPct: cutoff, softEdgePct: soft, maskStats: maskStats(mask) });
         picture.setPointerHandler(null);
         previewC.style.display = ""; picture.canvas.style.visibility = "hidden";
         drawPreview(); drawCrop();
+        ctx.debug.section("Preview at the current cut-off", alphaStats(previewC));
         ctx.status("Found the subject in " + ((performance.now() - t0) / 1000).toFixed(1) + " s. Adjust the Edge cut-off if needed, then press Apply." + (crop ? " The picture will become the cropped area." : ""), "ok");
       } catch (e) { ctx.status("Something went wrong: " + (e && e.message ? e.message : e), "bad"); }
       finally { picture.setBusy(false); }
@@ -139,6 +143,7 @@ export const removeBackgroundTool = {
       const cropped = found.region.w !== picture.width || found.region.h !== picture.height;
       picture.replaceWith(out); // the whole picture, or just the cropped area (the picture then has that size)
       picture.commit(before);
+      ctx.debug.section("Apply", { edgeCutoffPct: cutoff, softEdgePct: soft, cropped: cropped, pictureNow: alphaStats(picture.canvas) });
       crop = null; drag = null; picture.setPointerHandler(null);
       discard();
       ctx.status(cropped ? "Applied: the picture is now the cropped area. Undo brings the whole picture back." : "Applied. Not right? Undo, then change the Edge cut-off or the model and find the subject again.", "ok");
