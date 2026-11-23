@@ -9,7 +9,7 @@ ZineNow is free software under the **GNU AGPL v3 or later** (`LICENSE`). The ide
 3. **No use restrictions.** Licences that pass on a list of forbidden uses (the "Responsible AI" family: OpenRAIL, BigScience RAIL, ...) are not free software and are refused.
 4. **Compatible with AGPL-3.0 for anything we copy into our code.** Permissive (MIT, BSD-2/3, Apache-2.0, ISC), MPL-2.0, LGPL, GPL-3.0 and AGPL-3.0 are fine. GPL-2.0-only code is not.
 5. **Provenance written down:** the original project, who hosts the copy we download from (many files come from third-party re-uploads, which can state the wrong licence), and how we checked.
-6. **A line in `THIRD-PARTY-NOTICES.md`** and the licence shown on Ai Tools (Local)'s Models page (name, a link to the licence text, who made it, how open it is, a link to the project).
+6. **A line in `THIRD-PARTY-NOTICES.md`** (which also credits the work ZineNow is based on: ZineArranger by Nash High, MIT) and the licence shown on Ai Tools (Local)'s Models page (name, a link to the licence text, who made it, how open it is, a link to the project).
 
 ## What is accepted and what is refused
 
