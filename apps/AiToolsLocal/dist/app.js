@@ -20,13 +20,13 @@
     const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
-      const timer3 = setTimeout(() => {
+      const timer4 = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
         if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
-        clearTimeout(timer3);
+        clearTimeout(timer4);
         window.removeEventListener("message", onMessage);
         resolve();
       }
@@ -86,16 +86,16 @@
   // shared/js/numberFields.js
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
-  var isNumberBox = (el5) => el5 instanceof HTMLInputElement && el5.type === "number";
-  var allowsEmpty = (el5) => el5.hasAttribute("data-allow-empty");
-  var writeValue = (el5, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el5, text);
+  var isNumberBox = (el6) => el6 instanceof HTMLInputElement && el6.type === "number";
+  var allowsEmpty = (el6) => el6.hasAttribute("data-allow-empty");
+  var writeValue = (el6, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el6, text);
   var held = /* @__PURE__ */ new WeakMap();
-  function holdEmpty(el5) {
-    if (held.has(el5)) return;
-    const own = Object.getOwnPropertyDescriptor(el5, "value");
-    held.set(el5, own || null);
+  function holdEmpty(el6) {
+    if (held.has(el6)) return;
+    const own = Object.getOwnPropertyDescriptor(el6, "value");
+    held.set(el6, own || null);
     if (!own || !own.get || !own.configurable) return;
-    Object.defineProperty(el5, "value", {
+    Object.defineProperty(el6, "value", {
       configurable: true,
       enumerable: own.enumerable,
       get() {
@@ -105,12 +105,12 @@
       }
     });
   }
-  function releaseEmpty(el5) {
-    if (!held.has(el5)) return;
-    const own = held.get(el5);
-    held.delete(el5);
-    if (own) Object.defineProperty(el5, "value", own);
-    else delete el5.value;
+  function releaseEmpty(el6) {
+    if (!held.has(el6)) return;
+    const own = held.get(el6);
+    held.delete(el6);
+    if (own) Object.defineProperty(el6, "value", own);
+    else delete el6.value;
   }
   function makeButton(dir) {
     const b = document.createElement("button");
@@ -140,24 +140,24 @@
       if (isNumberBox(e.target) && e.target.value !== "") lastGood.set(e.target, e.target.value);
     }, true);
     document.addEventListener("input", (e) => {
-      const el5 = e.target;
-      if (!isNumberBox(el5)) return;
-      if (el5.value !== "") {
-        releaseEmpty(el5);
-        lastGood.set(el5, el5.value);
+      const el6 = e.target;
+      if (!isNumberBox(el6)) return;
+      if (el6.value !== "") {
+        releaseEmpty(el6);
+        lastGood.set(el6, el6.value);
         return;
       }
-      if (allowsEmpty(el5) || document.activeElement !== el5) return;
-      holdEmpty(el5);
+      if (allowsEmpty(el6) || document.activeElement !== el6) return;
+      holdEmpty(el6);
       e.stopImmediatePropagation();
     }, true);
-    const restoreIfEmpty = (el5) => {
-      if (el5.value !== "" || allowsEmpty(el5) || !lastGood.has(el5)) {
-        releaseEmpty(el5);
+    const restoreIfEmpty = (el6) => {
+      if (el6.value !== "" || allowsEmpty(el6) || !lastGood.has(el6)) {
+        releaseEmpty(el6);
         return false;
       }
-      releaseEmpty(el5);
-      writeValue(el5, lastGood.get(el5));
+      releaseEmpty(el6);
+      writeValue(el6, lastGood.get(el6));
       return true;
     };
     document.addEventListener("change", (e) => {
@@ -166,21 +166,21 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function stepBy(el5, dir) {
-      const before = el5.value;
-      if (before === "" && el5.placeholder !== "" && isFinite(Number(el5.placeholder))) writeValue(el5, el5.placeholder);
-      const start = el5.value;
+    function stepBy(el6, dir) {
+      const before = el6.value;
+      if (before === "" && el6.placeholder !== "" && isFinite(Number(el6.placeholder))) writeValue(el6, el6.placeholder);
+      const start = el6.value;
       try {
-        if (dir > 0) el5.stepUp();
-        else el5.stepDown();
+        if (dir > 0) el6.stepUp();
+        else el6.stepDown();
       } catch (err) {
         return false;
       }
-      const dec = (String(el5.step).split(".")[1] || "").length;
-      if (dec && el5.value !== "" && isFinite(Number(el5.value))) writeValue(el5, String(Number(Number(el5.value).toFixed(dec))));
-      if (el5.value === start && before !== "") return false;
-      el5.dispatchEvent(new Event("input", { bubbles: true }));
-      el5.dispatchEvent(new Event("change", { bubbles: true }));
+      const dec = (String(el6.step).split(".")[1] || "").length;
+      if (dec && el6.value !== "" && isFinite(Number(el6.value))) writeValue(el6, String(Number(Number(el6.value).toFixed(dec))));
+      if (el6.value === start && before !== "") return false;
+      el6.dispatchEvent(new Event("input", { bubbles: true }));
+      el6.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     let holdTimer = 0;
@@ -195,20 +195,20 @@
     document.addEventListener("pointerdown", (e) => {
       const button = buttonOf(e);
       if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
-      const el5 = boxOf(button);
-      if (!el5 || el5.disabled || el5.readOnly) return;
+      const el6 = boxOf(button);
+      if (!el6 || el6.disabled || el6.readOnly) return;
       e.preventDefault();
       const dir = Number(button.dataset.znStep) || 0;
       stop();
-      stepBy(el5, dir);
+      stepBy(el6, dir);
       holdTimer = setTimeout(() => {
         repeatTimer = setInterval(() => {
-          if (!stepBy(el5, dir)) stop();
+          if (!stepBy(el6, dir)) stop();
         }, REPEAT_MS);
       }, HOLD_MS);
       const release = () => {
         stop();
-        if (document.activeElement !== el5) el5.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+        if (document.activeElement !== el6) el6.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
       window.addEventListener("pointercancel", release, { once: true });
@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "7eb75a4" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "d3100e3" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -712,11 +712,11 @@
     }
     return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
   }
-  async function runModel(session, rgba, hole, sign = 1) {
+  async function runModel(session2, rgba, hole, sign = 1) {
     const ort = await loadOrt();
     const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
-    const out = await session.run({ [session.inputNames[0]]: input });
-    return outputToRgba(out[session.outputNames[0]].data);
+    const out = await session2.run({ [session2.inputNames[0]]: input });
+    return outputToRgba(out[session2.outputNames[0]].data);
   }
 
   // shared/js/ai/session.js
@@ -980,7 +980,7 @@
   }
   async function segmentCanvas(canvas, key, onStatus) {
     const prep = SEG_PREP[bgModel(key).key];
-    const session = await acquire(key, onStatus);
+    const session2 = await acquire(key, onStatus);
     const ort = await loadOrt();
     const small = document.createElement("canvas");
     small.width = small.height = prep.size;
@@ -990,8 +990,8 @@
     const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
     onStatus && onStatus("Finding the subject…");
     const t0 = performance.now();
-    const out = await session.run({ [session.inputNames[0]]: input });
-    const first = out[session.outputNames[0]];
+    const out = await session2.run({ [session2.inputNames[0]]: input });
+    const first = out[session2.outputNames[0]];
     const side = Math.round(Math.sqrt(first.data.length));
     touch2();
     let rawMin = Infinity, rawMax = -Infinity;
@@ -1000,7 +1000,7 @@
       if (v < rawMin) rawMin = v;
       if (v > rawMax) rawMax = v;
     }
-    const info = { model: key, prep: prep.mask + ", size " + prep.size, inputName: session.inputNames[0], outputNames: session.outputNames.join(","), outputDims: first.dims.join("x"), outputType: first.type, rawMin, rawMax, runMs: Math.round(performance.now() - t0) };
+    const info = { model: key, prep: prep.mask + ", size " + prep.size, inputName: session2.inputNames[0], outputNames: session2.outputNames.join(","), outputDims: first.dims.join("x"), outputType: first.type, rawMin, rawMax, runMs: Math.round(performance.now() - t0) };
     return { mask: segMask(first.data, prep.mask), side, info };
   }
   function cutOutCanvas(canvas, mask, side, cutoff, soft) {
@@ -1023,6 +1023,135 @@
     ox.imageSmoothingQuality = "high";
     ox.drawImage(m, 0, 0, canvas.width, canvas.height);
     return out;
+  }
+
+  // shared/js/ai/faceModel.js
+  var FACE_CACHE = "zinenow-ai-face-model";
+  var FACE_MODEL = {
+    key: "yunet",
+    name: "YuNet",
+    kind: "Face detection",
+    label: "YuNet (Face detection)",
+    mb: 0.23,
+    licence: "MIT",
+    host: "huggingface.co",
+    repo: "huggingface.co/opencv/face_detection_yunet",
+    url: "https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",
+    about: "Finds where faces are (boxes only). It does not recognise or identify anyone."
+  };
+
+  // shared/js/ai/faces.js
+  var FACE_SIZE = 640;
+  function yunetInput(rgba, W, H) {
+    const n = W * H, out = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) {
+      out[i] = rgba[i * 4 + 2];
+      out[n + i] = rgba[i * 4 + 1];
+      out[2 * n + i] = rgba[i * 4];
+    }
+    return out;
+  }
+  var clamp01 = (v) => v < 0 ? 0 : v > 1 ? 1 : v;
+  function decodeYunet(get, W, H, k, minScore) {
+    const faces = [];
+    for (const s of [8, 16, 32]) {
+      const cls = get("cls", s), obj = get("obj", s), bb = get("bbox", s);
+      if (!cls || !obj || !bb) throw new Error("Unexpected model outputs (stride " + s + ").");
+      const cols = Math.ceil(W / s), rows = Math.ceil(H / s);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        const score = Math.sqrt(clamp01(cls[i]) * clamp01(obj[i]));
+        if (score < minScore) continue;
+        const cx = (c + bb[i * 4]) * s, cy = (r + bb[i * 4 + 1]) * s, w = Math.exp(bb[i * 4 + 2]) * s, h = Math.exp(bb[i * 4 + 3]) * s;
+        faces.push({ x: (cx - w / 2) / k, y: (cy - h / 2) / k, w: w / k, h: h / k, score });
+      }
+    }
+    return nms(faces, 0.3);
+  }
+  function nms(faces, thr) {
+    faces.sort((a, b) => b.score - a.score);
+    const keep = [];
+    for (const f of faces) {
+      const clear = keep.every((g) => {
+        const x1 = Math.max(f.x, g.x), y1 = Math.max(f.y, g.y), x2 = Math.min(f.x + f.w, g.x + g.w), y2 = Math.min(f.y + f.h, g.y + g.h);
+        const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+        return inter / (f.w * f.h + g.w * g.h - inter) < thr;
+      });
+      if (clear) keep.push(f);
+    }
+    return keep;
+  }
+  function paddedBox(f, padPct, W, H) {
+    const px = f.w * padPct / 100, py = f.h * padPct / 100;
+    const x0 = Math.max(0, Math.floor(f.x - px)), y0 = Math.max(0, Math.floor(f.y - py));
+    const x1 = Math.min(W, Math.ceil(f.x + f.w + px)), y1 = Math.min(H, Math.ceil(f.y + f.h + py));
+    return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+  }
+
+  // shared/js/ai/faceSession.js
+  var IDLE_MS3 = 6e4;
+  var session = null;
+  var starting2 = null;
+  var timer3 = 0;
+  function releaseFaceSession() {
+    clearTimeout(timer3);
+    const s = session;
+    session = null;
+    starting2 = null;
+    if (s && s.release) {
+      try {
+        s.release();
+      } catch (e) {
+      }
+    }
+  }
+  var touch3 = () => {
+    clearTimeout(timer3);
+    timer3 = setTimeout(releaseFaceSession, IDLE_MS3);
+  };
+  async function acquire2(onStatus) {
+    touch3();
+    if (session) return session;
+    if (!starting2) {
+      starting2 = (async () => {
+        if (!await isModelSaved(FACE_MODEL.url, FACE_CACHE)) throw new Error(FACE_MODEL.name + " is not downloaded. Download it first (Models page, or the Face blur tool).");
+        onStatus && onStatus("Starting " + FACE_MODEL.name + "…");
+        const { bytes } = await getModelBytes(FACE_MODEL.url, void 0, void 0, FACE_CACHE);
+        session = (await createSession(bytes, false)).session;
+        return session;
+      })().catch((e) => {
+        starting2 = null;
+        throw e;
+      });
+    }
+    return starting2;
+  }
+  async function detectFaces(canvas, onStatus) {
+    const sess = await acquire2(onStatus);
+    const ort = await loadOrt();
+    const W = FACE_SIZE, H = FACE_SIZE;
+    const k = Math.min(W / canvas.width, H / canvas.height);
+    const w = Math.round(canvas.width * k), h = Math.round(canvas.height * k);
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    const x = c.getContext("2d", { willReadFrequently: true });
+    x.fillStyle = "#000";
+    x.fillRect(0, 0, W, H);
+    x.drawImage(canvas, 0, 0, w, h);
+    const input = new ort.Tensor("float32", yunetInput(x.getImageData(0, 0, W, H).data, W, H), [1, 3, H, W]);
+    onStatus && onStatus("Finding faces…");
+    const t0 = performance.now();
+    const out = await sess.run({ [sess.inputNames[0]]: input });
+    const runMs = Math.round(performance.now() - t0);
+    const names = sess.outputNames;
+    const get = (p, s) => {
+      const n = names.find((q) => q === p + "_" + s) || names.find((q) => q.includes(p) && q.includes(String(s)));
+      return n ? out[n].data : null;
+    };
+    const faces = decodeYunet(get, W, H, k, 0.1);
+    touch3();
+    return { faces, info: { model: FACE_MODEL.label, inputSize: W + "x" + H, fitScale: k, outputNames: names.join(","), runMs, found10pct: faces.length } };
   }
 
   // shared/js/ai/manager.js
@@ -1048,10 +1177,10 @@
     return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
   }
   async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-    const bg = which === "background";
+    const bg = which === "background", face = which === "face";
     const plan = await downloadPlan();
-    const saved = bg ? await bgSaved(model) : await aiSaved();
-    const modelMb = bg ? bgModel(model).mb : plan.modelMb;
+    const saved = face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
     const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
     let doneMb = 0;
     const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -1076,7 +1205,8 @@
       }
     }
     if (!saved.model) {
-      if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
+      if (face) await getModelBytes(FACE_MODEL.url, (got) => report(got / 1048576), signal, FACE_CACHE);
+      else if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
       else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
     }
     try {
@@ -1094,7 +1224,16 @@
     const saved = await aiSaved();
     return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
   }
+  async function facePlan() {
+    const plan = await downloadPlan();
+    return { gpu: plan.gpu, modelMb: FACE_MODEL.mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(FACE_MODEL.mb + plan.runtimeMb) };
+  }
+  async function faceSaved() {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
+  }
   async function anyModelSaved(except) {
+    if (except !== "face" && await isModelSaved(FACE_MODEL.url, FACE_CACHE)) return true;
     if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
     for (const m of BG_MODELS) if (m.key !== except && await isModelSaved(m.url, BG_CACHE)) return true;
     return false;
@@ -1107,6 +1246,11 @@
       }
     } catch (e) {
     }
+  }
+  async function deleteFace() {
+    releaseFaceSession();
+    await forgetModelUrl(FACE_MODEL.url, FACE_CACHE);
+    if (!await anyModelSaved("face")) await deleteRuntime();
   }
   async function deleteBg(key) {
     releaseBgSession();
@@ -1134,7 +1278,8 @@
   };
   var MODEL_ROWS = [
     { id: "fill", tool: "Remove object", model: FILL_MODEL },
-    ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m }))
+    ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m })),
+    { id: "face", tool: "Face blur", model: FACE_MODEL }
   ];
 
   // apps/AiToolsLocal/src/dialog.js
@@ -1217,7 +1362,7 @@
   function modelControl(id) {
     if (controls.has(id)) return controls.get(id);
     const row = rowFor(id);
-    const isFill = id === "fill";
+    const isFill = id === "fill", isFace = id === "face";
     const listeners = /* @__PURE__ */ new Set();
     const state = { phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null };
     let abort = null;
@@ -1231,7 +1376,7 @@
     };
     async function refresh2() {
       try {
-        const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
+        const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
         set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
       } catch (e) {
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
@@ -1242,7 +1387,7 @@
       abort = ctl2;
       set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
       try {
-        await downloadAi({ which: isFill ? "fill" : "background", model: isFill ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        await downloadAi({ which: isFill ? "fill" : isFace ? "face" : "background", model: isFill || isFace ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
         await refresh2();
       } catch (e) {
         await refresh2();
@@ -1255,7 +1400,7 @@
       if (abort) abort.abort();
     };
     async function remove() {
-      await (isFill ? deleteAi() : deleteBg(row.model.key));
+      await (isFill ? deleteAi() : isFace ? deleteFace() : deleteBg(row.model.key));
       await refresh2();
     }
     const ctl = { id, row, state, refresh: refresh2, download, cancel, remove, subscribe(fn) {
@@ -1272,7 +1417,7 @@
     return confirmDialog({
       title: "Download AI model?",
       points: [
-        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + Math.round(m.mb * 10) / 10 + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
+        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
         "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.",
         rich([["Warning:", true], [" it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete button)."]])
       ],
@@ -1656,8 +1801,340 @@
   };
   var allTools = () => tools.slice();
 
-  // apps/AiToolsLocal/src/tools/removeBackground.js
+  // apps/AiToolsLocal/src/tools/faceBlur.js
   var el3 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  var MIN_BOX = 8;
+  function hideBox(ctx2, src, b, mode, strength) {
+    if (b.w < 1 || b.h < 1) return;
+    if (mode === "black") {
+      ctx2.fillStyle = "#000";
+      ctx2.fillRect(b.x, b.y, b.w, b.h);
+      return;
+    }
+    if (mode === "pixel") {
+      const cells = Math.max(3, Math.round(24 - strength / 100 * 20));
+      const block = Math.max(2, Math.round(Math.max(b.w, b.h) / cells));
+      const t = document.createElement("canvas");
+      t.width = Math.max(1, Math.round(b.w / block));
+      t.height = Math.max(1, Math.round(b.h / block));
+      t.getContext("2d").drawImage(src, b.x, b.y, b.w, b.h, 0, 0, t.width, t.height);
+      ctx2.save();
+      ctx2.imageSmoothingEnabled = false;
+      ctx2.drawImage(t, 0, 0, t.width, t.height, b.x, b.y, b.w, b.h);
+      ctx2.restore();
+      return;
+    }
+    const radius = Math.max(1, strength / 100 * 0.3 * Math.max(b.w, b.h));
+    ctx2.save();
+    ctx2.beginPath();
+    ctx2.rect(b.x, b.y, b.w, b.h);
+    ctx2.clip();
+    if (typeof ctx2.filter === "string") {
+      ctx2.filter = "blur(" + radius + "px)";
+      ctx2.drawImage(src, 0, 0);
+    } else {
+      const f = Math.max(2, Math.round(radius / 2));
+      const t = document.createElement("canvas");
+      t.width = Math.max(1, Math.round(b.w / f));
+      t.height = Math.max(1, Math.round(b.h / f));
+      const tx = t.getContext("2d");
+      tx.imageSmoothingQuality = "high";
+      tx.drawImage(src, b.x, b.y, b.w, b.h, 0, 0, t.width, t.height);
+      ctx2.imageSmoothingQuality = "high";
+      ctx2.drawImage(t, 0, 0, t.width, t.height, b.x, b.y, b.w, b.h);
+    }
+    ctx2.restore();
+  }
+  var faceBlurTool = {
+    id: "face-blur",
+    name: "Face blur",
+    summary: "Find faces and hide them: blur, pixelate or a black box.",
+    create(ctx2) {
+      const { picture: picture2 } = ctx2;
+      const facesC = picture2.addOverlay(document.createElement("canvas"));
+      facesC.id = "faces";
+      facesC.style.display = "none";
+      const fx = facesC.getContext("2d");
+      const ctl = modelControl("face");
+      let mounted = false, ui = {};
+      let found = null;
+      let manual = [];
+      let minScore = 60, mode = "blur", strength = 50, pad = 15, drawMode = false;
+      let drag = null;
+      const visible = () => [...found ? found.faces.filter((f) => f.score * 100 >= minScore) : [], ...manual];
+      const boxOf = (f) => f.manual ? { x: Math.round(f.x), y: Math.round(f.y), w: Math.round(f.w), h: Math.round(f.h) } : paddedBox(f, pad, picture2.width, picture2.height);
+      function drawBoxes() {
+        fx.clearRect(0, 0, facesC.width, facesC.height);
+        if (!found && !manual.length && !drag) {
+          facesC.style.display = "none";
+          return;
+        }
+        facesC.style.display = "";
+        const s = picture2.view.s;
+        visible().forEach((f, i) => {
+          const b = boxOf(f);
+          fx.lineWidth = 3 / s;
+          if (f.on) {
+            fx.setLineDash([]);
+            fx.strokeStyle = "#e8622a";
+          } else {
+            fx.setLineDash([8 / s, 6 / s]);
+            fx.strokeStyle = "#9a9a9a";
+          }
+          fx.strokeRect(b.x, b.y, b.w, b.h);
+          fx.setLineDash([]);
+          const label = i + 1 + (f.manual ? "" : " · " + Math.round(f.score * 100) + "%"), fs = 13 / s;
+          fx.font = "bold " + fs + "px sans-serif";
+          const tw = fx.measureText(label).width + 8 / s;
+          fx.fillStyle = f.on ? "#e8622a" : "#6b6b6b";
+          fx.fillRect(b.x, Math.max(0, b.y - fs - 6 / s), tw, fs + 6 / s);
+          fx.fillStyle = "#fff";
+          fx.fillText(label, b.x + 4 / s, Math.max(fs, b.y - 5 / s));
+        });
+        if (drag) {
+          fx.setLineDash([8 / s, 6 / s]);
+          fx.lineWidth = 2 / s;
+          fx.strokeStyle = "#fff";
+          fx.strokeRect(Math.min(drag.a.x, drag.b.x), Math.min(drag.a.y, drag.b.y), Math.abs(drag.b.x - drag.a.x), Math.abs(drag.b.y - drag.a.y));
+          fx.setLineDash([]);
+        }
+        refresh2();
+      }
+      const handler = {
+        down(pt) {
+          if (drawMode) {
+            drag = { a: pt, b: pt };
+            return;
+          }
+          const hits = visible().filter((f) => {
+            const b = boxOf(f);
+            return pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h;
+          }).sort((p, q) => p.w * p.h - q.w * q.h);
+          if (hits.length) {
+            hits[0].on = !hits[0].on;
+            drawBoxes();
+          }
+        },
+        move(pt) {
+          if (drag) {
+            drag.b = pt;
+            drawBoxes();
+          }
+        },
+        up() {
+          if (!drag) return;
+          const w = Math.abs(drag.b.x - drag.a.x), h = Math.abs(drag.b.y - drag.a.y);
+          if (w >= MIN_BOX && h >= MIN_BOX) manual.push({ x: Math.min(drag.a.x, drag.b.x), y: Math.min(drag.a.y, drag.b.y), w, h, score: 1, manual: true, on: true });
+          drag = null;
+          drawBoxes();
+        },
+        cancel() {
+          drag = null;
+          drawBoxes();
+        }
+      };
+      function reset() {
+        found = null;
+        manual = [];
+        drag = null;
+        fx.clearRect(0, 0, facesC.width, facesC.height);
+        facesC.style.display = "none";
+        refresh2();
+      }
+      async function find() {
+        if (picture2.busy || !picture2.loaded || ctl.state.phase !== "ready") return;
+        picture2.setBusy(true);
+        try {
+          ctx2.status("Starting the face detector…");
+          const t0 = performance.now();
+          const { faces, info } = await detectFaces(picture2.canvas, (t) => ctx2.status(t));
+          found = { faces: faces.map((f) => ({ ...f, on: true })), depth: picture2.depth };
+          ctx2.debug.section("Find faces", { picture: picture2.width + "x" + picture2.height, ...info, facesAt60pct: faces.filter((f) => f.score >= 0.6).length, bestScores: faces.slice(0, 8).map((f) => Math.round(f.score * 100) + "%").join(" ") });
+          const n = visible().length;
+          ctx2.status("Found " + faces.length + " possible face" + (faces.length === 1 ? "" : "s") + " in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s; " + n + " shown at a minimum score of " + minScore + " %. Tap a box to leave that face alone, or draw a box by hand for one that was missed.", "ok");
+          picture2.setPointerHandler(handler);
+          drawBoxes();
+        } catch (e) {
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+        } finally {
+          picture2.setBusy(false);
+        }
+      }
+      async function apply() {
+        const todo = visible().filter((f) => f.on);
+        if (!todo.length || picture2.busy) {
+          ctx2.status("There is no face to hide: find faces first, or draw a box by hand.", "bad");
+          return;
+        }
+        picture2.setBusy(true);
+        try {
+          const before = await picture2.snapshot();
+          const src = document.createElement("canvas");
+          src.width = picture2.width;
+          src.height = picture2.height;
+          src.getContext("2d").drawImage(picture2.canvas, 0, 0);
+          for (const f of todo) hideBox(picture2.ctx, src, boxOf(f), mode, strength);
+          picture2.commit(before);
+          ctx2.debug.log("Face blur applied: " + todo.length + " box(es), " + mode + ", strength " + strength + ", grow " + pad + " %");
+          reset();
+          ctx2.status("Hid " + todo.length + " face" + (todo.length === 1 ? "" : "s") + " (" + (mode === "blur" ? "blur" : mode === "pixel" ? "pixelate" : "black box") + "). Undo brings them back.", "ok");
+        } catch (e) {
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+        } finally {
+          picture2.setBusy(false);
+        }
+      }
+      function refresh2() {
+        if (!mounted) return;
+        const ready = ctl.state.phase === "ready", has = picture2.loaded, idle = !picture2.busy;
+        ui.need.hidden = ready || ctl.state.phase === "checking";
+        ui.find.disabled = !has || !idle || !ready;
+        const n = visible().filter((f) => f.on).length;
+        ui.apply.disabled = !has || !idle || n === 0;
+        ui.apply.textContent = n ? "Hide " + n + " face" + (n === 1 ? "" : "s") : "Hide faces";
+        ui.draw.classList.toggle("active", drawMode);
+        ui.draw.textContent = drawMode ? "Drawing a box: drag on the picture (tap to stop)" : "Draw a box by hand";
+        ui.draw.disabled = !has || !idle;
+        ui.clearManual.hidden = !manual.length;
+        ui.minScore.closest(".field").classList.toggle("off", !found);
+        ui.strength.disabled = mode === "black";
+      }
+      picture2.onView(() => {
+        if (mounted) drawBoxes();
+      });
+      picture2.onOpen(reset);
+      ctl.subscribe(refresh2);
+      return {
+        mount(panel) {
+          mounted = true;
+          const secA = el3("section");
+          secA.append(el3("h2", "", "Find faces"));
+          ui.need = el3("p", "hint required", "Download required: get the face model below first.");
+          ui.find = el3("button", "btn-solid big", "Find faces");
+          ui.find.type = "button";
+          ui.find.addEventListener("click", find);
+          const msF = el3("label", "field");
+          msF.append(el3("span", "", "Minimum score (%)"));
+          const ms = document.createElement("input");
+          ms.type = "number";
+          ms.min = 10;
+          ms.max = 100;
+          ms.step = 5;
+          ms.value = minScore;
+          ms.addEventListener("input", () => {
+            const v = Number(ms.value);
+            if (ms.value.trim() !== "" && Number.isFinite(v)) {
+              minScore = Math.min(100, Math.max(10, v));
+              drawBoxes();
+            }
+          });
+          msF.append(ms);
+          wrapNumberInput(ms);
+          ui.minScore = ms;
+          const msH = el3("p", "hint", "Lower shows more possible faces (and more false ones). Tap a box on the picture to leave that face alone; tap again to include it.");
+          ui.draw = el3("button", "wide", "Draw a box by hand");
+          ui.draw.type = "button";
+          ui.draw.addEventListener("click", () => {
+            drawMode = !drawMode;
+            if (picture2.loaded) picture2.setPointerHandler(handler);
+            refresh2();
+          });
+          ui.clearManual = el3("button", "wide", "Remove my hand-drawn boxes");
+          ui.clearManual.type = "button";
+          ui.clearManual.hidden = true;
+          ui.clearManual.addEventListener("click", () => {
+            manual = [];
+            drawBoxes();
+            if (!found) {
+              facesC.style.display = "none";
+            }
+          });
+          secA.append(ui.need, ui.find, msF, msH, ui.draw, ui.clearManual);
+          const secB = el3("section");
+          secB.append(el3("h2", "", "Hide them with"));
+          const seg = el3("div", "seg");
+          seg.style.gridTemplateColumns = "repeat(3, 1fr)";
+          for (const [key, label] of [["blur", "Blur"], ["pixel", "Pixelate"], ["black", "Black box"]]) {
+            const b = el3("button", key === mode ? "active" : "", label);
+            b.type = "button";
+            b.addEventListener("click", () => {
+              mode = key;
+              for (const o of seg.children) o.classList.toggle("active", o === b);
+              refresh2();
+            });
+            seg.append(b);
+          }
+          const stF = el3("label", "field");
+          stF.append(el3("span", "", "Strength (%)"));
+          const st = document.createElement("input");
+          st.type = "number";
+          st.min = 1;
+          st.max = 100;
+          st.step = 5;
+          st.value = strength;
+          st.addEventListener("input", () => {
+            const v = Number(st.value);
+            if (st.value.trim() !== "" && Number.isFinite(v)) strength = Math.min(100, Math.max(1, v));
+          });
+          stF.append(st);
+          wrapNumberInput(st);
+          ui.strength = st;
+          const pdF = el3("label", "field");
+          pdF.append(el3("span", "", "Grow each box by (%)"));
+          const pd = document.createElement("input");
+          pd.type = "number";
+          pd.min = 0;
+          pd.max = 100;
+          pd.step = 5;
+          pd.value = pad;
+          pd.addEventListener("input", () => {
+            const v = Number(pd.value);
+            if (pd.value.trim() !== "" && Number.isFinite(v)) {
+              pad = Math.min(100, Math.max(0, v));
+              drawBoxes();
+            }
+          });
+          pdF.append(pd);
+          wrapNumberInput(pd);
+          const pdH = el3("p", "hint", "The detector's box is tight; a little extra covers the forehead, ears and chin. Hand-drawn boxes are used as drawn.");
+          ui.apply = el3("button", "btn-solid big", "Hide faces");
+          ui.apply.type = "button";
+          ui.apply.addEventListener("click", apply);
+          const note = el3("p", "hint", "Hiding is applied to the picture (Undo brings it back). The detector only finds where faces are; it does not recognise or identify anyone.");
+          secB.append(seg, stF, pdF, pdH, ui.apply, note);
+          const secC = el3("section");
+          secC.append(el3("h2", "", "Model"));
+          secC.append(modelBox("face", { compact: true, deletable: false }));
+          panel.append(secA, secB, secC);
+          if (found || manual.length || drawMode) picture2.setPointerHandler(handler);
+          drawBoxes();
+          refresh2();
+        },
+        unmount() {
+          mounted = false;
+          drag = null;
+          facesC.style.display = "none";
+          picture2.setPointerHandler(null);
+        },
+        onPictureChange() {
+          if (found && picture2.depth !== found.depth) reset();
+          refresh2();
+        },
+        primary() {
+          if (found || manual.length) apply();
+          else find();
+        }
+      };
+    }
+  };
+
+  // apps/AiToolsLocal/src/tools/removeBackground.js
+  var el4 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -1882,11 +2359,11 @@
       return {
         mount(panel) {
           mounted = true;
-          const sec1 = el3("section");
-          sec1.append(el3("h2", "", "Model"));
-          const radios = el3("div", "radios");
+          const sec1 = el4("section");
+          sec1.append(el4("h2", "", "Model"));
+          const radios = el4("div", "radios");
           for (const m of BG_MODELS) {
-            const lab = el3("label", "radio");
+            const lab = el4("label", "radio");
             const r = document.createElement("input");
             r.type = "radio";
             r.name = "bg-model";
@@ -1897,21 +2374,21 @@
               drawModelBox();
               refresh2();
             });
-            lab.append(r, el3("span", "", " " + m.label + " · " + m.mb + " MB"));
+            lab.append(r, el4("span", "", " " + m.label + " · " + m.mb + " MB"));
             radios.append(lab);
           }
-          ui.boxHost = el3("div");
+          ui.boxHost = el4("div");
           sec1.append(radios, ui.boxHost);
-          const secC = el3("section");
-          secC.append(el3("h2", "", "Crop first (optional)"));
-          ui.cropToggle = el3("button", "wide", "Crop first…");
+          const secC = el4("section");
+          secC.append(el4("h2", "", "Crop first (optional)"));
+          ui.cropToggle = el4("button", "wide", "Crop first…");
           ui.cropToggle.type = "button";
           ui.cropToggle.addEventListener("click", () => setCrop(!crop));
-          ui.cropBox = el3("div");
+          ui.cropBox = el4("div");
           ui.cropBox.hidden = true;
-          ui.cropInfo = el3("p", "hint");
-          const cropHint = el3("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
-          const reset = el3("button", "wide", "Reset the box");
+          ui.cropInfo = el4("p", "hint");
+          const cropHint = el4("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
+          const reset = el4("button", "wide", "Reset the box");
           reset.type = "button";
           reset.addEventListener("click", () => {
             crop = null;
@@ -1919,11 +2396,11 @@
           });
           ui.cropBox.append(ui.cropInfo, cropHint, reset);
           secC.append(ui.cropToggle, ui.cropBox);
-          const sec2 = el3("section");
-          sec2.append(el3("h2", "", "Cut out"));
+          const sec2 = el4("section");
+          sec2.append(el4("h2", "", "Cut out"));
           const num2 = (label, key, min, max, step, value, onInput) => {
-            const f = el3("label", "field");
-            f.append(el3("span", "", label));
+            const f = el4("label", "field");
+            f.append(el4("span", "", label));
             const i = document.createElement("input");
             i.type = "number";
             i.min = min;
@@ -1943,30 +2420,30 @@
             return f;
           };
           const need = () => {
-            const p = el3("p", "hint required", "Download required");
+            const p = el4("p", "hint required", "Download required");
             return p;
           };
           ui.need = [need(), need()];
           const f1 = num2("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
-          const h1 = el3("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
+          const h1 = el4("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
           const f2 = num2("Soft edge (%) — fade above the cut-off", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
-          ui.find = el3("button", "btn-solid big", "Find subject");
+          ui.find = el4("button", "btn-solid big", "Find subject");
           ui.find.type = "button";
           ui.find.addEventListener("click", find);
-          ui.apply = el3("button", "btn-solid big", "Apply");
+          ui.apply = el4("button", "btn-solid big", "Apply");
           ui.apply.type = "button";
           ui.apply.addEventListener("click", apply);
-          ui.discard = el3("button", "big", "Discard");
+          ui.discard = el4("button", "big", "Discard");
           ui.discard.type = "button";
           ui.discard.addEventListener("click", () => {
             discard();
             ctx2.status("Discarded.");
           });
-          const note = el3("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
+          const note = el4("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
           panel.append(secC, sec2, sec1);
           drawModelBox();
@@ -2086,7 +2563,7 @@
     } catch (e) {
     }
   };
-  var el4 = (tag, cls, text) => {
+  var el5 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -2103,7 +2580,7 @@
       const draftC = picture2.addOverlay(document.createElement("canvas"));
       draftC.id = "draft";
       const maskX = maskC.getContext("2d", { willReadFrequently: true }), draftX = draftC.getContext("2d");
-      const ring = el4("div", "ring");
+      const ring = el5("div", "ring");
       ring.hidden = true;
       picture2.stage.append(ring);
       const ctl = modelControl("fill");
@@ -2253,12 +2730,12 @@
           picture2.stage.addEventListener("pointerdown", showRing);
           picture2.stage.addEventListener("pointerleave", hideRing);
           picture2.stage.addEventListener("pointerup", touchHide);
-          const sec1 = el4("section");
-          sec1.append(el4("h2", "", "Mark what to remove"));
-          const seg = el4("div", "seg");
+          const sec1 = el5("section");
+          sec1.append(el5("h2", "", "Mark what to remove"));
+          const seg = el5("div", "seg");
           seg.setAttribute("role", "group");
           for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
-            const b = el4("button", key === tool ? "active" : "", label);
+            const b = el5("button", key === tool ? "active" : "", label);
             b.type = "button";
             b.addEventListener("click", () => {
               tool = key;
@@ -2266,8 +2743,8 @@
             });
             seg.append(b);
           }
-          const brushField = el4("label", "field");
-          brushField.append(el4("span", "", "Brush size (px)"));
+          const brushField = el5("label", "field");
+          brushField.append(el5("span", "", "Brush size (px)"));
           const brush = document.createElement("input");
           brush.type = "number";
           brush.min = 1;
@@ -2284,15 +2761,15 @@
           brushField.append(brush);
           wrapNumberInput(brush);
           ui.brush = brush;
-          const hint = el4("p", "hint", "Two fingers always move and zoom the picture.");
-          ui.clear = el4("button", "", "Clear marks");
+          const hint = el5("p", "hint", "Two fingers always move and zoom the picture.");
+          ui.clear = el5("button", "", "Clear marks");
           ui.clear.type = "button";
           ui.clear.addEventListener("click", clearMarks);
           sec1.append(seg, brushField, hint, ui.clear);
-          const sec2 = el4("section");
-          sec2.append(el4("h2", "", "Remove it"));
-          const growField = el4("label", "field");
-          growField.append(el4("span", "", "Grow the marked area by (px)"));
+          const sec2 = el5("section");
+          sec2.append(el5("h2", "", "Remove it"));
+          const growField = el5("label", "field");
+          growField.append(el5("span", "", "Grow the marked area by (px)"));
           const grow = document.createElement("input");
           grow.type = "number";
           grow.min = 0;
@@ -2308,18 +2785,18 @@
           });
           growField.append(grow);
           wrapNumberInput(grow);
-          const growHint = el4("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
-          ui.need = el4("p", "hint required", "Download required: get the model below first.");
-          ui.fill = el4("button", "btn-solid big", "Remove object");
+          const growHint = el5("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
+          ui.need = el5("p", "hint required", "Download required: get the model below first.");
+          ui.fill = el5("button", "btn-solid big", "Remove object");
           ui.fill.type = "button";
           ui.fill.addEventListener("click", removeObject);
-          ui.another = el4("button", "big", "Try another");
+          ui.another = el5("button", "big", "Try another");
           ui.another.type = "button";
           ui.another.title = "Undoes the last fill and fills again, showing the model the area from a slightly different view";
           ui.another.addEventListener("click", tryAnother);
           sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
-          const sec3 = el4("section");
-          sec3.append(el4("h2", "", "Model"));
+          const sec3 = el5("section");
+          sec3.append(el5("h2", "", "Model"));
           sec3.append(modelBox("fill", { compact: true, deletable: false }));
           panel.append(sec1, sec2, sec3);
           refreshButtons();
@@ -2388,6 +2865,7 @@
   var ctx = { picture, status, debug, openModels: () => select("models") };
   registerTool(removeObjectTool);
   registerTool(removeBackgroundTool);
+  registerTool(faceBlurTool);
   var instances = /* @__PURE__ */ new Map();
   var modelsPage = createModelsPage($("models"));
   var MODELS_TOOL = { id: "models", name: "Models", summary: "Downloads, licences and storage." };
@@ -2503,7 +2981,7 @@
       pictureSize: picture.width + "x" + picture.height,
       undoSteps: picture.depth,
       tool: active ? active.id : "none",
-      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet"].map((id) => [id, modelControl(id).state.phase]))
+      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face"].map((id) => [id, modelControl(id).state.phase]))
     })
   });
   select("remove-object");

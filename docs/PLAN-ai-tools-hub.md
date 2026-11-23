@@ -144,9 +144,9 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 
 **3a Face blur**
 - [x] `labs/ai-face-benchmark/index.html` (build number shown; built 2026-11-23): YuNet on a photo with faces; report time, number of faces found, boxes drawn, blur / pixelate / black box preview. **Waiting for the user to run it on the tablet.**
-- [ ] Gate: MIT/Apache-2.0, small, fast, finds the faces in 3 of the user's photos.
-- [ ] Tool `src/tools/faceBlur.js`: boxes, Blur / Pixelate / Black box, strength slider, untick a face, drag/draw a box by hand, Apply. Models page row.
-- [ ] Tests (stand-in detector), guide, HANDOFF.
+- [x] Gate: MIT, 227 KB, 0.2 to 0.7 s on the user's tablet, found 13 candidate faces (best 94 %) in the user's photo (benchmark report 2026-11-23).
+- [x] Tool `src/tools/faceBlur.js`: boxes, Blur / Pixelate / Black box, strength slider, untick a face, drag/draw a box by hand, Apply. Models page row.
+- [x] Tests (stand-in detector), guide, HANDOFF.
 
 **3b Text from image (OCR)**
 - [ ] `labs/ai-ocr-benchmark/index.html`: Tesseract.js (from a CDN, shown) with English; report time and the text read from the user's printed-text photo.
