@@ -156,9 +156,9 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 
 **3c Click-to-select**
 - [x] `labs/ai-sam-benchmark/index.html` (build 1, built 2026-11-23): MobileSAM encoder + decoder (Acly/MobileSAM on Hugging Face); report the encoder time per picture (CPU, and GPU if any), the decoder time per click, the mask drawn for each click (add / take away). **Waiting for the user to run it on the tablet.**
-- [ ] Gate: Apache-2.0; total download within budget; encoder time acceptable on the tablet (EdgeSAM as backup).
-- [ ] Tool `src/tools/selectObject.js`: click to add, shift/second mode to subtract, mask preview, "Use as mask" for Remove object, "Cut out" (keep the selection, see-through elsewhere).
-- [ ] Tests, guide, HANDOFF.
+- [x] Gate: Apache-2.0; 44.7 MB; user's tablet: encoder 11.6 s on the CPU, 9.0 s / 7.2 s on the GPU, 0.6 s per click, good outlines (report 2026-11-23). Just over the 10 s target on the CPU; the user decided to build it.
+- [x] Tool `src/tools/selectObject.js`: click to add, shift/second mode to subtract, mask preview, "Use as mask" for Remove object, "Cut out" (keep the selection, see-through elsewhere).
+- [x] Tests, guide, HANDOFF.
 
 **3d Upscale**
 - [ ] `labs/ai-upscale-benchmark/index.html`: realesr-general-x4v3 (and Swin2SR) on a 512 px photo, tiled; report time per tile and in total, and the result.

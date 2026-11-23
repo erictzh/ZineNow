@@ -12,6 +12,7 @@ import { createPicture } from "./picture.js";
 import { allTools, registerTool } from "./registry.js";
 import { faceBlurTool } from "./tools/faceBlur.js";
 import { ocrTool } from "./tools/ocr.js";
+import { selectObjectTool } from "./tools/selectObject.js";
 import { removeBackgroundTool } from "./tools/removeBackground.js";
 import { removeObjectTool } from "./tools/removeObject.js";
 
@@ -45,10 +46,15 @@ async function openFile(file) {
 }
 
 // ---- tools ----------------------------------------------------------------------------------------
-const ctx = { picture, status, debug, openModels: () => select("models") };
+const ctx = {
+  picture, status, debug, openModels: () => select("models"),
+  // marks made by another tool (a selection): switch to Remove object and show them as the marks to fill
+  useAsMarks(mask) { select("remove-object"); const t = instances.get("remove-object"); if (t && t.importMask) { t.importMask(mask); status("The selection is now marked in Remove object. Press Remove object to fill it.", "ok"); } },
+};
 registerTool(removeObjectTool);
 registerTool(removeBackgroundTool);
 registerTool(faceBlurTool);
+registerTool(selectObjectTool);
 registerTool(ocrTool);
 const instances = new Map();
 const modelsPage = createModelsPage($("models"));
@@ -138,7 +144,7 @@ installDebug({
   getState: () => ({
     pictureLoaded: picture.loaded, pictureSize: picture.width + "x" + picture.height, undoSteps: picture.depth,
     tool: active ? active.id : "none",
-    models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase])),
+    models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "sam", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase])),
   }),
 });
 select("remove-object");

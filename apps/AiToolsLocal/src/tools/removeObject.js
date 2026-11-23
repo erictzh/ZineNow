@@ -174,6 +174,13 @@ export const removeObjectTool = {
         picture.stage.removeEventListener("pointermove", showRing); picture.stage.removeEventListener("pointerdown", showRing);
         picture.stage.removeEventListener("pointerleave", hideRing); picture.stage.removeEventListener("pointerup", touchHide);
       },
+      // marks made elsewhere (Click-to-select): shown as the marks to fill
+      importMask(mask) {
+        clearMarks();
+        const w = maskC.width, h = maskC.height, id = maskX.createImageData(w, h);
+        for (let i = 0; i < w * h && i < mask.length; i++) if (mask[i]) { id.data[i * 4] = 232; id.data[i * 4 + 1] = 98; id.data[i * 4 + 2] = 42; id.data[i * 4 + 3] = 255; }
+        maskX.putImageData(id, 0, 0);
+      },
       onPictureChange: refreshButtons,
       primary: removeObject,
       onKey(e) {

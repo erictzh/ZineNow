@@ -42,6 +42,16 @@ Hides faces with Blur, Pixelate or a Black box. It uses a tiny face detector, **
 
 Limits: very small, turned away, covered or blurry faces can be missed (draw a box). The detector looks at a 640 pixel version of the picture, so tiny faces in a big group photo may need a crop first (use Remove background's Crop, or crop before you open it).
 
+## Click-to-select
+
+Click a thing and the model outlines it. It uses **MobileSAM** (Apache-2.0), two files that are downloaded together (about 44.7 MB: an image reader of about 28 MB and a mask maker of about 16.5 MB, from huggingface.co/Acly/MobileSAM).
+
+1. Download the model, then press **Read the picture**. The model reads the picture once: about 7 to 11 seconds on a tablet (faster on the graphics chip when there is one). Read it again after you change the picture.
+2. **Click or tap** a thing. It is outlined in orange (about half a second per click). If it picked too little, click again to add more (green dots). To remove a part that should not be included, switch to **Take away** and click on that part (red dots). **Remove the last click** and **Clear the selection** undo clicks.
+3. Use the selection: **Cut it out** keeps only the selection and makes everything else see-through; **Make it see-through** does the opposite; **Send to Remove object** switches to Remove object with the selection already marked, so the AI fills it with what is behind it. Undo brings the picture back.
+
+Tips: several clicks on different things select all of them together. A big picture is read at up to 1280 pixels (the selection is scaled back up). The model is not perfect on thin parts, shadows and busy backgrounds; add or take away clicks to fix them.
+
 ## Text from image (OCR)
 
 Reads the text in a picture on your device and lets you copy it or save it as a .txt file. It uses **Tesseract.js** (Apache-2.0), with one language file per language (from cdn.jsdelivr.net).

@@ -2,7 +2,7 @@
 // box that shows one model's facts with its Download / Delete buttons (used on the Models page and inside each tool).
 // The downloading itself is shared/js/ai/manager.js; nothing downloads until the person confirms in the pop-up (dialog.js).
 
-import { aiSaved, bgPlan, bgSaved, deleteAi, deleteBg, deleteFace, downloadAi, downloadPlan, facePlan, faceSaved } from "../../../shared/js/ai/manager.js";
+import { aiSaved, bgPlan, bgSaved, deleteAi, deleteBg, deleteFace, deleteSam, downloadAi, downloadPlan, facePlan, faceSaved, samPlan, samSaved } from "../../../shared/js/ai/manager.js";
 import { OCR_LANGS, OCR_ENGINE_MB } from "../../../shared/js/ai/ocrLangs.js";
 import { deleteOcrLang, downloadOcr, ocrEngineSaved, ocrLangSaved } from "../../../shared/js/ai/ocr.js";
 import { MODEL_ROWS } from "../../../shared/js/ai/modelList.js";
@@ -19,7 +19,7 @@ export const rowFor = (id) => MODEL_ROWS.find((r) => r.id === id);
 export function modelControl(id) {
   if (controls.has(id)) return controls.get(id);
   const row = rowFor(id);
-  const isFill = id === "fill", isFace = id === "face", isOcr = id.startsWith("ocr:"), ocrCode = isOcr ? id.slice(4) : "";
+  const isFill = id === "fill", isFace = id === "face", isSam = id === "sam", isOcr = id.startsWith("ocr:"), ocrCode = isOcr ? id.slice(4) : "";
   const listeners = new Set();
   const state = { phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null };
   let abort = null;
@@ -33,7 +33,7 @@ export function modelControl(id) {
         set({ phase: saved ? "ready" : "none", plan: { gpu: false, modelMb: row.model.mb, runtimeMb: OCR_ENGINE_MB, totalMb: Math.round(row.model.mb + OCR_ENGINE_MB) } });
         return;
       }
-      const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
+      const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : isSam ? [samSaved(), samPlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
       set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
     } catch (e) { set({ phase: "none", error: e && e.message ? e.message : String(e) }); }
   }
@@ -42,7 +42,7 @@ export function modelControl(id) {
     set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
     try {
       if (isOcr) await downloadOcr(ocrCode, { signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
-      else await downloadAi({ which: isFill ? "fill" : isFace ? "face" : "background", model: isFill || isFace ? undefined : row.model.key, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+      else await downloadAi({ which: isFill ? "fill" : isFace ? "face" : isSam ? "sam" : "background", model: isFill || isFace || isSam ? undefined : row.model.key, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
       await refresh();
     } catch (e) {
       await refresh();
@@ -50,7 +50,7 @@ export function modelControl(id) {
     } finally { abort = null; }
   }
   const cancel = () => { if (abort) abort.abort(); };
-  async function remove() { await (isOcr ? deleteOcrLang(ocrCode, OCR_LANGS.map((l) => l.code)) : isFill ? deleteAi() : isFace ? deleteFace() : deleteBg(row.model.key)); await refresh(); }
+  async function remove() { await (isOcr ? deleteOcrLang(ocrCode, OCR_LANGS.map((l) => l.code)) : isFill ? deleteAi() : isFace ? deleteFace() : isSam ? deleteSam() : deleteBg(row.model.key)); await refresh(); }
   const ctl = { id, row, state, refresh, download, cancel, remove, subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
   controls.set(id, ctl);
   refresh();
@@ -64,7 +64,7 @@ export async function askDownload(ctl) {
   return confirmDialog({
     title: "Download AI model?",
     points: [
-      rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : m.kind === "Text reading (OCR)" ? "an AI text-reading (OCR) language file" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
+      rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : m.kind === "Click-to-select" ? "an AI click-to-select model (two files)" : m.kind === "Text reading (OCR)" ? "an AI text-reading (OCR) language file" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
       "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.",
       rich([["Warning:", true], [" it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete button)."]]),
     ],
