@@ -135,7 +135,7 @@ export const removeObjectTool = {
         picture.stage.addEventListener("pointermove", showRing); picture.stage.addEventListener("pointerdown", showRing);
         picture.stage.addEventListener("pointerleave", hideRing); picture.stage.addEventListener("pointerup", touchHide);
 
-        const sec1 = el("section"); sec1.append(el("h2", "", "1. Mark what to remove"));
+        const sec1 = el("section"); sec1.append(el("h2", "", "Mark what to remove"));
         const seg = el("div", "seg"); seg.setAttribute("role", "group");
         for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
           const b = el("button", key === tool ? "active" : "", label); b.type = "button";
@@ -151,7 +151,7 @@ export const removeObjectTool = {
         ui.clear = el("button", "", "Clear marks"); ui.clear.type = "button"; ui.clear.addEventListener("click", clearMarks);
         sec1.append(seg, brushField, hint, ui.clear);
 
-        const sec2 = el("section"); sec2.append(el("h2", "", "2. Remove it"));
+        const sec2 = el("section"); sec2.append(el("h2", "", "Remove it"));
         const growField = el("label", "field"); growField.append(el("span", "", "Grow the marked area by (px)"));
         const grow = document.createElement("input"); grow.type = "number"; grow.min = 0; grow.max = 60; grow.step = 1; grow.value = settings.grow;
         grow.addEventListener("input", () => { const v = Number(grow.value); if (v >= 0) { settings.grow = v; save(); } });

@@ -174,7 +174,7 @@ export const removeBackgroundTool = {
     return {
       mount(panel) {
         mounted = true;
-        const sec1 = el("section"); sec1.append(el("h2", "", "1. Model"));
+        const sec1 = el("section"); sec1.append(el("h2", "", "Model"));
         const radios = el("div", "radios");
         for (const m of BG_MODELS) {
           const lab = el("label", "radio"); const r = document.createElement("input"); r.type = "radio"; r.name = "bg-model"; r.checked = m.key === modelKey;
@@ -184,7 +184,7 @@ export const removeBackgroundTool = {
         ui.boxHost = el("div");
         sec1.append(radios, ui.boxHost);
 
-        const secC = el("section"); secC.append(el("h2", "", "2. Crop first (optional)"));
+        const secC = el("section"); secC.append(el("h2", "", "Crop first (optional)"));
         ui.cropToggle = el("button", "wide", "Crop first…"); ui.cropToggle.type = "button"; ui.cropToggle.addEventListener("click", () => setCrop(!crop));
         ui.cropBox = el("div"); ui.cropBox.hidden = true;
         ui.cropInfo = el("p", "hint");
@@ -193,7 +193,7 @@ export const removeBackgroundTool = {
         ui.cropBox.append(ui.cropInfo, cropHint, reset);
         secC.append(ui.cropToggle, ui.cropBox);
 
-        const sec2 = el("section"); sec2.append(el("h2", "", "3. Cut out"));
+        const sec2 = el("section"); sec2.append(el("h2", "", "Cut out"));
         const num = (label, key, min, max, step, value, onInput) => {
           const f = el("label", "field"); f.append(el("span", "", label));
           const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.step = step; i.value = value;
@@ -210,7 +210,7 @@ export const removeBackgroundTool = {
         ui.discard = el("button", "big", "Discard"); ui.discard.type = "button"; ui.discard.addEventListener("click", () => { discard(); ctx.status("Discarded."); });
         const note = el("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
         sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
-        panel.append(sec1, secC, sec2);
+        panel.append(secC, sec2, sec1); // the model card is last
         drawModelBox();
         for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh));
         if (crop) picture.setPointerHandler(cropHandler);

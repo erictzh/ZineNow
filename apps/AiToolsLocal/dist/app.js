@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "ac4e217" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "7eb75a4" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -1883,7 +1883,7 @@
         mount(panel) {
           mounted = true;
           const sec1 = el3("section");
-          sec1.append(el3("h2", "", "1. Model"));
+          sec1.append(el3("h2", "", "Model"));
           const radios = el3("div", "radios");
           for (const m of BG_MODELS) {
             const lab = el3("label", "radio");
@@ -1903,7 +1903,7 @@
           ui.boxHost = el3("div");
           sec1.append(radios, ui.boxHost);
           const secC = el3("section");
-          secC.append(el3("h2", "", "2. Crop first (optional)"));
+          secC.append(el3("h2", "", "Crop first (optional)"));
           ui.cropToggle = el3("button", "wide", "Crop first…");
           ui.cropToggle.type = "button";
           ui.cropToggle.addEventListener("click", () => setCrop(!crop));
@@ -1920,7 +1920,7 @@
           ui.cropBox.append(ui.cropInfo, cropHint, reset);
           secC.append(ui.cropToggle, ui.cropBox);
           const sec2 = el3("section");
-          sec2.append(el3("h2", "", "3. Cut out"));
+          sec2.append(el3("h2", "", "Cut out"));
           const num2 = (label, key, min, max, step, value, onInput) => {
             const f = el3("label", "field");
             f.append(el3("span", "", label));
@@ -1968,7 +1968,7 @@
           });
           const note = el3("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
-          panel.append(sec1, secC, sec2);
+          panel.append(secC, sec2, sec1);
           drawModelBox();
           for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh2));
           if (crop) picture2.setPointerHandler(cropHandler);
@@ -2254,7 +2254,7 @@
           picture2.stage.addEventListener("pointerleave", hideRing);
           picture2.stage.addEventListener("pointerup", touchHide);
           const sec1 = el4("section");
-          sec1.append(el4("h2", "", "1. Mark what to remove"));
+          sec1.append(el4("h2", "", "Mark what to remove"));
           const seg = el4("div", "seg");
           seg.setAttribute("role", "group");
           for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
@@ -2290,7 +2290,7 @@
           ui.clear.addEventListener("click", clearMarks);
           sec1.append(seg, brushField, hint, ui.clear);
           const sec2 = el4("section");
-          sec2.append(el4("h2", "", "2. Remove it"));
+          sec2.append(el4("h2", "", "Remove it"));
           const growField = el4("label", "field");
           growField.append(el4("span", "", "Grow the marked area by (px)"));
           const grow = document.createElement("input");
