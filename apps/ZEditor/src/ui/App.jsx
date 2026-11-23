@@ -284,8 +284,9 @@ export function App() {
       {/* .json too: projects saved on Android before 2026-11-22 came out as "Name.znow.json". On Android a
           .znow file has no known type, hence application/octet-stream, so it isn't greyed out. */}
       {/* Import group: a .znow file (a saved group, or any project) whose items come in as one group. */}
-      <input ref={groupFiles.inputRef} type="file" accept=".znow,.json,application/json,application/octet-stream" style={{ display: "none" }} onChange={groupFiles.handleImportInput} />
-      <input ref={project.projectInputRef} type="file" accept=".znow,.json,application/json,application/octet-stream" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
+      {/* No accept filter on the two project inputs below: Android's file picker does not know ".znow", so any filter greyed those files out (only .json showed). The file is checked when it is read. */}
+      <input ref={groupFiles.inputRef} type="file" style={{ display: "none" }} onChange={groupFiles.handleImportInput} />
+      <input ref={project.projectInputRef} type="file" style={{ display: "none" }} onChange={project.handleProjectInputChange} />
 
       <InsertPdfDialog
         file={files.pendingInsertFile}
