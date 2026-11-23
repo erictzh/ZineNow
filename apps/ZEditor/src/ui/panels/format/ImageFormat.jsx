@@ -16,6 +16,8 @@ const { useState } = React;
 
 // Hidden for now (Ai Tools (Local) is still experimental). Set to true to show the section again.
 const SHOW_AI_TOOLS_SECTION = false;
+// Hidden until the background-removal model has been tested on the real device (labs/ai-bg-benchmark). Set to true to show it again.
+const SHOW_REMOVE_BACKGROUND_SECTION = false;
 
 export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
   const patch = (p) => onUpdate(ann.id, p);
@@ -75,7 +77,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
       <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
-      <RemoveBackgroundSection ann={ann} onRemoveBackground={onRemoveBackground} disabled={isCroppingThis} />
+      {SHOW_REMOVE_BACKGROUND_SECTION && <RemoveBackgroundSection ann={ann} onRemoveBackground={onRemoveBackground} disabled={isCroppingThis} />}
       {SHOW_AI_TOOLS_SECTION && (
       <PanelSection
         id="image.aitools"
