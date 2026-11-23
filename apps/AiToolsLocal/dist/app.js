@@ -715,6 +715,7 @@
     return out;
   }
   function softCut(v, cutoff, soft) {
+    if (cutoff <= 0) return 1;
     const half = Math.max(1e-4, Math.min(soft, cutoff, 1 - cutoff));
     const a = (v - (cutoff - half)) / (2 * half);
     return a < 0 ? 0 : a > 1 ? 1 : a;

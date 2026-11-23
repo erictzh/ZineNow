@@ -33,5 +33,6 @@ ok(cm[0] === 0 && Math.abs(cm[1] - 0.3) < 1e-6 && cm[2] === 1, "MODNet answer is
 // very small cut-offs still cut cleanly (the soft part narrows)
 ok(softCut(0, 0.001, 0.1) === 0 && softCut(0.01, 0.001, 0.1) === 1, "a tiny cut-off: background 0 is see-through, anything above is solid");
 ok(softCut(1, 0.999, 0.1) === 1 && softCut(0.9, 0.999, 0.1) === 0, "a cut-off near 100%: only the surest pixels stay");
+ok(softCut(0, 0, 0.1) === 1 && softCut(0.00005, 0, 0.1) === 1, "a cut-off of 0 cuts nothing (even the lowest mask values stay solid)");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
