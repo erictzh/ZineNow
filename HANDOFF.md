@@ -589,3 +589,5 @@ Tested headless with a stand-in ONNX model only (download flow, dialog, 90 % of 
 - `labs/ai-bg-benchmark` shows a **build number** next to its title and at the top of the report (now build 3). Bump it in the page whenever the page changes, so the user can tell a refresh happened.
 
 - `labs/ai-bg-benchmark` build 4: the Edge cut-off slider goes 0-100 (was 5-95); the soft edge narrows near the ends so 100 keeps only the surest pixels and 0 keeps everything.
+
+- `labs/ai-bg-benchmark` build 5: the Edge cut-off slider moves in steps of 0.125 %.
