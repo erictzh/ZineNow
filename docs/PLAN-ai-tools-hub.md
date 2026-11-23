@@ -155,7 +155,7 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 - [x] Tests, guide, HANDOFF.
 
 **3c Click-to-select**
-- [ ] `labs/ai-sam-benchmark/index.html`: MobileSAM encoder + decoder; report the encoder time per picture, the decoder time per click, and the mask drawn for a click.
+- [x] `labs/ai-sam-benchmark/index.html` (build 1, built 2026-11-23): MobileSAM encoder + decoder (Acly/MobileSAM on Hugging Face); report the encoder time per picture (CPU, and GPU if any), the decoder time per click, the mask drawn for each click (add / take away). **Waiting for the user to run it on the tablet.**
 - [ ] Gate: Apache-2.0; total download within budget; encoder time acceptable on the tablet (EdgeSAM as backup).
 - [ ] Tool `src/tools/selectObject.js`: click to add, shift/second mode to subtract, mask preview, "Use as mask" for Remove object, "Cut out" (keep the selection, see-through elsewhere).
 - [ ] Tests, guide, HANDOFF.

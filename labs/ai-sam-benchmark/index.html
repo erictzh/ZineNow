@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AI click-to-select speed test</title>
+<style>
+  :root { color-scheme: dark; --bg:#171312; --fg:#f2ece8; --mut:#a99f98; --acc:#e8622a; --card:#241e1c; --bd:#3a312e; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; max-width:900px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; } p { margin:6px 0; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:12px; margin:12px 0; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:12px 16px; font:inherit; font-weight:600; min-height:44px; }
+  button.sec { background:#3a312e; } button:disabled { opacity:.5; }
+  input[type=text], select { background:#171312; color:var(--fg); border:1px solid var(--bd); border-radius:8px; padding:8px; font:13px monospace; }
+  input[type=text] { width:100%; }
+  label { display:block; margin:8px 0 2px; font-size:13px; color:var(--mut); }
+  pre { white-space:pre-wrap; word-break:break-word; background:#100d0c; border:1px solid var(--bd); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace, monospace; margin:8px 0 0; max-height:380px; overflow:auto; }
+  progress { width:100%; height:14px; } .row { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  #stage { position:relative; margin-top:8px; touch-action:none; line-height:0; }
+  #stage canvas { width:100%; border-radius:6px; background:#000; display:block; }
+  #stage canvas#ov { position:absolute; left:0; top:0; pointer-events:none; }
+  .radio { display:flex; gap:4px; align-items:center; margin:0; color:var(--fg); font-size:14px; }
+</style>
+</head>
+<body>
+<h1>AI click-to-select speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 1</span></h1>
+<p>A throw-away test page (not part of the apps). It downloads a small open-source "segment anything" model (MobileSAM, Apache-2.0 licence, two files: an image reader of about 28 MB and a mask maker of about 16 MB), reads your picture once, and then outlines whatever you click. It times both steps on this device. Nothing is uploaded; your picture never leaves this page.</p>
+
+<div class="card"><b>Your device</b><pre id="device">checking…</pre></div>
+
+<div class="card">
+  <b>1. Pick a picture</b>
+  <p>One with a few separate things (a person and objects, a table of items). If you skip this, a plain test picture is used.</p>
+  <input type="file" id="pic" accept="image/*">
+</div>
+
+<div class="card">
+  <b>2. The models (downloaded once, then kept)</b>
+  <label for="encurl">Image reader (encoder)</label>
+  <input type="text" id="encurl" value="https://huggingface.co/Acly/MobileSAM/resolve/main/mobile_sam_image_encoder.onnx">
+  <label for="encfile">…or choose the encoder .onnx file from your device</label>
+  <input type="file" id="encfile">
+  <label for="decurl">Mask maker (decoder)</label>
+  <input type="text" id="decurl" value="https://huggingface.co/Acly/MobileSAM/resolve/main/sam_mask_decoder_single.onnx">
+  <label for="decfile">…or choose the decoder .onnx file from your device</label>
+  <input type="file" id="decfile">
+  <label for="scale">Picture scaling for the encoder (leave on "standard" unless it does not work)</label>
+  <select id="scale"><option value="std">standard (mean and spread, 0 to 255)</option><option value="raw">raw 0 to 255</option><option value="unit">0 to 1</option></select>
+  <progress id="prog" value="0" max="1" hidden></progress>
+  <div class="row">
+    <button id="run">Run the test</button>
+    <button id="copy" class="sec">Copy the report</button>
+    <button id="clear" class="sec">Forget the downloaded models</button>
+  </div>
+  <p id="status">Not started. Use Wi-Fi for the first run (about 45 MB) and keep this page open.</p>
+</div>
+
+<div class="card" id="results" hidden>
+  <b>3. Click on a thing in the picture</b>
+  <div class="row">
+    <label class="radio"><input type="radio" name="mode" value="1" checked> Add to the selection</label>
+    <label class="radio"><input type="radio" name="mode" value="0"> Take away from the selection</label>
+    <button id="undo" class="sec">Remove last click</button>
+    <button id="reset" class="sec">Clear clicks</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas><canvas id="ov"></canvas></div>
+  <p id="hint">Click or tap the picture. Orange = selected. Dots: green added, red taken away.</p>
+</div>
+
+<div class="card"><b>Report (send me a screenshot of this, or use "Copy the report")</b><pre id="log">(nothing yet)</pre></div>
+
+<script>
+"use strict";
+const BUILD = 1;
+const ORT_VERSION = "1.31.1";
+const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
+const CACHE = "zinenow-ai-sam-benchmark-model";
+const SIZE = 1024;
+const MEAN = [123.675, 116.28, 103.53], STD = [58.395, 57.12, 57.375];
+const $ = (id) => document.getElementById(id);
+const lines = [];
+const log = (s) => { lines.push(s); $("log").textContent = lines.join("\n"); };
+const status = (s) => { $("status").textContent = s; };
+const ms = (a) => Math.round(performance.now() - a);
+let S = null; // { ort, pic, k, embeddings, dec, points: [{x, y, label}] }
+
+async function deviceInfo() {
+  const out = ["Browser: " + navigator.userAgent, "CPU threads reported: " + (navigator.hardwareConcurrency || "?"), "Memory reported (GB, rounded down): " + (navigator.deviceMemory || "?")];
+  let gpu = "not available"; try { if (navigator.gpu && (await navigator.gpu.requestAdapter())) gpu = "available"; } catch (e) { /* none */ }
+  out.push("GPU (WebGPU): " + gpu);
+  $("device").textContent = out.join("\n");
+  return { webgpu: gpu === "available" };
+}
+
+async function getModel(label, urlId, fileId) {
+  const f = $(fileId).files[0];
+  if (f) { log(label + ": using the file you chose (" + (f.size / 1048576).toFixed(1) + " MB)"); return await f.arrayBuffer(); }
+  const url = $(urlId).value.trim();
+  const cache = await caches.open(CACHE);
+  const res = await cache.match(url);
+  if (res) { log(label + ": already downloaded earlier, using the saved copy."); return await res.arrayBuffer(); }
+  const t = performance.now();
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(label + " download failed: HTTP " + r.status + " (you can choose the file from your device instead)");
+  const total = Number(r.headers.get("content-length")) || 0;
+  const reader = r.body.getReader(); const chunks = []; let got = 0;
+  $("prog").hidden = false;
+  for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length; if (total) { $("prog").max = total; $("prog").value = got; } status("Downloading the " + label + "… " + (got / 1048576).toFixed(1) + (total ? " / " + (total / 1048576).toFixed(1) : "") + " MB"); }
+  $("prog").hidden = true;
+  const buf = new Uint8Array(got); let off = 0; for (const c of chunks) { buf.set(c, off); off += c.length; }
+  try { await cache.put(url, new Response(buf.buffer.slice(0), { headers: { "content-type": "application/octet-stream" } })); } catch (e) { log("(could not keep the " + label + " for next time: " + e.message + ")"); }
+  log(label + " downloaded: " + (got / 1048576).toFixed(1) + " MB in " + ms(t) + " ms");
+  return buf.buffer;
+}
+
+function builtInPicture() {
+  const c = document.createElement("canvas"); c.width = 800; c.height = 600;
+  const x = c.getContext("2d"); x.fillStyle = "#3b5a47"; x.fillRect(0, 0, 800, 600);
+  x.fillStyle = "#e8622a"; x.beginPath(); x.arc(250, 300, 120, 0, 7); x.fill();
+  x.fillStyle = "#f2d6b8"; x.fillRect(480, 200, 200, 250);
+  return c;
+}
+async function loadPicture() {
+  const f = $("pic").files[0];
+  if (!f) { log("Picture: the built-in test picture (a circle and a box: pick your own)"); return builtInPicture(); }
+  const bmp = await createImageBitmap(f);
+  const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  log("Picture: yours, " + c.width + "×" + c.height);
+  return c;
+}
+
+// The encoder input: the picture shrunk so its long side is 1024, scaled as chosen, in the top left of a 1024 x 1024 square (the rest 0).
+function encoderInput(ort, pic, mode) {
+  const k = SIZE / Math.max(pic.width, pic.height);
+  const w = Math.round(pic.width * k), h = Math.round(pic.height * k);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high"; x.drawImage(pic, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, n = SIZE * SIZE, out = new Float32Array(3 * n);
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+    const i = (yy * w + xx) * 4, o = yy * SIZE + xx;
+    for (let ch = 0; ch < 3; ch++) { const v = d[i + ch]; out[ch * n + o] = mode === "std" ? (v - MEAN[ch]) / STD[ch] : mode === "unit" ? v / 255 : v; }
+  }
+  return { tensor: new ort.Tensor("float32", out, [1, 3, SIZE, SIZE]), k };
+}
+const stats = (a) => { let lo = Infinity, hi = -Infinity, s = 0; for (let i = 0; i < a.length; i++) { const v = a[i]; if (v < lo) lo = v; if (v > hi) hi = v; s += v; } return "min " + lo.toFixed(3) + " max " + hi.toFixed(3) + " mean " + (s / a.length).toFixed(4); };
+
+async function decodeClick() {
+  const { ort, dec, pic, k, embeddings, points } = S;
+  const n = points.length + 1;
+  const coords = new Float32Array(n * 2), labels = new Float32Array(n);
+  points.forEach((p, i) => { coords[i * 2] = p.x * k; coords[i * 2 + 1] = p.y * k; labels[i] = p.label; });
+  labels[n - 1] = -1; // the usual "no box" padding point
+  const feeds = {};
+  const has = (name) => dec.inputNames.includes(name);
+  feeds.image_embeddings = embeddings;
+  feeds.point_coords = new ort.Tensor("float32", coords, [1, n, 2]);
+  feeds.point_labels = new ort.Tensor("float32", labels, [1, n]);
+  if (has("mask_input")) feeds.mask_input = new ort.Tensor("float32", new Float32Array(256 * 256), [1, 1, 256, 256]);
+  if (has("has_mask_input")) feeds.has_mask_input = new ort.Tensor("float32", new Float32Array([0]), [1]);
+  if (has("orig_im_size")) feeds.orig_im_size = new ort.Tensor("float32", new Float32Array([pic.height, pic.width]), [2]);
+  const t = performance.now();
+  const out = await dec.run(feeds);
+  const time = ms(t);
+  const masks = out[dec.outputNames.find((q) => /^masks?$/.test(q)) || dec.outputNames[0]];
+  const iou = out[dec.outputNames.find((q) => /iou/.test(q))];
+  const [, kk, mh, mw] = masks.dims.length === 4 ? masks.dims : [1, 1, masks.dims[masks.dims.length - 2], masks.dims[masks.dims.length - 1]];
+  let best = 0; if (iou && kk > 1) for (let i = 1; i < kk; i++) if (iou.data[i] > iou.data[best]) best = i;
+  const m = masks.data.subarray(best * mh * mw, (best + 1) * mh * mw);
+  let on = 0; for (let i = 0; i < m.length; i++) if (m[i] > 0) on++;
+  log("[click " + points.length + "] decoder " + time + " ms · mask " + mw + "×" + mh + " · selected " + (100 * on / m.length).toFixed(1) + " % of the picture" + (iou ? " · quality score " + Array.from(iou.data).map((v) => v.toFixed(2)).join(",") : ""));
+  // draw
+  const ov = $("ov"); ov.width = pic.width; ov.height = pic.height;
+  const mc = document.createElement("canvas"); mc.width = mw; mc.height = mh;
+  const mx = mc.getContext("2d"); const id = mx.createImageData(mw, mh);
+  for (let i = 0; i < m.length; i++) if (m[i] > 0) { id.data[i * 4] = 232; id.data[i * 4 + 1] = 98; id.data[i * 4 + 2] = 42; id.data[i * 4 + 3] = 150; }
+  mx.putImageData(id, 0, 0);
+  const x = ov.getContext("2d"); x.clearRect(0, 0, ov.width, ov.height); x.drawImage(mc, 0, 0, ov.width, ov.height);
+  for (const p of points) { x.beginPath(); x.arc(p.x, p.y, Math.max(5, ov.width / 120), 0, 7); x.fillStyle = p.label ? "#3fd26f" : "#ff5a5a"; x.fill(); x.lineWidth = 2; x.strokeStyle = "#fff"; x.stroke(); }
+}
+$("cv").addEventListener("pointerdown", async (e) => {
+  if (!S) return;
+  const r = $("cv").getBoundingClientRect();
+  S.points.push({ x: (e.clientX - r.left) / r.width * S.pic.width, y: (e.clientY - r.top) / r.height * S.pic.height, label: Number(document.querySelector("input[name=mode]:checked").value) });
+  try { await decodeClick(); } catch (err) { log("ERROR (decoder): " + err.message); }
+});
+$("undo").onclick = async () => { if (!S || !S.points.length) return; S.points.pop(); if (S.points.length) await decodeClick(); else $("ov").getContext("2d").clearRect(0, 0, $("ov").width, $("ov").height); };
+$("reset").onclick = () => { if (!S) return; S.points.length = 0; $("ov").getContext("2d").clearRect(0, 0, $("ov").width, $("ov").height); };
+
+$("run").onclick = async () => {
+  $("run").disabled = true; $("results").hidden = true; S = null;
+  lines.length = 0; log("ZineNow click-to-select test · build " + BUILD + " · runtime " + ORT_VERSION + " · " + new Date().toISOString());
+  try {
+    const dev = await deviceInfo();
+    if (!self.ort) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = ORT_URL; s.onload = res; s.onerror = () => rej(new Error("Could not load the AI runtime from the internet.")); document.head.append(s); });
+    const ort = self.ort; ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+    const pic = await loadPicture();
+    const encBytes = await getModel("image reader", "encurl", "encfile");
+    const decBytes = await getModel("mask maker", "decurl", "decfile");
+    status("Starting the models…");
+    let t = performance.now();
+    const enc = await ort.InferenceSession.create(encBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+    log("[CPU] encoder started in " + ms(t) + " ms · input " + enc.inputNames.join(",") + " · output " + enc.outputNames.join(","));
+    t = performance.now();
+    const dec = await ort.InferenceSession.create(decBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+    log("[CPU] decoder started in " + ms(t) + " ms · inputs " + dec.inputNames.join(",") + " · outputs " + dec.outputNames.join(","));
+    const { tensor, k } = encoderInput(ort, pic, $("scale").value);
+    status("Reading the picture (the slow step, once per picture)…");
+    t = performance.now();
+    const out = await enc.run({ [enc.inputNames[0]]: tensor });
+    const embeddings = out[enc.outputNames[0]];
+    log("[CPU] encoder first run: " + ms(t) + " ms (" + (ms(t) / 1000).toFixed(1) + " s) · output " + enc.outputNames[0] + " dims " + embeddings.dims.join("x") + " · " + stats(embeddings.data));
+    t = performance.now(); await enc.run({ [enc.inputNames[0]]: tensor }); log("[CPU] encoder second run (warm): " + ms(t) + " ms");
+    if (dev.webgpu) {
+      try {
+        t = performance.now();
+        const g = await ort.InferenceSession.create(encBytes, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" });
+        log("[GPU] encoder started in " + ms(t) + " ms");
+        t = performance.now(); await g.run({ [g.inputNames[0]]: tensor }); log("[GPU] encoder first run: " + ms(t) + " ms");
+        t = performance.now(); await g.run({ [g.inputNames[0]]: tensor }); log("[GPU] encoder second run (warm): " + ms(t) + " ms");
+        try { await g.release(); } catch (e) { /* ignore */ }
+      } catch (e) { log("[GPU] encoder could not run: " + e.message); }
+    } else log("[GPU] skipped: not available on this device/browser");
+    S = { ort, pic, k, embeddings, dec, points: [] };
+    const cv = $("cv"); cv.width = pic.width; cv.height = pic.height; cv.getContext("2d").drawImage(pic, 0, 0);
+    $("ov").width = pic.width; $("ov").height = pic.height;
+    $("results").hidden = false;
+    status("Ready. Click things in the picture below. Each click is timed in the report.");
+    log("== READY: click the picture, then send me the report ==");
+  } catch (e) { $("prog").hidden = true; log("ERROR: " + (e && e.message ? e.message : e)); status("Something went wrong: " + (e && e.message ? e.message : e)); }
+  finally { $("run").disabled = false; }
+};
+$("copy").onclick = async () => { try { await navigator.clipboard.writeText(lines.join("\n")); status("Report copied."); } catch (e) { status("Could not copy: select the report text and copy it by hand."); } };
+$("clear").onclick = async () => { await caches.delete(CACHE); status("The downloaded models were removed from this device."); };
+deviceInfo();
+</script>
+</body>
+</html>
