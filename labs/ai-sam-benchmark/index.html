@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-<h1>AI click-to-select speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 1</span></h1>
+<h1>AI click-to-select speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 2 · also accepts an encoder that takes a plain picture</span></h1>
 <p>A throw-away test page (not part of the apps). It downloads a small open-source "segment anything" model (MobileSAM, Apache-2.0 licence, two files: an image reader of about 28 MB and a mask maker of about 16 MB), reads your picture once, and then outlines whatever you click. It times both steps on this device. Nothing is uploaded; your picture never leaves this page.</p>
 
 <div class="card"><b>Your device</b><pre id="device">checking…</pre></div>
@@ -73,7 +73,7 @@
 
 <script>
 "use strict";
-const BUILD = 1;
+const BUILD = 2;
 const ORT_VERSION = "1.31.1";
 const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
 const CACHE = "zinenow-ai-sam-benchmark-model";
@@ -133,13 +133,20 @@ async function loadPicture() {
   return c;
 }
 
-// The encoder input: the picture shrunk so its long side is 1024, scaled as chosen, in the top left of a 1024 x 1024 square (the rest 0).
-function encoderInput(ort, pic, mode) {
+// The encoder input: the picture shrunk so its long side is 1024. Two layouts exist: "nchw" (1 x 3 x 1024 x 1024, scaled as chosen, picture in the top
+// left, the rest 0) and "hwc" (a plain height x width x 3 picture, colours 0 to 255, for encoders that scale and pad inside, like Acly's export).
+function encoderInput(ort, pic, layout, mode) {
   const k = SIZE / Math.max(pic.width, pic.height);
   const w = Math.round(pic.width * k), h = Math.round(pic.height * k);
   const c = document.createElement("canvas"); c.width = w; c.height = h;
   const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high"; x.drawImage(pic, 0, 0, w, h);
-  const d = x.getImageData(0, 0, w, h).data, n = SIZE * SIZE, out = new Float32Array(3 * n);
+  const d = x.getImageData(0, 0, w, h).data;
+  if (layout === "hwc" || layout === "hwc8") {
+    const f = layout === "hwc8" ? new Uint8Array(w * h * 3) : new Float32Array(w * h * 3);
+    for (let i = 0, o = 0; i < w * h; i++) { f[o++] = d[i * 4]; f[o++] = d[i * 4 + 1]; f[o++] = d[i * 4 + 2]; }
+    return { tensor: new ort.Tensor(layout === "hwc8" ? "uint8" : "float32", f, [h, w, 3]), k };
+  }
+  const n = SIZE * SIZE, out = new Float32Array(3 * n);
   for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
     const i = (yy * w + xx) * 4, o = yy * SIZE + xx;
     for (let ch = 0; ch < 3; ch++) { const v = d[i + ch]; out[ch * n + o] = mode === "std" ? (v - MEAN[ch]) / STD[ch] : mode === "unit" ? v / 255 : v; }
@@ -207,10 +214,20 @@ $("run").onclick = async () => {
     t = performance.now();
     const dec = await ort.InferenceSession.create(decBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
     log("[CPU] decoder started in " + ms(t) + " ms · inputs " + dec.inputNames.join(",") + " · outputs " + dec.outputNames.join(","));
-    const { tensor, k } = encoderInput(ort, pic, $("scale").value);
     status("Reading the picture (the slow step, once per picture)…");
-    t = performance.now();
-    const out = await enc.run({ [enc.inputNames[0]]: tensor });
+    // try the layouts one after the other until the encoder accepts one
+    let tensor, k, out, used;
+    const attempts = [["nchw", "1 x 3 x 1024 x 1024, scaled '" + $("scale").value + "'"], ["hwc", "plain height x width x 3, 0 to 255 (decimal)"], ["hwc8", "plain height x width x 3, 0 to 255 (whole numbers)"]];
+    for (const [layout, desc] of attempts) {
+      try {
+        ({ tensor, k } = encoderInput(ort, pic, layout, $("scale").value));
+        t = performance.now();
+        out = await enc.run({ [enc.inputNames[0]]: tensor });
+        used = desc; log("[CPU] encoder accepted the input: " + desc + " (dims " + tensor.dims.join("x") + ")");
+        break;
+      } catch (e) { log("[CPU] encoder did not accept '" + desc + "': " + String(e.message).replace(/\s+/g, " ").slice(0, 160)); }
+    }
+    if (!out) throw new Error("The image reader accepted none of the picture layouts I tried. Send me this report.");
     const embeddings = out[enc.outputNames[0]];
     log("[CPU] encoder first run: " + ms(t) + " ms (" + (ms(t) / 1000).toFixed(1) + " s) · output " + enc.outputNames[0] + " dims " + embeddings.dims.join("x") + " · " + stats(embeddings.data));
     t = performance.now(); await enc.run({ [enc.inputNames[0]]: tensor }); log("[CPU] encoder second run (warm): " + ms(t) + " ms");
