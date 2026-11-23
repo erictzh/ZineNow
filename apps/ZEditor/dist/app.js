@@ -11036,7 +11036,9 @@
     // Brush shape: the brush's width, page px
     brushErase: false,
     // Brush shape: true = painting rubs the marks out
-    fillColor: "#ffffff"
+    fillColor: "#ffffff",
+    areaVisible: true
+    // false: the marked area stays but is not drawn (look at the result; press the box again to edit)
   };
   var MARQUEE_MIN_SIZE = 4;
   var MIN_POLYGON_POINTS = 3;
@@ -15279,6 +15281,7 @@
     marquee,
     marqueeShape,
     marqueeBrush,
+    marqueeHidden,
     onMarqueeChange,
     zoom,
     rulerUnit,
@@ -15392,6 +15395,7 @@
         startMeasure(e);
         return;
       }
+      if (tool === "marquee" && marqueeHidden) return;
       if (tool === "marquee") {
         if (brushing) {
           const brush = marqueeBrush || { size: 24, erase: false };
@@ -15646,8 +15650,8 @@
       selectionTurn && /* @__PURE__ */ React.createElement(SelectionTurnKnob, { turn: selectionTurn, zoom, toPagePoint: overlayPoint, onRotateAnnotations }),
       measuring && measure && /* @__PURE__ */ React.createElement(MeasureOverlay, { measure, pageSize: canvasSize, zoom, unit: rulerUnit, onHandleDown: dragMeasureEnd }),
       softErasing && brushPos && /* @__PURE__ */ React.createElement(BrushCursor, { pos: brushPos, softEraser }),
-      tool === "marquee" && (marquee || brushLive) && /* @__PURE__ */ React.createElement(MarqueeOverlay, { region: marquee, zoom, pageSize: canvasSize, hover: polygonHover, toPagePoint: overlayPoint, onChange: onMarqueeChange, brushLive }),
-      brushing && brushHover && !brushLive && /* @__PURE__ */ React.createElement(BrushCursor, { pos: brushHover, softEraser: { size: marqueeBrush && marqueeBrush.size || 24, softness: 0 } }),
+      tool === "marquee" && !marqueeHidden && (marquee || brushLive) && /* @__PURE__ */ React.createElement(MarqueeOverlay, { region: marquee, zoom, pageSize: canvasSize, hover: polygonHover, toPagePoint: overlayPoint, onChange: onMarqueeChange, brushLive }),
+      brushing && !marqueeHidden && brushHover && !brushLive && /* @__PURE__ */ React.createElement(BrushCursor, { pos: brushHover, softEraser: { size: marqueeBrush && marqueeBrush.size || 24, softness: 0 } }),
       dragRect && /* @__PURE__ */ React.createElement("div", { className: "ze-drag-rect", style: { left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : void 0 } })
     ), /* @__PURE__ */ React.createElement(
       PageOverlays,
@@ -17185,7 +17189,7 @@
       { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
       { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
       { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: !useAi && (settings.fillStyle !== "pattern" || settings.fillMix !== void 0 && settings.fillMix < 100) }
-    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || settings.fillStyle === "ai" && ai.phase === "ready"), onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
+    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.areaVisible !== false, onChange: (e) => change({ areaVisible: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, brush ? "Brush area is visible" : "Selected area is visible"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Untick to hide the marked area and see the result. It stays marked, so Try another still works. Tick again to edit it.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || settings.fillStyle === "ai" && ai.phase === "ready"), onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
       AiModelDialog,
       {
         mode: aiDialog,
@@ -18697,7 +18701,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "9aeadd9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "6b02b15"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -19271,6 +19275,7 @@
         onMagicClick: magic.start,
         marquee: marquee.region,
         marqueeShape: t.marquee.shape,
+        marqueeHidden: t.marquee.areaVisible === false,
         marqueeBrush: { size: t.marquee.brushSize, erase: t.marquee.brushErase },
         onMarqueeChange: marquee.setRegion,
         snapGuides: view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null

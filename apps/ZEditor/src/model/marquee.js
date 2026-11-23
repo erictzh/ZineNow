@@ -36,6 +36,7 @@ export const MARQUEE_DEFAULTS = {
   brushSize: 24, // Brush shape: the brush's width, page px
   brushErase: false, // Brush shape: true = painting rubs the marks out
   fillColor: "#ffffff",
+  areaVisible: true, // false: the marked area stays but is not drawn (look at the result; press the box again to edit)
 };
 
 export const MARQUEE_MIN_SIZE = 4; // page px: a rectangle smaller than this is a click, not a marquee

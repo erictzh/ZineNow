@@ -40,7 +40,7 @@ export function ComposeCanvas({
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
-  marquee, marqueeShape, marqueeBrush, onMarqueeChange,
+  marquee, marqueeShape, marqueeBrush, marqueeHidden, onMarqueeChange,
   zoom, rulerUnit, viewKey,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
@@ -175,6 +175,7 @@ export function ComposeCanvas({
       startMeasure(e);
       return;
     }
+    if (tool === "marquee" && marqueeHidden) return; // the marked area is hidden (Marquee panel): do not start a new one by accident
     if (tool === "marquee") { // draws the marquee; the selected layer (the one "Selected layer" works on) stays selected
       if (brushing) {
         const brush = marqueeBrush || { size: 24, erase: false };
@@ -477,8 +478,8 @@ export function ComposeCanvas({
         )}
         {measuring && measure && <MeasureOverlay measure={measure} pageSize={canvasSize} zoom={zoom} unit={rulerUnit} onHandleDown={dragMeasureEnd} />}
         {softErasing && brushPos && <BrushCursor pos={brushPos} softEraser={softEraser} />}
-        {tool === "marquee" && (marquee || brushLive) && <MarqueeOverlay region={marquee} zoom={zoom} pageSize={canvasSize} hover={polygonHover} toPagePoint={overlayPoint} onChange={onMarqueeChange} brushLive={brushLive} />}
-        {brushing && brushHover && !brushLive && <BrushCursor pos={brushHover} softEraser={{ size: (marqueeBrush && marqueeBrush.size) || 24, softness: 0 }} />}
+        {tool === "marquee" && !marqueeHidden && (marquee || brushLive) && <MarqueeOverlay region={marquee} zoom={zoom} pageSize={canvasSize} hover={polygonHover} toPagePoint={overlayPoint} onChange={onMarqueeChange} brushLive={brushLive} />}
+        {brushing && !marqueeHidden && brushHover && !brushLive && <BrushCursor pos={brushHover} softEraser={{ size: (marqueeBrush && marqueeBrush.size) || 24, softness: 0 }} />}
         {dragRect && (
           <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
         )}
