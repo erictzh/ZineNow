@@ -20,12 +20,12 @@
   progress { width:100%; height:14px; } .row { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:center; }
   #stage { position:relative; margin-top:8px; touch-action:none; line-height:0; }
   #stage canvas { width:100%; border-radius:6px; background:#000; display:block; }
-  #stage canvas#ov { position:absolute; left:0; top:0; pointer-events:none; }
+  #stage canvas#ov { position:absolute; left:0; top:0; pointer-events:none; background:transparent; }
   .radio { display:flex; gap:4px; align-items:center; margin:0; color:var(--fg); font-size:14px; }
 </style>
 </head>
 <body>
-<h1>AI click-to-select speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 2 · also accepts an encoder that takes a plain picture</span></h1>
+<h1>AI click-to-select speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 3 · picture visible, clicks queued</span></h1>
 <p>A throw-away test page (not part of the apps). It downloads a small open-source "segment anything" model (MobileSAM, Apache-2.0 licence, two files: an image reader of about 28 MB and a mask maker of about 16 MB), reads your picture once, and then outlines whatever you click. It times both steps on this device. Nothing is uploaded; your picture never leaves this page.</p>
 
 <div class="card"><b>Your device</b><pre id="device">checking…</pre></div>
@@ -73,7 +73,7 @@
 
 <script>
 "use strict";
-const BUILD = 2;
+const BUILD = 3;
 const ORT_VERSION = "1.31.1";
 const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
 const CACHE = "zinenow-ai-sam-benchmark-model";
@@ -188,13 +188,22 @@ async function decodeClick() {
   const x = ov.getContext("2d"); x.clearRect(0, 0, ov.width, ov.height); x.drawImage(mc, 0, 0, ov.width, ov.height);
   for (const p of points) { x.beginPath(); x.arc(p.x, p.y, Math.max(5, ov.width / 120), 0, 7); x.fillStyle = p.label ? "#3fd26f" : "#ff5a5a"; x.fill(); x.lineWidth = 2; x.strokeStyle = "#fff"; x.stroke(); }
 }
-$("cv").addEventListener("pointerdown", async (e) => {
+// The decoder can only do one thing at a time: clicks that arrive while it works are merged, and the latest set of clicks is decoded when it is free.
+let deciding = false, again = false;
+async function requestDecode() {
+  if (deciding) { again = true; return; }
+  deciding = true; $("hint").textContent = "Working…";
+  try { do { again = false; if (S.points.length) await decodeClick(); } while (again); }
+  catch (err) { log("ERROR (decoder): " + err.message); }
+  finally { deciding = false; $("hint").textContent = "Click or tap the picture. Orange = selected. Dots: green added, red taken away."; }
+}
+$("cv").addEventListener("pointerdown", (e) => {
   if (!S) return;
   const r = $("cv").getBoundingClientRect();
   S.points.push({ x: (e.clientX - r.left) / r.width * S.pic.width, y: (e.clientY - r.top) / r.height * S.pic.height, label: Number(document.querySelector("input[name=mode]:checked").value) });
-  try { await decodeClick(); } catch (err) { log("ERROR (decoder): " + err.message); }
+  requestDecode();
 });
-$("undo").onclick = async () => { if (!S || !S.points.length) return; S.points.pop(); if (S.points.length) await decodeClick(); else $("ov").getContext("2d").clearRect(0, 0, $("ov").width, $("ov").height); };
+$("undo").onclick = () => { if (!S || !S.points.length) return; S.points.pop(); if (S.points.length) requestDecode(); else $("ov").getContext("2d").clearRect(0, 0, $("ov").width, $("ov").height); };
 $("reset").onclick = () => { if (!S) return; S.points.length = 0; $("ov").getContext("2d").clearRect(0, 0, $("ov").width, $("ov").height); };
 
 $("run").onclick = async () => {
