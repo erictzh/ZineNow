@@ -3,14 +3,14 @@
 export const DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
 const CACHE_NAME = "zinenow-ai-tools-model";
 
-export async function isModelSaved(url) {
-  try { return Boolean(await (await caches.open(CACHE_NAME)).match(url)); } catch (e) { return false; }
+export async function isModelSaved(url, cacheName = CACHE_NAME) {
+  try { return Boolean(await (await caches.open(cacheName)).match(url)); } catch (e) { return false; }
 }
 
 // The model's bytes. `onProgress(doneBytes, totalBytes)` while it downloads; not called when it is already saved.
-export async function getModelBytes(url, onProgress, signal) {
+export async function getModelBytes(url, onProgress, signal, cacheName = CACHE_NAME) {
   let cache = null;
-  try { cache = await caches.open(CACHE_NAME); } catch (e) { /* no cache storage: it downloads every time */ }
+  try { cache = await caches.open(cacheName); } catch (e) { /* no cache storage: it downloads every time */ }
   if (cache) {
     const saved = await cache.match(url);
     if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
@@ -32,6 +32,6 @@ export async function getModelBytes(url, onProgress, signal) {
   return { bytes: bytes.buffer, downloaded: true };
 }
 
-export async function forgetModel() {
-  try { await caches.delete(CACHE_NAME); } catch (e) { /* nothing to forget */ }
+export async function forgetModel(cacheName = CACHE_NAME) {
+  try { await caches.delete(cacheName); } catch (e) { /* nothing to forget */ }
 }

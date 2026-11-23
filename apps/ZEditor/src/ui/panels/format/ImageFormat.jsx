@@ -11,12 +11,13 @@ import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
+import { RemoveBackgroundSection } from "./RemoveBackgroundSection.jsx";
 const { useState } = React;
 
 // Hidden for now (Ai Tools (Local) is still experimental). Set to true to show the section again.
 const SHOW_AI_TOOLS_SECTION = false;
 
-export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace }) {
+export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
   const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -74,6 +75,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
       <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
+      <RemoveBackgroundSection ann={ann} onRemoveBackground={onRemoveBackground} disabled={isCroppingThis} />
       {SHOW_AI_TOOLS_SECTION && (
       <PanelSection
         id="image.aitools"

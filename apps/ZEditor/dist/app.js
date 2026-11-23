@@ -6000,23 +6000,23 @@
         lines.push("");
         continue;
       }
-      let current2 = "";
+      let current3 = "";
       para.split(" ").forEach((word, wordIndex) => {
         const atoms = word === "" ? [""] : wrapAtoms(word);
         atoms.forEach((atom, atomIndex) => {
           const joiner = atomIndex === 0 && wordIndex > 0 ? " " : "";
-          const test = current2 + joiner + atom;
-          if (current2 && measure(test) > maxWidth) {
-            lines.push(current2);
-            current2 = measure(atom) > maxWidth ? cutToFit(atom) : atom;
-          } else if (!current2 && measure(test) > maxWidth) {
-            current2 = cutToFit(test);
+          const test = current3 + joiner + atom;
+          if (current3 && measure(test) > maxWidth) {
+            lines.push(current3);
+            current3 = measure(atom) > maxWidth ? cutToFit(atom) : atom;
+          } else if (!current3 && measure(test) > maxWidth) {
+            current3 = cutToFit(test);
           } else {
-            current2 = test;
+            current3 = test;
           }
         });
       });
-      lines.push(current2);
+      lines.push(current3);
     }
     return lines;
   }
@@ -6408,6 +6408,422 @@
     return out;
   }
 
+  // shared/js/ai/bgModel.js
+  var BG_MODEL_URL = "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx";
+  var BG_CACHE = "zinenow-ai-bg-model";
+  var BG_MODEL_MB = 4.7;
+
+  // shared/js/ai/modelStore.js
+  var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
+  var CACHE_NAME = "zinenow-ai-tools-model";
+  async function isModelSaved(url, cacheName = CACHE_NAME) {
+    try {
+      return Boolean(await (await caches.open(cacheName)).match(url));
+    } catch (e) {
+      return false;
+    }
+  }
+  async function getModelBytes(url, onProgress, signal, cacheName = CACHE_NAME) {
+    let cache3 = null;
+    try {
+      cache3 = await caches.open(cacheName);
+    } catch (e) {
+    }
+    if (cache3) {
+      const saved = await cache3.match(url);
+      if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
+    }
+    const res = await fetch(url, signal ? { signal } : void 0);
+    if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
+    const total = Number(res.headers.get("content-length")) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.length;
+      if (onProgress) onProgress(got, total);
+    }
+    const bytes = new Uint8Array(got);
+    let off = 0;
+    for (const c of chunks) {
+      bytes.set(c, off);
+      off += c.length;
+    }
+    if (cache3) {
+      try {
+        await cache3.put(url, new Response(bytes.buffer, { headers: { "content-type": "application/octet-stream" } }));
+      } catch (e) {
+      }
+    }
+    return { bytes: bytes.buffer, downloaded: true };
+  }
+  async function forgetModel(cacheName = CACHE_NAME) {
+    try {
+      await caches.delete(cacheName);
+    } catch (e) {
+    }
+  }
+
+  // shared/js/ai/fill.js
+  var MODEL_SIZE = 512;
+  var CONTEXT = 1.5;
+  function cropWindow(bounds, w, h) {
+    const bw = bounds.x1 - bounds.x0 + 1, bh = bounds.y1 - bounds.y0 + 1;
+    const need = Math.max(bw, bh);
+    const short = Math.min(w, h);
+    if (need > short * 0.92) return null;
+    let side = Math.max(MODEL_SIZE, Math.ceil(need * CONTEXT));
+    side = Math.min(side, short);
+    const cx = (bounds.x0 + bounds.x1 + 1) / 2, cy = (bounds.y0 + bounds.y1 + 1) / 2;
+    const x = Math.round(Math.min(Math.max(0, cx - side / 2), w - side));
+    const y = Math.round(Math.min(Math.max(0, cy - side / 2), h - side));
+    return { x, y, side };
+  }
+  function windowMask(mask, w, crop) {
+    const out = new Uint8Array(MODEL_SIZE * MODEL_SIZE);
+    const k = crop.side / MODEL_SIZE;
+    for (let my = 0; my < MODEL_SIZE; my++) {
+      const y0 = crop.y + Math.floor(my * k), y1 = crop.y + Math.max(Math.floor(my * k), Math.ceil((my + 1) * k) - 1);
+      for (let mx = 0; mx < MODEL_SIZE; mx++) {
+        const x0 = crop.x + Math.floor(mx * k), x1 = crop.x + Math.max(Math.floor(mx * k), Math.ceil((mx + 1) * k) - 1);
+        let hit = 0;
+        for (let yy = y0; yy <= y1 && !hit; yy++) for (let xx = x0; xx <= x1; xx++) if (mask[yy * w + xx]) {
+          hit = 1;
+          break;
+        }
+        out[my * MODEL_SIZE + mx] = hit;
+      }
+    }
+    return out;
+  }
+  function buildInput(rgba, hole, sign = 1) {
+    const n = MODEL_SIZE * MODEL_SIZE;
+    const x = new Float32Array(4 * n);
+    for (let i = 0; i < n; i++) {
+      const known = hole[i] ? 0 : 1;
+      x[i] = sign * (known - 0.5);
+      for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = (rgba[i * 4 + c] / 127.5 - 1) * known;
+    }
+    return x;
+  }
+  function outputToRgba(out) {
+    const n = MODEL_SIZE * MODEL_SIZE;
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < 3 * n; i += 7) {
+      const v = out[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const mode = min < -0.01 && max <= 1.5 ? "signed" : max <= 1.5 ? "unit" : "byte";
+    const rgba = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < 3; c++) {
+        const v = out[c * n + i];
+        rgba[i * 4 + c] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v;
+      }
+      rgba[i * 4 + 3] = 255;
+    }
+    return rgba;
+  }
+  function blendWeights(mask, w, crop, feather) {
+    const s = crop.side;
+    const inside = new Uint8Array(s * s);
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) inside[y * s + x] = mask[(crop.y + y) * w + crop.x + x];
+    if (feather <= 0) return Float32Array.from(inside);
+    const a = new Float32Array(s * s), r = feather;
+    const rowSum = new Float32Array(s * s);
+    for (let y = 0; y < s; y++) {
+      let sum = 0;
+      const row = y * s;
+      for (let x = -r; x < s + r; x++) {
+        const add = x + r, sub = x - r - 1;
+        if (add < s && add >= 0) sum += inside[row + add];
+        if (sub >= 0 && sub < s) sum -= inside[row + sub];
+        if (x >= 0 && x < s) rowSum[row + x] = sum;
+      }
+    }
+    const win = 2 * r + 1;
+    for (let x = 0; x < s; x++) {
+      let sum = 0;
+      for (let y = -r; y < s + r; y++) {
+        const add = y + r, sub = y - r - 1;
+        if (add < s && add >= 0) sum += rowSum[add * s + x];
+        if (sub >= 0 && sub < s) sum -= rowSum[sub * s + x];
+        if (y >= 0 && y < s) a[y * s + x] = Math.min(1, sum / (win * win) * 2);
+      }
+    }
+    for (let i = 0; i < a.length; i++) if (inside[i]) a[i] = 1;
+    return a;
+  }
+  function paste(image, w, crop, answer, weights) {
+    const s = crop.side;
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const a = weights[y * s + x];
+        if (a <= 0) continue;
+        const d = ((crop.y + y) * w + crop.x + x) * 4, o = (y * s + x) * 4;
+        for (let c = 0; c < 3; c++) image[d + c] = image[d + c] + (answer[o + c] - image[d + c]) * a;
+      }
+    }
+  }
+  function labelPieces(mask, w, h) {
+    const labels = new Int32Array(w * h);
+    const boxes = [];
+    const stack = [];
+    for (let start = 0; start < labels.length; start++) {
+      if (!mask[start] || labels[start]) continue;
+      const id = boxes.length + 1;
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      labels[start] = id;
+      stack.push(start);
+      while (stack.length) {
+        const i = stack.pop();
+        const x = i % w, y = (i - x) / w;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+            const j = yy * w + xx;
+            if (mask[j] && !labels[j]) {
+              labels[j] = id;
+              stack.push(j);
+            }
+          }
+        }
+      }
+      boxes.push({ x0, y0, x1, y1 });
+    }
+    return { labels, boxes };
+  }
+  var overlaps = (a, b) => a.x < b.x + b.side && b.x < a.x + a.side && a.y < b.y + b.side && b.y < a.y + a.side;
+  function groupPieces(boxes, w, h) {
+    let groups = boxes.map((b, i) => ({ ids: [i + 1], bounds: { ...b } }));
+    for (const g of groups) g.crop = cropWindow(g.bounds, w, h);
+    let merged = true;
+    while (merged && groups.length > 1) {
+      merged = false;
+      outer: for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const a = groups[i], b = groups[j];
+          if (a.crop && b.crop && !overlaps(a.crop, b.crop)) continue;
+          const bounds = { x0: Math.min(a.bounds.x0, b.bounds.x0), y0: Math.min(a.bounds.y0, b.bounds.y0), x1: Math.max(a.bounds.x1, b.bounds.x1), y1: Math.max(a.bounds.y1, b.bounds.y1) };
+          const g = { ids: [...a.ids, ...b.ids], bounds, crop: cropWindow(bounds, w, h) };
+          groups = groups.filter((_, k) => k !== i && k !== j);
+          groups.push(g);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+    return groups.sort((p, q) => p.bounds.y0 - q.bounds.y0 || p.bounds.x0 - q.bounds.x0);
+  }
+  function groupMask(labels, ids) {
+    const wanted = new Set(ids);
+    const out = new Uint8Array(labels.length);
+    for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
+    return out;
+  }
+  async function findMaskSign(run2) {
+    const n = MODEL_SIZE * MODEL_SIZE;
+    const rgba = new Uint8ClampedArray(n * 4), truth = new Uint8ClampedArray(n * 4), hole = new Uint8Array(n);
+    for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
+      const i = y * MODEL_SIZE + x;
+      const px = [40 + x / MODEL_SIZE * 180, 60 + y / MODEL_SIZE * 150, 140 + (x + y) / (2 * MODEL_SIZE) * 90];
+      for (let c = 0; c < 3; c++) {
+        rgba[i * 4 + c] = px[c];
+        truth[i * 4 + c] = px[c];
+      }
+      rgba[i * 4 + 3] = truth[i * 4 + 3] = 255;
+      if (Math.hypot(x - 256, y - 256) < 60) hole[i] = 1;
+    }
+    const errors = {};
+    for (const sign of [1, -1]) {
+      const out = await run2(rgba, hole, sign);
+      let sum = 0, count = 0;
+      for (let i = 0; i < n; i++) if (hole[i]) {
+        for (let c = 0; c < 3; c++) sum += Math.abs(out[i * 4 + c] - truth[i * 4 + c]);
+        count += 3;
+      }
+      errors[sign] = sum / count;
+    }
+    return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
+  }
+
+  // shared/js/ai/runtime.js
+  var ORT_VERSION = "1.31.1";
+  var ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
+  var ortPromise = null;
+  function loadOrt() {
+    if (self.ort) return Promise.resolve(self.ort);
+    if (!ortPromise) {
+      ortPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = ORT_URL;
+        s.onload = () => resolve(self.ort);
+        s.onerror = () => {
+          ortPromise = null;
+          reject(new Error("Couldn't load the AI runtime. It needs the internet the first time."));
+        };
+        document.head.append(s);
+      });
+    }
+    return ortPromise;
+  }
+  async function gpuUsable() {
+    try {
+      return Boolean(navigator.gpu && await navigator.gpu.requestAdapter());
+    } catch (e) {
+      return false;
+    }
+  }
+  async function createSession(modelBytes, preferGpu) {
+    const ort = await loadOrt();
+    ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+    if (preferGpu && await gpuUsable()) {
+      try {
+        return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" }), backend: "gpu" };
+      } catch (e) {
+      }
+    }
+    return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
+  }
+  async function runModel(session, rgba, hole, sign = 1) {
+    const ort = await loadOrt();
+    const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
+    const out = await session.run({ [session.inputNames[0]]: input });
+    return outputToRgba(out[session.outputNames[0]].data);
+  }
+
+  // shared/js/ai/segment.js
+  var SEG_SIZE = 320;
+  var MEAN = [0.485, 0.456, 0.406];
+  var STD = [0.229, 0.224, 0.225];
+  function segInput(rgba, size = SEG_SIZE) {
+    const n = size * size;
+    let max = 1;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (rgba[o] > max) max = rgba[o];
+      if (rgba[o + 1] > max) max = rgba[o + 1];
+      if (rgba[o + 2] > max) max = rgba[o + 2];
+    }
+    const out = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) out[c * n + i] = (rgba[i * 4 + c] / max - MEAN[c]) / STD[c];
+    return out;
+  }
+  function segMask(data) {
+    const n = data.length;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const v = data[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    const range = hi - lo || 1;
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = (data[i] - lo) / range;
+    return out;
+  }
+  function softCut(v, cutoff, soft) {
+    const half = Math.max(1e-4, soft);
+    const a = (v - (cutoff - half)) / (2 * half);
+    return a < 0 ? 0 : a > 1 ? 1 : a;
+  }
+  function maskToAlpha(mask, cutoff, soft) {
+    const out = new Uint8ClampedArray(mask.length);
+    for (let i = 0; i < mask.length; i++) out[i] = Math.round(softCut(mask[i], cutoff, soft) * 255);
+    return out;
+  }
+
+  // shared/js/ai/bgSession.js
+  var IDLE_MS = 6e4;
+  var current = null;
+  var starting = null;
+  var timer = 0;
+  function releaseBgSession() {
+    clearTimeout(timer);
+    const c = current;
+    current = null;
+    starting = null;
+    if (c && c.release) {
+      try {
+        c.release();
+      } catch (e) {
+      }
+    }
+  }
+  var touch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(releaseBgSession, IDLE_MS);
+  };
+  async function acquire(onStatus) {
+    if (current) {
+      touch();
+      return current;
+    }
+    if (!starting) {
+      starting = (async () => {
+        if (!await isModelSaved(BG_MODEL_URL, BG_CACHE)) throw new Error("The background-removal model is not downloaded. Download it first (Image panel, Remove background).");
+        onStatus && onStatus("Starting the model…");
+        const { bytes } = await getModelBytes(BG_MODEL_URL, void 0, void 0, BG_CACHE);
+        current = (await createSession(bytes, false)).session;
+        return current;
+      })().catch((e) => {
+        starting = null;
+        throw e;
+      });
+    }
+    const s = await starting;
+    touch();
+    return s;
+  }
+  async function segmentCanvas(canvas, onStatus) {
+    const session = await acquire(onStatus);
+    const ort = await loadOrt();
+    const small = document.createElement("canvas");
+    small.width = small.height = SEG_SIZE;
+    const sx = small.getContext("2d", { willReadFrequently: true });
+    sx.imageSmoothingQuality = "high";
+    sx.drawImage(canvas, 0, 0, SEG_SIZE, SEG_SIZE);
+    const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, SEG_SIZE, SEG_SIZE).data), [1, 3, SEG_SIZE, SEG_SIZE]);
+    onStatus && onStatus("Finding the subject…");
+    const out = await session.run({ [session.inputNames[0]]: input });
+    const first = out[session.outputNames[0]];
+    const side = Math.round(Math.sqrt(first.data.length));
+    touch();
+    return { mask: segMask(first.data), side };
+  }
+  function cutOutCanvas(canvas, mask, side, cutoff, soft) {
+    const m = document.createElement("canvas");
+    m.width = m.height = side;
+    const mx = m.getContext("2d");
+    const img = mx.createImageData(side, side);
+    const alpha = maskToAlpha(mask, cutoff, soft);
+    for (let i = 0; i < side * side; i++) {
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
+      img.data[i * 4 + 3] = alpha[i];
+    }
+    mx.putImageData(img, 0, 0);
+    const out = document.createElement("canvas");
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const ox = out.getContext("2d");
+    ox.drawImage(canvas, 0, 0);
+    ox.globalCompositeOperation = "destination-in";
+    ox.imageSmoothingQuality = "high";
+    ox.drawImage(m, 0, 0, canvas.width, canvas.height);
+    return out;
+  }
+
   // shared/js/imageHandoff.js
   var ZEDITOR_READY_MESSAGE = "zeditor-ready";
   var AITOOLS_READY_MESSAGE = "aitools-ready";
@@ -6416,13 +6832,13 @@
     const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
-      const timer2 = setTimeout(() => {
+      const timer3 = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
         if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
-        clearTimeout(timer2);
+        clearTimeout(timer3);
         window.removeEventListener("message", onMessage);
         resolve();
       }
@@ -6671,9 +7087,9 @@
   function resolvedStyleProps(styles, name) {
     const chain = [];
     const seen = /* @__PURE__ */ new Set();
-    for (let current2 = styles.find((s) => s.name === name); current2 && !seen.has(current2.name); current2 = current2.basedOn ? styles.find((s) => s.name === current2.basedOn) : null) {
-      seen.add(current2.name);
-      chain.unshift(current2);
+    for (let current3 = styles.find((s) => s.name === name); current3 && !seen.has(current3.name); current3 = current3.basedOn ? styles.find((s) => s.name === current3.basedOn) : null) {
+      seen.add(current3.name);
+      chain.unshift(current3);
     }
     const merged = Object.assign({}, ...chain.map((s) => s.props));
     for (const key of Object.keys(merged)) if (merged[key] === null) delete merged[key];
@@ -6691,9 +7107,9 @@
     if (!ann || !ann.styleName || "styleName" in patch || "styleOverrides" in patch) return patch;
     const changed = Object.keys(patch).filter((key) => TEXT_STYLE_PROPS.includes(key));
     if (!changed.length) return patch;
-    const current2 = ann.styleOverrides || [];
-    const merged = Array.from(/* @__PURE__ */ new Set([...current2, ...changed]));
-    return merged.length === current2.length ? patch : { ...patch, styleOverrides: merged };
+    const current3 = ann.styleOverrides || [];
+    const merged = Array.from(/* @__PURE__ */ new Set([...current3, ...changed]));
+    return merged.length === current3.length ? patch : { ...patch, styleOverrides: merged };
   }
   function relinkPatch(ann, styles) {
     if (!ann || ann.type !== "text" || !ann.styleName || !styles.some((s) => s.name === ann.styleName)) return null;
@@ -6862,8 +7278,8 @@
       ...result
     };
   }
-  function patchedTraceSettings(current2, patch, presetSettings2) {
-    const now = normalizeTraceSettings(current2);
+  function patchedTraceSettings(current3, patch, presetSettings2) {
+    const now = normalizeTraceSettings(current3);
     if (patch.preset && patch.preset !== now.preset) return normalizeTraceSettings({ ...presetSettings2(patch.preset), view: now.view });
     return normalizeTraceSettings({ ...now, ...patch });
   }
@@ -8761,6 +9177,24 @@
       if (!patch) return;
       updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
     }
+    async function handleRemoveBackground(ann, opts, onStatus) {
+      const pageIdx = selectedIdx;
+      const patch = await flattenedImagePatch(ann, pageFilter);
+      if (!patch) throw new Error("There is nothing visible on that picture.");
+      const img = await new Promise((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = () => rej(new Error("Couldn't read the picture."));
+        i.src = patch.src;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      const { mask, side } = await segmentCanvas(canvas, onStatus);
+      const out = cutOutCanvas(canvas, mask, side, opts.cutoff, opts.soft);
+      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch, src: out.toDataURL("image/png") } : a));
+    }
     function handleOpenInAiTools(ann) {
       const name = (ann.name || "picture").replace(/[^\w .-]+/g, "") || "picture";
       const pageKey = selectedIdx !== null && pages[selectedIdx] ? pages[selectedIdx].key : null;
@@ -8826,6 +9260,7 @@
       handleUpdateAnnotation,
       handleSetLayerLook,
       handleFlattenImage,
+      handleRemoveBackground,
       handleOpenInAiTools,
       handleRasterizeText,
       handleRasterizeRect,
@@ -8998,8 +9433,8 @@
     }
     function zoomStep(direction) {
       leaveZoomBox();
-      const current2 = zoomRef.current;
-      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current2) : [...ZOOM_STEPS].reverse().find((s) => s < current2);
+      const current3 = zoomRef.current;
+      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current3) : [...ZOOM_STEPS].reverse().find((s) => s < current3);
       handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
     }
     useLayoutEffect(() => {
@@ -9439,7 +9874,7 @@
     const hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
     return { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
   }
-  var overlaps = (a, b) => a.x0 < b.x1 + 1 && a.x1 > b.x0 - 1 && a.y0 < b.y1 + 1 && a.y1 > b.y0 - 1;
+  var overlaps2 = (a, b) => a.x0 < b.x1 + 1 && a.x1 > b.x0 - 1 && a.y0 < b.y1 + 1 && a.y1 > b.y0 - 1;
   var REASON_TEXT = {
     effect: "an effect (stroke, shadow, gradient, photo fill, ransom, curve, distress or stacked letters)",
     decoration: "a double or wavy line",
@@ -9508,7 +9943,7 @@
         const ann = visible[i];
         const cand = candidates.get(ann.id);
         const mine = coveredRect(ann);
-        if (cand && !pictureAbove.some((r) => overlaps(mine, r))) {
+        if (cand && !pictureAbove.some((r) => overlaps2(mine, r))) {
           vectorIds.add(ann.id);
           counts.vector++;
           continue;
@@ -11647,301 +12082,11 @@
     return true;
   }
 
-  // shared/js/ai/fill.js
-  var MODEL_SIZE = 512;
-  var CONTEXT = 1.5;
-  function cropWindow(bounds, w, h) {
-    const bw = bounds.x1 - bounds.x0 + 1, bh = bounds.y1 - bounds.y0 + 1;
-    const need = Math.max(bw, bh);
-    const short = Math.min(w, h);
-    if (need > short * 0.92) return null;
-    let side = Math.max(MODEL_SIZE, Math.ceil(need * CONTEXT));
-    side = Math.min(side, short);
-    const cx = (bounds.x0 + bounds.x1 + 1) / 2, cy = (bounds.y0 + bounds.y1 + 1) / 2;
-    const x = Math.round(Math.min(Math.max(0, cx - side / 2), w - side));
-    const y = Math.round(Math.min(Math.max(0, cy - side / 2), h - side));
-    return { x, y, side };
-  }
-  function windowMask(mask, w, crop) {
-    const out = new Uint8Array(MODEL_SIZE * MODEL_SIZE);
-    const k = crop.side / MODEL_SIZE;
-    for (let my = 0; my < MODEL_SIZE; my++) {
-      const y0 = crop.y + Math.floor(my * k), y1 = crop.y + Math.max(Math.floor(my * k), Math.ceil((my + 1) * k) - 1);
-      for (let mx = 0; mx < MODEL_SIZE; mx++) {
-        const x0 = crop.x + Math.floor(mx * k), x1 = crop.x + Math.max(Math.floor(mx * k), Math.ceil((mx + 1) * k) - 1);
-        let hit = 0;
-        for (let yy = y0; yy <= y1 && !hit; yy++) for (let xx = x0; xx <= x1; xx++) if (mask[yy * w + xx]) {
-          hit = 1;
-          break;
-        }
-        out[my * MODEL_SIZE + mx] = hit;
-      }
-    }
-    return out;
-  }
-  function buildInput(rgba, hole, sign = 1) {
-    const n = MODEL_SIZE * MODEL_SIZE;
-    const x = new Float32Array(4 * n);
-    for (let i = 0; i < n; i++) {
-      const known = hole[i] ? 0 : 1;
-      x[i] = sign * (known - 0.5);
-      for (let c = 0; c < 3; c++) x[(c + 1) * n + i] = (rgba[i * 4 + c] / 127.5 - 1) * known;
-    }
-    return x;
-  }
-  function outputToRgba(out) {
-    const n = MODEL_SIZE * MODEL_SIZE;
-    let min = Infinity, max = -Infinity;
-    for (let i = 0; i < 3 * n; i += 7) {
-      const v = out[i];
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-    const mode = min < -0.01 && max <= 1.5 ? "signed" : max <= 1.5 ? "unit" : "byte";
-    const rgba = new Uint8ClampedArray(n * 4);
-    for (let i = 0; i < n; i++) {
-      for (let c = 0; c < 3; c++) {
-        const v = out[c * n + i];
-        rgba[i * 4 + c] = mode === "signed" ? (v + 1) * 127.5 : mode === "unit" ? v * 255 : v;
-      }
-      rgba[i * 4 + 3] = 255;
-    }
-    return rgba;
-  }
-  function blendWeights(mask, w, crop, feather) {
-    const s = crop.side;
-    const inside = new Uint8Array(s * s);
-    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) inside[y * s + x] = mask[(crop.y + y) * w + crop.x + x];
-    if (feather <= 0) return Float32Array.from(inside);
-    const a = new Float32Array(s * s), r = feather;
-    const rowSum = new Float32Array(s * s);
-    for (let y = 0; y < s; y++) {
-      let sum = 0;
-      const row = y * s;
-      for (let x = -r; x < s + r; x++) {
-        const add = x + r, sub = x - r - 1;
-        if (add < s && add >= 0) sum += inside[row + add];
-        if (sub >= 0 && sub < s) sum -= inside[row + sub];
-        if (x >= 0 && x < s) rowSum[row + x] = sum;
-      }
-    }
-    const win = 2 * r + 1;
-    for (let x = 0; x < s; x++) {
-      let sum = 0;
-      for (let y = -r; y < s + r; y++) {
-        const add = y + r, sub = y - r - 1;
-        if (add < s && add >= 0) sum += rowSum[add * s + x];
-        if (sub >= 0 && sub < s) sum -= rowSum[sub * s + x];
-        if (y >= 0 && y < s) a[y * s + x] = Math.min(1, sum / (win * win) * 2);
-      }
-    }
-    for (let i = 0; i < a.length; i++) if (inside[i]) a[i] = 1;
-    return a;
-  }
-  function paste(image, w, crop, answer, weights) {
-    const s = crop.side;
-    for (let y = 0; y < s; y++) {
-      for (let x = 0; x < s; x++) {
-        const a = weights[y * s + x];
-        if (a <= 0) continue;
-        const d = ((crop.y + y) * w + crop.x + x) * 4, o = (y * s + x) * 4;
-        for (let c = 0; c < 3; c++) image[d + c] = image[d + c] + (answer[o + c] - image[d + c]) * a;
-      }
-    }
-  }
-  function labelPieces(mask, w, h) {
-    const labels = new Int32Array(w * h);
-    const boxes = [];
-    const stack = [];
-    for (let start = 0; start < labels.length; start++) {
-      if (!mask[start] || labels[start]) continue;
-      const id = boxes.length + 1;
-      let x0 = w, y0 = h, x1 = -1, y1 = -1;
-      labels[start] = id;
-      stack.push(start);
-      while (stack.length) {
-        const i = stack.pop();
-        const x = i % w, y = (i - x) / w;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-        for (let dy = -1; dy <= 1; dy++) {
-          const yy = y + dy;
-          if (yy < 0 || yy >= h) continue;
-          for (let dx = -1; dx <= 1; dx++) {
-            const xx = x + dx;
-            if (xx < 0 || xx >= w) continue;
-            const j = yy * w + xx;
-            if (mask[j] && !labels[j]) {
-              labels[j] = id;
-              stack.push(j);
-            }
-          }
-        }
-      }
-      boxes.push({ x0, y0, x1, y1 });
-    }
-    return { labels, boxes };
-  }
-  var overlaps2 = (a, b) => a.x < b.x + b.side && b.x < a.x + a.side && a.y < b.y + b.side && b.y < a.y + a.side;
-  function groupPieces(boxes, w, h) {
-    let groups = boxes.map((b, i) => ({ ids: [i + 1], bounds: { ...b } }));
-    for (const g of groups) g.crop = cropWindow(g.bounds, w, h);
-    let merged = true;
-    while (merged && groups.length > 1) {
-      merged = false;
-      outer: for (let i = 0; i < groups.length; i++) {
-        for (let j = i + 1; j < groups.length; j++) {
-          const a = groups[i], b = groups[j];
-          if (a.crop && b.crop && !overlaps2(a.crop, b.crop)) continue;
-          const bounds = { x0: Math.min(a.bounds.x0, b.bounds.x0), y0: Math.min(a.bounds.y0, b.bounds.y0), x1: Math.max(a.bounds.x1, b.bounds.x1), y1: Math.max(a.bounds.y1, b.bounds.y1) };
-          const g = { ids: [...a.ids, ...b.ids], bounds, crop: cropWindow(bounds, w, h) };
-          groups = groups.filter((_, k) => k !== i && k !== j);
-          groups.push(g);
-          merged = true;
-          break outer;
-        }
-      }
-    }
-    return groups.sort((p, q) => p.bounds.y0 - q.bounds.y0 || p.bounds.x0 - q.bounds.x0);
-  }
-  function groupMask(labels, ids) {
-    const wanted = new Set(ids);
-    const out = new Uint8Array(labels.length);
-    for (let i = 0; i < labels.length; i++) if (labels[i] && wanted.has(labels[i])) out[i] = 1;
-    return out;
-  }
-  async function findMaskSign(run2) {
-    const n = MODEL_SIZE * MODEL_SIZE;
-    const rgba = new Uint8ClampedArray(n * 4), truth = new Uint8ClampedArray(n * 4), hole = new Uint8Array(n);
-    for (let y = 0; y < MODEL_SIZE; y++) for (let x = 0; x < MODEL_SIZE; x++) {
-      const i = y * MODEL_SIZE + x;
-      const px = [40 + x / MODEL_SIZE * 180, 60 + y / MODEL_SIZE * 150, 140 + (x + y) / (2 * MODEL_SIZE) * 90];
-      for (let c = 0; c < 3; c++) {
-        rgba[i * 4 + c] = px[c];
-        truth[i * 4 + c] = px[c];
-      }
-      rgba[i * 4 + 3] = truth[i * 4 + 3] = 255;
-      if (Math.hypot(x - 256, y - 256) < 60) hole[i] = 1;
-    }
-    const errors = {};
-    for (const sign of [1, -1]) {
-      const out = await run2(rgba, hole, sign);
-      let sum = 0, count = 0;
-      for (let i = 0; i < n; i++) if (hole[i]) {
-        for (let c = 0; c < 3; c++) sum += Math.abs(out[i * 4 + c] - truth[i * 4 + c]);
-        count += 3;
-      }
-      errors[sign] = sum / count;
-    }
-    return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
-  }
-
-  // shared/js/ai/modelStore.js
-  var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
-  var CACHE_NAME = "zinenow-ai-tools-model";
-  async function isModelSaved(url) {
-    try {
-      return Boolean(await (await caches.open(CACHE_NAME)).match(url));
-    } catch (e) {
-      return false;
-    }
-  }
-  async function getModelBytes(url, onProgress, signal) {
-    let cache3 = null;
-    try {
-      cache3 = await caches.open(CACHE_NAME);
-    } catch (e) {
-    }
-    if (cache3) {
-      const saved = await cache3.match(url);
-      if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
-    }
-    const res = await fetch(url, signal ? { signal } : void 0);
-    if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
-    const total = Number(res.headers.get("content-length")) || 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    let got = 0;
-    for (; ; ) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      got += value.length;
-      if (onProgress) onProgress(got, total);
-    }
-    const bytes = new Uint8Array(got);
-    let off = 0;
-    for (const c of chunks) {
-      bytes.set(c, off);
-      off += c.length;
-    }
-    if (cache3) {
-      try {
-        await cache3.put(url, new Response(bytes.buffer, { headers: { "content-type": "application/octet-stream" } }));
-      } catch (e) {
-      }
-    }
-    return { bytes: bytes.buffer, downloaded: true };
-  }
-  async function forgetModel() {
-    try {
-      await caches.delete(CACHE_NAME);
-    } catch (e) {
-    }
-  }
-
-  // shared/js/ai/runtime.js
-  var ORT_VERSION = "1.31.1";
-  var ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
-  var ortPromise = null;
-  function loadOrt() {
-    if (self.ort) return Promise.resolve(self.ort);
-    if (!ortPromise) {
-      ortPromise = new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = ORT_URL;
-        s.onload = () => resolve(self.ort);
-        s.onerror = () => {
-          ortPromise = null;
-          reject(new Error("Couldn't load the AI runtime. It needs the internet the first time."));
-        };
-        document.head.append(s);
-      });
-    }
-    return ortPromise;
-  }
-  async function gpuUsable() {
-    try {
-      return Boolean(navigator.gpu && await navigator.gpu.requestAdapter());
-    } catch (e) {
-      return false;
-    }
-  }
-  async function createSession(modelBytes, preferGpu) {
-    const ort = await loadOrt();
-    ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
-    if (preferGpu && await gpuUsable()) {
-      try {
-        return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" }), backend: "gpu" };
-      } catch (e) {
-      }
-    }
-    return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
-  }
-  async function runModel(session, rgba, hole, sign = 1) {
-    const ort = await loadOrt();
-    const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
-    const out = await session.run({ [session.inputNames[0]]: input });
-    return outputToRgba(out[session.outputNames[0]].data);
-  }
-
   // shared/js/ai/session.js
-  var IDLE_MS = 6e4;
-  var current = null;
-  var starting = null;
-  var timer = 0;
+  var IDLE_MS2 = 6e4;
+  var current2 = null;
+  var starting2 = null;
+  var timer2 = 0;
   var SIGN_KEY = "zinenow.ai.maskSign:" + DEFAULT_MODEL_URL;
   var savedSign = () => {
     try {
@@ -11952,10 +12097,10 @@
     }
   };
   function releaseSession() {
-    clearTimeout(timer);
-    const c = current;
-    current = null;
-    starting = null;
+    clearTimeout(timer2);
+    const c = current2;
+    current2 = null;
+    starting2 = null;
     if (c && c.session && c.session.release) {
       try {
         c.session.release();
@@ -11963,17 +12108,17 @@
       }
     }
   }
-  var touch = () => {
-    clearTimeout(timer);
-    timer = setTimeout(releaseSession, IDLE_MS);
+  var touch2 = () => {
+    clearTimeout(timer2);
+    timer2 = setTimeout(releaseSession, IDLE_MS2);
   };
   async function acquireSession(onStatus) {
-    if (current) {
-      touch();
-      return current;
+    if (current2) {
+      touch2();
+      return current2;
     }
-    if (!starting) {
-      starting = (async () => {
+    if (!starting2) {
+      starting2 = (async () => {
         if (!await isModelSaved(DEFAULT_MODEL_URL)) throw new Error("The AI model is not downloaded. Download it first (Marquee panel, AI model box).");
         onStatus && onStatus("Starting the AI model…");
         const { bytes } = await getModelBytes(DEFAULT_MODEL_URL);
@@ -11987,22 +12132,22 @@
           } catch (e) {
           }
         }
-        current = { session: made.session, backend: made.backend, sign, bytes };
-        return current;
+        current2 = { session: made.session, backend: made.backend, sign, bytes };
+        return current2;
       })().catch((e) => {
-        starting = null;
+        starting2 = null;
         throw e;
       });
     }
-    const c = await starting;
-    touch();
+    const c = await starting2;
+    touch2();
     return c;
   }
   async function runOnSession(rgba, hole, onStatus) {
     const c = await acquireSession(onStatus);
     try {
       const out = await runModel(c.session, rgba, hole, c.sign);
-      touch();
+      touch2();
       return out;
     } catch (e) {
       if (c.backend !== "gpu") throw e;
@@ -12012,8 +12157,8 @@
         c.session.release && c.session.release();
       } catch (err) {
       }
-      current = { session: cpu.session, backend: "cpu", sign: c.sign, bytes: c.bytes };
-      touch();
+      current2 = { session: cpu.session, backend: "cpu", sign: c.sign, bytes: c.bytes };
+      touch2();
       return runModel(cpu.session, rgba, hole, c.sign);
     }
   }
@@ -13470,12 +13615,12 @@
         if (plan2) plans.set(p, plan2);
       }
       if (!plans.size) return;
-      const current2 = selectedIdx !== null ? pages[selectedIdx] : null;
-      const plan = current2 && plans.get(current2);
+      const current3 = selectedIdx !== null ? pages[selectedIdx] : null;
+      const plan = current3 && plans.get(current3);
       const board = document.querySelector(".ze-artboard-zoom");
       if (plan && board && (plan.sx || plan.sy)) {
         const r = board.getBoundingClientRect();
-        canvasGrowShift.pending = { key: current2.key, sx: plan.sx, sy: plan.sy, left: r.left, top: r.top, zoom };
+        canvasGrowShift.pending = { key: current3.key, sx: plan.sx, sy: plan.sy, left: r.left, top: r.top, zoom };
       }
       setPages((prev) => prev.map((p) => plans.has(p) ? grownPage(p, plans.get(p)) : p));
     }, [pages, selectedIdx, releaseTick]);
@@ -15568,14 +15713,14 @@
         }
       }
       if (editingAnnId !== null && editingAnnId !== ann.id) onFinishTextEdit();
-      const current2 = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
-      const wasSelected = current2.includes(ann.id);
+      const current3 = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
+      const wasSelected = current3.includes(ann.id);
       const single = e.altKey && !e.shiftKey && Boolean(ann.groupId);
       if (single) onSelectAnnotation(ann.id, false, true);
       else if (!wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
       const shiftDeselect = e.shiftKey && wasSelected && !single;
       const mates = withGroupMates(annotations, [ann.id]);
-      const movingIds = single ? [ann.id] : wasSelected ? current2 : e.shiftKey ? [...current2, ...mates] : mates;
+      const movingIds = single ? [ann.id] : wasSelected ? current3 : e.shiftKey ? [...current3, ...mates] : mates;
       const originals = annotations.filter((a) => movingIds.includes(a.id));
       const dragDelta = dragDeltaFrom(e, zoom);
       const guideLines = guideLinesPx();
@@ -15596,7 +15741,7 @@
           onSelectAnnotation(ann.id, true);
           return;
         }
-        if (wasSelected && !e.shiftKey && !single && current2.length > 1) onSelectAnnotation(ann.id, false);
+        if (wasSelected && !e.shiftKey && !single && current3.length > 1) onSelectAnnotation(ann.id, false);
         if (onPlainClick) onPlainClick();
       });
     }
@@ -16237,12 +16382,12 @@
   function PresetPicker({ effect, ann, onPatch }) {
     const values = controlValues(ann, effect.controls);
     const same = (preset) => Object.entries(preset.values).every(([prop, v]) => values[prop] === v);
-    const current2 = (effect.presets.find(same) || { key: "custom" }).key;
+    const current3 = (effect.presets.find(same) || { key: "custom" }).key;
     return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(
       SelectInput,
       {
         options: [...effect.presets.map((p) => ({ key: p.key, label: p.label })), { key: "custom", label: "Custom" }],
-        value: current2,
+        value: current3,
         onChange: (key) => {
           const preset = effect.presets.find((p) => p.key === key);
           if (preset) onPatch(preset.values);
@@ -16274,10 +16419,202 @@
     return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { display: "block", marginTop: 0 } }, Math.round(ann.width), " × ", Math.round(ann.height), " px"));
   }
 
+  // apps/ZEditor/src/ui/dialogs/AiModelDialog.jsx
+  function AiModelDialog({ mode, plan, onConfirm, onCancel, kind = "fill" }) {
+    if (!mode || !plan) return null;
+    const mb = (n) => Math.round(n);
+    const bg = kind === "background";
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": mode === "download" ? "Download the AI model" : "Delete the AI model", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, mode === "download" ? "Download AI model?" : "Delete AI model?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, mode === "download" ? /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, bg ? /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI background-remover model (U²-Netp, about ", plan.modelMb.toFixed(1), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "github.com"), ",") : /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI object-remover model (MI-GAN, ", mb(plan.modelMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ","), " plus its runtime (about ", mb(plan.runtimeMb), " MB, skipped if you already have it) from ", /* @__PURE__ */ React.createElement("b", null, "cdn.jsdelivr.net"), ". About ", plan.totalMb, " MB in total."), /* @__PURE__ */ React.createElement("li", null, "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Warning:"), " it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).")) : /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "This removes the ", bg ? "background-removal" : "AI fill", " model from this device", bg ? "" : " (and the runtime, if the other AI model is not saved)", ". The runtime is only removed when no AI model needs it."), /* @__PURE__ */ React.createElement("li", null, "Ai Tools (Local) uses the same runtime files, so it may need to download them again."), /* @__PURE__ */ React.createElement("li", null, "You can download it again any time."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, mode === "download" ? "Confirm Download" : "Delete"))));
+  }
+
+  // shared/js/ai/manager.js
+  var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
+  var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
+  function runtimeUrls(gpu) {
+    return (gpu ? ["ort.all.min.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"] : ["ort.all.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]).map((f) => CDN + f);
+  }
+  async function downloadPlan() {
+    const gpu = await gpuUsable();
+    const runtimeMb = gpu ? SIZES.runtimeGpu : SIZES.runtimeCpu;
+    return { gpu, modelMb: SIZES.model, runtimeMb, totalMb: Math.round(SIZES.model + runtimeMb) };
+  }
+  async function aiSaved() {
+    const plan = await downloadPlan();
+    const runtimeSaved = await Promise.all(runtimeUrls(plan.gpu).map(async (u) => {
+      try {
+        return Boolean(await caches.match(u));
+      } catch (e) {
+        return false;
+      }
+    }));
+    return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
+  }
+  async function downloadAi({ onProgress, signal, which = "fill" } = {}) {
+    const bg = which === "background";
+    const plan = await downloadPlan();
+    const saved = bg ? await bgSaved() : await aiSaved();
+    const modelMb = bg ? BG_MODEL_MB : plan.modelMb;
+    const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
+    let doneMb = 0;
+    const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
+    if (!saved.runtime) {
+      for (const url of runtimeUrls(plan.gpu)) {
+        const res = await fetch(url, { signal });
+        if (!res.ok) throw new Error("Couldn't download the AI runtime (HTTP " + res.status + ").");
+        const copy = res.clone();
+        const reader = res.body.getReader();
+        let got = 0;
+        for (; ; ) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          got += value.length;
+          report(got / 1048576);
+        }
+        doneMb += got / 1048576;
+        try {
+          if (!await caches.match(url)) await (await caches.open("zinenow-ai-runtime")).put(url, copy);
+        } catch (e) {
+        }
+      }
+    }
+    if (!saved.model) {
+      if (bg) await getModelBytes(BG_MODEL_URL, (got) => report(got / 1048576), signal, BG_CACHE);
+      else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
+    }
+    try {
+      if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+    } catch (e) {
+    }
+    onProgress && onProgress(total, total);
+  }
+  async function bgPlan() {
+    const plan = await downloadPlan();
+    return { gpu: plan.gpu, modelMb: BG_MODEL_MB, runtimeMb: plan.runtimeMb, totalMb: Math.round(BG_MODEL_MB + plan.runtimeMb) };
+  }
+  async function bgSaved() {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(BG_MODEL_URL, BG_CACHE), runtime: saved.runtime };
+  }
+  async function deleteRuntime() {
+    try {
+      for (const name of await caches.keys()) {
+        const cache3 = await caches.open(name);
+        for (const req of await cache3.keys()) if (/onnxruntime-web/.test(req.url)) await cache3.delete(req);
+      }
+    } catch (e) {
+    }
+  }
+  async function deleteBg() {
+    releaseBgSession();
+    await forgetModel(BG_CACHE);
+    if (!await isModelSaved(DEFAULT_MODEL_URL)) await deleteRuntime();
+  }
+  async function deleteAi() {
+    releaseSession();
+    await forgetModel();
+    if (!await isModelSaved(BG_MODEL_URL, BG_CACHE)) await deleteRuntime();
+  }
+
+  // apps/ZEditor/src/state/useAiModel.js
+  var { useState: useState26, useEffect: useEffect22, useRef: useRef23, useCallback } = React;
+  function useAiModel(which = "fill") {
+    const bg = which === "background";
+    const [state, setState] = useState26({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
+    const abortRef = useRef23(null);
+    const alive = useRef23(true);
+    useEffect22(() => () => {
+      alive.current = false;
+    }, []);
+    const set = (patch) => {
+      if (alive.current) setState((s) => ({ ...s, ...patch }));
+    };
+    const refresh = useCallback(async () => {
+      try {
+        const [saved, plan] = await Promise.all(bg ? [bgSaved(), bgPlan()] : [aiSaved(), downloadPlan()]);
+        set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
+      } catch (e) {
+        set({ phase: "none", error: e && e.message ? e.message : String(e) });
+      }
+    }, []);
+    useEffect22(() => {
+      refresh();
+    }, [refresh]);
+    async function download() {
+      const ctl = new AbortController();
+      abortRef.current = ctl;
+      set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
+      try {
+        await downloadAi({ which, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        await refresh();
+      } catch (e) {
+        await refresh();
+        if (!(e && e.name === "AbortError")) set({ error: "The download didn't finish: " + (e && e.message ? e.message : e) });
+      } finally {
+        abortRef.current = null;
+      }
+    }
+    const cancel = () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+    async function remove() {
+      await (bg ? deleteBg() : deleteAi());
+      await refresh();
+    }
+    return { ...state, download, cancel, remove };
+  }
+
+  // apps/ZEditor/src/ui/panels/format/RemoveBackgroundSection.jsx
+  var { useState: useState27 } = React;
+  function RemoveBackgroundSection({ ann, onRemoveBackground, disabled }) {
+    const ai = useAiModel("background");
+    const [dialog, setDialog] = useState27(null);
+    const [cutoff, setCutoff] = useState27(50);
+    const [soft, setSoft] = useState27(10);
+    const [busy, setBusy] = useState27("");
+    const [error, setError] = useState27("");
+    const run2 = async () => {
+      setError("");
+      setBusy("Starting…");
+      try {
+        await onRemoveBackground(ann, { cutoff: cutoff / 100, soft: Math.max(1, soft) / 100 }, setBusy);
+      } catch (e) {
+        setError(e && e.message ? e.message : String(e));
+      } finally {
+        setBusy("");
+      }
+    };
+    return /* @__PURE__ */ React.createElement(
+      PanelSection,
+      {
+        id: "image.removebg",
+        title: "Remove background",
+        hint: "An AI model that runs on your device finds the main subject and makes everything else see-through. It works best on one clear subject. Nothing is uploaded. Not right? Undo (Ctrl+Z), change the numbers and run it again."
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-ai-box" }, /* @__PURE__ */ React.createElement("b", null, "AI model"), ai.phase === "checking" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Checking…"), ai.phase === "none" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Not downloaded. It is only downloaded if you choose to."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: () => setDialog("download") }, "Download AI model", ai.plan ? " (about " + ai.plan.totalMb + " MB)" : "")), ai.phase === "downloading" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("progress", { className: "ze-ai-progress", max: ai.totalMb || 1, value: ai.doneMb }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloading… ", ai.doneMb.toFixed(1), " of ", ai.totalMb.toFixed(1), " MB"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: ai.cancel }, "Cancel download")), ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloaded: runs on this device, works offline."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setDialog("delete") }, "Delete model")), ai.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, ai.error)),
+      ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Edge cut-off (%)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: 5, max: 95, step: 5, label: "Edge cut-off", value: cutoff, onChange: setCutoff }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Higher keeps less of the edge (a tighter cut). Lower keeps more.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Soft edge (%)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: 1, max: 50, step: 5, label: "Soft edge", value: soft, onChange: setSoft }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "How gradually the edge fades. Higher is softer.")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: disabled || Boolean(busy), onClick: run2 }, busy || "Remove background")),
+      error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, error),
+      /* @__PURE__ */ React.createElement(
+        AiModelDialog,
+        {
+          kind: "background",
+          mode: dialog,
+          plan: ai.plan,
+          onCancel: () => setDialog(null),
+          onConfirm: () => {
+            const mode = dialog;
+            setDialog(null);
+            if (mode === "download") ai.download();
+            else ai.remove();
+          }
+        }
+      )
+    );
+  }
+
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  var { useState: useState26 } = React;
+  var { useState: useState28 } = React;
   var SHOW_AI_TOOLS_SECTION = false;
-  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace }) {
+  function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
     const patch = (p) => onUpdate(ann.id, p);
     const isCroppingThis = croppingAnnId === ann.id;
     const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -16328,7 +16665,7 @@
           /* @__PURE__ */ React.createElement(ControlList, { controls: group.controls, source: ann, onPatch: patch })
         );
       })
-    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), SHOW_AI_TOOLS_SECTION && /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), /* @__PURE__ */ React.createElement(RemoveBackgroundSection, { ann, onRemoveBackground, disabled: isCroppingThis }), SHOW_AI_TOOLS_SECTION && /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.aitools",
@@ -16348,7 +16685,7 @@
     ));
   }
   function ImageTraceSection({ ann, imageTrace, disabled }) {
-    const [preset, setPreset] = useState26(DEFAULT_TRACE_PRESET);
+    const [preset, setPreset] = useState28(DEFAULT_TRACE_PRESET);
     const busy = imageTrace.busyId === ann.id;
     return /* @__PURE__ */ React.createElement(
       PanelSection,
@@ -16476,25 +16813,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState27, useRef: useRef23, useEffect: useEffect22, useMemo: useMemo3 } = React;
+  var { useState: useState29, useRef: useRef24, useEffect: useEffect23, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState27(value || "");
-    const [typed, setTyped] = useState27(false);
-    const [open, setOpen] = useState27(false);
-    const [highlight, setHighlight] = useState27(-1);
-    const previewFromRef = useRef23(null);
-    const listRef = useRef23(null);
-    const [status, setStatus] = useState27(null);
-    const [loadingFonts, setLoadingFonts] = useState27(false);
-    const containerRef = useRef23(null);
-    const uploadInputRef = useRef23(null);
-    useEffect22(() => {
+    const [query, setQuery] = useState29(value || "");
+    const [typed, setTyped] = useState29(false);
+    const [open, setOpen] = useState29(false);
+    const [highlight, setHighlight] = useState29(-1);
+    const previewFromRef = useRef24(null);
+    const listRef = useRef24(null);
+    const [status, setStatus] = useState29(null);
+    const [loadingFonts, setLoadingFonts] = useState29(false);
+    const containerRef = useRef24(null);
+    const uploadInputRef = useRef24(null);
+    useEffect23(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect22(() => {
+    useEffect23(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -16508,7 +16845,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect22(() => {
+    useEffect23(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -16659,10 +16996,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState28, useRef: useRef24 } = React;
+  var { useState: useState30, useRef: useRef25 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef24(null);
-    const [error, setError] = useState28(null);
+    const inputRef = useRef25(null);
+    const [error, setError] = useState30(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -16751,10 +17088,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState29 } = React;
+  var { useState: useState31 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState29("latin");
-    const [count, setCount] = useState29(3);
+    const [kind, setKind] = useState31("latin");
+    const [count, setCount] = useState31(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -16785,7 +17122,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState30 } = React;
+  var { useState: useState32 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -16793,7 +17130,7 @@
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState30(null);
+    const [message, setMessage] = useState32(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -16811,12 +17148,12 @@
       const sel = selection(false);
       if (sel) patch({ colorRuns: setRunProps(runs, sel.start, sel.end, props) });
     };
-    const current2 = (key) => {
+    const current3 = (key) => {
       const { annId, start } = textSelectionStore;
       const run2 = annId === ann.id ? runAt(runs, start) : null;
       return run2 && run2[key] != null ? run2[key] : ann[key];
     };
-    const toggle = (key) => setProps({ [key]: !current2(key) });
+    const toggle = (key) => setProps({ [key]: !current3(key) });
     const strikeNow = () => {
       const { annId, start } = textSelectionStore;
       const run2 = annId === ann.id ? runAt(runs, start) : null;
@@ -16830,7 +17167,7 @@
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState30(null);
+    const [sizeDraft, setSizeDraft] = useState32(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -16838,7 +17175,7 @@
       if (pt > 0) setProps({ fontSize: Math.round(ptToPx(pt) * 1e3) / 1e3 });
     }
     const count = (runs || []).reduce((total, run2) => total + run2.end - run2.start, 0);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: current2("fontFamily"), onChange: (v) => setProps({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: current3("fontFamily"), onChange: (v) => setProps({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
       NumberBox,
       {
         className: "ze-format-number",
@@ -16847,7 +17184,7 @@
         step: "0.5",
         "aria-label": "Size of the selected letters (pt)",
         title: "Size of the selected letters (pt). Press Enter or leave the box to apply.",
-        value: sizeDraft != null ? sizeDraft : Math.round(pxToPt(current2("fontSize") || 16) * 10) / 10,
+        value: sizeDraft != null ? sizeDraft : Math.round(pxToPt(current3("fontSize") || 16) * 10) / 10,
         onChange: (e) => setSizeDraft(e.target.value),
         onKeyDown: (e) => {
           if (e.key === "Enter") applySize();
@@ -16864,11 +17201,11 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState31 } = React;
+  var { useState: useState33 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState31("");
-    const [basedOn, setBasedOn] = useState31("");
-    const [message, setMessage] = useState31(null);
+    const [name, setName] = useState33("");
+    const [basedOn, setBasedOn] = useState33("");
+    const [message, setMessage] = useState33(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -17037,127 +17374,6 @@
     );
   }
 
-  // shared/js/ai/manager.js
-  var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
-  var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
-  function runtimeUrls(gpu) {
-    return (gpu ? ["ort.all.min.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"] : ["ort.all.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]).map((f) => CDN + f);
-  }
-  async function downloadPlan() {
-    const gpu = await gpuUsable();
-    const runtimeMb = gpu ? SIZES.runtimeGpu : SIZES.runtimeCpu;
-    return { gpu, modelMb: SIZES.model, runtimeMb, totalMb: Math.round(SIZES.model + runtimeMb) };
-  }
-  async function aiSaved() {
-    const plan = await downloadPlan();
-    const runtimeSaved = await Promise.all(runtimeUrls(plan.gpu).map(async (u) => {
-      try {
-        return Boolean(await caches.match(u));
-      } catch (e) {
-        return false;
-      }
-    }));
-    return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
-  }
-  async function downloadAi({ onProgress, signal } = {}) {
-    const plan = await downloadPlan();
-    const saved = await aiSaved();
-    const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : plan.modelMb);
-    let doneMb = 0;
-    const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
-    if (!saved.runtime) {
-      for (const url of runtimeUrls(plan.gpu)) {
-        const res = await fetch(url, { signal });
-        if (!res.ok) throw new Error("Couldn't download the AI runtime (HTTP " + res.status + ").");
-        const copy = res.clone();
-        const reader = res.body.getReader();
-        let got = 0;
-        for (; ; ) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          got += value.length;
-          report(got / 1048576);
-        }
-        doneMb += got / 1048576;
-        try {
-          if (!await caches.match(url)) await (await caches.open("zinenow-ai-runtime")).put(url, copy);
-        } catch (e) {
-        }
-      }
-    }
-    if (!saved.model) await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
-    try {
-      if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
-    } catch (e) {
-    }
-    onProgress && onProgress(total, total);
-  }
-  async function deleteAi() {
-    releaseSession();
-    await forgetModel();
-    try {
-      for (const name of await caches.keys()) {
-        const cache3 = await caches.open(name);
-        for (const req of await cache3.keys()) if (/onnxruntime-web/.test(req.url)) await cache3.delete(req);
-      }
-    } catch (e) {
-    }
-  }
-
-  // apps/ZEditor/src/state/useAiModel.js
-  var { useState: useState32, useEffect: useEffect23, useRef: useRef25, useCallback } = React;
-  function useAiModel() {
-    const [state, setState] = useState32({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
-    const abortRef = useRef25(null);
-    const alive = useRef25(true);
-    useEffect23(() => () => {
-      alive.current = false;
-    }, []);
-    const set = (patch) => {
-      if (alive.current) setState((s) => ({ ...s, ...patch }));
-    };
-    const refresh = useCallback(async () => {
-      try {
-        const [saved, plan] = await Promise.all([aiSaved(), downloadPlan()]);
-        set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
-      } catch (e) {
-        set({ phase: "none", error: e && e.message ? e.message : String(e) });
-      }
-    }, []);
-    useEffect23(() => {
-      refresh();
-    }, [refresh]);
-    async function download() {
-      const ctl = new AbortController();
-      abortRef.current = ctl;
-      set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
-      try {
-        await downloadAi({ signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
-        await refresh();
-      } catch (e) {
-        await refresh();
-        if (!(e && e.name === "AbortError")) set({ error: "The download didn't finish: " + (e && e.message ? e.message : e) });
-      } finally {
-        abortRef.current = null;
-      }
-    }
-    const cancel = () => {
-      if (abortRef.current) abortRef.current.abort();
-    };
-    async function remove() {
-      await deleteAi();
-      await refresh();
-    }
-    return { ...state, download, cancel, remove };
-  }
-
-  // apps/ZEditor/src/ui/dialogs/AiModelDialog.jsx
-  function AiModelDialog({ mode, plan, onConfirm, onCancel }) {
-    if (!mode || !plan) return null;
-    const mb = (n) => Math.round(n);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": mode === "download" ? "Download the AI model" : "Delete the AI model", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, mode === "download" ? "Download AI model?" : "Delete AI model?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, mode === "download" ? /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "You are downloading an AI object-remover model (MI-GAN, ", mb(plan.modelMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ", plus its runtime (about ", mb(plan.runtimeMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "cdn.jsdelivr.net"), ". About ", plan.totalMb, " MB in total."), /* @__PURE__ */ React.createElement("li", null, "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Warning:"), " it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).")) : /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "This removes the AI model and its runtime from this device (about ", plan.totalMb, " MB)."), /* @__PURE__ */ React.createElement("li", null, "Ai Tools (Local) uses the same files, so it will need to download them again."), /* @__PURE__ */ React.createElement("li", null, "You can download it again any time."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, mode === "download" ? "Confirm Download" : "Delete"))));
-  }
-
   // apps/ZEditor/src/ui/panels/format/ToolPanels.jsx
   function ShapeToolPanel({ tool, toolDefaults }) {
     const { rectDefaults, setRectDefaults } = toolDefaults;
@@ -17178,7 +17394,7 @@
     const cutNeedsAi = settings.action === "cut" && leaves === "surround" && (!chosen || useAi && ai.phase !== "ready");
     const needsLayer = fromLayer && !targetLayer;
     const fillMode = settings.mode === "fill";
-    const radio = (name, value, label, current2, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current2 === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
+    const radio = (name, value, label, current3, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current3 === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
     const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Vectorized" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
@@ -17331,6 +17547,7 @@
     croppingAnnId,
     onToggleCrop,
     onFlattenImage,
+    onRemoveBackground,
     onOpenInAiTools,
     onRasterizeRect,
     onRasterizeText,
@@ -17346,7 +17563,7 @@
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
     if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
-    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onOpenInAiTools, imageTrace });
+    if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace });
     if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize, onExportSvg });
     if (ann && ann.type === "rect") return /* @__PURE__ */ React.createElement(ShapeFormat, { key: ann.id, ann, onUpdate, onRasterizeRect });
     if (tool === "rect" || tool === "ellipse") return /* @__PURE__ */ React.createElement(ShapeToolPanel, { tool, toolDefaults });
@@ -17360,9 +17577,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState33, useRef: useRef26, useEffect: useEffect24, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState34, useRef: useRef26, useEffect: useEffect24, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState33(false);
+    const [open, setOpen] = useState34(false);
     const containerRef = useRef26(null);
     useEffect24(() => {
       if (!open) return;
@@ -17659,7 +17876,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState34, useRef: useRef27, useEffect: useEffect25 } = React;
+  var { useState: useState35, useRef: useRef27, useEffect: useEffect25 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -17681,19 +17898,19 @@
     return blocks;
   }
   var collapsedGroups = /* @__PURE__ */ new Set();
-  function RenameInput({ current: current2, onDone }) {
+  function RenameInput({ current: current3, onDone }) {
     return /* @__PURE__ */ React.createElement(
       "input",
       {
         className: "ze-layer-name-input",
-        defaultValue: current2,
+        defaultValue: current3,
         autoFocus: true,
         spellCheck: "false",
         onFocus: (e) => e.target.select(),
         onClick: (e) => e.stopPropagation(),
         onBlur: (e) => onDone(e.target.value),
         onKeyDown: (e) => {
-          if (e.key === "Escape") e.target.value = current2;
+          if (e.key === "Escape") e.target.value = current3;
           if (e.key === "Enter" || e.key === "Escape") e.target.blur();
         }
       }
@@ -17725,11 +17942,11 @@
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
-    const [renamingId, setRenamingId] = useState34(null);
-    const [menuOpen, setMenuOpen] = useState34(false);
+    const [renamingId, setRenamingId] = useState35(null);
+    const [menuOpen, setMenuOpen] = useState35(false);
     const menuRef = useRef27(null);
-    const [dropInfo, setDropInfo] = useState34(null);
-    const [, setCollapseTick] = useState34(0);
+    const [dropInfo, setDropInfo] = useState35(null);
+    const [, setCollapseTick] = useState35(0);
     const dragIdRef = useRef27(null);
     const listRef = useRef27(null);
     const panelRef = useRef27(null);
@@ -17738,7 +17955,7 @@
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState34(null);
+    const [rowMenu, setRowMenu] = useState35(null);
     const rowMenuRef = useRef27(null);
     useEffect25(() => {
       if (!menuOpen && !rowMenu) return;
@@ -18218,7 +18435,7 @@
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState35, useEffect: useEffect26, useRef: useRef29 } = React;
+  var { useState: useState36, useEffect: useEffect26, useRef: useRef29 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -18226,17 +18443,17 @@
   var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
-    const [urls, setUrls] = useState35({});
+    const [urls, setUrls] = useState36({});
     const urlsRef = useRef29({});
     const madeFrom = useRef29(/* @__PURE__ */ new Map());
     const baseCache = useRef29(null);
     const latest = useRef29({ pages, selectedKey });
-    const timer2 = useRef29(0);
+    const timer3 = useRef29(0);
     const running = useRef29(false);
     const lastEnd = useRef29(0);
     const lastMs = useRef29(0);
     const alive = useRef29(true);
-    const [on, setOn] = useState35(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const [on, setOn] = useState36(() => !document.documentElement.classList.contains("ze-static-thumbs"));
     const onRef = useRef29(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
@@ -18273,15 +18490,15 @@
       return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     }
     function schedule() {
-      if (running.current || timer2.current || !alive.current) return;
+      if (running.current || timer3.current || !alive.current) return;
       const p = nextStale();
       if (!p) return;
       const edited = p.key === latest.current.selectedKey;
       const gap = edited ? Math.max(SELECTED_GAP_MS, lastMs.current * SLOW_FACTOR) : Math.max(OTHER_GAP_MS, lastMs.current);
-      timer2.current = setTimeout(run2, Math.max(0, lastEnd.current + gap - performance.now()));
+      timer3.current = setTimeout(run2, Math.max(0, lastEnd.current + gap - performance.now()));
     }
     async function run2() {
-      timer2.current = 0;
+      timer3.current = 0;
       const p = nextStale();
       if (!p || !alive.current) return;
       running.current = true;
@@ -18325,7 +18542,7 @@
       alive.current = true;
       return () => {
         alive.current = false;
-        clearTimeout(timer2.current);
+        clearTimeout(timer3.current);
         for (const url of Object.values(urlsRef.current)) URL.revokeObjectURL(url);
       };
     }, []);
@@ -18395,7 +18612,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState36, useRef: useRef30, useEffect: useEffect27 } = React;
+  var { useState: useState37, useRef: useRef30, useEffect: useEffect27 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
@@ -18404,7 +18621,7 @@
     const bodyRef = useRef30(null);
     const scrollDirRef = useRef30(0);
     const rafRef = useRef30(null);
-    const [dragOverInfo, setDragOverInfo] = useState36(null);
+    const [dragOverInfo, setDragOverInfo] = useState37(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -18534,14 +18751,14 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState37, useEffect: useEffect28 } = React;
+  var { useState: useState38, useEffect: useEffect28 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState37(false);
-    const [alt, setAlt] = useState37(false);
+    const [shift, setShift] = useState38(false);
+    const [alt, setAlt] = useState38(false);
     useEffect28(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
@@ -18685,9 +18902,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState38 } = React;
+  var { useState: useState39 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState38(null);
+    const [customizing, setCustomizing] = useState39(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -18701,7 +18918,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "6b02b15"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "644bbeb"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -18766,13 +18983,13 @@
             key: "pageNumbers",
             label: "Page Numbers",
             checked: view.pageNumbers.on,
-            onToggle: (on) => view.setPageNumbers((current2) => ({ ...current2, on })),
+            onToggle: (on) => view.setPageNumbers((current3) => ({ ...current3, on })),
             settings: /* @__PURE__ */ React.createElement(
               PageNumbersSettings,
               {
                 settings: view.pageNumbers,
                 pageCount: pages.length,
-                onChange: (patch) => view.setPageNumbers((current2) => ({ ...current2, ...patch }))
+                onChange: (patch) => view.setPageNumbers((current3) => ({ ...current3, ...patch }))
               }
             )
           },
@@ -19299,6 +19516,7 @@
         croppingAnnId,
         onToggleCrop: selection.handleToggleCrop,
         onFlattenImage: edits.handleFlattenImage,
+        onRemoveBackground: edits.handleRemoveBackground,
         onOpenInAiTools: edits.handleOpenInAiTools,
         onRasterizeRect: edits.handleRasterizeRect,
         onRasterizeText: edits.handleRasterizeText,
