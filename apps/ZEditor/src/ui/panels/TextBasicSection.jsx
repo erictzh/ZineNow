@@ -44,16 +44,16 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
       <div className="ze-format-field">
         <span className="ze-format-label" title="Resize the box (drag its corner while editing) to see centering/right-align take effect.">Horizontal Align</span>
         <div className="ze-format-row">
-          <button type="button" className={"ze-format-toggle is-choice" + (align === "left" ? " active" : "")} title="Align left" onClick={() => onChange({ align: "left" })}>
+          <button type="button" className={"ze-format-toggle" + (align === "left" ? " active" : "")} title="Align left" onClick={() => onChange({ align: "left" })}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h13" /></svg>
           </button>
-          <button type="button" className={"ze-format-toggle is-choice" + (align === "center" ? " active" : "")} title="Align center" onClick={() => onChange({ align: "center" })}>
+          <button type="button" className={"ze-format-toggle" + (align === "center" ? " active" : "")} title="Align center" onClick={() => onChange({ align: "center" })}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M7 12h10M5.5 18h13" /></svg>
           </button>
-          <button type="button" className={"ze-format-toggle is-choice" + (align === "right" ? " active" : "")} title="Align right" onClick={() => onChange({ align: "right" })}>
+          <button type="button" className={"ze-format-toggle" + (align === "right" ? " active" : "")} title="Align right" onClick={() => onChange({ align: "right" })}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M10 12h10M7 18h13" /></svg>
           </button>
-          <button type="button" className={"ze-format-toggle is-choice" + (align === "justify" ? " active" : "")} title="Justify (the last line stays left; more options in Paragraph)" onClick={() => onChange({ align: "justify" })}>
+          <button type="button" className={"ze-format-toggle" + (align === "justify" ? " active" : "")} title="Justify (the last line stays left; more options in Paragraph)" onClick={() => onChange({ align: "justify" })}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
         </div>
@@ -64,7 +64,7 @@ export function TextBasicSection({ fontOptions, setFontOptions, fontFamily, font
           <div className="ze-format-row">
             {VERTICAL_ALIGNS.map((v) => (
               <button
-                key={v.key} type="button" className={"ze-format-toggle is-choice" + ((verticalAlign || "top") === v.key ? " active" : "")}
+                key={v.key} type="button" className={"ze-format-toggle" + ((verticalAlign || "top") === v.key ? " active" : "")}
                 disabled={!(frameHeight > 0)}
                 title={frameHeight > 0 ? v.label : "Give the box a fixed height first (drag its top or bottom handle, or set Frame height under Columns & frame)"}
                 onClick={() => onChange({ verticalAlign: v.key === "top" ? undefined : v.key })}
