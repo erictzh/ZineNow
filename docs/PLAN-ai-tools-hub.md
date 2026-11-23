@@ -150,9 +150,9 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 
 **3b Text from image (OCR)**
 - [x] `labs/ai-ocr-benchmark/index.html` (build 1, built 2026-11-23): Tesseract.js 5.1.1 (all from cdn.jsdelivr.net) with a language picker (English, Malay, Indonesian, Chinese, Tamil, other), a page-layout picker, word boxes coloured by confidence, text + Copy; report time and confidence. **Waiting for the user to run it on the tablet.**
-- [ ] Gate: Apache-2.0; engine + English data within the size budget; readable result on clean printed text.
-- [ ] Tool `src/tools/ocr.js`: language list on the Models page (each language file with size), recognised text box with Copy and Download .txt, read regions shown on the picture. Offline caching of the engine files and the chosen language data.
-- [ ] Tests, guide, HANDOFF.
+- [x] Gate: Apache-2.0; engine about 4.1 MB + English 2.95 MB; read the built-in printed text exactly in the sandbox (95 % confidence, 0.4 s). (The user's tablet report was not received before building; the user asked to proceed.)
+- [x] Tool `src/tools/ocr.js`: language list on the Models page (each language file with size), recognised text box with Copy and Download .txt, read regions shown on the picture. Offline caching of the engine files and the chosen language data.
+- [x] Tests, guide, HANDOFF.
 
 **3c Click-to-select**
 - [ ] `labs/ai-sam-benchmark/index.html`: MobileSAM encoder + decoder; report the encoder time per picture, the decoder time per click, and the mask drawn for a click.

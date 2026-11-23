@@ -20,13 +20,13 @@
     const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
-      const timer4 = setTimeout(() => {
+      const timer5 = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
         if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
-        clearTimeout(timer4);
+        clearTimeout(timer5);
         window.removeEventListener("message", onMessage);
         resolve();
       }
@@ -86,16 +86,16 @@
   // shared/js/numberFields.js
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
-  var isNumberBox = (el6) => el6 instanceof HTMLInputElement && el6.type === "number";
-  var allowsEmpty = (el6) => el6.hasAttribute("data-allow-empty");
-  var writeValue = (el6, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el6, text);
+  var isNumberBox = (el7) => el7 instanceof HTMLInputElement && el7.type === "number";
+  var allowsEmpty = (el7) => el7.hasAttribute("data-allow-empty");
+  var writeValue = (el7, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el7, text);
   var held = /* @__PURE__ */ new WeakMap();
-  function holdEmpty(el6) {
-    if (held.has(el6)) return;
-    const own = Object.getOwnPropertyDescriptor(el6, "value");
-    held.set(el6, own || null);
+  function holdEmpty(el7) {
+    if (held.has(el7)) return;
+    const own = Object.getOwnPropertyDescriptor(el7, "value");
+    held.set(el7, own || null);
     if (!own || !own.get || !own.configurable) return;
-    Object.defineProperty(el6, "value", {
+    Object.defineProperty(el7, "value", {
       configurable: true,
       enumerable: own.enumerable,
       get() {
@@ -105,12 +105,12 @@
       }
     });
   }
-  function releaseEmpty(el6) {
-    if (!held.has(el6)) return;
-    const own = held.get(el6);
-    held.delete(el6);
-    if (own) Object.defineProperty(el6, "value", own);
-    else delete el6.value;
+  function releaseEmpty(el7) {
+    if (!held.has(el7)) return;
+    const own = held.get(el7);
+    held.delete(el7);
+    if (own) Object.defineProperty(el7, "value", own);
+    else delete el7.value;
   }
   function makeButton(dir) {
     const b = document.createElement("button");
@@ -140,24 +140,24 @@
       if (isNumberBox(e.target) && e.target.value !== "") lastGood.set(e.target, e.target.value);
     }, true);
     document.addEventListener("input", (e) => {
-      const el6 = e.target;
-      if (!isNumberBox(el6)) return;
-      if (el6.value !== "") {
-        releaseEmpty(el6);
-        lastGood.set(el6, el6.value);
+      const el7 = e.target;
+      if (!isNumberBox(el7)) return;
+      if (el7.value !== "") {
+        releaseEmpty(el7);
+        lastGood.set(el7, el7.value);
         return;
       }
-      if (allowsEmpty(el6) || document.activeElement !== el6) return;
-      holdEmpty(el6);
+      if (allowsEmpty(el7) || document.activeElement !== el7) return;
+      holdEmpty(el7);
       e.stopImmediatePropagation();
     }, true);
-    const restoreIfEmpty = (el6) => {
-      if (el6.value !== "" || allowsEmpty(el6) || !lastGood.has(el6)) {
-        releaseEmpty(el6);
+    const restoreIfEmpty = (el7) => {
+      if (el7.value !== "" || allowsEmpty(el7) || !lastGood.has(el7)) {
+        releaseEmpty(el7);
         return false;
       }
-      releaseEmpty(el6);
-      writeValue(el6, lastGood.get(el6));
+      releaseEmpty(el7);
+      writeValue(el7, lastGood.get(el7));
       return true;
     };
     document.addEventListener("change", (e) => {
@@ -166,21 +166,21 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function stepBy(el6, dir) {
-      const before = el6.value;
-      if (before === "" && el6.placeholder !== "" && isFinite(Number(el6.placeholder))) writeValue(el6, el6.placeholder);
-      const start = el6.value;
+    function stepBy(el7, dir) {
+      const before = el7.value;
+      if (before === "" && el7.placeholder !== "" && isFinite(Number(el7.placeholder))) writeValue(el7, el7.placeholder);
+      const start = el7.value;
       try {
-        if (dir > 0) el6.stepUp();
-        else el6.stepDown();
+        if (dir > 0) el7.stepUp();
+        else el7.stepDown();
       } catch (err) {
         return false;
       }
-      const dec = (String(el6.step).split(".")[1] || "").length;
-      if (dec && el6.value !== "" && isFinite(Number(el6.value))) writeValue(el6, String(Number(Number(el6.value).toFixed(dec))));
-      if (el6.value === start && before !== "") return false;
-      el6.dispatchEvent(new Event("input", { bubbles: true }));
-      el6.dispatchEvent(new Event("change", { bubbles: true }));
+      const dec = (String(el7.step).split(".")[1] || "").length;
+      if (dec && el7.value !== "" && isFinite(Number(el7.value))) writeValue(el7, String(Number(Number(el7.value).toFixed(dec))));
+      if (el7.value === start && before !== "") return false;
+      el7.dispatchEvent(new Event("input", { bubbles: true }));
+      el7.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     let holdTimer = 0;
@@ -195,20 +195,20 @@
     document.addEventListener("pointerdown", (e) => {
       const button = buttonOf(e);
       if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
-      const el6 = boxOf(button);
-      if (!el6 || el6.disabled || el6.readOnly) return;
+      const el7 = boxOf(button);
+      if (!el7 || el7.disabled || el7.readOnly) return;
       e.preventDefault();
       const dir = Number(button.dataset.znStep) || 0;
       stop();
-      stepBy(el6, dir);
+      stepBy(el7, dir);
       holdTimer = setTimeout(() => {
         repeatTimer = setInterval(() => {
-          if (!stepBy(el6, dir)) stop();
+          if (!stepBy(el7, dir)) stop();
         }, REPEAT_MS);
       }, HOLD_MS);
       const release = () => {
         stop();
-        if (document.activeElement !== el6) el6.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+        if (document.activeElement !== el7) el7.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
       window.addEventListener("pointercancel", release, { once: true });
@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "449c641" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "85162ce" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -1263,6 +1263,208 @@
     if (!await anyModelSaved("fill")) await deleteRuntime();
   }
 
+  // shared/js/ai/ocrLangs.js
+  var TJS_VERSION = "5.1.1";
+  var CORE_VERSION = "5.1.0";
+  var DATA_VERSION = "1.0.0";
+  var TJS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/tesseract.min.js";
+  var WORKER_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/worker.min.js";
+  var CORE_URL = "https://cdn.jsdelivr.net/npm/tesseract.js-core@" + CORE_VERSION;
+  var OCR_ENGINE_MB = 4.1;
+  var OCR_ENGINE = { name: "Tesseract.js reader", licence: "Apache-2.0", host: "cdn.jsdelivr.net", repo: "cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION, mb: OCR_ENGINE_MB };
+  var OCR_LANGS = [
+    { code: "eng", name: "English", mb: 2.95 },
+    { code: "msa", name: "Malay (Bahasa Melayu)", mb: 1.18 },
+    { code: "ind", name: "Indonesian", mb: 1.19 },
+    { code: "chi_sim", name: "Chinese (simplified)", mb: 1.72 },
+    { code: "chi_tra", name: "Chinese (traditional)", mb: 1.66 },
+    { code: "tam", name: "Tamil", mb: 1.45 }
+  ];
+  var ocrLang = (code) => OCR_LANGS.find((l) => l.code === code) || OCR_LANGS[0];
+  var ocrLangUrl = (code) => "https://cdn.jsdelivr.net/npm/@tesseract.js-data/" + code + "@" + DATA_VERSION + "/4.0.0_best_int";
+  function ocrModel(l) {
+    return {
+      key: "ocr-" + l.code,
+      name: l.name,
+      kind: "Text reading (OCR)",
+      label: l.name + " (Text reading)",
+      mb: l.mb,
+      licence: "Apache-2.0",
+      host: "cdn.jsdelivr.net",
+      repo: "cdn.jsdelivr.net/npm/@tesseract.js-data/" + l.code,
+      about: "The " + l.name + " language file for the Tesseract text reader."
+    };
+  }
+
+  // shared/js/ai/ocr.js
+  var FLAG = "zinenow.ocr.engineSaved";
+  var IDLE_MS4 = 6e4;
+  var workers = /* @__PURE__ */ new Map();
+  var timer4 = 0;
+  var ocrEngineSaved = () => {
+    try {
+      return localStorage.getItem(FLAG) === "1";
+    } catch (e) {
+      return false;
+    }
+  };
+  var setEngineFlag = (on) => {
+    try {
+      if (on) localStorage.setItem(FLAG, "1");
+      else localStorage.removeItem(FLAG);
+    } catch (e) {
+    }
+  };
+  function idb(fn) {
+    return new Promise((resolve) => {
+      let q;
+      try {
+        q = indexedDB.open("keyval-store");
+      } catch (e) {
+        resolve(null);
+        return;
+      }
+      q.onupgradeneeded = () => {
+        try {
+          q.result.createObjectStore("keyval");
+        } catch (e) {
+        }
+      };
+      q.onerror = () => resolve(null);
+      q.onsuccess = async () => {
+        const db = q.result;
+        try {
+          resolve(await fn(db));
+        } catch (e) {
+          resolve(null);
+        } finally {
+          db.close();
+        }
+      };
+    });
+  }
+  async function ocrLangSaved(code) {
+    const r = await idb((db) => new Promise((res) => {
+      if (!db.objectStoreNames.contains("keyval")) {
+        res(false);
+        return;
+      }
+      const q = db.transaction("keyval").objectStore("keyval").getKey("./" + code + ".traineddata");
+      q.onsuccess = () => res(q.result !== void 0);
+      q.onerror = () => res(false);
+    }));
+    return Boolean(r);
+  }
+  var scriptPromise = null;
+  function loadTesseract() {
+    if (self.Tesseract) return Promise.resolve(self.Tesseract);
+    if (!scriptPromise) {
+      scriptPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = TJS_URL;
+        s.onload = () => resolve(self.Tesseract);
+        s.onerror = () => {
+          scriptPromise = null;
+          reject(new Error("Couldn't load the text reader. It needs the internet the first time."));
+        };
+        document.head.append(s);
+      });
+    }
+    return scriptPromise;
+  }
+  var makeWorker = async (code, logger = () => {
+  }) => (await loadTesseract()).createWorker(code, 1, { workerPath: WORKER_URL, corePath: CORE_URL, langPath: ocrLangUrl(code), logger });
+  async function downloadOcr(code, { onProgress, signal } = {}) {
+    const lang = ocrLang(code);
+    const engine = ocrEngineSaved() ? 0 : OCR_ENGINE_MB;
+    const total = engine + lang.mb;
+    let aborted = false;
+    if (signal) signal.addEventListener("abort", () => {
+      aborted = true;
+    });
+    const report = (done) => onProgress && onProgress(Math.min(total, done), total);
+    report(0);
+    const worker = await makeWorker(code, (m) => {
+      if (typeof m.progress !== "number") return;
+      if (/core/.test(m.status)) report(m.progress * engine);
+      else if (/language/.test(m.status)) report(engine + m.progress * lang.mb);
+      else if (/initializing/.test(m.status)) report(engine + (m.status.includes("api") ? lang.mb : 0));
+    });
+    try {
+      await worker.terminate();
+    } catch (e) {
+    }
+    setEngineFlag(true);
+    try {
+      if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+    } catch (e) {
+    }
+    report(total);
+    if (aborted) {
+      const err = new Error("Cancelled");
+      err.name = "AbortError";
+      throw err;
+    }
+  }
+  function releaseOcr() {
+    clearTimeout(timer4);
+    const all = [...workers.values()];
+    workers.clear();
+    for (const w of all) Promise.resolve(w).then((x) => {
+      if (x && x.terminate) {
+        try {
+          x.terminate();
+        } catch (e) {
+        }
+      }
+    }, () => {
+    });
+  }
+  var touch4 = () => {
+    clearTimeout(timer4);
+    timer4 = setTimeout(releaseOcr, IDLE_MS4);
+  };
+  async function deleteEngineFiles() {
+    setEngineFlag(false);
+    try {
+      for (const name of await caches.keys()) {
+        const cache = await caches.open(name);
+        for (const req of await cache.keys()) if (/tesseract/i.test(req.url)) await cache.delete(req);
+      }
+    } catch (e) {
+    }
+  }
+  async function deleteOcrLang(code, allCodes) {
+    releaseOcr();
+    await idb((db) => new Promise((res) => {
+      const t = db.transaction("keyval", "readwrite");
+      t.objectStore("keyval").delete("./" + code + ".traineddata");
+      t.oncomplete = () => res(true);
+      t.onerror = () => res(false);
+    }));
+    let any = false;
+    for (const c of allCodes) if (c !== code && await ocrLangSaved(c)) any = true;
+    if (!any) await deleteEngineFiles();
+  }
+  async function recognizeText(canvas, { lang = "eng", psm = "3" } = {}, onStatus) {
+    if (!await ocrLangSaved(lang)) throw new Error(ocrLang(lang).name + " is not downloaded. Download it first (Models page, or the Text from image tool).");
+    touch4();
+    if (!workers.has(lang)) {
+      onStatus && onStatus("Starting the text reader…");
+      workers.set(lang, makeWorker(lang).catch((e) => {
+        workers.delete(lang);
+        throw e;
+      }));
+    }
+    const worker = await workers.get(lang);
+    await worker.setParameters({ tessedit_pageseg_mode: String(psm) });
+    onStatus && onStatus("Reading the text…");
+    const t0 = performance.now();
+    const { data } = await worker.recognize(canvas);
+    touch4();
+    return { text: (data.text || "").trim(), confidence: data.confidence || 0, words: (data.words || []).filter((w) => w.text && w.text.trim()), runMs: Math.round(performance.now() - t0) };
+  }
+
   // shared/js/ai/modelList.js
   var FILL_MODEL = {
     key: "migan",
@@ -1279,7 +1481,8 @@
   var MODEL_ROWS = [
     { id: "fill", tool: "Remove object", model: FILL_MODEL },
     ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m })),
-    { id: "face", tool: "Face blur", model: FACE_MODEL }
+    { id: "face", tool: "Face blur", model: FACE_MODEL },
+    ...OCR_LANGS.map((l) => ({ id: "ocr:" + l.code, tool: "Text from image", model: ocrModel(l) }))
   ];
 
   // apps/AiToolsLocal/src/dialog.js
@@ -1362,7 +1565,7 @@
   function modelControl(id) {
     if (controls.has(id)) return controls.get(id);
     const row = rowFor(id);
-    const isFill = id === "fill", isFace = id === "face";
+    const isFill = id === "fill", isFace = id === "face", isOcr = id.startsWith("ocr:"), ocrCode = isOcr ? id.slice(4) : "";
     const listeners = /* @__PURE__ */ new Set();
     const state = { phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null };
     let abort = null;
@@ -1376,6 +1579,11 @@
     };
     async function refresh2() {
       try {
+        if (isOcr) {
+          const saved2 = await ocrLangSaved(ocrCode) && ocrEngineSaved();
+          set({ phase: saved2 ? "ready" : "none", plan: { gpu: false, modelMb: row.model.mb, runtimeMb: OCR_ENGINE_MB, totalMb: Math.round(row.model.mb + OCR_ENGINE_MB) } });
+          return;
+        }
         const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
         set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
       } catch (e) {
@@ -1387,7 +1595,8 @@
       abort = ctl2;
       set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
       try {
-        await downloadAi({ which: isFill ? "fill" : isFace ? "face" : "background", model: isFill || isFace ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        if (isOcr) await downloadOcr(ocrCode, { signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        else await downloadAi({ which: isFill ? "fill" : isFace ? "face" : "background", model: isFill || isFace ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
         await refresh2();
       } catch (e) {
         await refresh2();
@@ -1400,7 +1609,7 @@
       if (abort) abort.abort();
     };
     async function remove() {
-      await (isFill ? deleteAi() : isFace ? deleteFace() : deleteBg(row.model.key));
+      await (isOcr ? deleteOcrLang(ocrCode, OCR_LANGS.map((l) => l.code)) : isFill ? deleteAi() : isFace ? deleteFace() : deleteBg(row.model.key));
       await refresh2();
     }
     const ctl = { id, row, state, refresh: refresh2, download, cancel, remove, subscribe(fn) {
@@ -1417,7 +1626,7 @@
     return confirmDialog({
       title: "Download AI model?",
       points: [
-        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
+        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : m.kind === "Text reading (OCR)" ? "an AI text-reading (OCR) language file" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
         "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.",
         rich([["Warning:", true], [" it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete button)."]])
       ],
@@ -1531,6 +1740,16 @@
       const eState = el2("span", "hint");
       engine.append(eTitle, eFacts, eState);
       host.append(engine);
+      const tess = el2("div", "model-card");
+      tess.append(el2("div", "model-tool", "Used by: Text from image"));
+      const tHead = el2("div", "model-title");
+      tHead.append(el2("b", "", OCR_ENGINE.name), el2("span", "model-size", "about " + OCR_ENGINE.mb + " MB"));
+      const tFacts = el2("span", "hint", OCR_ENGINE.licence + " licence. Downloaded from " + OCR_ENGINE.repo + " the first time you download a language, then kept. It is removed automatically when the last language is deleted.");
+      const tState = el2("span", "hint");
+      const tBox = el2("div", "model-box");
+      tBox.append(tHead, tFacts, tState);
+      tess.append(tBox);
+      host.append(tess);
       async function updateTotals() {
         const saved = await aiSaved();
         const plan = await downloadPlan();
@@ -1540,9 +1759,12 @@
           mb += r.model.mb;
           n++;
         }
+        tState.textContent = ocrEngineSaved() ? "On this device." : "Not downloaded.";
+        tState.className = "hint" + (ocrEngineSaved() ? " ok" : "");
+        if (ocrEngineSaved()) mb += OCR_ENGINE.mb;
         eState.textContent = saved.runtime ? "On this device (about " + Math.round(plan.runtimeMb) + " MB)." : "Not downloaded.";
         eState.className = "hint" + (saved.runtime ? " ok" : "");
-        total.textContent = n || saved.runtime ? "Saved on this device: " + n + " model" + (n === 1 ? "" : "s") + " and " + (saved.runtime ? "the engine" : "no engine") + ", about " + Math.round(mb) + " MB in total." : "Nothing is downloaded yet.";
+        total.textContent = n || saved.runtime || ocrEngineSaved() ? "Saved on this device: " + n + " model" + (n === 1 ? "" : "s") + (saved.runtime ? ", the AI engine" : "") + (ocrEngineSaved() ? ", the text reader" : "") + ", about " + Math.round(mb) + " MB in total." : "Nothing is downloaded yet.";
       }
       off = onModelsChanged(updateTotals);
       updateTotals();
@@ -2139,8 +2361,287 @@
     }
   };
 
-  // apps/AiToolsLocal/src/tools/removeBackground.js
+  // apps/AiToolsLocal/src/tools/ocr.js
   var el4 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  var MIN_BOX2 = 12;
+  var PSMS = [["3", "Automatic (a normal page with paragraphs)"], ["11", "Scattered text (signs, posters, zine pages)"], ["6", "One block of text"], ["7", "One line"]];
+  var confColor = (c) => c >= 80 ? "#3fd26f" : c >= 55 ? "#f2c94c" : "#ff5a5a";
+  var ocrTool = {
+    id: "ocr",
+    name: "Text from image",
+    summary: "Read the text in a picture and copy it.",
+    create(ctx2) {
+      const { picture: picture2 } = ctx2;
+      const boxesC = picture2.addOverlay(document.createElement("canvas"));
+      boxesC.id = "ocrboxes";
+      boxesC.style.display = "none";
+      const bx = boxesC.getContext("2d");
+      let mounted = false, ui = {}, boxEl = null;
+      let lang = "eng", psm = "3", showBoxes = true, drawMode = false;
+      let area = null;
+      let result = null;
+      let drag = null;
+      const unsub = [];
+      const ctl = () => modelControl("ocr:" + lang);
+      function drawOverlay() {
+        bx.clearRect(0, 0, boxesC.width, boxesC.height);
+        if (!area && !(result && showBoxes) && !drag) {
+          boxesC.style.display = "none";
+          return;
+        }
+        boxesC.style.display = "";
+        const s = picture2.view.s;
+        if (area) {
+          bx.lineWidth = 2.5 / s;
+          bx.setLineDash([8 / s, 6 / s]);
+          bx.strokeStyle = "#fff";
+          bx.strokeRect(area.x, area.y, area.w, area.h);
+          bx.setLineDash([]);
+        }
+        if (result && showBoxes) {
+          bx.lineWidth = Math.max(1.5, 2 / s);
+          for (const w of result.words) {
+            bx.strokeStyle = confColor(w.confidence);
+            bx.strokeRect(result.region.x + w.bbox.x0, result.region.y + w.bbox.y0, w.bbox.x1 - w.bbox.x0, w.bbox.y1 - w.bbox.y0);
+          }
+        }
+        if (drag) {
+          bx.lineWidth = 2 / s;
+          bx.setLineDash([8 / s, 6 / s]);
+          bx.strokeStyle = "#e8622a";
+          bx.strokeRect(Math.min(drag.a.x, drag.b.x), Math.min(drag.a.y, drag.b.y), Math.abs(drag.b.x - drag.a.x), Math.abs(drag.b.y - drag.a.y));
+          bx.setLineDash([]);
+        }
+      }
+      const handler = {
+        down(pt) {
+          if (drawMode) drag = { a: pt, b: pt };
+        },
+        move(pt) {
+          if (drag) {
+            drag.b = pt;
+            drawOverlay();
+          }
+        },
+        up() {
+          if (!drag) return;
+          const x0 = Math.max(0, Math.min(drag.a.x, drag.b.x)), y0 = Math.max(0, Math.min(drag.a.y, drag.b.y));
+          const x1 = Math.min(picture2.width, Math.max(drag.a.x, drag.b.x)), y1 = Math.min(picture2.height, Math.max(drag.a.y, drag.b.y));
+          if (x1 - x0 >= MIN_BOX2 && y1 - y0 >= MIN_BOX2) {
+            area = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+            result = null;
+            ui.text.value = "";
+            ui.conf.textContent = "";
+            drawMode = false;
+          }
+          drag = null;
+          drawOverlay();
+          refresh2();
+        },
+        cancel() {
+          drag = null;
+          drawOverlay();
+        }
+      };
+      function reset() {
+        area = null;
+        result = null;
+        drag = null;
+        drawMode = false;
+        if (ui.text) {
+          ui.text.value = "";
+          ui.conf.textContent = "";
+        }
+        drawOverlay();
+        refresh2();
+      }
+      async function read() {
+        if (picture2.busy || !picture2.loaded || ctl().state.phase !== "ready") return;
+        picture2.setBusy(true);
+        try {
+          ctx2.status("Starting the text reader…");
+          const region = area ? { x: Math.round(area.x), y: Math.round(area.y), w: Math.round(area.w), h: Math.round(area.h) } : { x: 0, y: 0, w: picture2.width, h: picture2.height };
+          const src = document.createElement("canvas");
+          src.width = region.w;
+          src.height = region.h;
+          src.getContext("2d").drawImage(picture2.canvas, region.x, region.y, region.w, region.h, 0, 0, region.w, region.h);
+          const t0 = performance.now();
+          const r = await recognizeText(src, { lang, psm }, (t) => ctx2.status(t));
+          result = { words: r.words, region, depth: picture2.depth };
+          ui.text.value = r.text;
+          ui.conf.textContent = r.text ? "Average confidence " + Math.round(r.confidence) + " % · " + r.words.length + " words" : "";
+          ctx2.debug.section("Read text", { language: lang, layoutMode: psm, region: region.w + "x" + region.h + " at " + region.x + "," + region.y, runMs: r.runMs, totalMs: Math.round(performance.now() - t0), confidence: r.confidence, words: r.words.length, characters: r.text.length });
+          drawOverlay();
+          ctx2.status(r.text ? "Read " + r.words.length + " words in " + (r.runMs / 1e3).toFixed(1) + " s. Check them against the picture (green = sure, yellow = unsure, red = very unsure), then copy the text." : "No text was found. Try another page layout (Scattered text suits posters), or draw a box round the text.", r.text ? "ok" : "bad");
+        } catch (e) {
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+        } finally {
+          picture2.setBusy(false);
+        }
+      }
+      function refresh2() {
+        if (!mounted) return;
+        const ready = ctl().state.phase === "ready", has = picture2.loaded, idle = !picture2.busy;
+        ui.need.hidden = ready || ctl().state.phase === "checking";
+        ui.read.disabled = !has || !idle || !ready;
+        ui.draw.classList.toggle("active", drawMode);
+        ui.draw.textContent = drawMode ? "Drag on the picture to draw the box…" : area ? "Draw the box again" : "Read only an area (draw a box)";
+        ui.draw.disabled = !has || !idle;
+        ui.clearArea.hidden = !area;
+        const has_text = Boolean(ui.text.value.trim());
+        ui.copy.disabled = !has_text;
+        ui.save.disabled = !has_text;
+      }
+      picture2.onView(() => {
+        if (mounted) drawOverlay();
+      });
+      picture2.onOpen(reset);
+      function drawModelBox() {
+        if (boxEl) {
+          boxEl.dispose && boxEl.dispose();
+          boxEl.remove();
+        }
+        boxEl = modelBox("ocr:" + lang, { compact: true, deletable: false });
+        ui.boxHost.append(boxEl);
+      }
+      return {
+        mount(panel) {
+          mounted = true;
+          const secA = el4("section");
+          secA.append(el4("h2", "", "Read the text"));
+          const lf = el4("label", "field");
+          lf.append(el4("span", "", "Language"));
+          ui.lang = el4("select");
+          for (const l of OCR_LANGS) {
+            const o = el4("option", "", l.name);
+            o.value = l.code;
+            ui.lang.append(o);
+          }
+          ui.lang.value = lang;
+          ui.lang.addEventListener("change", () => {
+            lang = ui.lang.value;
+            result = null;
+            ui.text.value = "";
+            ui.conf.textContent = "";
+            drawOverlay();
+            drawModelBox();
+            refresh2();
+          });
+          lf.append(ui.lang);
+          const pf = el4("label", "field");
+          pf.append(el4("span", "", "How the page is laid out"));
+          ui.psm = el4("select");
+          for (const [v, t] of PSMS) {
+            const o = el4("option", "", t);
+            o.value = v;
+            ui.psm.append(o);
+          }
+          ui.psm.value = psm;
+          ui.psm.addEventListener("change", () => {
+            psm = ui.psm.value;
+          });
+          pf.append(ui.psm);
+          ui.need = el4("p", "hint required", "Download required: get the language below first.");
+          ui.draw = el4("button", "wide", "Read only an area (draw a box)");
+          ui.draw.type = "button";
+          ui.draw.addEventListener("click", () => {
+            drawMode = !drawMode;
+            if (drawMode) picture2.setPointerHandler(handler);
+            refresh2();
+          });
+          ui.clearArea = el4("button", "wide", "Read the whole picture again");
+          ui.clearArea.type = "button";
+          ui.clearArea.hidden = true;
+          ui.clearArea.addEventListener("click", () => {
+            area = null;
+            result = null;
+            ui.text.value = "";
+            ui.conf.textContent = "";
+            drawOverlay();
+            refresh2();
+          });
+          ui.read = el4("button", "btn-solid big", "Read text");
+          ui.read.type = "button";
+          ui.read.addEventListener("click", read);
+          secA.append(lf, pf, ui.need, ui.draw, ui.clearArea, ui.read);
+          const secB = el4("section");
+          secB.append(el4("h2", "", "Text"));
+          ui.conf = el4("p", "hint");
+          ui.text = document.createElement("textarea");
+          ui.text.className = "ocr-text";
+          ui.text.rows = 9;
+          ui.text.placeholder = "The text will appear here. You can fix mistakes before copying.";
+          ui.text.addEventListener("input", refresh2);
+          const row = el4("div", "row");
+          ui.copy = el4("button", "", "Copy text");
+          ui.copy.type = "button";
+          ui.copy.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(ui.text.value);
+              ctx2.status("Text copied.", "ok");
+            } catch (e) {
+              ui.text.select();
+              ctx2.status("Select the text and copy it by hand.", "bad");
+            }
+          });
+          ui.save = el4("button", "", "Save as .txt");
+          ui.save.type = "button";
+          ui.save.addEventListener("click", () => downloadBlob(new Blob([ui.text.value], { type: "text/plain;charset=utf-8" }), picture2.name + ".txt"));
+          row.append(ui.copy, ui.save);
+          const lab = el4("label", "radio");
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = showBoxes;
+          cb.addEventListener("change", () => {
+            showBoxes = cb.checked;
+            drawOverlay();
+          });
+          lab.append(cb, el4("span", "", " Show the words found on the picture"));
+          const hint = el4("p", "hint", "Works best on clean printed text. Handwriting and decorative fonts read poorly. Green boxes are sure, yellow unsure, red very unsure.");
+          secB.append(ui.conf, ui.text, row, lab, hint);
+          const secC = el4("section");
+          secC.append(el4("h2", "", "Language file"));
+          ui.boxHost = el4("div");
+          secC.append(ui.boxHost);
+          panel.append(secA, secB, secC);
+          drawModelBox();
+          for (const l of OCR_LANGS) unsub.push(modelControl("ocr:" + l.code).subscribe(refresh2));
+          if (area || drawMode) picture2.setPointerHandler(handler);
+          drawOverlay();
+          refresh2();
+        },
+        unmount() {
+          mounted = false;
+          drag = null;
+          boxesC.style.display = "none";
+          picture2.setPointerHandler(null);
+          while (unsub.length) unsub.pop()();
+          if (boxEl) {
+            boxEl.dispose && boxEl.dispose();
+            boxEl = null;
+          }
+        },
+        onPictureChange() {
+          if (result && picture2.depth !== result.depth) {
+            result = null;
+            drawOverlay();
+          }
+          refresh2();
+        },
+        primary() {
+          read();
+        }
+      };
+    }
+  };
+
+  // apps/AiToolsLocal/src/tools/removeBackground.js
+  var el5 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -2365,11 +2866,11 @@
       return {
         mount(panel) {
           mounted = true;
-          const sec1 = el4("section");
-          sec1.append(el4("h2", "", "Model"));
-          const radios = el4("div", "radios");
+          const sec1 = el5("section");
+          sec1.append(el5("h2", "", "Model"));
+          const radios = el5("div", "radios");
           for (const m of BG_MODELS) {
-            const lab = el4("label", "radio");
+            const lab = el5("label", "radio");
             const r = document.createElement("input");
             r.type = "radio";
             r.name = "bg-model";
@@ -2380,21 +2881,21 @@
               drawModelBox();
               refresh2();
             });
-            lab.append(r, el4("span", "", " " + m.label + " · " + m.mb + " MB"));
+            lab.append(r, el5("span", "", " " + m.label + " · " + m.mb + " MB"));
             radios.append(lab);
           }
-          ui.boxHost = el4("div");
+          ui.boxHost = el5("div");
           sec1.append(radios, ui.boxHost);
-          const secC = el4("section");
-          secC.append(el4("h2", "", "Crop first (optional)"));
-          ui.cropToggle = el4("button", "wide", "Crop first…");
+          const secC = el5("section");
+          secC.append(el5("h2", "", "Crop first (optional)"));
+          ui.cropToggle = el5("button", "wide", "Crop first…");
           ui.cropToggle.type = "button";
           ui.cropToggle.addEventListener("click", () => setCrop(!crop));
-          ui.cropBox = el4("div");
+          ui.cropBox = el5("div");
           ui.cropBox.hidden = true;
-          ui.cropInfo = el4("p", "hint");
-          const cropHint = el4("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
-          const reset = el4("button", "wide", "Reset the box");
+          ui.cropInfo = el5("p", "hint");
+          const cropHint = el5("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
+          const reset = el5("button", "wide", "Reset the box");
           reset.type = "button";
           reset.addEventListener("click", () => {
             crop = null;
@@ -2402,11 +2903,11 @@
           });
           ui.cropBox.append(ui.cropInfo, cropHint, reset);
           secC.append(ui.cropToggle, ui.cropBox);
-          const sec2 = el4("section");
-          sec2.append(el4("h2", "", "Cut out"));
+          const sec2 = el5("section");
+          sec2.append(el5("h2", "", "Cut out"));
           const num2 = (label, key, min, max, step, value, onInput) => {
-            const f = el4("label", "field");
-            f.append(el4("span", "", label));
+            const f = el5("label", "field");
+            f.append(el5("span", "", label));
             const i = document.createElement("input");
             i.type = "number";
             i.min = min;
@@ -2426,30 +2927,30 @@
             return f;
           };
           const need = () => {
-            const p = el4("p", "hint required", "Download required");
+            const p = el5("p", "hint required", "Download required");
             return p;
           };
           ui.need = [need(), need()];
           const f1 = num2("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
-          const h1 = el4("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
+          const h1 = el5("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
           const f2 = num2("Soft edge (%) — fade above the cut-off", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
-          ui.find = el4("button", "btn-solid big", "Find subject");
+          ui.find = el5("button", "btn-solid big", "Find subject");
           ui.find.type = "button";
           ui.find.addEventListener("click", find);
-          ui.apply = el4("button", "btn-solid big", "Apply");
+          ui.apply = el5("button", "btn-solid big", "Apply");
           ui.apply.type = "button";
           ui.apply.addEventListener("click", apply);
-          ui.discard = el4("button", "big", "Discard");
+          ui.discard = el5("button", "big", "Discard");
           ui.discard.type = "button";
           ui.discard.addEventListener("click", () => {
             discard();
             ctx2.status("Discarded.");
           });
-          const note = el4("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
+          const note = el5("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
           panel.append(secC, sec2, sec1);
           drawModelBox();
@@ -2569,7 +3070,7 @@
     } catch (e) {
     }
   };
-  var el5 = (tag, cls, text) => {
+  var el6 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -2586,7 +3087,7 @@
       const draftC = picture2.addOverlay(document.createElement("canvas"));
       draftC.id = "draft";
       const maskX = maskC.getContext("2d", { willReadFrequently: true }), draftX = draftC.getContext("2d");
-      const ring = el5("div", "ring");
+      const ring = el6("div", "ring");
       ring.hidden = true;
       picture2.stage.append(ring);
       const ctl = modelControl("fill");
@@ -2736,12 +3237,12 @@
           picture2.stage.addEventListener("pointerdown", showRing);
           picture2.stage.addEventListener("pointerleave", hideRing);
           picture2.stage.addEventListener("pointerup", touchHide);
-          const sec1 = el5("section");
-          sec1.append(el5("h2", "", "Mark what to remove"));
-          const seg = el5("div", "seg");
+          const sec1 = el6("section");
+          sec1.append(el6("h2", "", "Mark what to remove"));
+          const seg = el6("div", "seg");
           seg.setAttribute("role", "group");
           for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
-            const b = el5("button", key === tool ? "active" : "", label);
+            const b = el6("button", key === tool ? "active" : "", label);
             b.type = "button";
             b.addEventListener("click", () => {
               tool = key;
@@ -2749,8 +3250,8 @@
             });
             seg.append(b);
           }
-          const brushField = el5("label", "field");
-          brushField.append(el5("span", "", "Brush size (px)"));
+          const brushField = el6("label", "field");
+          brushField.append(el6("span", "", "Brush size (px)"));
           const brush = document.createElement("input");
           brush.type = "number";
           brush.min = 1;
@@ -2767,15 +3268,15 @@
           brushField.append(brush);
           wrapNumberInput(brush);
           ui.brush = brush;
-          const hint = el5("p", "hint", "Two fingers always move and zoom the picture.");
-          ui.clear = el5("button", "", "Clear marks");
+          const hint = el6("p", "hint", "Two fingers always move and zoom the picture.");
+          ui.clear = el6("button", "", "Clear marks");
           ui.clear.type = "button";
           ui.clear.addEventListener("click", clearMarks);
           sec1.append(seg, brushField, hint, ui.clear);
-          const sec2 = el5("section");
-          sec2.append(el5("h2", "", "Remove it"));
-          const growField = el5("label", "field");
-          growField.append(el5("span", "", "Grow the marked area by (px)"));
+          const sec2 = el6("section");
+          sec2.append(el6("h2", "", "Remove it"));
+          const growField = el6("label", "field");
+          growField.append(el6("span", "", "Grow the marked area by (px)"));
           const grow = document.createElement("input");
           grow.type = "number";
           grow.min = 0;
@@ -2791,18 +3292,18 @@
           });
           growField.append(grow);
           wrapNumberInput(grow);
-          const growHint = el5("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
-          ui.need = el5("p", "hint required", "Download required: get the model below first.");
-          ui.fill = el5("button", "btn-solid big", "Remove object");
+          const growHint = el6("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
+          ui.need = el6("p", "hint required", "Download required: get the model below first.");
+          ui.fill = el6("button", "btn-solid big", "Remove object");
           ui.fill.type = "button";
           ui.fill.addEventListener("click", removeObject);
-          ui.another = el5("button", "big", "Try another");
+          ui.another = el6("button", "big", "Try another");
           ui.another.type = "button";
           ui.another.title = "Undoes the last fill and fills again, showing the model the area from a slightly different view";
           ui.another.addEventListener("click", tryAnother);
           sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
-          const sec3 = el5("section");
-          sec3.append(el5("h2", "", "Model"));
+          const sec3 = el6("section");
+          sec3.append(el6("h2", "", "Model"));
           sec3.append(modelBox("fill", { compact: true, deletable: false }));
           panel.append(sec1, sec2, sec3);
           refreshButtons();
@@ -2872,6 +3373,7 @@
   registerTool(removeObjectTool);
   registerTool(removeBackgroundTool);
   registerTool(faceBlurTool);
+  registerTool(ocrTool);
   var instances = /* @__PURE__ */ new Map();
   var modelsPage = createModelsPage($("models"));
   var MODELS_TOOL = { id: "models", name: "Models", summary: "Downloads, licences and storage." };
@@ -2987,7 +3489,7 @@
       pictureSize: picture.width + "x" + picture.height,
       undoSteps: picture.depth,
       tool: active ? active.id : "none",
-      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face"].map((id) => [id, modelControl(id).state.phase]))
+      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase]))
     })
   });
   select("remove-object");

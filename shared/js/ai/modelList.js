@@ -3,6 +3,7 @@
 import { DEFAULT_MODEL_URL } from "./modelStore.js";
 import { BG_MODELS } from "./bgModel.js";
 import { FACE_MODEL } from "./faceModel.js";
+import { OCR_LANGS, ocrModel } from "./ocrLangs.js";
 
 export const FILL_MODEL = {
   key: "migan", name: "MI-GAN", kind: "Remove object", label: "MI-GAN (Remove object)",
@@ -15,4 +16,5 @@ export const MODEL_ROWS = [
   { id: "fill", tool: "Remove object", model: FILL_MODEL },
   ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m })),
   { id: "face", tool: "Face blur", model: FACE_MODEL },
+  ...OCR_LANGS.map((l) => ({ id: "ocr:" + l.code, tool: "Text from image", model: ocrModel(l) })),
 ];

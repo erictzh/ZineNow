@@ -4,6 +4,8 @@
 import { aiSaved, downloadPlan } from "../../../shared/js/ai/manager.js";
 import { ORT_VERSION } from "../../../shared/js/ai/runtime.js";
 import { MODEL_ROWS } from "../../../shared/js/ai/modelList.js";
+import { OCR_ENGINE } from "../../../shared/js/ai/ocrLangs.js";
+import { ocrEngineSaved } from "../../../shared/js/ai/ocr.js";
 import { modelBox, modelControl, onModelsChanged } from "./models.js";
 
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -36,6 +38,13 @@ export function createModelsPage(host) {
     const eState = el("span", "hint");
     engine.append(eTitle, eFacts, eState);
     host.append(engine);
+    const tess = el("div", "model-card");
+    tess.append(el("div", "model-tool", "Used by: Text from image"));
+    const tHead = el("div", "model-title"); tHead.append(el("b", "", OCR_ENGINE.name), el("span", "model-size", "about " + OCR_ENGINE.mb + " MB"));
+    const tFacts = el("span", "hint", OCR_ENGINE.licence + " licence. Downloaded from " + OCR_ENGINE.repo + " the first time you download a language, then kept. It is removed automatically when the last language is deleted.");
+    const tState = el("span", "hint");
+    const tBox = el("div", "model-box"); tBox.append(tHead, tFacts, tState); tess.append(tBox);
+    host.append(tess);
 
     async function updateTotals() {
       const saved = await aiSaved();
@@ -43,9 +52,11 @@ export function createModelsPage(host) {
       let mb = saved.runtime ? plan.runtimeMb : 0;
       let n = 0;
       for (const r of MODEL_ROWS) if (modelControl(r.id).state.phase === "ready") { mb += r.model.mb; n++; }
+      tState.textContent = ocrEngineSaved() ? "On this device." : "Not downloaded."; tState.className = "hint" + (ocrEngineSaved() ? " ok" : "");
+      if (ocrEngineSaved()) mb += OCR_ENGINE.mb;
       eState.textContent = saved.runtime ? "On this device (about " + Math.round(plan.runtimeMb) + " MB)." : "Not downloaded.";
       eState.className = "hint" + (saved.runtime ? " ok" : "");
-      total.textContent = n || saved.runtime ? "Saved on this device: " + n + " model" + (n === 1 ? "" : "s") + " and " + (saved.runtime ? "the engine" : "no engine") + ", about " + Math.round(mb) + " MB in total." : "Nothing is downloaded yet.";
+      total.textContent = n || saved.runtime || ocrEngineSaved() ? "Saved on this device: " + n + " model" + (n === 1 ? "" : "s") + (saved.runtime ? ", the AI engine" : "") + (ocrEngineSaved() ? ", the text reader" : "") + ", about " + Math.round(mb) + " MB in total." : "Nothing is downloaded yet.";
     }
     off = onModelsChanged(updateTotals);
     updateTotals();
