@@ -591,3 +591,5 @@ Tested headless with a stand-in ONNX model only (download flow, dialog, 90 % of 
 - `labs/ai-bg-benchmark` build 4: the Edge cut-off slider goes 0-100 (was 5-95); the soft edge narrows near the ends so 100 keeps only the surest pixels and 0 keeps everything.
 
 - `labs/ai-bg-benchmark` build 5: the Edge cut-off slider moves in steps of 0.125 %.
+
+- `labs/ai-bg-benchmark` build 6: Edge cut-off also has a number box (0-100 %, steps of 0.001) and a "Fine slider (0 to 1 % only)" checkbox, because the user's best cut-off was below 0.125 % (the model's mask is nearly 0 on the background, so useful cut-offs are tiny).
