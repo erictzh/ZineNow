@@ -38,7 +38,7 @@ Hides faces with Blur, Pixelate or a Black box. It uses a tiny face detector, **
 2. **Find faces.** Orange boxes with a number and a score appear on the picture. **Minimum score (%)** hides the unsure ones (lower shows more, including false ones).
 3. **Tap a box** to leave that face alone (it turns grey and dashed); tap again to include it. A face the detector missed: **Draw a box by hand** and drag on the picture.
 4. Choose **Blur**, **Pixelate** or **Black box**, the **Strength**, and **Grow each box by (%)** (the detector's box is tight; a little extra covers forehead, ears and chin; hand-drawn boxes are used as drawn).
-5. **Hide N faces** applies it to the picture. Undo brings the faces back. Use **Debug** if the boxes look wrong.
+5. **Hide N faces** applies it to the picture. Undo brings the faces back. Use the **Log** if the boxes look wrong.
 
 Limits: very small, turned away, covered or blurry faces can be missed (draw a box). The detector looks at a 640 pixel version of the picture, so tiny faces in a big group photo may need a crop first (use Remove background's Crop, or crop before you open it).
 
@@ -67,9 +67,9 @@ Limits: it works best on clean printed text. Handwriting and decorative fonts re
 
 **Send to ZEditor** opens the picture in ZEditor as a new document. A picture that came from ZEditor ("Open in Ai Tools") goes back to that same ZEditor as a new layer.
 
-## The Debug window
+## The Log window
 
-If something does not work, press **Debug** in the top bar (or Ctrl+Shift+D). A window with a log opens: your device, what each tool did, how long it took, numbers about the model's answer and about the picture (how much is see-through), and, after **Save PNG**, what the saved file really is (for example "RGBA (has transparency)"). Press **Copy** and paste it in a message, ideally with a screenshot. **Snapshot** adds the picture's current numbers, **Clear** empties the log. Nothing is sent anywhere: the text only goes where you paste it.
+The bottom of the right-hand sidebar is a **Log**: your device, every message from the app and the tools, how long each step took, numbers about the model's answer and the picture, and, after **Save PNG**, what the saved file really is (for example "RGBA (has transparency)"). Press **Copy** (top right of the Log) to copy the whole log, and paste it in a message, ideally with a screenshot. **Snapshot** adds the picture's current numbers, **Clear** empties the log, and **▾** folds it away (also Ctrl+Shift+D). Nothing is sent anywhere: the text only goes where you paste it.
 
 ## Tips
 

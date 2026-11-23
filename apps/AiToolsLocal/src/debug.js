@@ -1,5 +1,5 @@
-// A debug window: a log of what the app and the tools did (with numbers about the picture, the model's answer and the saved file) that
-// can be copied as plain text and sent along with a screenshot. Open it with the Debug button (or Ctrl+Shift+D). Nothing leaves the device:
+// The log window: a log of what the app and the tools did (with numbers about the picture, the model's answer and the saved file) that
+// can be copied as plain text (Copy, top right of the window) and sent along with a screenshot. It sits at the bottom of the right-hand sidebar. Nothing leaves the device:
 // the text only goes where the person pastes it.
 
 const lines = [];
@@ -52,22 +52,26 @@ export async function describePng(blob) {
   return out;
 }
 
-// Wires the window up. `getState()` returns an object describing the app now (picture, tool, models); called each time the window opens
-// and on Snapshot. `getCanvas()` returns the picture's canvas.
-export function installDebug({ button, getState, getCanvas }) {
-  const win = document.createElement("div"); win.className = "debug-win"; win.hidden = true;
-  const bar = document.createElement("div"); bar.className = "debug-bar";
-  const title = document.createElement("b"); title.textContent = "Debug (copy this and send it)";
-  const mk = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", fn); return b; };
-  const ta = document.createElement("textarea"); ta.readOnly = true; ta.spellcheck = false;
-  const note = document.createElement("span"); note.className = "hint";
+// Builds the log window inside `host` (the bottom of the right-hand sidebar): a header with the title and, top right, Snapshot, Clear and Copy
+// (Copy puts the whole log on the clipboard), above the log text. `getState()` returns an object describing the app now (picture, tool, models);
+// called for each Snapshot. `getCanvas()` returns the picture's canvas. Ctrl+Shift+D folds / unfolds the window.
+export function installDebug({ host, getState, getCanvas }) {
+  host.classList.add("logwin");
+  const bar = document.createElement("div"); bar.className = "log-bar";
+  const title = document.createElement("b"); title.textContent = "Log";
+  const mk = (label, fn, cls) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; if (cls) b.className = cls; b.addEventListener("click", fn); return b; };
+  const ta = document.createElement("textarea"); ta.readOnly = true; ta.spellcheck = false; ta.setAttribute("aria-label", "Log");
+  const fold = mk("▾", () => setFolded(!host.classList.contains("folded")), "log-fold"); fold.title = "Fold or unfold the log (Ctrl+Shift+D)";
   const copy = mk("Copy", async () => {
-    try { await navigator.clipboard.writeText(ta.value); note.textContent = "Copied."; }
-    catch (e) { ta.focus(); ta.select(); note.textContent = document.execCommand && document.execCommand("copy") ? "Copied." : "Select the text and copy it by hand."; }
-  });
-  bar.append(title, copy, mk("Snapshot", () => snapshot()), mk("Clear", () => { debug.clear(); header(); }), mk("Close", () => toggle(false)), note);
-  win.append(bar, ta);
-  document.body.append(win);
+    let msg;
+    try { await navigator.clipboard.writeText(ta.value); msg = "Copied ✓"; }
+    catch (e) { ta.focus(); ta.select(); msg = document.execCommand && document.execCommand("copy") ? "Copied ✓" : "Select it"; }
+    copy.textContent = msg; setTimeout(() => { copy.textContent = "Copy"; }, 2500);
+  }, "btn-solid log-copy"); // copies the whole log; the label says "Copied" for a moment
+  const right = document.createElement("span"); right.className = "log-actions";
+  right.append(mk("Snapshot", () => snapshot()), mk("Clear", () => { debug.clear(); header(); }), copy);
+  bar.append(fold, title, right);
+  host.append(bar, ta);
 
   refresh = () => { ta.value = debug.body; ta.scrollTop = ta.scrollHeight; };
   async function header() {
@@ -81,20 +85,14 @@ export function installDebug({ button, getState, getCanvas }) {
       serviceWorker: navigator.serviceWorker && navigator.serviceWorker.controller ? "controlling this page" : "none",
     };
     try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); info.storage = Math.round((e.usage || 0) / 1048576) + " MB used of " + Math.round((e.quota || 0) / 1048576) + " MB"; } } catch (e) { /* not available */ }
-    debug.head("== Ai Tools (Local) debug ==", info);
+    debug.head("== Ai Tools (Local) log ==", info);
   }
   async function snapshot() {
     debug.section("Snapshot", { ...(getState ? getState() : {}), picture: getCanvas && getCanvas() && getCanvas().width ? alphaStats(getCanvas()) : "no picture" });
   }
-  let first = true;
-  async function toggle(open) {
-    win.hidden = !open; document.body.classList.toggle("debug-open", open);
-    if (open && first) { first = false; await header(); await snapshot(); }
-    else if (open) await snapshot();
-    refresh();
-  }
-  button.addEventListener("click", () => toggle(win.hidden));
-  document.addEventListener("keydown", (e) => { if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") { e.preventDefault(); toggle(win.hidden); } });
+  function setFolded(f) { host.classList.toggle("folded", f); fold.textContent = f ? "▸" : "▾"; }
+  document.addEventListener("keydown", (e) => { if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") { e.preventDefault(); setFolded(!host.classList.contains("folded")); } });
   window.addEventListener("error", (e) => debug.log("ERROR: " + e.message + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : "")));
   window.addEventListener("unhandledrejection", (e) => debug.log("ERROR (promise): " + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+  header().then(refresh);
 }
