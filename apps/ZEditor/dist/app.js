@@ -16789,6 +16789,21 @@
     about: "Click on a thing and it outlines it. Two files: an image reader (about 28 MB) and a mask maker (about 16.5 MB)."
   };
 
+  // shared/js/ai/upscaleModel.js
+  var UPSCALE_CACHE = "zinenow-ai-upscale-model";
+  var UPSCALE_MODEL = {
+    key: "realesr-x4v3",
+    name: "Real-ESRGAN general x4v3",
+    kind: "Upscale",
+    label: "Real-ESRGAN x4v3 (Upscale)",
+    mb: 4.9,
+    licence: "BSD-3-Clause",
+    host: "huggingface.co",
+    repo: "huggingface.co/OwlMaster/AllFilesRope",
+    url: "https://huggingface.co/OwlMaster/AllFilesRope/resolve/main/realesr-general-x4v3.onnx",
+    about: "Enlarges a picture 2 or 4 times and adds believable detail. It works piece by piece, so big pictures are slow."
+  };
+
   // shared/js/ai/manager.js
   var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
   var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
@@ -16812,10 +16827,10 @@
     return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
   }
   async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-    const bg = which === "background", face = which === "face", sam = which === "sam";
+    const bg = which === "background", face = which === "face", sam = which === "sam", up = which === "upscale";
     const plan = await downloadPlan();
-    const saved = sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
-    const modelMb = sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
+    const saved = up ? await upscaleSaved() : sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = up ? UPSCALE_MODEL.mb : sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
     const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
     let doneMb = 0;
     const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -16840,7 +16855,8 @@
       }
     }
     if (!saved.model) {
-      if (sam) {
+      if (up) await getModelBytes(UPSCALE_MODEL.url, (got) => report(got / 1048576), signal, UPSCALE_CACHE);
+      else if (sam) {
         const first = await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) ? 0 : SAM_MODEL.encoderMb;
         await getModelBytes(SAM_MODEL.encoderUrl, (got) => report(got / 1048576), signal, SAM_CACHE);
         doneMb += first;
@@ -16868,11 +16884,16 @@
     const saved = await aiSaved();
     return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
   }
+  async function upscaleSaved() {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE), runtime: saved.runtime };
+  }
   async function samSaved() {
     const saved = await aiSaved();
     return { model: await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) && await isModelSaved(SAM_MODEL.decoderUrl, SAM_CACHE), runtime: saved.runtime };
   }
   async function anyModelSaved(except) {
+    if (except !== "upscale" && await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE)) return true;
     if (except !== "sam" && (await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) || await isModelSaved(SAM_MODEL.decoderUrl, SAM_CACHE))) return true;
     if (except !== "face" && await isModelSaved(FACE_MODEL.url, FACE_CACHE)) return true;
     if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
@@ -19350,7 +19371,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "a50a157"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5685f25"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

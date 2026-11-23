@@ -52,6 +52,18 @@ Click a thing and the model outlines it. It uses **MobileSAM** (Apache-2.0), two
 
 Tips: several clicks on different things select all of them together. A big picture is read at up to 1280 pixels (the selection is scaled back up). The model is not perfect on thin parts, shadows and busy backgrounds; add or take away clicks to fix them.
 
+## Upscale
+
+Enlarges the picture 2 or 4 times and adds believable detail, with **Real-ESRGAN general x4v3** (BSD-3-Clause, about 4.9 MB, a copy on huggingface.co). It works on small pieces (tiles), so big pictures do not run out of memory, but it is **the heaviest tool**.
+
+1. Download the model. Open a picture (start with a small one, about 500 pixels wide).
+2. Choose **Enlarge by** (2× is about 4 times faster than 4×). The panel shows the new size; if it would be more than 8192 pixels on the long side (or 40 million pixels) it says so: use 2× or crop first.
+3. **Piece size (tiles)**: 64 px is gentler on memory, 192 px is faster but needs more memory. **Run on**: the processor, or the graphics chip (if your device has one that works).
+4. Press **Enlarge**. A progress bar and the **Log** show each tile's time and the time left. **Cancel** stops it and leaves the picture as it was.
+5. The picture becomes the enlarged one. **Undo** brings the original back (Hold to compare is unavailable because the sizes differ). A picture with see-through parts keeps them.
+
+Tip: to enlarge part of a picture, crop it first (Remove background > Crop first, or open a cropped file).
+
 ## Text from image (OCR)
 
 Reads the text in a picture on your device and lets you copy it or save it as a .txt file. It uses **Tesseract.js** (Apache-2.0), with one language file per language (from cdn.jsdelivr.net).

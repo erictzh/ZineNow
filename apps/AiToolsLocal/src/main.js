@@ -12,6 +12,7 @@ import { createPicture } from "./picture.js";
 import { allTools, registerTool } from "./registry.js";
 import { faceBlurTool } from "./tools/faceBlur.js";
 import { ocrTool } from "./tools/ocr.js";
+import { upscaleTool } from "./tools/upscale.js";
 import { selectObjectTool } from "./tools/selectObject.js";
 import { removeBackgroundTool } from "./tools/removeBackground.js";
 import { removeObjectTool } from "./tools/removeObject.js";
@@ -55,6 +56,7 @@ registerTool(removeObjectTool);
 registerTool(removeBackgroundTool);
 registerTool(faceBlurTool);
 registerTool(selectObjectTool);
+registerTool(upscaleTool);
 registerTool(ocrTool);
 const instances = new Map();
 const modelsPage = createModelsPage($("models"));
@@ -144,7 +146,7 @@ installDebug({
   getState: () => ({
     pictureLoaded: picture.loaded, pictureSize: picture.width + "x" + picture.height, undoSteps: picture.depth,
     tool: active ? active.id : "none",
-    models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "sam", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase])),
+    models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "sam", "upscale", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase])),
   }),
 });
 select("remove-object");
