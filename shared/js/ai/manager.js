@@ -13,6 +13,8 @@ import { FACE_CACHE, FACE_MODEL } from "./faceModel.js";
 import { releaseFaceSession } from "./faceSession.js";
 import { SAM_CACHE, SAM_MODEL } from "./samModel.js";
 import { releaseSamSession } from "./samSession.js";
+import { UPSCALE_CACHE, UPSCALE_MODEL } from "./upscaleModel.js";
+import { releaseUpscaleSession } from "./upscaleSession.js";
 
 const CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
 // Sizes in MB (as published for runtime 1.31.1 and the model file); the numbers in the dialog are rounded from these.
@@ -40,10 +42,10 @@ export async function aiSaved() {
 // Downloads whatever is missing. `onProgress(doneMb, totalMb)`; `signal` (an AbortSignal) cancels it (the model is only kept once it
 // is complete). Resolves when both parts are saved. `which`: "fill" (MI-GAN, the default) or "background" (U²-Netp).
 export async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-  const bg = which === "background", face = which === "face", sam = which === "sam";
+  const bg = which === "background", face = which === "face", sam = which === "sam", up = which === "upscale";
   const plan = await downloadPlan();
-  const saved = sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
-  const modelMb = sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
+  const saved = up ? await upscaleSaved() : sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+  const modelMb = up ? UPSCALE_MODEL.mb : sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
   const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
   let doneMb = 0;
   const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -61,7 +63,8 @@ export async function downloadAi({ onProgress, signal, which = "fill", model = "
     }
   }
   if (!saved.model) {
-    if (sam) {
+    if (up) await getModelBytes(UPSCALE_MODEL.url, (got) => report(got / 1048576), signal, UPSCALE_CACHE);
+    else if (sam) {
       // two files: the reader first, then the mask maker (progress counts both)
       const first = (await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE)) ? 0 : SAM_MODEL.encoderMb;
       await getModelBytes(SAM_MODEL.encoderUrl, (got) => report(got / 1048576), signal, SAM_CACHE);
@@ -94,6 +97,16 @@ export async function faceSaved() {
   const saved = await aiSaved();
   return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
 }
+// The upscaling model: { gpu, modelMb, runtimeMb, totalMb }.
+export async function upscalePlan() {
+  const plan = await downloadPlan();
+  return { gpu: plan.gpu, modelMb: UPSCALE_MODEL.mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(UPSCALE_MODEL.mb + plan.runtimeMb) };
+}
+export async function upscaleSaved() {
+  const saved = await aiSaved();
+  return { model: await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE), runtime: saved.runtime };
+}
+
 // The click-to-select model (MobileSAM, two files): { gpu, modelMb, runtimeMb, totalMb }.
 export async function samPlan() {
   const plan = await downloadPlan();
@@ -105,6 +118,7 @@ export async function samSaved() {
 }
 // Is any AI model saved (the fill model, a background-removal one, the face detector or MobileSAM)? The runtime is only deleted when none is.
 async function anyModelSaved(except) {
+  if (except !== "upscale" && (await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE))) return true;
   if (except !== "sam" && ((await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE)) || (await isModelSaved(SAM_MODEL.decoderUrl, SAM_CACHE)))) return true;
   if (except !== "face" && (await isModelSaved(FACE_MODEL.url, FACE_CACHE))) return true;
   if (except !== "fill" && (await isModelSaved(DEFAULT_MODEL_URL))) return true;
@@ -119,6 +133,13 @@ async function deleteRuntime() {
       for (const req of await cache.keys()) if (/onnxruntime-web/.test(req.url)) await cache.delete(req);
     }
   } catch (e) { /* nothing more to delete */ }
+}
+
+// Deletes the upscaling model (the runtime goes too only when no other AI model is saved).
+export async function deleteUpscale() {
+  releaseUpscaleSession();
+  await forgetModelUrl(UPSCALE_MODEL.url, UPSCALE_CACHE);
+  if (!(await anyModelSaved("upscale"))) await deleteRuntime();
 }
 
 // Deletes the click-to-select model (both files; the runtime goes too only when no other AI model is saved).

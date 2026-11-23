@@ -20,13 +20,13 @@
     const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
-      const timer6 = setTimeout(() => {
+      const timer7 = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
         if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
-        clearTimeout(timer6);
+        clearTimeout(timer7);
         window.removeEventListener("message", onMessage);
         resolve();
       }
@@ -86,16 +86,16 @@
   // shared/js/numberFields.js
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
-  var isNumberBox = (el8) => el8 instanceof HTMLInputElement && el8.type === "number";
-  var allowsEmpty = (el8) => el8.hasAttribute("data-allow-empty");
-  var writeValue = (el8, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el8, text);
+  var isNumberBox = (el9) => el9 instanceof HTMLInputElement && el9.type === "number";
+  var allowsEmpty = (el9) => el9.hasAttribute("data-allow-empty");
+  var writeValue = (el9, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el9, text);
   var held = /* @__PURE__ */ new WeakMap();
-  function holdEmpty(el8) {
-    if (held.has(el8)) return;
-    const own = Object.getOwnPropertyDescriptor(el8, "value");
-    held.set(el8, own || null);
+  function holdEmpty(el9) {
+    if (held.has(el9)) return;
+    const own = Object.getOwnPropertyDescriptor(el9, "value");
+    held.set(el9, own || null);
     if (!own || !own.get || !own.configurable) return;
-    Object.defineProperty(el8, "value", {
+    Object.defineProperty(el9, "value", {
       configurable: true,
       enumerable: own.enumerable,
       get() {
@@ -105,12 +105,12 @@
       }
     });
   }
-  function releaseEmpty(el8) {
-    if (!held.has(el8)) return;
-    const own = held.get(el8);
-    held.delete(el8);
-    if (own) Object.defineProperty(el8, "value", own);
-    else delete el8.value;
+  function releaseEmpty(el9) {
+    if (!held.has(el9)) return;
+    const own = held.get(el9);
+    held.delete(el9);
+    if (own) Object.defineProperty(el9, "value", own);
+    else delete el9.value;
   }
   function makeButton(dir) {
     const b = document.createElement("button");
@@ -140,24 +140,24 @@
       if (isNumberBox(e.target) && e.target.value !== "") lastGood.set(e.target, e.target.value);
     }, true);
     document.addEventListener("input", (e) => {
-      const el8 = e.target;
-      if (!isNumberBox(el8)) return;
-      if (el8.value !== "") {
-        releaseEmpty(el8);
-        lastGood.set(el8, el8.value);
+      const el9 = e.target;
+      if (!isNumberBox(el9)) return;
+      if (el9.value !== "") {
+        releaseEmpty(el9);
+        lastGood.set(el9, el9.value);
         return;
       }
-      if (allowsEmpty(el8) || document.activeElement !== el8) return;
-      holdEmpty(el8);
+      if (allowsEmpty(el9) || document.activeElement !== el9) return;
+      holdEmpty(el9);
       e.stopImmediatePropagation();
     }, true);
-    const restoreIfEmpty = (el8) => {
-      if (el8.value !== "" || allowsEmpty(el8) || !lastGood.has(el8)) {
-        releaseEmpty(el8);
+    const restoreIfEmpty = (el9) => {
+      if (el9.value !== "" || allowsEmpty(el9) || !lastGood.has(el9)) {
+        releaseEmpty(el9);
         return false;
       }
-      releaseEmpty(el8);
-      writeValue(el8, lastGood.get(el8));
+      releaseEmpty(el9);
+      writeValue(el9, lastGood.get(el9));
       return true;
     };
     document.addEventListener("change", (e) => {
@@ -166,21 +166,21 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function stepBy(el8, dir) {
-      const before = el8.value;
-      if (before === "" && el8.placeholder !== "" && isFinite(Number(el8.placeholder))) writeValue(el8, el8.placeholder);
-      const start = el8.value;
+    function stepBy(el9, dir) {
+      const before = el9.value;
+      if (before === "" && el9.placeholder !== "" && isFinite(Number(el9.placeholder))) writeValue(el9, el9.placeholder);
+      const start = el9.value;
       try {
-        if (dir > 0) el8.stepUp();
-        else el8.stepDown();
+        if (dir > 0) el9.stepUp();
+        else el9.stepDown();
       } catch (err) {
         return false;
       }
-      const dec = (String(el8.step).split(".")[1] || "").length;
-      if (dec && el8.value !== "" && isFinite(Number(el8.value))) writeValue(el8, String(Number(Number(el8.value).toFixed(dec))));
-      if (el8.value === start && before !== "") return false;
-      el8.dispatchEvent(new Event("input", { bubbles: true }));
-      el8.dispatchEvent(new Event("change", { bubbles: true }));
+      const dec = (String(el9.step).split(".")[1] || "").length;
+      if (dec && el9.value !== "" && isFinite(Number(el9.value))) writeValue(el9, String(Number(Number(el9.value).toFixed(dec))));
+      if (el9.value === start && before !== "") return false;
+      el9.dispatchEvent(new Event("input", { bubbles: true }));
+      el9.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     let holdTimer = 0;
@@ -195,20 +195,20 @@
     document.addEventListener("pointerdown", (e) => {
       const button = buttonOf(e);
       if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
-      const el8 = boxOf(button);
-      if (!el8 || el8.disabled || el8.readOnly) return;
+      const el9 = boxOf(button);
+      if (!el9 || el9.disabled || el9.readOnly) return;
       e.preventDefault();
       const dir = Number(button.dataset.znStep) || 0;
       stop();
-      stepBy(el8, dir);
+      stepBy(el9, dir);
       holdTimer = setTimeout(() => {
         repeatTimer = setInterval(() => {
-          if (!stepBy(el8, dir)) stop();
+          if (!stepBy(el9, dir)) stop();
         }, REPEAT_MS);
       }, HOLD_MS);
       const release = () => {
         stop();
-        if (document.activeElement !== el8) el8.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+        if (document.activeElement !== el9) el9.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
       window.addEventListener("pointercancel", release, { once: true });
@@ -341,7 +341,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "183094c" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "90cc93f" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -1305,6 +1305,175 @@
     return { mask: r.mask, w: r.w, h: r.h, coverage: r.coverage, iou: iouT ? Array.from(iouT.data) : [], ms };
   }
 
+  // shared/js/ai/upscaleModel.js
+  var UPSCALE_CACHE = "zinenow-ai-upscale-model";
+  var UPSCALE_MODEL = {
+    key: "realesr-x4v3",
+    name: "Real-ESRGAN general x4v3",
+    kind: "Upscale",
+    label: "Real-ESRGAN x4v3 (Upscale)",
+    mb: 4.9,
+    licence: "BSD-3-Clause",
+    host: "huggingface.co",
+    repo: "huggingface.co/OwlMaster/AllFilesRope",
+    url: "https://huggingface.co/OwlMaster/AllFilesRope/resolve/main/realesr-general-x4v3.onnx",
+    about: "Enlarges a picture 2 or 4 times and adds believable detail. It works piece by piece, so big pictures are slow."
+  };
+
+  // shared/js/ai/upscale.js
+  function tilePlan(W, H, tile) {
+    const list = [];
+    for (let y0 = 0; y0 < H; y0 += tile) for (let x0 = 0; x0 < W; x0 += tile) list.push({ x0, y0, w: Math.min(tile, W - x0), h: Math.min(tile, H - y0) });
+    return list;
+  }
+  function tileInput(rgba, W, H, ox, oy, T) {
+    const out = new Float32Array(3 * T * T), n = T * T;
+    for (let y = 0; y < T; y++) {
+      const sy = Math.min(H - 1, Math.max(0, oy + y));
+      for (let x = 0; x < T; x++) {
+        const sx = Math.min(W - 1, Math.max(0, ox + x)), i = (sy * W + sx) * 4, o = y * T + x;
+        out[o] = rgba[i] / 255;
+        out[n + o] = rgba[i + 1] / 255;
+        out[2 * n + o] = rgba[i + 2] / 255;
+      }
+    }
+    return out;
+  }
+  function tileToRgba(od, OT, S, pad, w, h) {
+    const cw = w * S, ch = h * S, n = OT * OT, out = new Uint8ClampedArray(cw * ch * 4);
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+      const si = (pad * S + y) * OT + (pad * S + x), di = (y * cw + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const v = od[c * n + si];
+        out[di + c] = v <= 0 ? 0 : v >= 1 ? 255 : Math.round(v * 255);
+      }
+      out[di + 3] = 255;
+    }
+    return out;
+  }
+  function resultSize(W, H, want, maxSide) {
+    const w = W * want, h = H * want;
+    return { w, h, tooBig: Math.max(w, h) > maxSide };
+  }
+
+  // shared/js/ai/upscaleSession.js
+  var IDLE_MS5 = 12e4;
+  var current2 = null;
+  var starting4 = null;
+  var timer5 = 0;
+  function releaseUpscaleSession() {
+    clearTimeout(timer5);
+    const c = current2;
+    current2 = null;
+    starting4 = null;
+    if (c && c.session && c.session.release) {
+      try {
+        c.session.release();
+      } catch (e) {
+      }
+    }
+  }
+  var touch5 = () => {
+    clearTimeout(timer5);
+    timer5 = setTimeout(releaseUpscaleSession, IDLE_MS5);
+  };
+  async function acquire4(gpu, onStatus) {
+    touch5();
+    if (current2 && current2.wantGpu === gpu) return current2;
+    if (current2) releaseUpscaleSession();
+    if (!starting4) {
+      starting4 = (async () => {
+        if (!await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE)) throw new Error(UPSCALE_MODEL.name + " is not downloaded. Download it first (Models page, or the Upscale tool).");
+        onStatus && onStatus("Starting " + UPSCALE_MODEL.name + "…");
+        const { bytes } = await getModelBytes(UPSCALE_MODEL.url, void 0, void 0, UPSCALE_CACHE);
+        const made = await createSession(bytes, gpu);
+        current2 = { session: made.session, backend: made.backend, bytes, wantGpu: gpu };
+        return current2;
+      })().catch((e) => {
+        starting4 = null;
+        throw e;
+      });
+    }
+    const c = await starting4;
+    starting4 = null;
+    return c;
+  }
+  var sizeOf = (session2) => {
+    try {
+      const m = session2.inputMetadata, sh = Array.isArray(m) ? m[0].shape : m && m[session2.inputNames[0]] && m[session2.inputNames[0]].shape;
+      const ok = (v) => Number.isFinite(v) && v > 0 && v < 4096;
+      if (sh && ok(sh[2]) && ok(sh[3])) return [sh[3], sh[2]];
+    } catch (e) {
+    }
+    return null;
+  };
+  async function upscaleCanvas(canvas, { tile = 128, pad = 12, gpu = false, onProgress, shouldCancel, onStatus } = {}) {
+    let c = await acquire4(gpu, onStatus);
+    const ort = await loadOrt();
+    const W = canvas.width, H = canvas.height;
+    const fixed = sizeOf(c.session);
+    let T = tile + 2 * pad;
+    if (fixed) {
+      T = fixed[0];
+      tile = Math.max(8, T - 2 * pad);
+    }
+    const src = canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const tiles = tilePlan(W, H, tile);
+    let out = null, S = 0, outX = null;
+    const times = [];
+    const info = { backend: c.backend, tile, pad, input: T + "x" + T, fixedInput: Boolean(fixed), tiles: tiles.length };
+    for (let k = 0; k < tiles.length; k++) {
+      if (shouldCancel && shouldCancel()) return { cancelled: true, info: { ...info, doneTiles: k } };
+      const t = tiles[k];
+      const feed = new ort.Tensor("float32", tileInput(src, W, H, t.x0 - pad, t.y0 - pad, T), [1, 3, T, T]);
+      const t1 = performance.now();
+      let res;
+      try {
+        res = await c.session.run({ [c.session.inputNames[0]]: feed });
+      } catch (e) {
+        if (c.backend !== "gpu") throw e;
+        onStatus && onStatus("The graphics chip failed; continuing on the processor (slower)…");
+        const cpu = await createSession(c.bytes, false);
+        try {
+          c.session.release && c.session.release();
+        } catch (err) {
+        }
+        c.session = cpu.session;
+        c.backend = "cpu";
+        info.backend = "cpu (the graphics chip failed)";
+        res = await c.session.run({ [c.session.inputNames[0]]: feed });
+      }
+      const o = res[c.session.outputNames[0]], OT = o.dims[3];
+      if (!out) {
+        S = OT / T;
+        if (!Number.isInteger(S) || S < 1) throw new Error("Unexpected model output size " + o.dims.join("x") + " for an input of " + T + "x" + T + ".");
+        out = document.createElement("canvas");
+        out.width = W * S;
+        out.height = H * S;
+        outX = out.getContext("2d");
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < o.data.length; i += 11) {
+          if (o.data[i] < lo) lo = o.data[i];
+          if (o.data[i] > hi) hi = o.data[i];
+        }
+        info.outputDims = o.dims.join("x");
+        info.scale = S;
+        info.valueRange = lo.toFixed(3) + " to " + hi.toFixed(3);
+      }
+      const rgba = tileToRgba(o.data, OT, S, pad, t.w, t.h);
+      outX.putImageData(new ImageData(rgba, t.w * S, t.h * S), t.x0 * S, t.y0 * S);
+      times.push(Math.round(performance.now() - t1));
+      const avg = times.reduce((a, b) => a + b, 0) / times.length;
+      onProgress && onProgress(k + 1, tiles.length, avg);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    touch5();
+    info.firstTileMs = times[0];
+    info.slowestTileMs = Math.max(...times);
+    info.avgTileMs = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+    return { canvas: out, info };
+  }
+
   // shared/js/ai/manager.js
   var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
   var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
@@ -1328,10 +1497,10 @@
     return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
   }
   async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-    const bg = which === "background", face = which === "face", sam = which === "sam";
+    const bg = which === "background", face = which === "face", sam = which === "sam", up = which === "upscale";
     const plan = await downloadPlan();
-    const saved = sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
-    const modelMb = sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
+    const saved = up ? await upscaleSaved() : sam ? await samSaved() : face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = up ? UPSCALE_MODEL.mb : sam ? SAM_MODEL.mb : face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
     const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
     let doneMb = 0;
     const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -1356,7 +1525,8 @@
       }
     }
     if (!saved.model) {
-      if (sam) {
+      if (up) await getModelBytes(UPSCALE_MODEL.url, (got) => report(got / 1048576), signal, UPSCALE_CACHE);
+      else if (sam) {
         const first = await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) ? 0 : SAM_MODEL.encoderMb;
         await getModelBytes(SAM_MODEL.encoderUrl, (got) => report(got / 1048576), signal, SAM_CACHE);
         doneMb += first;
@@ -1388,6 +1558,14 @@
     const saved = await aiSaved();
     return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
   }
+  async function upscalePlan() {
+    const plan = await downloadPlan();
+    return { gpu: plan.gpu, modelMb: UPSCALE_MODEL.mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(UPSCALE_MODEL.mb + plan.runtimeMb) };
+  }
+  async function upscaleSaved() {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE), runtime: saved.runtime };
+  }
   async function samPlan() {
     const plan = await downloadPlan();
     return { gpu: plan.gpu, modelMb: SAM_MODEL.mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(SAM_MODEL.mb + plan.runtimeMb) };
@@ -1397,6 +1575,7 @@
     return { model: await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) && await isModelSaved(SAM_MODEL.decoderUrl, SAM_CACHE), runtime: saved.runtime };
   }
   async function anyModelSaved(except) {
+    if (except !== "upscale" && await isModelSaved(UPSCALE_MODEL.url, UPSCALE_CACHE)) return true;
     if (except !== "sam" && (await isModelSaved(SAM_MODEL.encoderUrl, SAM_CACHE) || await isModelSaved(SAM_MODEL.decoderUrl, SAM_CACHE))) return true;
     if (except !== "face" && await isModelSaved(FACE_MODEL.url, FACE_CACHE)) return true;
     if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
@@ -1411,6 +1590,11 @@
       }
     } catch (e) {
     }
+  }
+  async function deleteUpscale() {
+    releaseUpscaleSession();
+    await forgetModelUrl(UPSCALE_MODEL.url, UPSCALE_CACHE);
+    if (!await anyModelSaved("upscale")) await deleteRuntime();
   }
   async function deleteSam() {
     releaseSamSession();
@@ -1469,9 +1653,9 @@
 
   // shared/js/ai/ocr.js
   var FLAG = "zinenow.ocr.engineSaved";
-  var IDLE_MS5 = 6e4;
+  var IDLE_MS6 = 6e4;
   var workers = /* @__PURE__ */ new Map();
-  var timer5 = 0;
+  var timer6 = 0;
   var ocrEngineSaved = () => {
     try {
       return localStorage.getItem(FLAG) === "1";
@@ -1578,7 +1762,7 @@
     }
   }
   function releaseOcr() {
-    clearTimeout(timer5);
+    clearTimeout(timer6);
     const all = [...workers.values()];
     workers.clear();
     for (const w of all) Promise.resolve(w).then((x) => {
@@ -1591,9 +1775,9 @@
     }, () => {
     });
   }
-  var touch5 = () => {
-    clearTimeout(timer5);
-    timer5 = setTimeout(releaseOcr, IDLE_MS5);
+  var touch6 = () => {
+    clearTimeout(timer6);
+    timer6 = setTimeout(releaseOcr, IDLE_MS6);
   };
   async function deleteEngineFiles() {
     setEngineFlag(false);
@@ -1619,7 +1803,7 @@
   }
   async function recognizeText(canvas, { lang = "eng", psm = "3" } = {}, onStatus) {
     if (!await ocrLangSaved(lang)) throw new Error(ocrLang(lang).name + " is not downloaded. Download it first (Models page, or the Text from image tool).");
-    touch5();
+    touch6();
     if (!workers.has(lang)) {
       onStatus && onStatus("Starting the text reader…");
       workers.set(lang, makeWorker(lang).catch((e) => {
@@ -1632,7 +1816,7 @@
     onStatus && onStatus("Reading the text…");
     const t0 = performance.now();
     const { data } = await worker.recognize(canvas);
-    touch5();
+    touch6();
     return { text: (data.text || "").trim(), confidence: data.confidence || 0, words: (data.words || []).filter((w) => w.text && w.text.trim()), runMs: Math.round(performance.now() - t0) };
   }
 
@@ -1654,6 +1838,7 @@
     ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m })),
     { id: "face", tool: "Face blur", model: FACE_MODEL },
     { id: "sam", tool: "Click-to-select", model: SAM_MODEL },
+    { id: "upscale", tool: "Upscale", model: UPSCALE_MODEL },
     ...OCR_LANGS.map((l) => ({ id: "ocr:" + l.code, tool: "Text from image", model: ocrModel(l) }))
   ];
 
@@ -1737,7 +1922,7 @@
   function modelControl(id) {
     if (controls.has(id)) return controls.get(id);
     const row = rowFor(id);
-    const isFill = id === "fill", isFace = id === "face", isSam = id === "sam", isOcr = id.startsWith("ocr:"), ocrCode = isOcr ? id.slice(4) : "";
+    const isFill = id === "fill", isFace = id === "face", isSam = id === "sam", isUp = id === "upscale", isOcr = id.startsWith("ocr:"), ocrCode = isOcr ? id.slice(4) : "";
     const listeners = /* @__PURE__ */ new Set();
     const state = { phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null };
     let abort = null;
@@ -1756,7 +1941,7 @@
           set({ phase: saved2 ? "ready" : "none", plan: { gpu: false, modelMb: row.model.mb, runtimeMb: OCR_ENGINE_MB, totalMb: Math.round(row.model.mb + OCR_ENGINE_MB) } });
           return;
         }
-        const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : isSam ? [samSaved(), samPlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
+        const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : isFace ? [faceSaved(), facePlan()] : isSam ? [samSaved(), samPlan()] : isUp ? [upscaleSaved(), upscalePlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
         set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
       } catch (e) {
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
@@ -1768,7 +1953,7 @@
       set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
       try {
         if (isOcr) await downloadOcr(ocrCode, { signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
-        else await downloadAi({ which: isFill ? "fill" : isFace ? "face" : isSam ? "sam" : "background", model: isFill || isFace || isSam ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        else await downloadAi({ which: isFill ? "fill" : isFace ? "face" : isSam ? "sam" : isUp ? "upscale" : "background", model: isFill || isFace || isSam || isUp ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
         await refresh2();
       } catch (e) {
         await refresh2();
@@ -1781,7 +1966,7 @@
       if (abort) abort.abort();
     };
     async function remove() {
-      await (isOcr ? deleteOcrLang(ocrCode, OCR_LANGS.map((l) => l.code)) : isFill ? deleteAi() : isFace ? deleteFace() : isSam ? deleteSam() : deleteBg(row.model.key));
+      await (isOcr ? deleteOcrLang(ocrCode, OCR_LANGS.map((l) => l.code)) : isFill ? deleteAi() : isFace ? deleteFace() : isSam ? deleteSam() : isUp ? deleteUpscale() : deleteBg(row.model.key));
       await refresh2();
     }
     const ctl = { id, row, state, refresh: refresh2, download, cancel, remove, subscribe(fn) {
@@ -1798,7 +1983,7 @@
     return confirmDialog({
       title: "Download AI model?",
       points: [
-        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : m.kind === "Click-to-select" ? "an AI click-to-select model (two files)" : m.kind === "Text reading (OCR)" ? "an AI text-reading (OCR) language file" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
+        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : m.kind === "Face detection" ? "an AI face-detection model" : m.kind === "Click-to-select" ? "an AI click-to-select model (two files)" : m.kind === "Upscale" ? "an AI upscaling model" : m.kind === "Text reading (OCR)" ? "an AI text-reading (OCR) language file" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + (m.mb < 1 ? "0.2" : Math.round(m.mb * 10) / 10) + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
         "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.",
         rich([["Warning:", true], [" it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete button)."]])
       ],
@@ -2812,8 +2997,208 @@
     }
   };
 
-  // apps/AiToolsLocal/src/tools/selectObject.js
+  // apps/AiToolsLocal/src/tools/upscale.js
   var el5 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  var MAX_SIDE2 = 8192;
+  var MAX_PIXELS = 4e7;
+  var TILES = [["64", "64 px (gentle on memory, slower)"], ["96", "96 px"], ["128", "128 px (default)"], ["192", "192 px (faster, more memory)"]];
+  var upscaleTool = {
+    id: "upscale",
+    name: "Upscale",
+    summary: "Enlarge a picture 2 or 4 times with AI detail.",
+    create(ctx2) {
+      const { picture: picture2 } = ctx2;
+      const ctl = modelControl("upscale");
+      let mounted = false, ui = {};
+      let want = 2, tile = "128", gpu = false, running = false, cancelled = false;
+      function sizeLine() {
+        if (!picture2.loaded) return { text: "Open a picture first.", bad: false };
+        const r = resultSize(picture2.width, picture2.height, want, MAX_SIDE2);
+        const big = r.tooBig || r.w * r.h > MAX_PIXELS;
+        return { text: picture2.width + " × " + picture2.height + " px  →  " + r.w + " × " + r.h + " px" + (big ? " (too big: use 2×, or crop the picture first)" : ""), bad: big };
+      }
+      async function run() {
+        if (running || picture2.busy || !picture2.loaded || ctl.state.phase !== "ready") return;
+        const line = sizeLine();
+        if (line.bad) {
+          ctx2.status("That would be too big: " + line.text, "bad");
+          return;
+        }
+        running = true;
+        cancelled = false;
+        picture2.setBusy(true);
+        refresh2();
+        try {
+          const before = await picture2.snapshot();
+          const t0 = performance.now();
+          ctx2.status("Starting the upscaler…");
+          const res = await upscaleCanvas(picture2.canvas, {
+            tile: Number(tile),
+            pad: 12,
+            gpu,
+            onStatus: (t) => ctx2.status(t),
+            shouldCancel: () => cancelled,
+            onProgress: (done, total, avg) => {
+              ui.prog.max = total;
+              ui.prog.value = done;
+              ctx2.status("Tile " + done + " of " + total + " · " + Math.round(avg) + " ms each · about " + Math.round(avg * (total - done) / 1e3) + " s left");
+            }
+          });
+          if (res.cancelled) {
+            before.close();
+            ctx2.debug.section("Upscale cancelled", { ...res.info });
+            ctx2.status("Cancelled after " + res.info.doneTiles + " of " + res.info.tiles + " tiles. The picture is unchanged.", "bad");
+            return;
+          }
+          let final = res.canvas;
+          const w = picture2.width * want, h = picture2.height * want;
+          if (final.width !== w || final.height !== h) {
+            const f = document.createElement("canvas");
+            f.width = w;
+            f.height = h;
+            const fx = f.getContext("2d");
+            fx.imageSmoothingQuality = "high";
+            fx.drawImage(final, 0, 0, w, h);
+            final = f;
+          }
+          const probe = picture2.ctx.getImageData(0, 0, picture2.width, picture2.height).data;
+          let hasAlpha = false;
+          for (let i = 3; i < probe.length; i += 4) if (probe[i] < 255) {
+            hasAlpha = true;
+            break;
+          }
+          if (hasAlpha) {
+            const a = document.createElement("canvas");
+            a.width = w;
+            a.height = h;
+            const ax = a.getContext("2d");
+            ax.imageSmoothingQuality = "high";
+            ax.drawImage(picture2.canvas, 0, 0, w, h);
+            const ad = ax.getImageData(0, 0, w, h).data, fx = final.getContext("2d"), fd = fx.getImageData(0, 0, w, h);
+            for (let i = 3; i < fd.data.length; i += 4) fd.data[i] = ad[i];
+            fx.putImageData(fd, 0, 0);
+          }
+          picture2.replaceWith(final);
+          picture2.commit(before);
+          const sec = (performance.now() - t0) / 1e3;
+          ctx2.debug.section("Upscale", { picture: probe.length / 4 + " px -> " + w + "x" + h, wanted: want + "x", totalSeconds: Math.round(sec * 10) / 10, hasTransparency: hasAlpha, ...res.info });
+          ctx2.status("Done in " + sec.toFixed(1) + " s: the picture is now " + w + " × " + h + " px. Undo brings the original back.", "ok");
+        } catch (e) {
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+        } finally {
+          running = false;
+          ui.prog.value = 0;
+          picture2.setBusy(false);
+          refresh2();
+        }
+      }
+      function refresh2() {
+        if (!mounted) return;
+        const ready = ctl.state.phase === "ready", has = picture2.loaded;
+        ui.need.hidden = ready || ctl.state.phase === "checking";
+        const line = sizeLine();
+        ui.size.textContent = line.text;
+        ui.size.classList.toggle("bad", line.bad);
+        ui.run.disabled = !has || running || picture2.busy || !ready || line.bad;
+        ui.run.textContent = running ? "Enlarging…" : "Enlarge";
+        ui.cancel.hidden = !running;
+        ui.prog.hidden = !running;
+        for (const c of [ui.want, ui.tile, ui.ep]) c.disabled = running;
+      }
+      picture2.onOpen(refresh2);
+      ctl.subscribe(refresh2);
+      return {
+        mount(panel) {
+          mounted = true;
+          const secA = el5("section");
+          secA.append(el5("h2", "", "Enlarge"));
+          const wf = el5("label", "field");
+          wf.append(el5("span", "", "Enlarge by"));
+          ui.want = el5("select");
+          for (const [v, t] of [["2", "2× (about 4 times faster)"], ["4", "4× (the model's own size)"]]) {
+            const o = el5("option", "", t);
+            o.value = v;
+            ui.want.append(o);
+          }
+          ui.want.value = String(want);
+          ui.want.addEventListener("change", () => {
+            want = Number(ui.want.value);
+            refresh2();
+          });
+          wf.append(ui.want);
+          ui.size = el5("p", "hint");
+          const tf = el5("label", "field");
+          tf.append(el5("span", "", "Piece size (tiles)"));
+          ui.tile = el5("select");
+          for (const [v, t] of TILES) {
+            const o = el5("option", "", t);
+            o.value = v;
+            ui.tile.append(o);
+          }
+          ui.tile.value = tile;
+          ui.tile.addEventListener("change", () => {
+            tile = ui.tile.value;
+          });
+          tf.append(ui.tile);
+          const ef = el5("label", "field");
+          ef.append(el5("span", "", "Run on"));
+          ui.ep = el5("select");
+          const o1 = el5("option", "", "The processor (CPU)");
+          o1.value = "cpu";
+          ui.ep.append(o1);
+          if (navigator.gpu) {
+            const o2 = el5("option", "", "The graphics chip (if it works)");
+            o2.value = "gpu";
+            ui.ep.append(o2);
+          }
+          ui.ep.value = gpu ? "gpu" : "cpu";
+          ui.ep.addEventListener("change", () => {
+            gpu = ui.ep.value === "gpu";
+          });
+          ef.append(ui.ep);
+          ui.need = el5("p", "hint required", "Download required: get the model below first.");
+          ui.run = el5("button", "btn-solid big", "Enlarge");
+          ui.run.type = "button";
+          ui.run.addEventListener("click", run);
+          ui.prog = document.createElement("progress");
+          ui.prog.hidden = true;
+          ui.prog.max = 1;
+          ui.prog.value = 0;
+          ui.cancel = el5("button", "big", "Cancel");
+          ui.cancel.type = "button";
+          ui.cancel.hidden = true;
+          ui.cancel.addEventListener("click", () => {
+            cancelled = true;
+            ctx2.status("Cancelling…");
+          });
+          const note = el5("p", "hint", "This is the heaviest tool: a small picture (about 500 px wide) takes seconds to a minute on a tablet, a big one much longer. Try a small picture or 2× first. The result is the new picture (Undo brings the original back).");
+          secA.append(wf, ui.size, tf, ef, ui.need, ui.run, ui.prog, ui.cancel, note);
+          const secB = el5("section");
+          secB.append(el5("h2", "", "Model"));
+          secB.append(modelBox("upscale", { compact: true, deletable: false }));
+          panel.append(secA, secB);
+          refresh2();
+        },
+        unmount() {
+          mounted = false;
+        },
+        onPictureChange() {
+          refresh2();
+        },
+        primary() {
+          run();
+        }
+      };
+    }
+  };
+
+  // apps/AiToolsLocal/src/tools/selectObject.js
+  var el6 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -3016,21 +3401,21 @@
       return {
         mount(panel) {
           mounted = true;
-          const secA = el5("section");
-          secA.append(el5("h2", "", "Read the picture"));
-          ui.need = el5("p", "hint required", "Download required: get the model below first.");
-          ui.prepare = el5("button", "btn-solid big", "Read the picture");
+          const secA = el6("section");
+          secA.append(el6("h2", "", "Read the picture"));
+          ui.need = el6("p", "hint required", "Download required: get the model below first.");
+          ui.prepare = el6("button", "btn-solid big", "Read the picture");
           ui.prepare.type = "button";
           ui.prepare.addEventListener("click", prepare);
-          const note = el5("p", "hint", "The model reads the picture once (about 10 seconds on a tablet), then every click is quick. Read it again after you change the picture.");
+          const note = el6("p", "hint", "The model reads the picture once (about 10 seconds on a tablet), then every click is quick. Read it again after you change the picture.");
           secA.append(ui.need, ui.prepare, note);
-          ui.step2 = el5("div");
+          ui.step2 = el6("div");
           ui.step2.hidden = true;
-          const secB = el5("section");
-          secB.append(el5("h2", "", "Click to select"));
-          ui.mode = el5("div", "seg");
+          const secB = el6("section");
+          secB.append(el6("h2", "", "Click to select"));
+          ui.mode = el6("div", "seg");
           for (const [label, add] of [["Add to selection", true], ["Take away", false]]) {
-            const b = el5("button", "", label);
+            const b = el6("button", "", label);
             b.type = "button";
             b.addEventListener("click", () => {
               addMode = add;
@@ -3038,7 +3423,7 @@
             });
             ui.mode.append(b);
           }
-          ui.undoClick = el5("button", "wide", "Remove the last click");
+          ui.undoClick = el6("button", "wide", "Remove the last click");
           ui.undoClick.type = "button";
           ui.undoClick.addEventListener("click", () => {
             points.pop();
@@ -3047,7 +3432,7 @@
             refresh2();
             if (points.length) decode();
           });
-          ui.clear = el5("button", "wide", "Clear the selection");
+          ui.clear = el6("button", "wide", "Clear the selection");
           ui.clear.type = "button";
           ui.clear.addEventListener("click", () => {
             points = [];
@@ -3055,24 +3440,24 @@
             drawSelection();
             refresh2();
           });
-          const tip = el5("p", "hint", "Click once on a thing. If it picked too little or too much, click again to add (green) or switch to Take away and click the part that should not be included (red).");
+          const tip = el6("p", "hint", "Click once on a thing. If it picked too little or too much, click again to add (green) or switch to Take away and click the part that should not be included (red).");
           secB.append(ui.mode, ui.undoClick, ui.clear, tip);
-          const secC = el5("section");
-          secC.append(el5("h2", "", "Use the selection"));
-          ui.keep = el5("button", "btn-solid big", "Cut it out");
+          const secC = el6("section");
+          secC.append(el6("h2", "", "Use the selection"));
+          ui.keep = el6("button", "btn-solid big", "Cut it out");
           ui.keep.type = "button";
           ui.keep.addEventListener("click", () => apply(true));
-          ui.hole = el5("button", "big", "Make it see-through");
+          ui.hole = el6("button", "big", "Make it see-through");
           ui.hole.type = "button";
           ui.hole.addEventListener("click", () => apply(false));
-          ui.marks = el5("button", "big", "Send to Remove object");
+          ui.marks = el6("button", "big", "Send to Remove object");
           ui.marks.type = "button";
           ui.marks.addEventListener("click", useAsMarks);
-          const use = el5("p", "hint", "Cut it out keeps only the selection and makes everything else see-through. Make it see-through does the opposite. Send to Remove object marks it, so the AI fills it with what is behind it. Undo brings the picture back.");
+          const use = el6("p", "hint", "Cut it out keeps only the selection and makes everything else see-through. Make it see-through does the opposite. Send to Remove object marks it, so the AI fills it with what is behind it. Undo brings the picture back.");
           secC.append(ui.keep, ui.hole, ui.marks, use);
           ui.step2.append(secB, secC);
-          const secD = el5("section");
-          secD.append(el5("h2", "", "Model"));
+          const secD = el6("section");
+          secD.append(el6("h2", "", "Model"));
           secD.append(modelBox("sam", { compact: true, deletable: false }));
           panel.append(secA, ui.step2, secD);
           if (prep) picture2.setPointerHandler(handler);
@@ -3099,7 +3484,7 @@
   };
 
   // apps/AiToolsLocal/src/tools/removeBackground.js
-  var el6 = (tag, cls, text) => {
+  var el7 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -3324,11 +3709,11 @@
       return {
         mount(panel) {
           mounted = true;
-          const sec1 = el6("section");
-          sec1.append(el6("h2", "", "Model"));
-          const radios = el6("div", "radios");
+          const sec1 = el7("section");
+          sec1.append(el7("h2", "", "Model"));
+          const radios = el7("div", "radios");
           for (const m of BG_MODELS) {
-            const lab = el6("label", "radio");
+            const lab = el7("label", "radio");
             const r = document.createElement("input");
             r.type = "radio";
             r.name = "bg-model";
@@ -3339,21 +3724,21 @@
               drawModelBox();
               refresh2();
             });
-            lab.append(r, el6("span", "", " " + m.label + " · " + m.mb + " MB"));
+            lab.append(r, el7("span", "", " " + m.label + " · " + m.mb + " MB"));
             radios.append(lab);
           }
-          ui.boxHost = el6("div");
+          ui.boxHost = el7("div");
           sec1.append(radios, ui.boxHost);
-          const secC = el6("section");
-          secC.append(el6("h2", "", "Crop first (optional)"));
-          ui.cropToggle = el6("button", "wide", "Crop first…");
+          const secC = el7("section");
+          secC.append(el7("h2", "", "Crop first (optional)"));
+          ui.cropToggle = el7("button", "wide", "Crop first…");
           ui.cropToggle.type = "button";
           ui.cropToggle.addEventListener("click", () => setCrop(!crop));
-          ui.cropBox = el6("div");
+          ui.cropBox = el7("div");
           ui.cropBox.hidden = true;
-          ui.cropInfo = el6("p", "hint");
-          const cropHint = el6("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
-          const reset = el6("button", "wide", "Reset the box");
+          ui.cropInfo = el7("p", "hint");
+          const cropHint = el7("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
+          const reset = el7("button", "wide", "Reset the box");
           reset.type = "button";
           reset.addEventListener("click", () => {
             crop = null;
@@ -3361,11 +3746,11 @@
           });
           ui.cropBox.append(ui.cropInfo, cropHint, reset);
           secC.append(ui.cropToggle, ui.cropBox);
-          const sec2 = el6("section");
-          sec2.append(el6("h2", "", "Cut out"));
+          const sec2 = el7("section");
+          sec2.append(el7("h2", "", "Cut out"));
           const num2 = (label, key, min, max, step, value, onInput) => {
-            const f = el6("label", "field");
-            f.append(el6("span", "", label));
+            const f = el7("label", "field");
+            f.append(el7("span", "", label));
             const i = document.createElement("input");
             i.type = "number";
             i.min = min;
@@ -3385,30 +3770,30 @@
             return f;
           };
           const need = () => {
-            const p = el6("p", "hint required", "Download required");
+            const p = el7("p", "hint required", "Download required");
             return p;
           };
           ui.need = [need(), need()];
           const f1 = num2("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
-          const h1 = el6("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
+          const h1 = el7("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
           const f2 = num2("Soft edge (%) — fade above the cut-off", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
-          ui.find = el6("button", "btn-solid big", "Find subject");
+          ui.find = el7("button", "btn-solid big", "Find subject");
           ui.find.type = "button";
           ui.find.addEventListener("click", find);
-          ui.apply = el6("button", "btn-solid big", "Apply");
+          ui.apply = el7("button", "btn-solid big", "Apply");
           ui.apply.type = "button";
           ui.apply.addEventListener("click", apply);
-          ui.discard = el6("button", "big", "Discard");
+          ui.discard = el7("button", "big", "Discard");
           ui.discard.type = "button";
           ui.discard.addEventListener("click", () => {
             discard();
             ctx2.status("Discarded.");
           });
-          const note = el6("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
+          const note = el7("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
           panel.append(secC, sec2, sec1);
           drawModelBox();
@@ -3528,7 +3913,7 @@
     } catch (e) {
     }
   };
-  var el7 = (tag, cls, text) => {
+  var el8 = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
@@ -3545,7 +3930,7 @@
       const draftC = picture2.addOverlay(document.createElement("canvas"));
       draftC.id = "draft";
       const maskX = maskC.getContext("2d", { willReadFrequently: true }), draftX = draftC.getContext("2d");
-      const ring = el7("div", "ring");
+      const ring = el8("div", "ring");
       ring.hidden = true;
       picture2.stage.append(ring);
       const ctl = modelControl("fill");
@@ -3695,12 +4080,12 @@
           picture2.stage.addEventListener("pointerdown", showRing);
           picture2.stage.addEventListener("pointerleave", hideRing);
           picture2.stage.addEventListener("pointerup", touchHide);
-          const sec1 = el7("section");
-          sec1.append(el7("h2", "", "Mark what to remove"));
-          const seg = el7("div", "seg");
+          const sec1 = el8("section");
+          sec1.append(el8("h2", "", "Mark what to remove"));
+          const seg = el8("div", "seg");
           seg.setAttribute("role", "group");
           for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
-            const b = el7("button", key === tool ? "active" : "", label);
+            const b = el8("button", key === tool ? "active" : "", label);
             b.type = "button";
             b.addEventListener("click", () => {
               tool = key;
@@ -3708,8 +4093,8 @@
             });
             seg.append(b);
           }
-          const brushField = el7("label", "field");
-          brushField.append(el7("span", "", "Brush size (px)"));
+          const brushField = el8("label", "field");
+          brushField.append(el8("span", "", "Brush size (px)"));
           const brush = document.createElement("input");
           brush.type = "number";
           brush.min = 1;
@@ -3726,15 +4111,15 @@
           brushField.append(brush);
           wrapNumberInput(brush);
           ui.brush = brush;
-          const hint = el7("p", "hint", "Two fingers always move and zoom the picture.");
-          ui.clear = el7("button", "", "Clear marks");
+          const hint = el8("p", "hint", "Two fingers always move and zoom the picture.");
+          ui.clear = el8("button", "", "Clear marks");
           ui.clear.type = "button";
           ui.clear.addEventListener("click", clearMarks);
           sec1.append(seg, brushField, hint, ui.clear);
-          const sec2 = el7("section");
-          sec2.append(el7("h2", "", "Remove it"));
-          const growField = el7("label", "field");
-          growField.append(el7("span", "", "Grow the marked area by (px)"));
+          const sec2 = el8("section");
+          sec2.append(el8("h2", "", "Remove it"));
+          const growField = el8("label", "field");
+          growField.append(el8("span", "", "Grow the marked area by (px)"));
           const grow = document.createElement("input");
           grow.type = "number";
           grow.min = 0;
@@ -3750,18 +4135,18 @@
           });
           growField.append(grow);
           wrapNumberInput(grow);
-          const growHint = el7("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
-          ui.need = el7("p", "hint required", "Download required: get the model below first.");
-          ui.fill = el7("button", "btn-solid big", "Remove object");
+          const growHint = el8("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
+          ui.need = el8("p", "hint required", "Download required: get the model below first.");
+          ui.fill = el8("button", "btn-solid big", "Remove object");
           ui.fill.type = "button";
           ui.fill.addEventListener("click", removeObject);
-          ui.another = el7("button", "big", "Try another");
+          ui.another = el8("button", "big", "Try another");
           ui.another.type = "button";
           ui.another.title = "Undoes the last fill and fills again, showing the model the area from a slightly different view";
           ui.another.addEventListener("click", tryAnother);
           sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
-          const sec3 = el7("section");
-          sec3.append(el7("h2", "", "Model"));
+          const sec3 = el8("section");
+          sec3.append(el8("h2", "", "Model"));
           sec3.append(modelBox("fill", { compact: true, deletable: false }));
           panel.append(sec1, sec2, sec3);
           refreshButtons();
@@ -3858,6 +4243,7 @@
   registerTool(removeBackgroundTool);
   registerTool(faceBlurTool);
   registerTool(selectObjectTool);
+  registerTool(upscaleTool);
   registerTool(ocrTool);
   var instances = /* @__PURE__ */ new Map();
   var modelsPage = createModelsPage($("models"));
@@ -3974,7 +4360,7 @@
       pictureSize: picture.width + "x" + picture.height,
       undoSteps: picture.depth,
       tool: active ? active.id : "none",
-      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "sam", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase]))
+      models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet", "face", "sam", "upscale", "ocr:eng", "ocr:msa"].map((id) => [id, modelControl(id).state.phase]))
     })
   });
   select("remove-object");

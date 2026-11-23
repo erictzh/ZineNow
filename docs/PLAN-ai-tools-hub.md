@@ -165,8 +165,8 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 **3d Upscale**
 - [x] `labs/ai-upscale-benchmark/index.html` (build 1, built 2026-11-23): realesr-general-x4v3 on a small photo, tiled (tile size and overlap pickers, CPU / GPU, 2x or 4x, progress + Cancel, before / after, save PNG); report time per tile and in total. **Waiting for the user to run it on the tablet.**
 - [ ] Gate: BSD-3/Apache-2.0; total time acceptable (up to about 30 s) and no freeze on the tablet.
-- [ ] Tool `src/tools/upscale.js`: 2x / 4x, output size limit, before/after, progress bar + Cancel, tiles released from memory as it goes.
-- [ ] Tests, guide, HANDOFF.
+- [x] Tool `src/tools/upscale.js` (built directly, no test page: the user's decision): 2x / 4x, output size limit, before/after, progress bar + Cancel, tiles released from memory as it goes.
+- [x] Tests, guide, HANDOFF.
 
 ### Phase 4 (polish)
 - [ ] "Where it runs" line on every tool and the Models page; clear experimental notice.
