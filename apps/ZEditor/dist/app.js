@@ -13283,6 +13283,14 @@
     } catch (e) {
     }
   }
+  async function ensureFontAccess(pages) {
+    if (!canReadSystemFonts() || !usedFaces(pages).some((f) => faceKind(f) === "system")) return;
+    try {
+      const state = await navigator.permissions.query({ name: "local-fonts" });
+      if (state.state === "prompt") await window.queryLocalFonts();
+    } catch (e) {
+    }
+  }
 
   // apps/ZEditor/src/io/projectFile.js
   function serializeProject({ title, pdfDocs, pages, textStyles, settings, embeddedFonts = [] }) {
@@ -13453,6 +13461,8 @@
     function startNewDocument(title) {
       setProjectFile(null);
       setDocTitle(title);
+      view.setEmbedFonts(true);
+      view.setEmbedFontsSkip([]);
     }
     async function handleSaveProject({ saveAs = false } = {}) {
       if (pages.length === 0 || savingProject) return;
@@ -13460,10 +13470,11 @@
       setSavingProject(true);
       try {
         let embeddedFonts = [];
-        if (view.embedFonts) {
+        if (view.embedFonts && canReadSystemFonts()) {
+          await ensureFontAccess(pages);
           const r = await buildEmbeddedFonts(pages, view.embedFontsSkip);
           embeddedFonts = r.fonts;
-          status.setNotice(r.missing.length ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ") : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file." : null);
+          status.setNotice(r.missing.length ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ") : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file. Only share it if those fonts' licences allow it (Project > Embed Fonts… to change)." : null);
         }
         const json = serializeProject({
           title: docTitle,
@@ -13956,7 +13967,7 @@
     const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
-    const [embedFonts, setEmbedFonts] = useState15(false);
+    const [embedFonts, setEmbedFonts] = useState15(true);
     const [embedFontsSkip, setEmbedFontsSkip] = useState15([]);
     function settingsForSave() {
       return {
@@ -13988,7 +13999,7 @@
       if (s.rulersOn !== void 0) setRulersOn(s.rulersOn);
       if (s.rulerUnit !== void 0) setRulerUnit(s.rulerUnit);
       if (s.snapToGuidesOn !== void 0) setSnapToGuidesOn(s.snapToGuidesOn);
-      setEmbedFonts(s.embedFonts === true);
+      setEmbedFonts(s.embedFonts !== false);
       setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
       setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
     }
@@ -14156,7 +14167,8 @@
       status.setErrorMsg(null);
       try {
         const name = items.find((a) => a.groupName) ? items.find((a) => a.groupName).groupName : "Group";
-        const embedded = view && view.embedFonts ? await buildEmbeddedFonts([{ annotations: items }], view.embedFontsSkip) : { fonts: [] };
+        if (view && view.embedFonts && canReadSystemFonts()) await ensureFontAccess([{ annotations: items }]);
+        const embedded = view && view.embedFonts && canReadSystemFonts() ? await buildEmbeddedFonts([{ annotations: items }], view.embedFontsSkip) : { fonts: [] };
         const json = serializeGroup(name, items, embedded.fonts);
         const handle = await saveFile(json, titleToFileName(name, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
         if (handle !== "cancelled") status.setNotice("Saved the group as " + (handle && handle.name ? handle.name : titleToFileName(name, ".znow")) + ". Open it on its own, or bring it into any document with Import group.");
@@ -16680,7 +16692,7 @@
       "input",
       {
         type: "checkbox",
-        checked: view.embedFonts,
+        checked: view.embedFonts && supported,
         disabled: !supported,
         onChange: (e) => {
           if (!e.target.checked) view.setEmbedFonts(false);
@@ -16696,7 +16708,7 @@
           }
         }
       }
-    ), /* @__PURE__ */ React.createElement("span", null, "Embed system fonts when saving this project"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "The choice is saved in the project file, so Save keeps embedding.")), !supported && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint is-error" }, "This browser can't read this computer's fonts. Use Chrome or Edge to embed system fonts. Fonts you upload are always inside the project."), supported && !granted && /* @__PURE__ */ React.createElement("div", { className: "ze-embed-allow" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "ZEditor needs your permission to read the fonts on this computer."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: allowFonts }, "Allow reading this computer's fonts")), /* @__PURE__ */ React.createElement("div", { className: "ze-embed-list", role: "list" }, rows === null && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Looking at the fonts the text uses…"), rows && rows.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "No text in this project uses a font yet."), rows && rows.map((r) => /* @__PURE__ */ React.createElement("label", { key: r.key, role: "listitem", className: "ze-embed-row" + (r.kind === "system" ? "" : " is-fixed") }, r.kind === "system" ? /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !skip.includes(r.key), disabled: !supported, onChange: (e) => toggleFace(r.key, e.target.checked) }) : /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: true, disabled: true }), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-name" }, r.label), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-status" + (r.kind === "system" && r.bytes == null ? " is-bad" : "") }, r.kind === "system" ? r.bytes != null ? formatBytes(r.bytes) : "Can't read it here (allow font access, or it isn't installed on this computer)" : STATUS[r.kind])))), rows && system.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint ze-embed-total" }, view.embedFonts ? "Will be embedded when you save: " + formatBytes(total) + " in " + system.filter((r) => !skip.includes(r.key) && r.bytes != null).length + " font file(s)." : "Switched off: nothing will be embedded.", view.embedFonts && unreadable > 0 ? " " + unreadable + " could not be read." : ""), /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Only embed fonts you are allowed to share. Styles of a font that the text does not use (for example Italic) are not embedded.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: close }, "Done"))));
+    ), /* @__PURE__ */ React.createElement("span", null, "Embed system fonts when saving this project"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "On by default. The choice is saved in the project file: a project saved before this existed embeds on its next Save, unless you untick this.")), !supported && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint is-error" }, "This browser can't read this computer's fonts. Use Chrome or Edge to embed system fonts. Fonts you upload are always inside the project."), supported && !granted && /* @__PURE__ */ React.createElement("div", { className: "ze-embed-allow" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "ZEditor needs your permission to read the fonts on this computer."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: allowFonts }, "Allow reading this computer's fonts")), /* @__PURE__ */ React.createElement("div", { className: "ze-embed-list", role: "list" }, rows === null && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Looking at the fonts the text uses…"), rows && rows.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "No text in this project uses a font yet."), rows && rows.map((r) => /* @__PURE__ */ React.createElement("label", { key: r.key, role: "listitem", className: "ze-embed-row" + (r.kind === "system" ? "" : " is-fixed") }, r.kind === "system" ? /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: !skip.includes(r.key), disabled: !supported, onChange: (e) => toggleFace(r.key, e.target.checked) }) : /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: true, disabled: true }), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-name" }, r.label), /* @__PURE__ */ React.createElement("span", { className: "ze-embed-status" + (r.kind === "system" && r.bytes == null ? " is-bad" : "") }, r.kind === "system" ? r.bytes != null ? formatBytes(r.bytes) : "Can't read it here (allow font access, or it isn't installed on this computer)" : STATUS[r.kind])))), rows && system.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint ze-embed-total" }, view.embedFonts && supported ? "Will be embedded when you save: " + formatBytes(total) + " in " + system.filter((r) => !skip.includes(r.key) && r.bytes != null).length + " font file(s)." : "Switched off: nothing will be embedded.", view.embedFonts && supported && unreadable > 0 ? " " + unreadable + " could not be read." : ""), /* @__PURE__ */ React.createElement("p", { className: "ze-format-hint" }, "Only embed fonts you are allowed to share. Styles of a font that the text does not use (for example Italic) are not embedded.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: close }, "Done"))));
   }
 
   // apps/ZEditor/src/ui/dialogs/shortcuts.js
@@ -19603,7 +19615,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "fb84d27"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "e219a6c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -19758,7 +19770,7 @@
       "input",
       {
         type: "checkbox",
-        checked: view.embedFonts,
+        checked: view.embedFonts && canReadFonts,
         disabled: pages.length === 0 || !canReadFonts,
         onChange: (e) => {
           if (!e.target.checked) view.setEmbedFonts(false);

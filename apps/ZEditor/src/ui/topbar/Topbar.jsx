@@ -197,7 +197,7 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                 </div>
                 <label className="toggle-switch">
                   <input
-                    type="checkbox" checked={view.embedFonts} disabled={pages.length === 0 || !canReadFonts}
+                    type="checkbox" checked={view.embedFonts && canReadFonts} disabled={pages.length === 0 || !canReadFonts}
                     onChange={(e) => { if (!e.target.checked) view.setEmbedFonts(false); else if (fontLicenceSeen()) view.setEmbedFonts(true); else { close(); dialogs.openEmbedFonts(true); } }}
                   />
                   <span className="toggle-slider"></span>

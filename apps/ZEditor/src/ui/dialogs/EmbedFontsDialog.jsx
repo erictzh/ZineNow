@@ -66,10 +66,10 @@ export function EmbedFontsDialog({ open, startConfirm, onClose, pages, view }) {
         <div className="ze-modal-head">Embed Fonts</div>
         <div className="ze-modal-body">
           <label className="ze-format-check ze-embed-master">
-            <input type="checkbox" checked={view.embedFonts} disabled={!supported}
+            <input type="checkbox" checked={view.embedFonts && supported} disabled={!supported}
               onChange={(e) => { if (!e.target.checked) view.setEmbedFonts(false); else { try { if (localStorage.getItem("zeditor.fontEmbedLicenceSeen") === "1") { view.setEmbedFonts(true); return; } } catch (err) { /* ask */ } setAsking(true); } }} />
             <span>Embed system fonts when saving this project</span>
-            <span className="ze-format-hint">The choice is saved in the project file, so Save keeps embedding.</span>
+            <span className="ze-format-hint">On by default. The choice is saved in the project file: a project saved before this existed embeds on its next Save, unless you untick this.</span>
           </label>
           {!supported && <p className="ze-format-hint is-error">This browser can't read this computer's fonts. Use Chrome or Edge to embed system fonts. Fonts you upload are always inside the project.</p>}
           {supported && !granted && (
@@ -95,8 +95,8 @@ export function EmbedFontsDialog({ open, startConfirm, onClose, pages, view }) {
           </div>
           {rows && system.length > 0 && (
             <p className="ze-format-hint ze-embed-total">
-              {view.embedFonts ? "Will be embedded when you save: " + formatBytes(total) + " in " + (system.filter((r) => !skip.includes(r.key) && r.bytes != null).length) + " font file(s)." : "Switched off: nothing will be embedded."}
-              {view.embedFonts && unreadable > 0 ? " " + unreadable + " could not be read." : ""}
+              {view.embedFonts && supported ? "Will be embedded when you save: " + formatBytes(total) + " in " + (system.filter((r) => !skip.includes(r.key) && r.bytes != null).length) + " font file(s)." : "Switched off: nothing will be embedded."}
+              {view.embedFonts && supported && unreadable > 0 ? " " + unreadable + " could not be read." : ""}
             </p>
           )}
           <p className="ze-format-hint">Only embed fonts you are allowed to share. Styles of a font that the text does not use (for example Italic) are not embedded.</p>

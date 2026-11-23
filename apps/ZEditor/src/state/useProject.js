@@ -2,7 +2,7 @@
 
 import { stripExtension, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, writeFileHandle } from "../io/fileSave.js";
-import { buildEmbeddedFonts } from "../io/fontEmbed.js";
+import { buildEmbeddedFonts, canReadSystemFonts, ensureFontAccess } from "../io/fontEmbed.js";
 import { readProjectFile, serializeProject } from "../io/projectFile.js";
 import { saveReloadSnapshot, takeReloadSnapshot } from "../io/reloadSnapshot.js";
 import { allowNextUnload, warnBeforeLeaving } from "../../../../shared/js/leaveWarning.js";
@@ -38,6 +38,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   function startNewDocument(title) {
     setProjectFile(null);
     setDocTitle(title);
+    view.setEmbedFonts(true); view.setEmbedFontsSkip([]); // a new document starts with the default: embed the system fonts it uses
   }
 
   // `saveAs` always asks where to save; otherwise it overwrites the
@@ -49,12 +50,13 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
     try {
       // Project > Embed Fonts…: the system fonts the text uses go inside the file (needs the browser's font access; the ones it can't read are named)
       let embeddedFonts = [];
-      if (view.embedFonts) {
+      if (view.embedFonts && canReadSystemFonts()) {
+        await ensureFontAccess(pages); // asks the browser for font access the first time (this click is the user action it needs)
         const r = await buildEmbeddedFonts(pages, view.embedFontsSkip);
         embeddedFonts = r.fonts;
         status.setNotice(r.missing.length
           ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ")
-          : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file." : null);
+          : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file. Only share it if those fonts' licences allow it (Project > Embed Fonts… to change)." : null);
       }
       const json = serializeProject({
         title: docTitle,
