@@ -4,6 +4,18 @@ ZineNow itself is licensed under the **GNU AGPL v3 or later** (see `LICENSE`). I
 
 Licences of the libraries were read from each package's own metadata or licence file (version as pinned in the apps). The AI-model rows come from the original projects as remembered, with the exact download source listed; they should be re-checked against the original repositories (see the policy).
 
+## Software this project is based on
+
+| Work | Used in | Licence | Made by | Project |
+|---|---|---|---|---|
+| **Zine Arranger** | ZineArranger (ZineNow's version of it, with changes and additions under the AGPL) | MIT | **Nash High** (copyright 2024) | https://codeberg.org/nashhigh/zine-arranger (also https://nashhigh.itch.io/zinearranger) |
+
+Nash High's copyright and MIT licence notice must stay with any copy of ZineArranger or substantial parts of it: it is kept in `apps/ZineArranger/LICENSE`, his original README is kept in `apps/ZineArranger/README.md`, and the app says "Originally by Nash High" (the ⓘ next to the title). Thank you, Nash High.
+
+## Ideas and algorithms (written from the papers, no code copied)
+
+- ZEditor's "Remove & fill" (smooth, detailed and pattern fills) uses the ideas of fast-marching image inpainting (A. Telea, 2004) and exemplar-based inpainting (A. Criminisi, P. Pérez, K. Toyama, 2004).
+
 ## AI models (downloaded by the user's browser when they choose to; not part of this repository)
 
 | Model | Used in | Licence | Made by | Project | Downloaded from |
