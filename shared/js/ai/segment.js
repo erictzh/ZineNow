@@ -39,6 +39,7 @@ export function segMask(data, how = "minmax") {
 // above it by `soft` fully solid, and it fades in between.
 // The soft part narrows near 0 and 1 (it can't reach past the ends), so a very small cut-off still cuts cleanly.
 export function softCut(v, cutoff, soft) {
+  if (cutoff <= 0) return 1; // a cut-off of 0 cuts nothing: everything stays (the model's lowest values would otherwise come out half see-through)
   const half = Math.max(0.0001, Math.min(soft, cutoff, 1 - cutoff));
   const a = (v - (cutoff - half)) / (2 * half);
   return a < 0 ? 0 : a > 1 ? 1 : a;
