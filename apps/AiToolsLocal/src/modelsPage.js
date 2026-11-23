@@ -25,7 +25,7 @@ export function createModelsPage(host) {
     for (const r of MODEL_ROWS) {
       const card = el("div", "model-card");
       card.append(el("div", "model-tool", "Used by: " + r.tool));
-      const box = modelBox(r.id); boxes.push(box); card.append(box);
+      const box = modelBox(r.id, { showSize: true }); boxes.push(box); card.append(box);
       host.append(card);
       toolFor.set(r.id, r);
     }
