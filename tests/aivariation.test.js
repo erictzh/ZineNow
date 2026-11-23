@@ -1,5 +1,5 @@
-// "Try another" for the AI fill: a fixed cycle of slightly different views (apps/ZEditor/src/render/aiFill.js).
-import { AI_VARIATIONS, variationFor, varyCrop } from "../apps/ZEditor/src/render/aiFill.js";
+// "Try another" for the AI fill: a fixed cycle of slightly different views (shared/js/ai/variations.js, used by ZEditor and Ai Tools (Local)).
+import { AI_VARIATIONS, variationFor, varyCrop } from "../shared/js/ai/variations.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 

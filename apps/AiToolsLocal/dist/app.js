@@ -20,13 +20,13 @@
     const win = window.open(path, "_blank");
     if (!win) throw new Error("The browser blocked the new tab. Allow pop-ups for this page and try again.");
     const ready = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer3 = setTimeout(() => {
         window.removeEventListener("message", onMessage);
         reject(new Error("The other app didn't answer. It may still be loading: try again in a moment."));
       }, 2e4);
       function onMessage(e) {
         if (e.source !== win || e.origin !== location.origin || !e.data || e.data.type !== readyType) return;
-        clearTimeout(timer);
+        clearTimeout(timer3);
         window.removeEventListener("message", onMessage);
         resolve();
       }
@@ -86,16 +86,16 @@
   // shared/js/numberFields.js
   var HOLD_MS = 450;
   var REPEAT_MS = 80;
-  var isNumberBox = (el) => el instanceof HTMLInputElement && el.type === "number";
-  var allowsEmpty = (el) => el.hasAttribute("data-allow-empty");
-  var writeValue = (el, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, text);
+  var isNumberBox = (el5) => el5 instanceof HTMLInputElement && el5.type === "number";
+  var allowsEmpty = (el5) => el5.hasAttribute("data-allow-empty");
+  var writeValue = (el5, text) => Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el5, text);
   var held = /* @__PURE__ */ new WeakMap();
-  function holdEmpty(el) {
-    if (held.has(el)) return;
-    const own = Object.getOwnPropertyDescriptor(el, "value");
-    held.set(el, own || null);
+  function holdEmpty(el5) {
+    if (held.has(el5)) return;
+    const own = Object.getOwnPropertyDescriptor(el5, "value");
+    held.set(el5, own || null);
     if (!own || !own.get || !own.configurable) return;
-    Object.defineProperty(el, "value", {
+    Object.defineProperty(el5, "value", {
       configurable: true,
       enumerable: own.enumerable,
       get() {
@@ -105,12 +105,12 @@
       }
     });
   }
-  function releaseEmpty(el) {
-    if (!held.has(el)) return;
-    const own = held.get(el);
-    held.delete(el);
-    if (own) Object.defineProperty(el, "value", own);
-    else delete el.value;
+  function releaseEmpty(el5) {
+    if (!held.has(el5)) return;
+    const own = held.get(el5);
+    held.delete(el5);
+    if (own) Object.defineProperty(el5, "value", own);
+    else delete el5.value;
   }
   function makeButton(dir) {
     const b = document.createElement("button");
@@ -140,24 +140,24 @@
       if (isNumberBox(e.target) && e.target.value !== "") lastGood.set(e.target, e.target.value);
     }, true);
     document.addEventListener("input", (e) => {
-      const el = e.target;
-      if (!isNumberBox(el)) return;
-      if (el.value !== "") {
-        releaseEmpty(el);
-        lastGood.set(el, el.value);
+      const el5 = e.target;
+      if (!isNumberBox(el5)) return;
+      if (el5.value !== "") {
+        releaseEmpty(el5);
+        lastGood.set(el5, el5.value);
         return;
       }
-      if (allowsEmpty(el) || document.activeElement !== el) return;
-      holdEmpty(el);
+      if (allowsEmpty(el5) || document.activeElement !== el5) return;
+      holdEmpty(el5);
       e.stopImmediatePropagation();
     }, true);
-    const restoreIfEmpty = (el) => {
-      if (el.value !== "" || allowsEmpty(el) || !lastGood.has(el)) {
-        releaseEmpty(el);
+    const restoreIfEmpty = (el5) => {
+      if (el5.value !== "" || allowsEmpty(el5) || !lastGood.has(el5)) {
+        releaseEmpty(el5);
         return false;
       }
-      releaseEmpty(el);
-      writeValue(el, lastGood.get(el));
+      releaseEmpty(el5);
+      writeValue(el5, lastGood.get(el5));
       return true;
     };
     document.addEventListener("change", (e) => {
@@ -166,21 +166,21 @@
     document.addEventListener("focusout", (e) => {
       if (isNumberBox(e.target)) restoreIfEmpty(e.target);
     }, true);
-    function stepBy(el, dir) {
-      const before = el.value;
-      if (before === "" && el.placeholder !== "" && isFinite(Number(el.placeholder))) writeValue(el, el.placeholder);
-      const start = el.value;
+    function stepBy(el5, dir) {
+      const before = el5.value;
+      if (before === "" && el5.placeholder !== "" && isFinite(Number(el5.placeholder))) writeValue(el5, el5.placeholder);
+      const start = el5.value;
       try {
-        if (dir > 0) el.stepUp();
-        else el.stepDown();
+        if (dir > 0) el5.stepUp();
+        else el5.stepDown();
       } catch (err) {
         return false;
       }
-      const dec = (String(el.step).split(".")[1] || "").length;
-      if (dec && el.value !== "" && isFinite(Number(el.value))) writeValue(el, String(Number(Number(el.value).toFixed(dec))));
-      if (el.value === start && before !== "") return false;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+      const dec = (String(el5.step).split(".")[1] || "").length;
+      if (dec && el5.value !== "" && isFinite(Number(el5.value))) writeValue(el5, String(Number(Number(el5.value).toFixed(dec))));
+      if (el5.value === start && before !== "") return false;
+      el5.dispatchEvent(new Event("input", { bubbles: true }));
+      el5.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
     let holdTimer = 0;
@@ -195,20 +195,20 @@
     document.addEventListener("pointerdown", (e) => {
       const button = buttonOf(e);
       if (!button || button.disabled || e.pointerType === "mouse" && e.button !== 0) return;
-      const el = boxOf(button);
-      if (!el || el.disabled || el.readOnly) return;
+      const el5 = boxOf(button);
+      if (!el5 || el5.disabled || el5.readOnly) return;
       e.preventDefault();
       const dir = Number(button.dataset.znStep) || 0;
       stop();
-      stepBy(el, dir);
+      stepBy(el5, dir);
       holdTimer = setTimeout(() => {
         repeatTimer = setInterval(() => {
-          if (!stepBy(el, dir)) stop();
+          if (!stepBy(el5, dir)) stop();
         }, REPEAT_MS);
       }, HOLD_MS);
       const release = () => {
         stop();
-        if (document.activeElement !== el) el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+        if (document.activeElement !== el5) el5.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       };
       window.addEventListener("pointerup", release, { once: true });
       window.addEventListener("pointercancel", release, { once: true });
@@ -220,6 +220,66 @@
           e.stopPropagation();
         }
       }, true);
+    }
+  }
+
+  // shared/js/ai/modelStore.js
+  var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
+  var CACHE_NAME = "zinenow-ai-tools-model";
+  async function isModelSaved(url, cacheName = CACHE_NAME) {
+    try {
+      return Boolean(await (await caches.open(cacheName)).match(url));
+    } catch (e) {
+      return false;
+    }
+  }
+  async function getModelBytes(url, onProgress, signal, cacheName = CACHE_NAME) {
+    let cache = null;
+    try {
+      cache = await caches.open(cacheName);
+    } catch (e) {
+    }
+    if (cache) {
+      const saved = await cache.match(url);
+      if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
+    }
+    const res = await fetch(url, signal ? { signal } : void 0);
+    if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
+    const total = Number(res.headers.get("content-length")) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0;
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.length;
+      if (onProgress) onProgress(got, total);
+    }
+    const bytes = new Uint8Array(got);
+    let off = 0;
+    for (const c of chunks) {
+      bytes.set(c, off);
+      off += c.length;
+    }
+    if (cache) {
+      try {
+        await cache.put(url, new Response(bytes.buffer, { headers: { "content-type": "application/octet-stream" } }));
+      } catch (e) {
+      }
+    }
+    return { bytes: bytes.buffer, downloaded: true };
+  }
+  async function forgetModel(cacheName = CACHE_NAME) {
+    try {
+      await caches.delete(cacheName);
+    } catch (e) {
+    }
+  }
+  async function forgetModelUrl(url, cacheName = CACHE_NAME) {
+    try {
+      await (await caches.open(cacheName)).delete(url);
+    } catch (e) {
     }
   }
 
@@ -458,60 +518,6 @@
     return { sign: errors[-1] < errors[1] ? -1 : 1, errors };
   }
 
-  // shared/js/ai/modelStore.js
-  var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
-  var CACHE_NAME = "zinenow-ai-tools-model";
-  async function isModelSaved(url, cacheName = CACHE_NAME) {
-    try {
-      return Boolean(await (await caches.open(cacheName)).match(url));
-    } catch (e) {
-      return false;
-    }
-  }
-  async function getModelBytes(url, onProgress, signal, cacheName = CACHE_NAME) {
-    let cache = null;
-    try {
-      cache = await caches.open(cacheName);
-    } catch (e) {
-    }
-    if (cache) {
-      const saved = await cache.match(url);
-      if (saved) return { bytes: await saved.arrayBuffer(), downloaded: false };
-    }
-    const res = await fetch(url, signal ? { signal } : void 0);
-    if (!res.ok) throw new Error("Couldn't download the model (HTTP " + res.status + "). Check your internet connection.");
-    const total = Number(res.headers.get("content-length")) || 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    let got = 0;
-    for (; ; ) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      got += value.length;
-      if (onProgress) onProgress(got, total);
-    }
-    const bytes = new Uint8Array(got);
-    let off = 0;
-    for (const c of chunks) {
-      bytes.set(c, off);
-      off += c.length;
-    }
-    if (cache) {
-      try {
-        await cache.put(url, new Response(bytes.buffer, { headers: { "content-type": "application/octet-stream" } }));
-      } catch (e) {
-      }
-    }
-    return { bytes: bytes.buffer, downloaded: true };
-  }
-  async function forgetModel(cacheName = CACHE_NAME) {
-    try {
-      await caches.delete(cacheName);
-    } catch (e) {
-    }
-  }
-
   // shared/js/ai/runtime.js
   var ORT_VERSION = "1.31.1";
   var ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
@@ -539,413 +545,1502 @@
       return false;
     }
   }
-  async function createSession(modelBytes2, preferGpu) {
+  async function createSession(modelBytes, preferGpu) {
     const ort = await loadOrt();
     ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
     if (preferGpu && await gpuUsable()) {
       try {
-        return { session: await ort.InferenceSession.create(modelBytes2, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" }), backend: "gpu" };
+        return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["webgpu"], graphOptimizationLevel: "all" }), backend: "gpu" };
       } catch (e) {
       }
     }
-    return { session: await ort.InferenceSession.create(modelBytes2, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
+    return { session: await ort.InferenceSession.create(modelBytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }), backend: "cpu" };
   }
-  async function runModel(session2, rgba, hole, sign = 1) {
+  async function runModel(session, rgba, hole, sign = 1) {
     const ort = await loadOrt();
     const input = new ort.Tensor("float32", buildInput(rgba, hole, sign), [1, 4, MODEL_SIZE, MODEL_SIZE]);
-    const out = await session2.run({ [session2.inputNames[0]]: input });
-    return outputToRgba(out[session2.outputNames[0]].data);
+    const out = await session.run({ [session.inputNames[0]]: input });
+    return outputToRgba(out[session.outputNames[0]].data);
   }
-  var findSign = (session2) => findMaskSign((rgba, hole, sign) => runModel(session2, rgba, hole, sign));
 
-  // apps/AiToolsLocal/src/main.js
-  var $ = (id) => document.getElementById(id);
+  // shared/js/ai/session.js
+  var IDLE_MS = 6e4;
+  var current = null;
+  var starting = null;
+  var timer = 0;
+  var SIGN_KEY = "zinenow.ai.maskSign:" + DEFAULT_MODEL_URL;
+  var savedSign = () => {
+    try {
+      const v = Number(localStorage.getItem(SIGN_KEY));
+      return v === 1 || v === -1 ? v : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  function releaseSession() {
+    clearTimeout(timer);
+    const c = current;
+    current = null;
+    starting = null;
+    if (c && c.session && c.session.release) {
+      try {
+        c.session.release();
+      } catch (e) {
+      }
+    }
+  }
+  var touch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(releaseSession, IDLE_MS);
+  };
+  async function acquireSession(onStatus) {
+    if (current) {
+      touch();
+      return current;
+    }
+    if (!starting) {
+      starting = (async () => {
+        if (!await isModelSaved(DEFAULT_MODEL_URL)) throw new Error("The AI model is not downloaded. Download it first (Marquee panel, AI model box).");
+        onStatus && onStatus("Starting the AI model…");
+        const { bytes } = await getModelBytes(DEFAULT_MODEL_URL);
+        const made = await createSession(bytes, true);
+        let sign = savedSign();
+        if (!sign) {
+          onStatus && onStatus("Checking the AI model (one time)…");
+          sign = (await findMaskSign((rgba, hole, s) => runModel(made.session, rgba, hole, s))).sign;
+          try {
+            localStorage.setItem(SIGN_KEY, String(sign));
+          } catch (e) {
+          }
+        }
+        current = { session: made.session, backend: made.backend, sign, bytes };
+        return current;
+      })().catch((e) => {
+        starting = null;
+        throw e;
+      });
+    }
+    const c = await starting;
+    touch();
+    return c;
+  }
+  async function runOnSession(rgba, hole, onStatus) {
+    const c = await acquireSession(onStatus);
+    try {
+      const out = await runModel(c.session, rgba, hole, c.sign);
+      touch();
+      return out;
+    } catch (e) {
+      if (c.backend !== "gpu") throw e;
+      onStatus && onStatus("The graphics chip failed; trying the processor…");
+      const cpu = await createSession(c.bytes, false);
+      try {
+        c.session.release && c.session.release();
+      } catch (err) {
+      }
+      current = { session: cpu.session, backend: "cpu", sign: c.sign, bytes: c.bytes };
+      touch();
+      return runModel(cpu.session, rgba, hole, c.sign);
+    }
+  }
+
+  // shared/js/ai/bgModel.js
+  var BG_CACHE = "zinenow-ai-bg-model";
+  var BG_MODELS = [
+    {
+      key: "u2netp",
+      name: "U²-Netp",
+      kind: "General",
+      label: "U²-Netp (General)",
+      mb: 4.4,
+      licence: "Apache-2.0",
+      host: "huggingface.co",
+      repo: "huggingface.co/edgetools/u2netp",
+      url: "https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx",
+      about: "Any single subject: an object, an animal or a person. Edges are a little rough."
+    },
+    {
+      key: "modnet",
+      name: "MODNet",
+      kind: "Portrait",
+      label: "MODNet (Portrait)",
+      mb: 25,
+      licence: "Apache-2.0",
+      host: "huggingface.co",
+      repo: "huggingface.co/Xenova/modnet",
+      url: "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx",
+      about: "Photos of people (head and shoulders): soft hair edges. Not for objects or animals."
+    }
+  ];
+  var bgModel = (key) => BG_MODELS.find((m) => m.key === key) || BG_MODELS[0];
+
+  // shared/js/ai/segment.js
+  var SEG_PREP = {
+    u2netp: { size: 320, mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], byBrightest: true, mask: "minmax" },
+    modnet: { size: 512, mean: [0.5, 0.5, 0.5], std: [0.5, 0.5, 0.5], byBrightest: false, mask: "clamp" }
+  };
+  function segInput(rgba, prep = SEG_PREP.u2netp) {
+    const size = typeof prep === "number" ? SEG_PREP.u2netp.size : prep.size;
+    const p = typeof prep === "number" ? SEG_PREP.u2netp : prep;
+    const n = size * size;
+    let max = 255;
+    if (p.byBrightest) {
+      max = 1;
+      for (let i = 0; i < n; i++) {
+        const o = i * 4;
+        if (rgba[o] > max) max = rgba[o];
+        if (rgba[o + 1] > max) max = rgba[o + 1];
+        if (rgba[o + 2] > max) max = rgba[o + 2];
+      }
+    }
+    const out = new Float32Array(3 * n);
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) out[c * n + i] = (rgba[i * 4 + c] / max - p.mean[c]) / p.std[c];
+    return out;
+  }
+  function segMask(data, how = "minmax") {
+    const n = data.length;
+    const out = new Float32Array(n);
+    if (how === "clamp") {
+      for (let i = 0; i < n; i++) out[i] = data[i] < 0 ? 0 : data[i] > 1 ? 1 : data[i];
+      return out;
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const v = data[i];
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    const range = hi - lo || 1;
+    for (let i = 0; i < n; i++) out[i] = (data[i] - lo) / range;
+    return out;
+  }
+  function softCut(v, cutoff, soft) {
+    const half = Math.max(1e-4, Math.min(soft, cutoff, 1 - cutoff));
+    const a = (v - (cutoff - half)) / (2 * half);
+    return a < 0 ? 0 : a > 1 ? 1 : a;
+  }
+  function maskToAlpha(mask, cutoff, soft) {
+    const out = new Uint8ClampedArray(mask.length);
+    for (let i = 0; i < mask.length; i++) out[i] = Math.round(softCut(mask[i], cutoff, soft) * 255);
+    return out;
+  }
+
+  // shared/js/ai/bgSession.js
+  var IDLE_MS2 = 6e4;
+  var sessions = /* @__PURE__ */ new Map();
+  var timer2 = 0;
+  function releaseBgSession() {
+    clearTimeout(timer2);
+    const all = [...sessions.values()];
+    sessions.clear();
+    for (const s of all) Promise.resolve(s).then((x) => {
+      if (x && x.release) {
+        try {
+          x.release();
+        } catch (e) {
+        }
+      }
+    }, () => {
+    });
+  }
+  var touch2 = () => {
+    clearTimeout(timer2);
+    timer2 = setTimeout(releaseBgSession, IDLE_MS2);
+  };
+  function acquire(key, onStatus) {
+    touch2();
+    if (!sessions.has(key)) {
+      const m = bgModel(key);
+      sessions.set(key, (async () => {
+        if (!await isModelSaved(m.url, BG_CACHE)) throw new Error(m.name + " is not downloaded. Download it first (Image panel, AI Background Removal).");
+        onStatus && onStatus("Starting " + m.name + "…");
+        const { bytes } = await getModelBytes(m.url, void 0, void 0, BG_CACHE);
+        return (await createSession(bytes, false)).session;
+      })().catch((e) => {
+        sessions.delete(key);
+        throw e;
+      }));
+    }
+    return sessions.get(key);
+  }
+  async function segmentCanvas(canvas, key, onStatus) {
+    const prep = SEG_PREP[bgModel(key).key];
+    const session = await acquire(key, onStatus);
+    const ort = await loadOrt();
+    const small = document.createElement("canvas");
+    small.width = small.height = prep.size;
+    const sx = small.getContext("2d", { willReadFrequently: true });
+    sx.imageSmoothingQuality = "high";
+    sx.drawImage(canvas, 0, 0, prep.size, prep.size);
+    const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
+    onStatus && onStatus("Finding the subject…");
+    const out = await session.run({ [session.inputNames[0]]: input });
+    const first = out[session.outputNames[0]];
+    const side = Math.round(Math.sqrt(first.data.length));
+    touch2();
+    return { mask: segMask(first.data, prep.mask), side };
+  }
+  function cutOutCanvas(canvas, mask, side, cutoff, soft) {
+    const m = document.createElement("canvas");
+    m.width = m.height = side;
+    const mx = m.getContext("2d");
+    const img = mx.createImageData(side, side);
+    const alpha = maskToAlpha(mask, cutoff, soft);
+    for (let i = 0; i < side * side; i++) {
+      img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = 255;
+      img.data[i * 4 + 3] = alpha[i];
+    }
+    mx.putImageData(img, 0, 0);
+    const out = document.createElement("canvas");
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const ox = out.getContext("2d");
+    ox.drawImage(canvas, 0, 0);
+    ox.globalCompositeOperation = "destination-in";
+    ox.imageSmoothingQuality = "high";
+    ox.drawImage(m, 0, 0, canvas.width, canvas.height);
+    return out;
+  }
+
+  // shared/js/ai/manager.js
+  var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
+  var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
+  function runtimeUrls(gpu) {
+    return (gpu ? ["ort.all.min.js", "ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"] : ["ort.all.min.js", "ort-wasm-simd-threaded.mjs", "ort-wasm-simd-threaded.wasm"]).map((f) => CDN + f);
+  }
+  async function downloadPlan() {
+    const gpu = await gpuUsable();
+    const runtimeMb = gpu ? SIZES.runtimeGpu : SIZES.runtimeCpu;
+    return { gpu, modelMb: SIZES.model, runtimeMb, totalMb: Math.round(SIZES.model + runtimeMb) };
+  }
+  async function aiSaved() {
+    const plan = await downloadPlan();
+    const runtimeSaved = await Promise.all(runtimeUrls(plan.gpu).map(async (u) => {
+      try {
+        return Boolean(await caches.match(u));
+      } catch (e) {
+        return false;
+      }
+    }));
+    return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
+  }
+  async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
+    const bg = which === "background";
+    const plan = await downloadPlan();
+    const saved = bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = bg ? bgModel(model).mb : plan.modelMb;
+    const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
+    let doneMb = 0;
+    const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
+    if (!saved.runtime) {
+      for (const url of runtimeUrls(plan.gpu)) {
+        const res = await fetch(url, { signal });
+        if (!res.ok) throw new Error("Couldn't download the AI runtime (HTTP " + res.status + ").");
+        const copy = res.clone();
+        const reader = res.body.getReader();
+        let got = 0;
+        for (; ; ) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          got += value.length;
+          report(got / 1048576);
+        }
+        doneMb += got / 1048576;
+        try {
+          if (!await caches.match(url)) await (await caches.open("zinenow-ai-runtime")).put(url, copy);
+        } catch (e) {
+        }
+      }
+    }
+    if (!saved.model) {
+      if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
+      else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
+    }
+    try {
+      if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+    } catch (e) {
+    }
+    onProgress && onProgress(total, total);
+  }
+  async function bgPlan(key) {
+    const plan = await downloadPlan();
+    const mb = bgModel(key).mb;
+    return { gpu: plan.gpu, modelMb: mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(mb + plan.runtimeMb) };
+  }
+  async function bgSaved(key) {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
+  }
+  async function anyModelSaved(except) {
+    if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
+    for (const m of BG_MODELS) if (m.key !== except && await isModelSaved(m.url, BG_CACHE)) return true;
+    return false;
+  }
+  async function deleteRuntime() {
+    try {
+      for (const name of await caches.keys()) {
+        const cache = await caches.open(name);
+        for (const req of await cache.keys()) if (/onnxruntime-web/.test(req.url)) await cache.delete(req);
+      }
+    } catch (e) {
+    }
+  }
+  async function deleteBg(key) {
+    releaseBgSession();
+    await forgetModelUrl(bgModel(key).url, BG_CACHE);
+    if (!await anyModelSaved(key)) await deleteRuntime();
+  }
+  async function deleteAi() {
+    releaseSession();
+    await forgetModel();
+    if (!await anyModelSaved("fill")) await deleteRuntime();
+  }
+
+  // shared/js/ai/modelList.js
+  var FILL_MODEL = {
+    key: "migan",
+    name: "MI-GAN",
+    kind: "Remove object",
+    label: "MI-GAN (Remove object)",
+    mb: 28.2,
+    licence: "MIT",
+    host: "huggingface.co",
+    repo: "huggingface.co/lxfater/inpaint-web",
+    url: DEFAULT_MODEL_URL,
+    about: "Fills the area you mark with what would plausibly be behind it."
+  };
+  var MODEL_ROWS = [
+    { id: "fill", tool: "Remove object", model: FILL_MODEL },
+    ...BG_MODELS.map((m) => ({ id: "bg:" + m.key, tool: "Remove background", model: m }))
+  ];
+
+  // apps/AiToolsLocal/src/dialog.js
+  function confirmDialog({ title, points, ok = "OK", cancel = "Cancel" }) {
+    return new Promise((resolve) => {
+      const back = document.createElement("div");
+      back.className = "dlg-backdrop";
+      const box = document.createElement("div");
+      box.className = "dlg";
+      box.setAttribute("role", "dialog");
+      box.setAttribute("aria-modal", "true");
+      box.setAttribute("aria-label", title);
+      const h = document.createElement("div");
+      h.className = "dlg-title";
+      h.textContent = title;
+      const ul = document.createElement("ul");
+      ul.className = "dlg-points";
+      for (const p of points) {
+        const li = document.createElement("li");
+        if (typeof p === "string") li.textContent = p;
+        else li.append(p);
+        ul.append(li);
+      }
+      const row = document.createElement("div");
+      row.className = "dlg-actions";
+      const no = document.createElement("button");
+      no.type = "button";
+      no.textContent = cancel;
+      const yes = document.createElement("button");
+      yes.type = "button";
+      yes.className = "btn-solid";
+      yes.textContent = ok;
+      row.append(no, yes);
+      box.append(h, ul, row);
+      back.append(box);
+      document.body.append(back);
+      const done = (v) => {
+        document.removeEventListener("keydown", onKey, true);
+        back.remove();
+        resolve(v);
+      };
+      const onKey = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          done(false);
+        }
+      };
+      document.addEventListener("keydown", onKey, true);
+      no.addEventListener("click", () => done(false));
+      yes.addEventListener("click", () => done(true));
+      back.addEventListener("pointerdown", (e) => {
+        if (e.target === back) done(false);
+      });
+      yes.focus();
+    });
+  }
+  function rich(parts) {
+    const s = document.createElement("span");
+    for (const [text, bold] of parts) {
+      if (bold) {
+        const b = document.createElement("b");
+        b.textContent = text;
+        s.append(b);
+      } else s.append(text);
+    }
+    return s;
+  }
+
+  // apps/AiToolsLocal/src/models.js
+  var controls = /* @__PURE__ */ new Map();
+  var globalListeners = /* @__PURE__ */ new Set();
+  var onModelsChanged = (fn) => {
+    globalListeners.add(fn);
+    return () => globalListeners.delete(fn);
+  };
+  var tellAll = () => {
+    for (const f of globalListeners) f();
+  };
+  var rowFor = (id) => MODEL_ROWS.find((r) => r.id === id);
+  function modelControl(id) {
+    if (controls.has(id)) return controls.get(id);
+    const row = rowFor(id);
+    const isFill = id === "fill";
+    const listeners = /* @__PURE__ */ new Set();
+    const state = { phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null };
+    let abort = null;
+    const emit = () => {
+      for (const f of listeners) f(state);
+      tellAll();
+    };
+    const set = (patch) => {
+      Object.assign(state, patch);
+      emit();
+    };
+    async function refresh() {
+      try {
+        const [saved, plan] = await Promise.all(isFill ? [aiSaved(), downloadPlan()] : [bgSaved(row.model.key), bgPlan(row.model.key)]);
+        set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
+      } catch (e) {
+        set({ phase: "none", error: e && e.message ? e.message : String(e) });
+      }
+    }
+    async function download() {
+      const ctl2 = new AbortController();
+      abort = ctl2;
+      set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
+      try {
+        await downloadAi({ which: isFill ? "fill" : "background", model: isFill ? void 0 : row.model.key, signal: ctl2.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        await refresh();
+      } catch (e) {
+        await refresh();
+        if (!(e && e.name === "AbortError")) set({ error: "The download didn't finish: " + (e && e.message ? e.message : e) });
+      } finally {
+        abort = null;
+      }
+    }
+    const cancel = () => {
+      if (abort) abort.abort();
+    };
+    async function remove() {
+      await (isFill ? deleteAi() : deleteBg(row.model.key));
+      await refresh();
+    }
+    const ctl = { id, row, state, refresh, download, cancel, remove, subscribe(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    } };
+    controls.set(id, ctl);
+    refresh();
+    return ctl;
+  }
+  async function askDownload(ctl) {
+    const m = ctl.row.model, plan = ctl.state.plan;
+    if (!plan) return false;
+    return confirmDialog({
+      title: "Download AI model?",
+      points: [
+        rich([["You are downloading "], [m.kind === "Remove object" ? "an AI object-remover model" : "an AI background-remover model"], [" ("], [m.label, true], [", about " + Math.round(m.mb * 10) / 10 + " MB, " + m.licence + " licence) from "], [m.host, true], [" (" + m.repo + "), plus its runtime (about " + Math.round(plan.runtimeMb) + " MB, skipped if you already have it) from "], ["cdn.jsdelivr.net", true], [". About " + plan.totalMb + " MB in total."]]),
+        "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.",
+        rich([["Warning:", true], [" it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete button)."]])
+      ],
+      ok: "Confirm Download",
+      cancel: "Cancel"
+    });
+  }
+  function askDelete(ctl) {
+    const m = ctl.row.model;
+    return confirmDialog({
+      title: "Delete AI model?",
+      points: [
+        "This removes " + m.label + " from this device. The runtime is only removed when no AI model needs it.",
+        "ZEditor uses the same files, so it may need to download them again.",
+        "You can download it again any time."
+      ],
+      ok: "Delete",
+      cancel: "Cancel"
+    });
+  }
+  var el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  function modelBox(id, { compact = false } = {}) {
+    const ctl = modelControl(id), m = ctl.row.model;
+    const box = el("div", "model-box");
+    const title = el("b", "", m.name + " (" + m.kind + ")");
+    const facts = el("span", "hint", (compact ? "" : m.about + " ") + m.licence + " licence (free and open source). About " + Math.round(m.mb * 10) / 10 + " MB, downloaded from " + m.repo + ". Runs on your device; nothing is uploaded.");
+    const live = el("div", "model-live");
+    box.append(title, facts, live);
+    function draw(s) {
+      live.textContent = "";
+      if (s.phase === "checking") live.append(el("span", "hint", "Checking…"));
+      else if (s.phase === "none") {
+        const b = el("button", "btn-solid wide", "Download " + m.name + (s.plan ? " (about " + s.plan.totalMb + " MB)" : ""));
+        b.type = "button";
+        b.addEventListener("click", async () => {
+          if (await askDownload(ctl)) ctl.download();
+        });
+        live.append(b);
+      } else if (s.phase === "downloading") {
+        const p = document.createElement("progress");
+        p.max = s.totalMb || 1;
+        p.value = s.doneMb;
+        const t = el("span", "hint", "Downloading… " + s.doneMb.toFixed(1) + " of " + s.totalMb.toFixed(1) + " MB");
+        const c = el("button", "wide", "Cancel download");
+        c.type = "button";
+        c.addEventListener("click", ctl.cancel);
+        live.append(p, t, c);
+      } else if (s.phase === "ready") {
+        live.append(el("span", "hint ok", "Downloaded: works offline."));
+        const d = el("button", "wide", "Delete " + m.name);
+        d.type = "button";
+        d.addEventListener("click", async () => {
+          if (await askDelete(ctl)) ctl.remove();
+        });
+        live.append(d);
+      }
+      if (s.error) live.append(el("span", "hint bad", s.error));
+    }
+    draw(ctl.state);
+    const off = ctl.subscribe(draw);
+    box.dispose = off;
+    return box;
+  }
+
+  // apps/AiToolsLocal/src/modelsPage.js
+  var el2 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  function createModelsPage(host) {
+    host.hidden = true;
+    host.className = "models-page";
+    let off = null, boxes = [];
+    async function build() {
+      host.textContent = "";
+      for (const b of boxes) b.dispose && b.dispose();
+      boxes = [];
+      host.append(el2("h2", "", "Models"));
+      host.append(el2("p", "hint", "Every AI model the tools use. They run on this device and nothing is uploaded. Each is downloaded once, only when you choose to, then works offline. Delete any you don't need."));
+      const total = el2("p", "total");
+      host.append(total);
+      const toolFor = /* @__PURE__ */ new Map();
+      for (const r of MODEL_ROWS) {
+        const card = el2("div", "model-card");
+        card.append(el2("div", "model-tool", "Used by: " + r.tool));
+        const box = modelBox(r.id);
+        boxes.push(box);
+        card.append(box);
+        host.append(card);
+        toolFor.set(r.id, r);
+      }
+      const engine = el2("div", "model-card");
+      engine.append(el2("div", "model-tool", "Shared by all tools"));
+      const eTitle = el2("b", "", "AI engine (ONNX Runtime Web " + ORT_VERSION + ")");
+      const eFacts = el2("span", "hint", "MIT licence. Downloaded from cdn.jsdelivr.net the first time you download any model (about 16 to 30 MB, depending on your device), then kept. It is removed automatically when the last AI model is deleted.");
+      const eState = el2("span", "hint");
+      engine.append(eTitle, eFacts, eState);
+      host.append(engine);
+      async function updateTotals() {
+        const saved = await aiSaved();
+        const plan = await downloadPlan();
+        let mb = saved.runtime ? plan.runtimeMb : 0;
+        let n = 0;
+        for (const r of MODEL_ROWS) if (modelControl(r.id).state.phase === "ready") {
+          mb += r.model.mb;
+          n++;
+        }
+        eState.textContent = saved.runtime ? "On this device (about " + Math.round(plan.runtimeMb) + " MB)." : "Not downloaded.";
+        eState.className = "hint" + (saved.runtime ? " ok" : "");
+        total.textContent = n || saved.runtime ? "Saved on this device: " + n + " model" + (n === 1 ? "" : "s") + " and " + (saved.runtime ? "the engine" : "no engine") + ", about " + Math.round(mb) + " MB in total." : "Nothing is downloaded yet.";
+      }
+      off = onModelsChanged(updateTotals);
+      updateTotals();
+    }
+    return {
+      show() {
+        host.hidden = false;
+        build();
+      },
+      hide() {
+        host.hidden = true;
+        if (off) off();
+        off = null;
+        for (const b of boxes) b.dispose && b.dispose();
+        boxes = [];
+        host.textContent = "";
+      }
+    };
+  }
+
+  // apps/AiToolsLocal/src/picture.js
   var MAX_SIDE = 4096;
-  var FEATHER = 3;
   var MAX_UNDO = 8;
-  installNumberFields();
-  wrapNumberInputs();
-  var settings = { brush: 40, grow: 6, url: DEFAULT_MODEL_URL };
+  function createPicture({ stage, world, imgC, origC, emptyEl, onChange }) {
+    const imgX = imgC.getContext("2d", { willReadFrequently: true });
+    const overlays = [];
+    let fileName = "picture";
+    let loaded = false, busy = false;
+    let view = { s: 1, x: 0, y: 0 };
+    let undoStack = [], redoStack = [];
+    let handler = null;
+    const openListeners = [];
+    const changed = () => onChange && onChange();
+    const toImage = (e) => {
+      const r = stage.getBoundingClientRect();
+      return { x: (e.clientX - r.left - view.x) / view.s, y: (e.clientY - r.top - view.y) / view.s };
+    };
+    function applyView() {
+      world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")";
+    }
+    function fit() {
+      const r = stage.getBoundingClientRect();
+      const s = Math.min(r.width / imgC.width, r.height / imgC.height, 1) * 0.96;
+      view = { s, x: (r.width - imgC.width * s) / 2, y: (r.height - imgC.height * s) / 2 };
+      applyView();
+    }
+    async function open(file) {
+      if (!file || !/^image\//.test(file.type || "image/")) return { ok: false, message: "That isn't a picture file." };
+      try {
+        const bmp = await createImageBitmap(file);
+        const k = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+        const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+        for (const c of [imgC, origC, ...overlays]) {
+          c.width = w;
+          c.height = h;
+        }
+        imgX.clearRect(0, 0, w, h);
+        imgX.drawImage(bmp, 0, 0, w, h);
+        origC.getContext("2d").drawImage(bmp, 0, 0, w, h);
+        if (bmp.close) bmp.close();
+        fileName = (file.name || "picture").replace(/\.[^.]+$/, "");
+        for (const b of [...undoStack, ...redoStack]) b.close && b.close();
+        undoStack = [];
+        redoStack = [];
+        loaded = true;
+        emptyEl.hidden = true;
+        world.hidden = false;
+        fit();
+        changed();
+        for (const f of openListeners) f();
+        return { ok: true, width: w, height: h, shrunk: k < 1 };
+      } catch (e) {
+        return { ok: false, message: "Couldn't open that picture: " + e.message };
+      }
+    }
+    const snapshot = () => createImageBitmap(imgC);
+    function commit(before) {
+      undoStack.push(before);
+      if (undoStack.length > MAX_UNDO) undoStack.shift().close();
+      for (const b of redoStack) b.close && b.close();
+      redoStack = [];
+      changed();
+    }
+    async function swap(from, to) {
+      if (!from.length || busy) return false;
+      to.push(await createImageBitmap(imgC));
+      const bmp = from.pop();
+      imgX.clearRect(0, 0, imgC.width, imgC.height);
+      imgX.drawImage(bmp, 0, 0);
+      bmp.close();
+      changed();
+      return true;
+    }
+    const undo = () => swap(undoStack, redoStack);
+    const redo = () => swap(redoStack, undoStack);
+    const toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't make the picture.")), "image/png"));
+    const pointers = /* @__PURE__ */ new Map();
+    let pinch = null, gesture = false;
+    stage.addEventListener("pointerdown", (e) => {
+      if (!loaded || busy) return;
+      stage.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        if (gesture && handler && handler.cancel) handler.cancel();
+        gesture = false;
+        const [p, q] = [...pointers.values()];
+        pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), cx: (p.x + q.x) / 2, cy: (p.y + q.y) / 2 };
+        return;
+      }
+      if (pointers.size > 2) return;
+      if (handler && handler.down) {
+        gesture = true;
+        handler.down(toImage(e), e);
+      }
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && pointers.size === 2) {
+        const [p, q] = [...pointers.values()];
+        const d = Math.hypot(p.x - q.x, p.y - q.y), cx = (p.x + q.x) / 2, cy = (p.y + q.y) / 2;
+        const r = stage.getBoundingClientRect();
+        const s2 = Math.min(40, Math.max(0.05, view.s * d / pinch.d));
+        const ix = (pinch.cx - r.left - view.x) / view.s, iy = (pinch.cy - r.top - view.y) / view.s;
+        view = { s: s2, x: cx - r.left - ix * s2, y: cy - r.top - iy * s2 };
+        pinch = { d, cx, cy };
+        applyView();
+        return;
+      }
+      if (gesture && handler && handler.move) handler.move(toImage(e), e);
+    });
+    function endPointer(e) {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0 && gesture) {
+        gesture = false;
+        if (handler && handler.up) handler.up(toImage(e), e);
+      }
+    }
+    stage.addEventListener("pointerup", endPointer);
+    stage.addEventListener("pointercancel", endPointer);
+    stage.addEventListener("wheel", (e) => {
+      if (!loaded) return;
+      e.preventDefault();
+      const r = stage.getBoundingClientRect();
+      const s2 = Math.min(40, Math.max(0.05, view.s * Math.exp(-e.deltaY * 15e-4)));
+      const ix = (e.clientX - r.left - view.x) / view.s, iy = (e.clientY - r.top - view.y) / view.s;
+      view = { s: s2, x: e.clientX - r.left - ix * s2, y: e.clientY - r.top - iy * s2 };
+      applyView();
+    }, { passive: false });
+    stage.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("resize", () => {
+      if (loaded) fit();
+    });
+    return {
+      stage,
+      world,
+      canvas: imgC,
+      ctx: imgX,
+      original: origC,
+      get loaded() {
+        return loaded;
+      },
+      get width() {
+        return imgC.width;
+      },
+      get height() {
+        return imgC.height;
+      },
+      get name() {
+        return fileName;
+      },
+      get busy() {
+        return busy;
+      },
+      setBusy(b) {
+        busy = Boolean(b);
+        changed();
+      },
+      get canUndo() {
+        return undoStack.length > 0;
+      },
+      get canRedo() {
+        return redoStack.length > 0;
+      },
+      get depth() {
+        return undoStack.length;
+      },
+      get view() {
+        return { ...view };
+      },
+      setView(v) {
+        view = { ...v };
+        applyView();
+      },
+      toImage,
+      fit,
+      open,
+      snapshot,
+      commit,
+      undo,
+      redo,
+      toBlob,
+      setPointerHandler(h) {
+        handler = h;
+      },
+      // A canvas a tool draws on top of the picture (same size, follows it). Returns the canvas.
+      addOverlay(canvas) {
+        canvas.classList.add("overlay");
+        canvas.width = imgC.width;
+        canvas.height = imgC.height;
+        overlays.push(canvas);
+        world.append(canvas);
+        return canvas;
+      },
+      removeOverlay(canvas) {
+        const i = overlays.indexOf(canvas);
+        if (i >= 0) overlays.splice(i, 1);
+        canvas.remove();
+      },
+      onOpen(fn) {
+        openListeners.push(fn);
+      },
+      showOriginal(on) {
+        origC.hidden = !on;
+        imgC.style.visibility = on ? "hidden" : "visible";
+      }
+    };
+  }
+
+  // apps/AiToolsLocal/src/registry.js
+  var tools = [];
+  var registerTool = (t) => {
+    tools.push(t);
+    return t;
+  };
+  var allTools = () => tools.slice();
+
+  // apps/AiToolsLocal/src/tools/removeBackground.js
+  var el3 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  var DEFAULT_CUTOFF = 0.1;
+  var removeBackgroundTool = {
+    id: "remove-background",
+    name: "Remove background",
+    summary: "Keep the main subject, make the rest see-through.",
+    create(ctx2) {
+      const { picture: picture2 } = ctx2;
+      const previewC = picture2.addOverlay(document.createElement("canvas"));
+      previewC.id = "preview";
+      previewC.style.display = "none";
+      const previewX = previewC.getContext("2d");
+      let mounted = false, ui = {}, boxEl = null;
+      let modelKey = BG_MODELS[0].key;
+      let cutoff = DEFAULT_CUTOFF, soft = 10;
+      let found = null;
+      let raf = 0;
+      const ctl = () => modelControl("bg:" + modelKey);
+      const discard = () => {
+        found = null;
+        previewC.style.display = "none";
+        previewX.clearRect(0, 0, previewC.width, previewC.height);
+        picture2.canvas.style.visibility = "visible";
+        refresh();
+      };
+      function drawPreview() {
+        raf = 0;
+        if (!found) return;
+        previewX.clearRect(0, 0, previewC.width, previewC.height);
+        previewX.drawImage(cutOutCanvas(picture2.canvas, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100), 0, 0);
+      }
+      const queuePreview = () => {
+        if (!raf) raf = requestAnimationFrame(drawPreview);
+      };
+      async function find() {
+        if (picture2.busy || !picture2.loaded || ctl().state.phase !== "ready") return;
+        picture2.setBusy(true);
+        try {
+          ctx2.status("Starting " + bgModel(modelKey).name + "…");
+          const t0 = performance.now();
+          const { mask, side } = await segmentCanvas(picture2.canvas, modelKey, (t) => ctx2.status(t));
+          found = { mask, side, depth: picture2.depth };
+          previewC.style.display = "";
+          picture2.canvas.style.visibility = "hidden";
+          drawPreview();
+          ctx2.status("Found the subject in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s. Adjust the Edge cut-off if needed, then press Apply.", "ok");
+        } catch (e) {
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
+        } finally {
+          picture2.setBusy(false);
+        }
+      }
+      async function apply() {
+        if (!found || picture2.busy) return;
+        const before = await picture2.snapshot();
+        const out = cutOutCanvas(picture2.canvas, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100);
+        picture2.ctx.clearRect(0, 0, picture2.width, picture2.height);
+        picture2.ctx.drawImage(out, 0, 0);
+        picture2.commit(before);
+        discard();
+        ctx2.status("Applied. Not right? Undo, then change the Edge cut-off or the model and find the subject again.", "ok");
+      }
+      function refresh() {
+        if (!mounted) return;
+        const ready = ctl().state.phase === "ready", has = picture2.loaded, idle = !picture2.busy;
+        for (const k of ["cutoff", "soft"]) {
+          ui[k].disabled = !ready;
+          ui[k].closest(".field").classList.toggle("off", !ready);
+        }
+        for (const n of ui.need) n.hidden = ready || ctl().state.phase === "checking";
+        ui.find.disabled = !has || !idle || !ready;
+        ui.apply.hidden = ui.discard.hidden = !found;
+        ui.apply.disabled = ui.discard.disabled = !idle;
+        ui.find.hidden = Boolean(found);
+      }
+      const unsub = [];
+      function drawModelBox() {
+        if (boxEl) {
+          boxEl.dispose && boxEl.dispose();
+          boxEl.remove();
+        }
+        boxEl = modelBox("bg:" + modelKey);
+        ui.boxHost.append(boxEl);
+      }
+      return {
+        mount(panel) {
+          mounted = true;
+          picture2.onOpen(discard);
+          const sec1 = el3("section");
+          sec1.append(el3("h2", "", "1. Model"));
+          const radios = el3("div", "radios");
+          for (const m of BG_MODELS) {
+            const lab = el3("label", "radio");
+            const r = document.createElement("input");
+            r.type = "radio";
+            r.name = "bg-model";
+            r.checked = m.key === modelKey;
+            r.addEventListener("change", () => {
+              modelKey = m.key;
+              discard();
+              drawModelBox();
+              refresh();
+            });
+            lab.append(r, el3("span", "", " " + m.label + " · " + m.mb + " MB"));
+            radios.append(lab);
+          }
+          ui.boxHost = el3("div");
+          sec1.append(radios, ui.boxHost);
+          const sec2 = el3("section");
+          sec2.append(el3("h2", "", "2. Cut out"));
+          const num = (label, key, min, max, step, value, onInput) => {
+            const f = el3("label", "field");
+            f.append(el3("span", "", label));
+            const i = document.createElement("input");
+            i.type = "number";
+            i.min = min;
+            i.max = max;
+            i.step = step;
+            i.value = value;
+            i.addEventListener("input", () => {
+              const v = Number(i.value);
+              if (i.value.trim() !== "" && Number.isFinite(v)) {
+                onInput(Math.min(max, Math.max(min, v)));
+                queuePreview();
+              }
+            });
+            f.append(i);
+            wrapNumberInput(i);
+            ui[key] = i;
+            return f;
+          };
+          const need = () => {
+            const p = el3("p", "hint required", "Download required");
+            return p;
+          };
+          ui.need = [need(), need()];
+          const f1 = num("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
+            cutoff = v;
+          });
+          const h1 = el3("p", "hint", "Higher keeps less of the edge (a tighter cut). You can type finer values like 0.05.");
+          const f2 = num("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => {
+            soft = v;
+          });
+          ui.find = el3("button", "btn-solid big", "Find subject");
+          ui.find.type = "button";
+          ui.find.addEventListener("click", find);
+          ui.apply = el3("button", "btn-solid big", "Apply");
+          ui.apply.type = "button";
+          ui.apply.addEventListener("click", apply);
+          ui.discard = el3("button", "big", "Discard");
+          ui.discard.type = "button";
+          ui.discard.addEventListener("click", () => {
+            discard();
+            ctx2.status("Discarded.");
+          });
+          const note = el3("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
+          sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
+          panel.append(sec1, sec2);
+          drawModelBox();
+          for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh));
+          refresh();
+        },
+        unmount() {
+          mounted = false;
+          discard();
+          while (unsub.length) unsub.pop()();
+          if (boxEl) {
+            boxEl.dispose && boxEl.dispose();
+            boxEl = null;
+          }
+        },
+        onPictureChange() {
+          if (found && picture2.depth !== found.depth) discard();
+          else refresh();
+        },
+        primary() {
+          if (found) apply();
+          else find();
+        }
+      };
+    }
+  };
+
+  // shared/js/ai/variations.js
+  var AI_VARIATIONS = [
+    { dx: 0, dy: 0, scale: 1, grow: 0 },
+    { dx: -0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0, dy: -0.12, scale: 1, grow: 1 },
+    { dx: 0, dy: 0.12, scale: 1, grow: 2 },
+    { dx: 0, dy: 0, scale: 1.25, grow: 0 },
+    { dx: 0.08, dy: 0.08, scale: 0.85, grow: 3 }
+  ];
+  function variationFor(n) {
+    return AI_VARIATIONS[((Math.round(n) || 0) % AI_VARIATIONS.length + AI_VARIATIONS.length) % AI_VARIATIONS.length];
+  }
+  function varyCrop(crop, v, bounds, w, h) {
+    let side = Math.min(Math.min(w, h), Math.max(1, Math.round(crop.side * v.scale)));
+    const need = Math.max(bounds.x1 - bounds.x0 + 1, bounds.y1 - bounds.y0 + 1);
+    if (side < need) side = Math.min(Math.min(w, h), crop.side);
+    const cx = crop.x + crop.side / 2 + v.dx * crop.side, cy = crop.y + crop.side / 2 + v.dy * crop.side;
+    let x = Math.round(cx - side / 2), y = Math.round(cy - side / 2);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    x = Math.min(Math.max(x, bounds.x1 + 1 - side), bounds.x0);
+    y = Math.min(Math.max(y, bounds.y1 + 1 - side), bounds.y0);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    if (x > bounds.x0 || y > bounds.y0 || x + side < bounds.x1 + 1 || y + side < bounds.y1 + 1) return crop;
+    return { x, y, side };
+  }
+
+  // shared/js/ai/fillMask.js
+  var FEATHER = 3;
+  var MAX_GROUPS = 12;
+  async function aiFillMask(ctx2, buildMask, variation, onStatus) {
+    const v = variationFor(variation);
+    const canvas = ctx2.canvas, w = canvas.width, h = canvas.height;
+    const mask = buildMask(v.grow);
+    const { labels, boxes } = labelPieces(mask, w, h);
+    if (!boxes.length) return false;
+    const groups = groupPieces(boxes, w, h);
+    if (groups.some((g) => !g.crop)) throw new Error("That area is too big for the AI: mark a smaller part, or do it in a few steps.");
+    if (groups.length > MAX_GROUPS) throw new Error("That is " + groups.length + " separate areas: do at most " + MAX_GROUPS + " at a time.");
+    for (let i = 0; i < groups.length; i++) {
+      if (groups.length > 1) onStatus && onStatus("Removing area " + (i + 1) + " of " + groups.length + "…");
+      const crop = variation ? varyCrop(groups[i].crop, v, groups[i].bounds, w, h) : groups[i].crop;
+      const gm = groups.length === 1 ? mask : groupMask(labels, groups[i].ids);
+      const win = document.createElement("canvas");
+      win.width = win.height = MODEL_SIZE;
+      const wx = win.getContext("2d", { willReadFrequently: true });
+      wx.imageSmoothingQuality = "high";
+      wx.drawImage(canvas, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
+      const answer = await runOnSession(rgba, windowMask(gm, w, crop), onStatus);
+      const ac = document.createElement("canvas");
+      ac.width = ac.height = MODEL_SIZE;
+      ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
+      const sc = document.createElement("canvas");
+      sc.width = sc.height = crop.side;
+      const sx = sc.getContext("2d", { willReadFrequently: true });
+      sx.imageSmoothingQuality = "high";
+      sx.drawImage(ac, 0, 0, crop.side, crop.side);
+      const region = ctx2.getImageData(crop.x, crop.y, crop.side, crop.side);
+      paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, sx.getImageData(0, 0, crop.side, crop.side).data, blendWeights(gm, w, crop, FEATHER));
+      ctx2.putImageData(region, crop.x, crop.y);
+    }
+    return true;
+  }
+
+  // apps/AiToolsLocal/src/tools/removeObject.js
+  var SETTINGS_KEY = "zinenow.aitools.settings";
+  var settings = { brush: 40, grow: 6 };
   try {
-    Object.assign(settings, JSON.parse(localStorage.getItem("zinenow.aitools.settings") || "{}"));
+    Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"));
   } catch (e) {
   }
-  var saveSettings = () => {
+  var save = () => {
     try {
-      localStorage.setItem("zinenow.aitools.settings", JSON.stringify(settings));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {
     }
   };
-  $("brush").value = settings.brush;
-  $("grow").value = settings.grow;
-  $("model-url").value = settings.url;
-  var stage = $("stage");
-  var world = $("world");
-  var imgC = $("img");
-  var origC = $("orig");
-  var maskC = $("mask");
-  var draftC = $("draft");
-  var imgX = imgC.getContext("2d", { willReadFrequently: true });
-  var maskX = maskC.getContext("2d", { willReadFrequently: true });
-  var draftX = draftC.getContext("2d");
-  var fileName = "picture";
-  var view = { s: 1, x: 0, y: 0 };
-  var tool = "brush";
-  var busy = false;
-  var undoStack = [];
-  var redoStack = [];
-  var session = null;
-  var modelBytes = null;
-  var maskSign = null;
-  var cameFromZEditor = false;
-  var handoffMeta;
+  var el4 = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  var removeObjectTool = {
+    id: "remove-object",
+    name: "Remove object",
+    summary: "Mark something, it is filled with what would be behind it.",
+    create(ctx2) {
+      const { picture: picture2 } = ctx2;
+      const maskC = picture2.addOverlay(document.createElement("canvas"));
+      maskC.id = "mask";
+      const draftC = picture2.addOverlay(document.createElement("canvas"));
+      draftC.id = "draft";
+      const maskX = maskC.getContext("2d", { willReadFrequently: true }), draftX = draftC.getContext("2d");
+      const ring = el4("div", "ring");
+      ring.hidden = true;
+      picture2.stage.append(ring);
+      const ctl = modelControl("fill");
+      let mounted = false, tool = "brush", stroke = null;
+      let last = null;
+      let ui = {};
+      const markedPixels = () => {
+        const d = maskX.getImageData(0, 0, maskC.width, maskC.height).data;
+        const m = new Uint8Array(maskC.width * maskC.height);
+        for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] >= 64 ? 1 : 0;
+        return m;
+      };
+      const clearMarks = () => maskX.clearRect(0, 0, maskC.width, maskC.height);
+      function paintLine(a, b) {
+        maskX.save();
+        maskX.globalCompositeOperation = tool === "erase" ? "destination-out" : "source-over";
+        maskX.strokeStyle = maskX.fillStyle = "#e8622a";
+        maskX.lineCap = maskX.lineJoin = "round";
+        maskX.lineWidth = settings.brush;
+        maskX.beginPath();
+        maskX.moveTo(a.x, a.y);
+        maskX.lineTo(b.x + 0.01, b.y);
+        maskX.stroke();
+        maskX.restore();
+      }
+      const handler = {
+        down(pt, e) {
+          if (tool === "pan") stroke = { kind: "pan", sx: e.clientX, sy: e.clientY, v: picture2.view };
+          else if (tool === "box") stroke = { kind: "box", a: pt, b: pt };
+          else {
+            stroke = { kind: "paint", last: pt };
+            paintLine(pt, pt);
+          }
+        },
+        move(pt, e) {
+          if (!stroke) return;
+          if (stroke.kind === "pan") picture2.setView({ ...stroke.v, x: stroke.v.x + e.clientX - stroke.sx, y: stroke.v.y + e.clientY - stroke.sy });
+          else if (stroke.kind === "paint") {
+            paintLine(stroke.last, pt);
+            stroke.last = pt;
+          } else if (stroke.kind === "box") {
+            stroke.b = pt;
+            draftX.clearRect(0, 0, draftC.width, draftC.height);
+            const s = picture2.view.s;
+            draftX.strokeStyle = "#ffffff";
+            draftX.setLineDash([8 / s, 6 / s]);
+            draftX.lineWidth = 2 / s;
+            draftX.strokeRect(stroke.a.x, stroke.a.y, pt.x - stroke.a.x, pt.y - stroke.a.y);
+          }
+        },
+        up() {
+          if (stroke && stroke.kind === "box") {
+            draftX.clearRect(0, 0, draftC.width, draftC.height);
+            maskX.fillStyle = "#e8622a";
+            maskX.fillRect(Math.min(stroke.a.x, stroke.b.x), Math.min(stroke.a.y, stroke.b.y), Math.abs(stroke.b.x - stroke.a.x), Math.abs(stroke.b.y - stroke.a.y));
+          }
+          stroke = null;
+        },
+        cancel() {
+          draftX.clearRect(0, 0, draftC.width, draftC.height);
+          stroke = null;
+        }
+      };
+      function showRing(e) {
+        if (!mounted || !picture2.loaded || tool !== "brush" && tool !== "erase") {
+          ring.hidden = true;
+          return;
+        }
+        const r = picture2.stage.getBoundingClientRect(), d = Math.max(4, settings.brush * picture2.view.s);
+        ring.style.width = ring.style.height = d + "px";
+        ring.style.left = e.clientX - r.left - d / 2 + "px";
+        ring.style.top = e.clientY - r.top - d / 2 + "px";
+        ring.hidden = false;
+      }
+      const hideRing = () => {
+        ring.hidden = true;
+      };
+      const touchHide = (e) => {
+        if (e.pointerType !== "mouse") ring.hidden = true;
+      };
+      async function runFill(marked, variation) {
+        const w = picture2.width, h = picture2.height;
+        const grow = Math.max(0, Math.round(settings.grow));
+        picture2.setBusy(true);
+        const t0 = performance.now();
+        let before = null;
+        try {
+          before = await picture2.snapshot();
+          ctx2.status("Removing it…");
+          await new Promise((r) => setTimeout(r, 30));
+          const ok = await aiFillMask(picture2.ctx, (extra) => dilate(marked, w, h, grow + extra), variation, (t) => ctx2.status(t));
+          if (!ok) {
+            before.close();
+            ctx2.status("Paint over the object first (Brush or Box), then press Remove object.", "bad");
+            return;
+          }
+          picture2.commit(before);
+          before = null;
+          clearMarks();
+          last = { marked, variation, depth: picture2.depth };
+          ctx2.status("Done in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s" + (variation ? " (variation " + variation + ")" : "") + ". Not right? Try another, Undo, or mark a bit differently.", "ok");
+        } catch (e) {
+          if (before) {
+            picture2.ctx.clearRect(0, 0, w, h);
+            picture2.ctx.drawImage(before, 0, 0);
+            before.close();
+          }
+          ctx2.status("Something went wrong: " + (e && e.message ? e.message : e) + " The picture was left as it was.", "bad");
+        } finally {
+          picture2.setBusy(false);
+        }
+      }
+      function removeObject() {
+        if (picture2.busy || !picture2.loaded) return;
+        if (ctl.state.phase !== "ready") {
+          ctx2.status("Download the model first (below).", "bad");
+          return;
+        }
+        const marked = markedPixels();
+        if (!holeBounds(marked, picture2.width, picture2.height)) {
+          ctx2.status("Paint over the object first (Brush or Box), then press Remove object.", "bad");
+          return;
+        }
+        runFill(marked, 0);
+      }
+      async function tryAnother() {
+        if (picture2.busy || !last || picture2.depth !== last.depth || ctl.state.phase !== "ready") return;
+        const { marked, variation } = last;
+        await picture2.undo();
+        runFill(marked, variation + 1);
+      }
+      function refreshButtons() {
+        if (!mounted) return;
+        const ready = ctl.state.phase === "ready", has = picture2.loaded, idle = !picture2.busy;
+        ui.clear.disabled = !has || !idle;
+        ui.fill.disabled = !has || !idle || !ready;
+        ui.another.disabled = !has || !idle || !ready || !last || picture2.depth !== last.depth;
+        ui.need.hidden = ready || ctl.state.phase === "checking";
+      }
+      ctl.subscribe(refreshButtons);
+      return {
+        mount(panel) {
+          mounted = true;
+          for (const c of [maskC, draftC]) c.style.display = "";
+          picture2.setPointerHandler(handler);
+          picture2.stage.addEventListener("pointermove", showRing);
+          picture2.stage.addEventListener("pointerdown", showRing);
+          picture2.stage.addEventListener("pointerleave", hideRing);
+          picture2.stage.addEventListener("pointerup", touchHide);
+          const sec1 = el4("section");
+          sec1.append(el4("h2", "", "1. Mark what to remove"));
+          const seg = el4("div", "seg");
+          seg.setAttribute("role", "group");
+          for (const [key, label] of [["brush", "Brush"], ["erase", "Erase mark"], ["box", "Box"], ["pan", "Move"]]) {
+            const b = el4("button", key === tool ? "active" : "", label);
+            b.type = "button";
+            b.addEventListener("click", () => {
+              tool = key;
+              for (const o of seg.children) o.classList.toggle("active", o === b);
+            });
+            seg.append(b);
+          }
+          const brushField = el4("label", "field");
+          brushField.append(el4("span", "", "Brush size (px)"));
+          const brush = document.createElement("input");
+          brush.type = "number";
+          brush.min = 1;
+          brush.max = 400;
+          brush.step = 5;
+          brush.value = settings.brush;
+          brush.addEventListener("input", () => {
+            const v = Number(brush.value);
+            if (v >= 1) {
+              settings.brush = v;
+              save();
+            }
+          });
+          brushField.append(brush);
+          wrapNumberInput(brush);
+          ui.brush = brush;
+          const hint = el4("p", "hint", "Two fingers always move and zoom the picture.");
+          ui.clear = el4("button", "", "Clear marks");
+          ui.clear.type = "button";
+          ui.clear.addEventListener("click", clearMarks);
+          sec1.append(seg, brushField, hint, ui.clear);
+          const sec2 = el4("section");
+          sec2.append(el4("h2", "", "2. Remove it"));
+          const growField = el4("label", "field");
+          growField.append(el4("span", "", "Grow the marked area by (px)"));
+          const grow = document.createElement("input");
+          grow.type = "number";
+          grow.min = 0;
+          grow.max = 60;
+          grow.step = 1;
+          grow.value = settings.grow;
+          grow.addEventListener("input", () => {
+            const v = Number(grow.value);
+            if (v >= 0) {
+              settings.grow = v;
+              save();
+            }
+          });
+          growField.append(grow);
+          wrapNumberInput(grow);
+          const growHint = el4("p", "hint", "A few pixels more than you painted covers shadows and fringes.");
+          ui.need = el4("p", "hint required", "Download required: get the model below first.");
+          ui.fill = el4("button", "btn-solid big", "Remove object");
+          ui.fill.type = "button";
+          ui.fill.addEventListener("click", removeObject);
+          ui.another = el4("button", "big", "Try another");
+          ui.another.type = "button";
+          ui.another.title = "Undoes the last fill and fills again, showing the model the area from a slightly different view";
+          ui.another.addEventListener("click", tryAnother);
+          sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
+          const sec3 = el4("section");
+          sec3.append(el4("h2", "", "Model"));
+          sec3.append(modelBox("fill", { compact: true }));
+          panel.append(sec1, sec2, sec3);
+          refreshButtons();
+        },
+        unmount() {
+          mounted = false;
+          stroke = null;
+          ring.hidden = true;
+          for (const c of [maskC, draftC]) c.style.display = "none";
+          picture2.setPointerHandler(null);
+          picture2.stage.removeEventListener("pointermove", showRing);
+          picture2.stage.removeEventListener("pointerdown", showRing);
+          picture2.stage.removeEventListener("pointerleave", hideRing);
+          picture2.stage.removeEventListener("pointerup", touchHide);
+        },
+        onPictureChange: refreshButtons,
+        primary: removeObject,
+        onKey(e) {
+          if (e.key !== "[" && e.key !== "]") return false;
+          const v = Math.min(400, Math.max(1, Math.round(settings.brush * (e.key === "]" ? 1.2 : 1 / 1.2) + (e.key === "]" ? 1 : -1))));
+          settings.brush = v;
+          if (ui.brush) ui.brush.value = v;
+          save();
+          return true;
+        }
+      };
+    }
+  };
+
+  // apps/AiToolsLocal/src/main.js
+  var $ = (id) => document.getElementById(id);
+  installNumberFields();
+  wrapNumberInputs();
   function status(text, kind) {
     const s = $("status");
     s.textContent = text;
     s.className = kind || "";
   }
-  var loaded = false;
-  function hasPicture() {
-    return loaded;
-  }
-  function applyView() {
-    world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")";
-  }
-  function fitView() {
-    const r = stage.getBoundingClientRect();
-    const s = Math.min(r.width / imgC.width, r.height / imgC.height, 1) * 0.96;
-    view = { s, x: (r.width - imgC.width * s) / 2, y: (r.height - imgC.height * s) / 2 };
-    applyView();
-  }
-  function updateButtons() {
-    const has = hasPicture();
-    for (const id of ["save", "send", "clear", "fill", "compare"]) $(id).disabled = !has || busy;
-    $("undo").disabled = !undoStack.length || busy;
-    $("redo").disabled = !redoStack.length || busy;
-  }
+  var cameFromZEditor = false;
+  var handoffMeta;
+  var active = null;
+  var picture = createPicture({
+    stage: $("stage"),
+    world: $("world"),
+    imgC: $("img"),
+    origC: $("orig"),
+    emptyEl: $("empty"),
+    onChange() {
+      const has = picture.loaded, busy = picture.busy;
+      for (const id of ["save", "send", "compare"]) $(id).disabled = !has || busy;
+      $("undo").disabled = !picture.canUndo || busy;
+      $("redo").disabled = !picture.canRedo || busy;
+      if (active && active.tool && active.tool.onPictureChange) active.tool.onPictureChange();
+    }
+  });
   async function openFile(file) {
-    if (!file || !/^image\//.test(file.type || "image/")) {
-      status("That isn't a picture file.", "bad");
+    const r = await picture.open(file);
+    if (!r.ok) {
+      status(r.message, "bad");
       return;
     }
-    try {
-      let bmp = await createImageBitmap(file);
-      let note = "";
-      const k = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-      const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
-      if (k < 1) note = " It was shrunk to " + w + " × " + h + " so it fits in memory.";
-      for (const c of [imgC, origC, maskC, draftC]) {
-        c.width = w;
-        c.height = h;
-      }
-      imgX.clearRect(0, 0, w, h);
-      imgX.drawImage(bmp, 0, 0, w, h);
-      origC.getContext("2d").drawImage(bmp, 0, 0, w, h);
-      bmp.close && bmp.close();
-      fileName = (file.name || "picture").replace(/\.[^.]+$/, "");
-      undoStack = [];
-      redoStack = [];
-      loaded = true;
-      $("empty").hidden = true;
-      world.hidden = false;
-      fitView();
-      updateButtons();
-      status("Picture opened (" + w + " × " + h + ")." + note + " Paint over the object you want gone, then press Remove object.");
-    } catch (e) {
-      status("Couldn't open that picture: " + e.message, "bad");
+    status("Picture opened (" + r.width + " × " + r.height + ")." + (r.shrunk ? " It was shrunk so it fits in memory." : "") + " Pick a tool on the left.");
+  }
+  var ctx = { picture, status, openModels: () => select("models") };
+  registerTool(removeObjectTool);
+  registerTool(removeBackgroundTool);
+  var instances = /* @__PURE__ */ new Map();
+  var modelsPage = createModelsPage($("models"));
+  var MODELS_TOOL = { id: "models", name: "Models", summary: "Downloads, licences and storage." };
+  function buildList() {
+    const list = $("tools-list");
+    for (const t of [...allTools(), MODELS_TOOL]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tool-btn";
+      b.dataset.id = t.id;
+      const n = document.createElement("span");
+      n.className = "tool-name";
+      n.textContent = t.name;
+      const s = document.createElement("span");
+      s.className = "tool-sum";
+      s.textContent = t.summary;
+      b.append(n, s);
+      b.addEventListener("click", () => select(t.id));
+      list.append(b);
     }
   }
-  var pointers = /* @__PURE__ */ new Map();
-  var stroke = null;
-  var pinch = null;
-  var toImage = (e) => {
-    const r = stage.getBoundingClientRect();
-    return { x: (e.clientX - r.left - view.x) / view.s, y: (e.clientY - r.top - view.y) / view.s };
-  };
-  function paintLine(a, b) {
-    maskX.save();
-    maskX.globalCompositeOperation = tool === "erase" ? "destination-out" : "source-over";
-    maskX.strokeStyle = maskX.fillStyle = "#e8622a";
-    maskX.lineCap = maskX.lineJoin = "round";
-    maskX.lineWidth = settings.brush;
-    maskX.beginPath();
-    maskX.moveTo(a.x, a.y);
-    maskX.lineTo(b.x + 0.01, b.y);
-    maskX.stroke();
-    maskX.restore();
-  }
-  stage.addEventListener("pointerdown", (e) => {
-    if (!hasPicture() || busy) return;
-    stage.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pointers.size === 2) {
-      stroke = null;
-      const [p, q] = [...pointers.values()];
-      pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), cx: (p.x + q.x) / 2, cy: (p.y + q.y) / 2 };
+  function select(id) {
+    if (active && active.id === id) return;
+    if (active) {
+      if (active.tool) active.tool.unmount();
+      else modelsPage.hide();
+    }
+    const panel = $("tool-panel");
+    panel.textContent = "";
+    for (const b of document.querySelectorAll(".tool-btn")) b.classList.toggle("active", b.dataset.id === id);
+    if (id === "models") {
+      active = { id };
+      modelsPage.show();
+      panel.append(Object.assign(document.createElement("p"), { className: "hint", textContent: "Download or delete models on the page to the left. Your picture stays open: pick a tool again to carry on." }));
       return;
     }
-    if (pointers.size > 2) return;
-    const pt = toImage(e);
-    if (tool === "pan") stroke = { kind: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
-    else if (tool === "box") stroke = { kind: "box", a: pt, b: pt };
-    else {
-      stroke = { kind: "paint", last: pt };
-      paintLine(pt, pt);
-    }
-  });
-  stage.addEventListener("pointermove", (e) => {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinch && pointers.size === 2) {
-      const [p, q] = [...pointers.values()];
-      const d = Math.hypot(p.x - q.x, p.y - q.y), cx = (p.x + q.x) / 2, cy = (p.y + q.y) / 2;
-      const r = stage.getBoundingClientRect();
-      const s2 = Math.min(40, Math.max(0.05, view.s * d / pinch.d));
-      const ix = (pinch.cx - r.left - view.x) / view.s, iy = (pinch.cy - r.top - view.y) / view.s;
-      view = { s: s2, x: cx - r.left - ix * s2, y: cy - r.top - iy * s2 };
-      pinch = { d, cx, cy };
-      applyView();
-      return;
-    }
-    if (!stroke) return;
-    const pt = toImage(e);
-    if (stroke.kind === "pan") {
-      view.x = stroke.vx + e.clientX - stroke.sx;
-      view.y = stroke.vy + e.clientY - stroke.sy;
-      applyView();
-    } else if (stroke.kind === "paint") {
-      paintLine(stroke.last, pt);
-      stroke.last = pt;
-    } else if (stroke.kind === "box") {
-      stroke.b = pt;
-      draftX.clearRect(0, 0, draftC.width, draftC.height);
-      draftX.strokeStyle = "#ffffff";
-      draftX.setLineDash([8 / view.s, 6 / view.s]);
-      draftX.lineWidth = 2 / view.s;
-      draftX.strokeRect(stroke.a.x, stroke.a.y, pt.x - stroke.a.x, pt.y - stroke.a.y);
-    }
-  });
-  function endPointer(e) {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
-    if (pointers.size < 2) pinch = null;
-    if (stroke && stroke.kind === "box" && pointers.size === 0) {
-      draftX.clearRect(0, 0, draftC.width, draftC.height);
-      maskX.fillStyle = "#e8622a";
-      maskX.fillRect(Math.min(stroke.a.x, stroke.b.x), Math.min(stroke.a.y, stroke.b.y), Math.abs(stroke.b.x - stroke.a.x), Math.abs(stroke.b.y - stroke.a.y));
-    }
-    if (pointers.size === 0) stroke = null;
+    const def = allTools().find((t) => t.id === id);
+    if (!instances.has(id)) instances.set(id, def.create(ctx));
+    const tool = instances.get(id);
+    active = { id, tool };
+    tool.mount(panel);
+    if (tool.onPictureChange) tool.onPictureChange();
   }
-  var ring = $("ring");
-  function showRing(e) {
-    if (!hasPicture() || tool !== "brush" && tool !== "erase" || pointers.size > 1) {
-      ring.hidden = true;
-      return;
-    }
-    const r = stage.getBoundingClientRect(), d = Math.max(4, settings.brush * view.s);
-    ring.style.width = ring.style.height = d + "px";
-    ring.style.left = e.clientX - r.left - d / 2 + "px";
-    ring.style.top = e.clientY - r.top - d / 2 + "px";
-    ring.hidden = false;
-  }
-  stage.addEventListener("pointermove", showRing);
-  stage.addEventListener("pointerdown", showRing);
-  stage.addEventListener("pointerleave", () => {
-    ring.hidden = true;
-  });
-  stage.addEventListener("pointerup", (e) => {
-    if (e.pointerType !== "mouse") ring.hidden = true;
-  });
-  stage.addEventListener("pointerup", endPointer);
-  stage.addEventListener("pointercancel", endPointer);
-  stage.addEventListener("wheel", (e) => {
-    if (!hasPicture()) return;
-    e.preventDefault();
-    const r = stage.getBoundingClientRect();
-    const s2 = Math.min(40, Math.max(0.05, view.s * Math.exp(-e.deltaY * 15e-4)));
-    const ix = (e.clientX - r.left - view.x) / view.s, iy = (e.clientY - r.top - view.y) / view.s;
-    view = { s: s2, x: e.clientX - r.left - ix * s2, y: e.clientY - r.top - iy * s2 };
-    applyView();
-  }, { passive: false });
-  for (const b of document.querySelectorAll("[data-tool]")) {
-    b.addEventListener("click", () => {
-      tool = b.dataset.tool;
-      for (const o of document.querySelectorAll("[data-tool]")) o.classList.toggle("active", o === b);
-    });
-  }
-  $("brush").addEventListener("input", () => {
-    const v = Number($("brush").value);
-    if (v >= 1) {
-      settings.brush = v;
-      saveSettings();
-    }
-  });
-  $("grow").addEventListener("input", () => {
-    const v = Number($("grow").value);
-    if (v >= 0) {
-      settings.grow = v;
-      saveSettings();
-    }
-  });
-  $("clear").addEventListener("click", () => maskX.clearRect(0, 0, maskC.width, maskC.height));
-  function markedPixels() {
-    const d = maskX.getImageData(0, 0, maskC.width, maskC.height).data;
-    const m = new Uint8Array(maskC.width * maskC.height);
-    for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] >= 64 ? 1 : 0;
-    return m;
-  }
-  async function checkMaskSign(url) {
-    const key = "sign:" + url;
-    const saved = (settings.signs || {})[key];
-    if (saved === 1 || saved === -1) {
-      maskSign = saved;
-      return;
-    }
-    status("Checking the model (one time, a few seconds)…");
-    const r = await findSign(session.session);
-    maskSign = r.sign;
-    settings.signs = { ...settings.signs || {}, [key]: r.sign };
-    saveSettings();
-  }
-  async function ensureSession() {
-    if (session) return session;
-    const url = $("model-url").value.trim() || DEFAULT_MODEL_URL;
-    settings.url = url;
-    saveSettings();
-    if (!modelBytes) {
-      status("Getting the model…");
-      $("prog").hidden = false;
-      const r = await getModelBytes(url, (got, total) => {
-        $("prog").max = total || got * 2;
-        $("prog").value = got;
-        status("Downloading the model (first time only)… " + (got / 1048576).toFixed(1) + (total ? " of " + (total / 1048576).toFixed(1) : "") + " MB");
-      });
-      $("prog").hidden = true;
-      modelBytes = r.bytes;
-    }
-    status("Starting the model…");
-    session = await createSession(modelBytes, true);
-    await checkMaskSign(url);
-    refreshModelInfo();
-    return session;
-  }
-  var MAX_OBJECTS = 12;
-  async function fillOne(mask, crop, w) {
-    const sess = await ensureSession();
-    const win = document.createElement("canvas");
-    win.width = win.height = MODEL_SIZE;
-    const wx = win.getContext("2d", { willReadFrequently: true });
-    wx.imageSmoothingQuality = "high";
-    wx.drawImage(imgC, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
-    const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
-    const hole = windowMask(mask, w, crop);
-    let answer;
-    try {
-      answer = await runModel(sess.session, rgba, hole, maskSign || 1);
-    } catch (e) {
-      if (sess.backend !== "gpu") throw e;
-      status("The graphics chip failed; trying the processor…");
-      session = await createSession(modelBytes, false);
-      answer = await runModel(session.session, rgba, hole, maskSign || 1);
-      refreshModelInfo();
-    }
-    const ac = document.createElement("canvas");
-    ac.width = ac.height = MODEL_SIZE;
-    ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
-    const sc = document.createElement("canvas");
-    sc.width = sc.height = crop.side;
-    const sx = sc.getContext("2d", { willReadFrequently: true });
-    sx.imageSmoothingQuality = "high";
-    sx.drawImage(ac, 0, 0, crop.side, crop.side);
-    const scaled = sx.getImageData(0, 0, crop.side, crop.side).data;
-    const region = imgX.getImageData(crop.x, crop.y, crop.side, crop.side);
-    paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, scaled, blendWeights(mask, w, crop, FEATHER));
-    imgX.putImageData(region, crop.x, crop.y);
-  }
-  async function removeObject() {
-    if (busy || !hasPicture()) return;
-    const w = imgC.width, h = imgC.height;
-    const marked = markedPixels();
-    if (!holeBounds(marked, w, h)) {
-      status("Paint over the object first (Brush or Box), then press Remove object.", "bad");
-      return;
-    }
-    const mask = dilate(marked, w, h, Math.max(0, Math.round(settings.grow)));
-    const { labels, boxes } = labelPieces(mask, w, h);
-    const groups = groupPieces(boxes, w, h);
-    if (groups.some((g) => !g.crop)) {
-      status("That area is too big for the AI: mark a smaller part, or do it in two or three steps.", "bad");
-      return;
-    }
-    if (groups.length > MAX_OBJECTS) {
-      status("That is " + groups.length + " separate marks: do at most " + MAX_OBJECTS + " at a time.", "bad");
-      return;
-    }
-    busy = true;
-    updateButtons();
-    const t0 = performance.now();
-    let before = null;
-    try {
-      before = await createImageBitmap(imgC);
-      for (let i = 0; i < groups.length; i++) {
-        status((groups.length > 1 ? "Removing object " + (i + 1) + " of " + groups.length + "… " : "Removing it… ") + (session ? session.backend === "gpu" ? "(graphics chip)" : "(processor, slower)" : ""));
-        await new Promise((r) => setTimeout(r, 30));
-        await fillOne(groups.length === 1 ? mask : groupMask(labels, groups[i].ids), groups[i].crop, w);
-      }
-      undoStack.push(before);
-      if (undoStack.length > MAX_UNDO) undoStack.shift().close();
-      redoStack = [];
-      maskX.clearRect(0, 0, maskC.width, maskC.height);
-      status("Done in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s" + (groups.length > 1 ? " (" + groups.length + " objects)" : "") + ". Not right? Undo, mark a bit differently, or press Remove object again.", "ok");
-    } catch (e) {
-      $("prog").hidden = true;
-      if (before) {
-        imgX.clearRect(0, 0, w, h);
-        imgX.drawImage(before, 0, 0);
-        before.close();
-      }
-      status("Something went wrong: " + (e && e.message ? e.message : e) + " The picture was left as it was.", "bad");
-    } finally {
-      busy = false;
-      updateButtons();
-    }
-  }
-  $("fill").addEventListener("click", removeObject);
-  async function restore(from, to) {
-    if (!from.length || busy) return;
-    to.push(await createImageBitmap(imgC));
-    const bmp = from.pop();
-    imgX.clearRect(0, 0, imgC.width, imgC.height);
-    imgX.drawImage(bmp, 0, 0);
-    bmp.close();
-    updateButtons();
-  }
-  $("undo").addEventListener("click", () => restore(undoStack, redoStack));
-  $("redo").addEventListener("click", () => restore(redoStack, undoStack));
-  var showOriginal = (on) => {
-    origC.hidden = !on;
-    imgC.style.visibility = on ? "hidden" : "visible";
-  };
+  buildList();
+  $("undo").addEventListener("click", () => picture.undo());
+  $("redo").addEventListener("click", () => picture.redo());
   var compare = $("compare");
-  for (const ev of ["pointerdown"]) compare.addEventListener(ev, () => showOriginal(true));
-  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) compare.addEventListener(ev, () => showOriginal(false));
-  $("save").addEventListener("click", () => {
-    imgC.toBlob((blob) => {
-      if (blob) downloadBlob(blob, fileName + "-filled.png");
-      else status("Couldn't save the picture.", "bad");
-    }, "image/png");
+  compare.addEventListener("pointerdown", () => picture.showOriginal(true));
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) compare.addEventListener(ev, () => picture.showOriginal(false));
+  $("save").addEventListener("click", async () => {
+    try {
+      downloadBlob(await picture.toBlob(), picture.name + "-edited.png");
+    } catch (e) {
+      status("Couldn't save the picture.", "bad");
+    }
   });
-  var toBlob = () => new Promise((resolve, reject) => imgC.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't make the picture.")), "image/png"));
   $("send").addEventListener("click", async () => {
-    if (!hasPicture()) return;
+    if (!picture.loaded) return;
     try {
       if (cameFromZEditor && hasOpener()) {
-        await sendImageToOpener(toBlob, fileName + "-filled.png", handoffMeta);
+        await sendImageToOpener(picture.toBlob, picture.name + "-edited.png", handoffMeta);
         status("Sent back to ZEditor: a new layer in the document it came from.", "ok");
         return;
       }
       status("Opening ZEditor…");
-      await sendImageToZEditor(toBlob, fileName + "-filled.png");
+      await sendImageToZEditor(picture.toBlob, picture.name + "-edited.png");
       status("Sent to ZEditor (it opened in a new tab).", "ok");
     } catch (e) {
       status("Couldn't send it: " + (e && e.message ? e.message : e), "bad");
@@ -964,8 +2059,7 @@
     e.target.value = "";
     if (f) openFile(f);
   });
-  stage.addEventListener("dragover", (e) => e.preventDefault());
-  stage.addEventListener("drop", (e) => {
+  $("stage").addEventListener("drop", (e) => {
     e.preventDefault();
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
     if (f) openFile(f);
@@ -975,33 +2069,16 @@
     if (item) openFile(item.getAsFile());
   });
   document.addEventListener("keydown", (e) => {
-    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       (e.shiftKey ? $("redo") : $("undo")).click();
-    } else if (e.key === "Enter" && hasPicture()) removeObject();
-    else if (e.key === "[" || e.key === "]") {
-      const v = Math.min(400, Math.max(1, Math.round(settings.brush * (e.key === "]" ? 1.2 : 1 / 1.2) + (e.key === "]" ? 1 : -1))));
-      settings.brush = v;
-      $("brush").value = v;
-      saveSettings();
+      return;
     }
+    const tool = active && active.tool;
+    if (!tool) return;
+    if (tool.onKey && tool.onKey(e)) return;
+    if (e.key === "Enter" && picture.loaded && tool.primary) tool.primary();
   });
-  window.addEventListener("resize", () => {
-    if (hasPicture()) fitView();
-  });
-  async function refreshModelInfo() {
-    const saved = await isModelSaved($("model-url").value.trim() || DEFAULT_MODEL_URL);
-    const gpu = await gpuUsable();
-    $("model-info").textContent = "Model: " + (saved ? "saved on this device (works offline)." : "not downloaded yet (about 28 MB, downloaded the first time you press Remove object).") + "  Chip: " + (session ? session.backend === "gpu" ? "graphics chip (fast)." : "processor (slower)." : gpu ? "graphics chip available." : "no graphics chip mode here: the processor will be used.");
-  }
-  $("forget").addEventListener("click", async () => {
-    await forgetModel();
-    session = null;
-    modelBytes = null;
-    refreshModelInfo();
-    status("The saved model was removed from this device.");
-  });
-  refreshModelInfo();
-  updateButtons();
+  select("remove-object");
 })();

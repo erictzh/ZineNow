@@ -5,7 +5,7 @@
 // first time they are used (the shared worker keeps version-pinned CDN files cache-first). The model file itself is kept by the
 // page in the Cache API (src/modelStore.js), not here.
 // Bump CACHE_VERSION when FILES or CDN change.
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 const FILES = [
   "index.html",
