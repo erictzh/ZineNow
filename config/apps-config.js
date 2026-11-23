@@ -27,6 +27,6 @@ window.ZINENOW_APPS = [
   },
   {
     folder: "AiToolsLocal",
-    desc: "Remove objects with AI, on your device"
+    desc: "Under development, still in experimental phase."
   }
 ];
