@@ -76,8 +76,8 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
           {!noPaper && <div className="ze-format-field">
             <span className="ze-format-label">Orientation</span>
             <div className="ze-format-row">
-              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!landscape ? " active" : "")} onClick={() => setOrientation("portrait")}>Portrait</button>
-              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (landscape ? " active" : "")} onClick={() => setOrientation("landscape")}>Landscape</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (!landscape ? " active" : "")} onClick={() => setOrientation("portrait")}>Portrait</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (landscape ? " active" : "")} onClick={() => setOrientation("landscape")}>Landscape</button>
             </div>
           </div>}
           <label className="ze-format-field">

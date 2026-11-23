@@ -83,8 +83,8 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <span className="ze-format-hint">In page pixels. The [ and ] keys change it.</span>
             </div>
             <div className="ze-format-row" role="group" aria-label="Brush mode">
-              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: false })}>Paint</button>
-              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: true })}>Erase mark</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (!settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: false })}>Paint</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: true })}>Erase mark</button>
             </div>
             <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!marquee || !marquee.region} onClick={() => marquee.setRegion(null)}>Clear marks</button>
           </React.Fragment>
@@ -305,9 +305,9 @@ export function EraserToolPanel({ toolDefaults, magicErase }) {
       )}
       <PanelSection id="eraser.mode" title="Mode" defaultOpen>
         <div className="ze-format-row">
-          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "stroke" ? " active" : "")} onClick={() => setEraserMode("stroke")}>Strokes</button>
-          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "soft" ? " active" : "")} onClick={() => setEraserMode("soft")}>Soft (images)</button>
-          <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (eraserMode === "magic" ? " active" : "")} onClick={() => setEraserMode("magic")}>Magic</button>
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (eraserMode === "stroke" ? " active" : "")} onClick={() => setEraserMode("stroke")}>Strokes</button>
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (eraserMode === "soft" ? " active" : "")} onClick={() => setEraserMode("soft")}>Soft (images)</button>
+          <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (eraserMode === "magic" ? " active" : "")} onClick={() => setEraserMode("magic")}>Magic</button>
         </div>
         {eraserMode === "stroke" && <span className="ze-format-hint">Removes any pen or highlighter stroke you drag across.</span>}
       </PanelSection>
@@ -341,8 +341,8 @@ export function EraserToolPanel({ toolDefaults, magicErase }) {
             <div className="ze-format-field">
               <span className="ze-format-label">Erase</span>
               <div className="ze-format-row">
-                <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: true })}>Connected only</button>
-                <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: false })}>Whole image</button>
+                <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: true })}>Connected only</button>
+                <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (!magicEraser.contiguous ? " active" : "")} onClick={() => onChangeMagic({ contiguous: false })}>Whole image</button>
               </div>
               <span className="ze-format-hint">
                 {magicEraser.contiguous
@@ -355,8 +355,8 @@ export function EraserToolPanel({ toolDefaults, magicErase }) {
             <div className="ze-format-field">
               <span className="ze-format-label">Connect through corners</span>
               <div className="ze-format-row">
-                <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!magicEraser.diagonal ? " active" : "")} onClick={() => onChangeMagic({ diagonal: false })}>Edges only</button>
-                <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (magicEraser.diagonal ? " active" : "")} onClick={() => onChangeMagic({ diagonal: true })}>Corners too</button>
+                <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (!magicEraser.diagonal ? " active" : "")} onClick={() => onChangeMagic({ diagonal: false })}>Edges only</button>
+                <button type="button" className={"ze-format-toggle ze-format-toggle-wide is-choice" + (magicEraser.diagonal ? " active" : "")} onClick={() => onChangeMagic({ diagonal: true })}>Corners too</button>
               </div>
               <span className="ze-format-hint">"Corners too" spreads through 1px diagonal gaps, which can leak past thin outlines.</span>
             </div>

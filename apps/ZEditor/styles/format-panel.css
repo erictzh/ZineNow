@@ -76,6 +76,8 @@
     border-color: var(--ui-accent);
 }
 .ze-format-toggle-wide { width: auto; padding: 0 12px; }
+/* Choose-one buttons (alignment, Paint / Erase mark, Portrait / Landscape...): the chosen one is a hollow box with an accent border, not a filled one. On / off toggles (Bold...) and action buttons stay filled. */
+.ze-format-toggle.is-choice.active { background: transparent; border-color: var(--ui-accent); box-shadow: inset 0 0 0 1px var(--ui-accent); color: #fff; }
 
 .ze-format-swatches { row-gap: 8px; }
 .ze-format-swatch {
