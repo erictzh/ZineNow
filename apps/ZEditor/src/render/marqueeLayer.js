@@ -284,7 +284,7 @@ async function coverForRegion(marquee, color, scale) {
 async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, area, opts, fillInfo) {
   const { style } = opts;
   // the AI works on its own window of the whole picture (render/aiFill.js), not on the region below
-  if (style === "ai") return aiFillCanvas(ctx, area, opts.grow || 0, null);
+  if (style === "ai") return aiFillCanvas(ctx, area, opts.grow || 0, null, opts.seed || 0);
   const grow = opts.grow || 0;
   const around = Math.max(FILL_CONTEXT_PX, style === "pattern" ? opts.reach + 8 : 0) + grow;
   const b = areaBounds(area);
