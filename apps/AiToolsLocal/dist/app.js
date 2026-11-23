@@ -292,49 +292,56 @@
     }
     return out;
   }
-  function installDebug({ button, getState, getCanvas }) {
-    const win = document.createElement("div");
-    win.className = "debug-win";
-    win.hidden = true;
+  function installDebug({ host, getState, getCanvas }) {
+    host.classList.add("logwin");
     const bar = document.createElement("div");
-    bar.className = "debug-bar";
+    bar.className = "log-bar";
     const title = document.createElement("b");
-    title.textContent = "Debug (copy this and send it)";
-    const mk = (label, fn) => {
+    title.textContent = "Log";
+    const mk = (label, fn, cls) => {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = label;
+      if (cls) b.className = cls;
       b.addEventListener("click", fn);
       return b;
     };
     const ta = document.createElement("textarea");
     ta.readOnly = true;
     ta.spellcheck = false;
-    const note = document.createElement("span");
-    note.className = "hint";
+    ta.setAttribute("aria-label", "Log");
+    const fold = mk("▾", () => setFolded(!host.classList.contains("folded")), "log-fold");
+    fold.title = "Fold or unfold the log (Ctrl+Shift+D)";
     const copy = mk("Copy", async () => {
+      let msg;
       try {
         await navigator.clipboard.writeText(ta.value);
-        note.textContent = "Copied.";
+        msg = "Copied ✓";
       } catch (e) {
         ta.focus();
         ta.select();
-        note.textContent = document.execCommand && document.execCommand("copy") ? "Copied." : "Select the text and copy it by hand.";
+        msg = document.execCommand && document.execCommand("copy") ? "Copied ✓" : "Select it";
       }
-    });
-    bar.append(title, copy, mk("Snapshot", () => snapshot()), mk("Clear", () => {
+      copy.textContent = msg;
+      setTimeout(() => {
+        copy.textContent = "Copy";
+      }, 2500);
+    }, "btn-solid log-copy");
+    const right = document.createElement("span");
+    right.className = "log-actions";
+    right.append(mk("Snapshot", () => snapshot()), mk("Clear", () => {
       debug.clear();
       header();
-    }), mk("Close", () => toggle(false)), note);
-    win.append(bar, ta);
-    document.body.append(win);
+    }), copy);
+    bar.append(fold, title, right);
+    host.append(bar, ta);
     refresh = () => {
       ta.value = debug.body;
       ta.scrollTop = ta.scrollHeight;
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "2d7c846" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "183094c" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -352,31 +359,24 @@
         }
       } catch (e) {
       }
-      debug.head("== Ai Tools (Local) debug ==", info);
+      debug.head("== Ai Tools (Local) log ==", info);
     }
     async function snapshot() {
       debug.section("Snapshot", { ...getState ? getState() : {}, picture: getCanvas && getCanvas() && getCanvas().width ? alphaStats(getCanvas()) : "no picture" });
     }
-    let first = true;
-    async function toggle(open) {
-      win.hidden = !open;
-      document.body.classList.toggle("debug-open", open);
-      if (open && first) {
-        first = false;
-        await header();
-        await snapshot();
-      } else if (open) await snapshot();
-      refresh();
+    function setFolded(f) {
+      host.classList.toggle("folded", f);
+      fold.textContent = f ? "▸" : "▾";
     }
-    button.addEventListener("click", () => toggle(win.hidden));
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        toggle(win.hidden);
+        setFolded(!host.classList.contains("folded"));
       }
     });
     window.addEventListener("error", (e) => debug.log("ERROR: " + e.message + (e.filename ? " (" + e.filename.split("/").pop() + ":" + e.lineno + ")" : "")));
     window.addEventListener("unhandledrejection", (e) => debug.log("ERROR (promise): " + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+    header().then(refresh);
   }
 
   // shared/js/ai/modelStore.js
@@ -3967,7 +3967,7 @@
     if (e.key === "Enter" && picture.loaded && tool.primary) tool.primary();
   });
   installDebug({
-    button: $("debug"),
+    host: $("logwin"),
     getCanvas: () => picture.canvas,
     getState: () => ({
       pictureLoaded: picture.loaded,

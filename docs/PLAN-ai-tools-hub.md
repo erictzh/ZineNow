@@ -87,6 +87,8 @@ Suggested order: 3a, 3b, 3c, 3d. Each ships separately and the user can stop at 
 2. Review points: **Phases 1 and 2 together**, then review (decided).
 3. Go for Phase 1+2: **not given yet** (the user wants this document first).
 
+> **Change of method (2026-11-23, the user's decision): no more test pages.** Tools are built directly in Ai Tools (Local) and tested there; the right-hand **Log** window (Copy button at its top right) replaces the benchmark pages as the way to report speed and problems. The benchmark pages for 3a to 3d that exist stay in `labs/`.
+
 ## Detailed work breakdown
 
 ### Where things are today (so we both remember)

@@ -139,7 +139,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 installDebug({
-  button: $("debug"),
+  host: $("logwin"),
   getCanvas: () => picture.canvas,
   getState: () => ({
     pictureLoaded: picture.loaded, pictureSize: picture.width + "x" + picture.height, undoSteps: picture.depth,
