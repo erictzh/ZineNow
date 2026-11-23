@@ -34,7 +34,7 @@ export function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle,
         ))}
         {textStyles.map((style) => (
           <span key={style.name} className="ze-style-chip">
-            <button type="button" className={"ze-format-toggle" + (style.name === linkedName ? " active" : "")} title={`Give this text the "${style.name}" look and link it to the style${style.basedOn ? ` (based on "${style.basedOn}")` : ""}`} onClick={() => apply(style)}>{style.name}</button>
+            <button type="button" className={"ze-format-toggle is-choice" + (style.name === linkedName ? " active" : "")} title={`Give this text the "${style.name}" look and link it to the style${style.basedOn ? ` (based on "${style.basedOn}")` : ""}`} onClick={() => apply(style)}>{style.name}</button>
             <button type="button" className="ze-style-chip-delete" title={`Delete "${style.name}"`} aria-label={`Delete style ${style.name}`} onClick={() => onDeleteStyle(style.name)}>×</button>
           </span>
         ))}
