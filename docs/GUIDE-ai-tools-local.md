@@ -25,9 +25,10 @@ The **Models** page lists every model: its name, what it is for, licence, size, 
 ## Remove background
 
 1. Pick the model: **U²-Netp (General)**, about 4.4 MB, Apache-2.0: any single subject (an object, an animal, a person), edges a little rough. **MODNet (Portrait)**, about 25 MB, Apache-2.0: photos of people (head and shoulders), soft hair edges, not for objects. (It finds a person's outline; it does not recognise or identify faces.)
-2. **Find subject.** The picture shows the subject with everything else see-through (checkerboard).
-3. Adjust **Edge cut-off (%)**, 0 to 100 (the - and + buttons move by 0.125; type finer values like 0.05) and **Soft edge (%)**. The useful cut-offs are very small. The picture updates live.
-4. **Apply** makes it the picture (Undo brings it back), or **Discard**.
+2. Optional **Crop first…**: a box appears on the picture. Drag the box, its edges or its corners. Only what is inside is used (this also helps the model on a busy picture). When you Apply, **the picture becomes the cropped area**; Undo brings the whole picture back. (**Hold to compare** is unavailable while the picture is cropped, because it no longer lines up with the original.)
+3. **Find subject.** The picture shows the subject with everything else see-through (checkerboard).
+4. Adjust **Edge cut-off (%)**, 0 to 100 (the - and + buttons move by 0.125; type finer values like 0.05) and **Soft edge (%)**. The useful cut-offs are very small, and 0 keeps everything. The picture updates live.
+5. **Apply** makes it the picture (Undo brings it back), or **Discard**.
 
 ## Send to ZEditor
 
