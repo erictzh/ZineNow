@@ -10,7 +10,9 @@ html, body { height: 100%; margin: 0; background: var(--ui-bg); color: var(--ui-
 .tools-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ui-fg-muted); margin: 2px 4px 8px; }
 .tools-list { display: flex; flex-direction: column; gap: 6px; }
 .tool-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 10px; min-height: 52px; }
-.tool-btn.active { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
+/* the selected tool: hollow, an orange outline with the sidebar showing through, white text (not a filled orange box) */
+.tool-btn.active { background: transparent; border-color: var(--ui-accent); box-shadow: inset 0 0 0 1px var(--ui-accent); color: #fff; } /* a 2 px look without changing the button's size */
+.tool-btn.active .tool-sum { opacity: 1; }
 .tool-name { font-weight: 600; }
 .tool-sum { font-size: 12px; opacity: .8; }
 
