@@ -205,6 +205,11 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
                 <span className="ze-format-hint">{f.hint}</span>
               </div>
             ))}
+            <label className="ze-format-check">
+              <input type="checkbox" checked={settings.areaVisible !== false} onChange={(e) => change({ areaVisible: e.target.checked })} />
+              <span>{brush ? "Brush area is visible" : "Selected area is visible"}</span>
+              <span className="ze-format-hint">Untick to hide the marked area and see the result. It stays marked, so Try another still works. Tick again to edit it.</span>
+            </label>
             <div className="ze-format-row">
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
               <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || (settings.fillStyle === "ai" && ai.phase === "ready"))} onClick={() => marquee.tryAnotherFill()}>Try another</button>

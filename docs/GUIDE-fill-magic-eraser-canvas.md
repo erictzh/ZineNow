@@ -50,6 +50,7 @@ You have a picture with something you don't want in it: a stray person, a mark, 
    - **Smooth**: blends the colours around the edge. Best for plain paper, flat colours and soft backgrounds.
    - **Detailed**: carries thin lines through the gap. Only good for small marks.
 6. **Press "Remove & fill".** A big area takes a moment ("Filling…").
+6b. **Want to see the result without the box over it?** Untick **Selected area is visible** (it says **Brush area is visible** for the Brush shape) above the Remove & fill button. The area stays marked, so Try another still works; tick it again to move or edit the area. While it is hidden, dragging on the page does not start a new area.
 7. **Not right? Press "Try another".** It undoes the last fill and fills again with different choices. (With the AI style the model gives the same answer for the same input, so each press shows it a slightly different view of the area: the frame moves a little and the area grows by 0-3 px. The differences are small, and press N always gives the same variation.) Press it a few times and keep the best.
 8. **Still not right? Change a number under Fine-tune** (use the + and − buttons), then press Remove & fill again. Press **Ctrl+Z** first to replace the last fill rather than fill over it:
 

@@ -200,6 +200,7 @@ export function App() {
                 onMagicClick={magic.start}
                 marquee={marquee.region}
                 marqueeShape={t.marquee.shape}
+                marqueeHidden={t.marquee.areaVisible === false}
                 marqueeBrush={{ size: t.marquee.brushSize, erase: t.marquee.brushErase }}
                 onMarqueeChange={marquee.setRegion}
                 snapGuides={view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null}
