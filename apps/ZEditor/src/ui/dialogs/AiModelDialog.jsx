@@ -1,5 +1,5 @@
-// Asks before the AI model is downloaded (and before it is deleted). Short on purpose: what is downloaded and from where, that it
-// stays on the device, and the cost.
+// Asks before the AI model is downloaded (and before it is deleted). Short on purpose: what is downloaded and from where, that the model
+// does not connect to the internet and nothing leaves the device, and the warning about lag on lower-end devices (wording by the user).
 
 export function AiModelDialog({ mode, plan, onConfirm, onCancel }) {
   if (!mode || !plan) return null;
@@ -11,9 +11,9 @@ export function AiModelDialog({ mode, plan, onConfirm, onCancel }) {
         <div className="ze-modal-body">
           {mode === "download" ? (
             <ul className="ze-ai-points">
-              <li><b>What:</b> an AI object-remover model (MI-GAN, {mb(plan.modelMb)} MB) from <b>huggingface.co</b>, plus its runtime (about {mb(plan.runtimeMb)} MB) from <b>cdn.jsdelivr.net</b>. About {plan.totalMb} MB in total.</li>
-              <li><b>Private:</b> it is a local AI model. It runs on your device and no file or picture leaves it.</li>
-              <li><b>Cost:</b> it may cause lag on lower-end devices. You can delete it later (Delete model button).</li>
+              <li>You are downloading an AI object-remover model (MI-GAN, {mb(plan.modelMb)} MB) from <b>huggingface.co</b>, plus its runtime (about {mb(plan.runtimeMb)} MB) from <b>cdn.jsdelivr.net</b>. About {plan.totalMb} MB in total.</li>
+              <li>The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.</li>
+              <li><b>Warning:</b> it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).</li>
             </ul>
           ) : (
             <ul className="ze-ai-points">
