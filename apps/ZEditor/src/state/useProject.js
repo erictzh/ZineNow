@@ -97,9 +97,9 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   async function openProjectPicker() {
     if (typeof window.showOpenFilePicker === "function") {
       try {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description: "ZEditor project file", accept: { "application/json": [".znow", ".json"] } }], // .json: older Android saves (App.jsx)
-        });
+        // No file-type filter: on Android the picker turns a type filter into MIME types, and it does not know ".znow", so only .json files could be
+        // picked. Every file can be picked; the content is checked when it is read.
+        const [handle] = await window.showOpenFilePicker({ id: "zeditor-project" });
         handleLoadProjectFile(await handle.getFile(), handle);
         return;
       } catch (err) {
