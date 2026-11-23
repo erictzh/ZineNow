@@ -143,7 +143,7 @@ Suggested order: 3a, 3b, 3c, 3d. Each ships separately and the user can stop at 
 For each tool the order is: benchmark page -> user runs it on the tablet -> gate decision -> build -> merge -> user tests.
 
 **3a Face blur**
-- [ ] `labs/ai-face-benchmark/index.html` (build number shown): YuNet and/or BlazeFace on a photo with several faces; report time, number of faces found, boxes drawn.
+- [x] `labs/ai-face-benchmark/index.html` (build number shown; built 2026-11-23): YuNet on a photo with faces; report time, number of faces found, boxes drawn, blur / pixelate / black box preview. **Waiting for the user to run it on the tablet.**
 - [ ] Gate: MIT/Apache-2.0, small, fast, finds the faces in 3 of the user's photos.
 - [ ] Tool `src/tools/faceBlur.js`: boxes, Blur / Pixelate / Black box, strength slider, untick a face, drag/draw a box by hand, Apply. Models page row.
 - [ ] Tests (stand-in detector), guide, HANDOFF.

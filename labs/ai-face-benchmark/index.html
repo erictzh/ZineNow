@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AI face detection speed test</title>
+<style>
+  :root { color-scheme: dark; --bg:#171312; --fg:#f2ece8; --mut:#a99f98; --acc:#e8622a; --card:#241e1c; --bd:#3a312e; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; max-width:900px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; } p { margin:6px 0; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:12px; margin:12px 0; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:12px 16px; font:inherit; font-weight:600; min-height:44px; }
+  button.sec { background:#3a312e; } button:disabled { opacity:.5; }
+  input[type=text], input[type=number], select { background:#171312; color:var(--fg); border:1px solid var(--bd); border-radius:8px; padding:8px; font:13px monospace; }
+  input[type=text] { width:100%; }
+  label { display:block; margin:8px 0 2px; font-size:13px; color:var(--mut); }
+  pre { white-space:pre-wrap; word-break:break-word; background:#100d0c; border:1px solid var(--bd); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace, monospace; margin:8px 0 0; max-height:340px; overflow:auto; }
+  progress { width:100%; height:14px; } .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .imgs { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:8px; margin-top:8px; }
+  .imgs figure { margin:0; } .imgs canvas { width:100%; border-radius:6px; display:block; background:#000; }
+  figcaption { font-size:12px; color:var(--mut); margin-top:4px; }
+  input[type=range] { width:180px; }
+</style>
+</head>
+<body>
+<h1>AI face detection speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 1</span></h1>
+<p>A throw-away test page (not part of the apps). It downloads one small open-source face detector (YuNet, MIT licence, about 0.23 MB), finds the faces in your picture on this device, and times it. It only finds where faces are (boxes). It does not recognise or identify anyone. Nothing is uploaded.</p>
+
+<div class="card">
+  <b>Your device</b>
+  <pre id="device">checking…</pre>
+</div>
+
+<div class="card">
+  <b>1. Pick a photo with faces</b>
+  <p>Try a few: one face, a group, a small face far away, a face turned sideways or partly covered. If you skip this, a plain test picture with no faces is used.</p>
+  <input type="file" id="pic" accept="image/*">
+</div>
+
+<div class="card">
+  <b>2. The model (downloaded once, then kept)</b>
+  <label for="url">YuNet (face_detection_yunet_2023mar.onnx)</label>
+  <input type="text" id="url" value="https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx">
+  <label for="file">…or choose the .onnx file from your device</label>
+  <input type="file" id="file">
+  <progress id="prog" value="0" max="1" hidden></progress>
+  <div class="row">
+    <button id="run">Run the test</button>
+    <button id="copy" class="sec">Copy the report</button>
+    <button id="clear" class="sec">Forget the downloaded model</button>
+  </div>
+  <p id="status">Not started. Use Wi-Fi for the first run and keep this page open.</p>
+</div>
+
+<div class="card" id="results" hidden>
+  <b>Faces found</b>
+  <div class="row">
+    <label style="margin:0">Minimum score (%) <input type="range" id="thr" min="10" max="99" value="60"></label>
+    <input type="number" id="thrn" min="1" max="100" step="1" value="60" style="width:80px">
+    <label style="margin:0">Hide faces with <select id="mode"><option value="boxes">just show boxes</option><option value="blur">blur</option><option value="pixel">pixelate</option><option value="black">black box</option></select></label>
+  </div>
+  <div class="imgs" id="imgs"></div>
+</div>
+
+<div class="card">
+  <b>Report (send me a screenshot of this, or use "Copy the report")</b>
+  <pre id="log">(nothing yet)</pre>
+</div>
+
+<script>
+"use strict";
+const BUILD = 1;
+const ORT_VERSION = "1.31.1";
+const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
+const CACHE = "zinenow-ai-face-benchmark-model";
+const $ = (id) => document.getElementById(id);
+const lines = [];
+const log = (s) => { lines.push(s); $("log").textContent = lines.join("\n"); };
+const status = (s) => { $("status").textContent = s; };
+const ms = (a) => Math.round(performance.now() - a);
+let found = null; // { picture, faces: [{x,y,w,h,score}], label }
+
+async function deviceInfo() {
+  const out = [];
+  out.push("Browser: " + navigator.userAgent);
+  out.push("CPU threads reported: " + (navigator.hardwareConcurrency || "?"));
+  out.push("Memory reported (GB, rounded down): " + (navigator.deviceMemory || "?"));
+  out.push("Multi-thread allowed (crossOriginIsolated): " + (self.crossOriginIsolated ? "yes" : "no (the CPU test will use 1 thread)"));
+  let gpu = "not available";
+  try { if (navigator.gpu && (await navigator.gpu.requestAdapter())) gpu = "available"; } catch (e) { /* none */ }
+  out.push("GPU (WebGPU): " + gpu);
+  $("device").textContent = out.join("\n");
+  return { webgpu: gpu === "available" };
+}
+
+async function getModel() {
+  const f = $("file").files[0];
+  if (f) { log("Model: using the file you chose (" + (f.size / 1024).toFixed(0) + " KB)"); return await f.arrayBuffer(); }
+  const url = $("url").value.trim();
+  const cache = await caches.open(CACHE);
+  const res = await cache.match(url);
+  if (res) { log("Model: already downloaded earlier, using the saved copy."); return await res.arrayBuffer(); }
+  const t = performance.now();
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Download failed: HTTP " + r.status + " (you can choose the file from your device instead)");
+  const buf = await r.arrayBuffer();
+  try { await cache.put(url, new Response(buf.slice(0), { headers: { "content-type": "application/octet-stream" } })); } catch (e) { log("(could not keep the model for next time: " + e.message + ")"); }
+  log("Model downloaded: " + (buf.byteLength / 1024).toFixed(0) + " KB in " + ms(t) + " ms");
+  return buf;
+}
+
+function builtInPicture() {
+  const c = document.createElement("canvas"); c.width = 640; c.height = 480;
+  const x = c.getContext("2d"); x.fillStyle = "#4d6a4a"; x.fillRect(0, 0, 640, 480);
+  x.fillStyle = "#e8622a"; x.fillRect(200, 140, 240, 220);
+  return c;
+}
+async function loadPicture() {
+  const f = $("pic").files[0];
+  if (!f) { log("Picture: the built-in test picture (no faces in it: pick your own)"); return builtInPicture(); }
+  const bmp = await createImageBitmap(f);
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  log("Picture: yours, " + c.width + "×" + c.height);
+  return c;
+}
+
+// ---- YuNet ------------------------------------------------------------------------------------------------
+// Input: 1 x 3 x H x W, colours as B, G, R in 0..255 (no scaling). The picture is fitted inside the model's square (top left, rest black).
+// Outputs: for strides 8, 16 and 32: cls_s, obj_s (one score per cell), bbox_s (4 numbers: centre offsets and log size), kps_s (5 landmarks).
+function inputSize(session) {
+  try { const m = session.inputMetadata; const sh = Array.isArray(m) ? m[0].shape : m && m[session.inputNames[0]] && m[session.inputNames[0]].shape; if (sh && Number.isFinite(sh[2]) && Number.isFinite(sh[3])) return [sh[3], sh[2]]; } catch (e) { /* use the default */ }
+  return [640, 640];
+}
+function toTensor(ort, picture, W, H) {
+  const k = Math.min(W / picture.width, H / picture.height);
+  const w = Math.round(picture.width * k), h = Math.round(picture.height * k);
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.fillStyle = "#000"; x.fillRect(0, 0, W, H); x.drawImage(picture, 0, 0, w, h);
+  const d = x.getImageData(0, 0, W, H).data, n = W * H, out = new Float32Array(3 * n);
+  for (let i = 0; i < n; i++) { out[i] = d[i * 4 + 2]; out[n + i] = d[i * 4 + 1]; out[2 * n + i] = d[i * 4]; }
+  return { tensor: new ort.Tensor("float32", out, [1, 3, H, W]), k };
+}
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+function decode(out, names, W, H, k, minScore) {
+  const faces = [];
+  for (const s of [8, 16, 32]) {
+    const get = (p) => { const n = names.find((q) => q === p + "_" + s) || names.find((q) => q.includes(p) && q.includes(String(s))); return n ? out[n].data : null; };
+    const cls = get("cls"), obj = get("obj"), bb = get("bbox");
+    if (!cls || !obj || !bb) throw new Error("Unexpected outputs: " + names.join(","));
+    const cols = Math.ceil(W / s), rows = Math.ceil(H / s);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const score = Math.sqrt(clamp01(cls[i]) * clamp01(obj[i]));
+      if (score < minScore) continue;
+      const cx = (c + bb[i * 4]) * s, cy = (r + bb[i * 4 + 1]) * s, w = Math.exp(bb[i * 4 + 2]) * s, h = Math.exp(bb[i * 4 + 3]) * s;
+      faces.push({ x: (cx - w / 2) / k, y: (cy - h / 2) / k, w: w / k, h: h / k, score });
+    }
+  }
+  return nms(faces, 0.3);
+}
+function nms(faces, thr) {
+  faces.sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const f of faces) {
+    if (keep.every((g) => { const x1 = Math.max(f.x, g.x), y1 = Math.max(f.y, g.y), x2 = Math.min(f.x + f.w, g.x + g.w), y2 = Math.min(f.y + f.h, g.y + g.h); const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1); return inter / (f.w * f.h + g.w * g.h - inter) < thr; })) keep.push(f);
+  }
+  return keep;
+}
+
+async function testBackend(ort, bytes, picture, provider) {
+  const label = provider === "webgpu" ? "GPU" : "CPU";
+  status("Starting the model on the " + label + "…");
+  const t0 = performance.now(); let session;
+  try { session = await ort.InferenceSession.create(bytes, { executionProviders: [provider], graphOptimizationLevel: "all" }); }
+  catch (e) { log("[" + label + "] could not start: " + e.message); return; }
+  log("[" + label + "] model started in " + ms(t0) + " ms · input " + session.inputNames.join(",") + " · outputs " + session.outputNames.join(","));
+  try {
+    const [W, H] = inputSize(session);
+    log("[" + label + "] model input size: " + W + "×" + H);
+    const run = async () => {
+      const t = performance.now();
+      const { tensor, k } = toTensor(ort, picture, W, H);
+      const out = await session.run({ [session.inputNames[0]]: tensor });
+      return { out, k, time: ms(t), W, H };
+    };
+    const r = await run();
+    log("[" + label + "] first run: " + r.time + " ms");
+    for (const n of session.outputNames) log("[" + label + "]   output " + n + " dims " + r.out[n].dims.join("x"));
+    const faces = decode(r.out, session.outputNames, r.W, r.H, r.k, 0.1);
+    found = { picture, faces, label };
+    log("[" + label + "] faces at score >= 10 %: " + faces.length + (faces.length ? " (best scores: " + faces.slice(0, 6).map((f) => Math.round(f.score * 100) + "%").join(", ") + ")" : ""));
+    const again = performance.now(); await run(); log("[" + label + "] second run (model already warm): " + ms(again) + " ms");
+    drawResults();
+  } catch (e) { log("[" + label + "] run failed: " + e.message); }
+  try { await session.release(); } catch (e) { /* ignore */ }
+}
+
+// ---- showing the result: boxes, or the faces hidden --------------------------------------------------------------
+function drawResults() {
+  if (!found) return;
+  $("results").hidden = false; $("imgs").textContent = "";
+  const thr = (Number($("thrn").value) || 0) / 100, mode = $("mode").value;
+  const { picture, faces } = found, shown = faces.filter((f) => f.score >= thr);
+  const c = document.createElement("canvas"); c.width = picture.width; c.height = picture.height;
+  const x = c.getContext("2d"); x.drawImage(picture, 0, 0);
+  for (const f of shown) {
+    const bx = Math.max(0, f.x), by = Math.max(0, f.y), bw = Math.min(c.width - bx, f.w), bh = Math.min(c.height - by, f.h);
+    if (bw < 2 || bh < 2) continue;
+    if (mode === "blur") { x.save(); x.beginPath(); x.rect(bx, by, bw, bh); x.clip(); x.filter = "blur(" + Math.max(4, bw / 6) + "px)"; x.drawImage(picture, 0, 0); x.restore(); }
+    else if (mode === "pixel") { const s = Math.max(2, Math.round(bw / 10)), t = document.createElement("canvas"); t.width = Math.max(1, Math.round(bw / s)); t.height = Math.max(1, Math.round(bh / s)); t.getContext("2d").drawImage(picture, bx, by, bw, bh, 0, 0, t.width, t.height); x.imageSmoothingEnabled = false; x.drawImage(t, 0, 0, t.width, t.height, bx, by, bw, bh); x.imageSmoothingEnabled = true; }
+    else if (mode === "black") { x.fillStyle = "#000"; x.fillRect(bx, by, bw, bh); }
+    else { x.lineWidth = Math.max(2, c.width / 300); x.strokeStyle = "#e8622a"; x.strokeRect(bx, by, bw, bh); x.fillStyle = "#e8622a"; x.font = Math.max(12, c.width / 40) + "px sans-serif"; x.fillText(Math.round(f.score * 100) + "%", bx + 2, Math.max(14, by - 4)); }
+  }
+  const f = document.createElement("figure"); f.append(c);
+  const cap = document.createElement("figcaption"); cap.textContent = shown.length + " face(s) at a minimum score of " + Math.round(thr * 100) + " % (" + found.label + ")"; f.append(cap);
+  $("imgs").append(f);
+}
+$("thr").oninput = () => { $("thrn").value = $("thr").value; drawResults(); };
+$("thrn").oninput = () => { $("thr").value = $("thrn").value; drawResults(); };
+$("mode").onchange = drawResults;
+
+$("run").onclick = async () => {
+  $("run").disabled = true; found = null; $("imgs").textContent = ""; $("results").hidden = true;
+  lines.length = 0; log("ZineNow face-detection test · build " + BUILD + " · runtime " + ORT_VERSION + " · " + new Date().toISOString());
+  try {
+    const dev = await deviceInfo();
+    if (!self.ort) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = ORT_URL; s.onload = res; s.onerror = () => rej(new Error("Could not load the AI runtime from the internet.")); document.head.append(s); });
+    const ort = self.ort; ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+    const picture = await loadPicture();
+    const bytes = await getModel();
+    await testBackend(ort, bytes, picture, "wasm");
+    if (dev.webgpu) await testBackend(ort, bytes, picture, "webgpu"); else log("[GPU] skipped: not available on this device/browser");
+    status("Done. Look at the faces found (try the minimum score and the blur / pixelate options), then send me the report below.");
+    log("== DONE ==");
+  } catch (e) { log("ERROR: " + e.message); status("Something went wrong: " + e.message); }
+  finally { $("run").disabled = false; }
+};
+$("copy").onclick = async () => { try { await navigator.clipboard.writeText(lines.join("\n")); status("Report copied."); } catch (e) { status("Could not copy: select the report text and copy it by hand."); } };
+$("clear").onclick = async () => { await caches.delete(CACHE); status("The downloaded model was removed from this device."); };
+deviceInfo();
+</script>
+</body>
+</html>
