@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "ffafcdd" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "ac4e217" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -1299,7 +1299,7 @@
     if (text != null) n.textContent = text;
     return n;
   };
-  function modelBox(id, { compact = false } = {}) {
+  function modelBox(id, { compact = false, deletable = true } = {}) {
     const ctl = modelControl(id), m = ctl.row.model;
     const box = el("div", "model-box");
     const title = el("b", "", m.name + " (" + m.kind + ")");
@@ -1326,13 +1326,15 @@
         c.addEventListener("click", ctl.cancel);
         live.append(p, t, c);
       } else if (s.phase === "ready") {
-        live.append(el("span", "hint ok", "Downloaded: works offline."));
-        const d = el("button", "wide", "Delete " + m.name);
-        d.type = "button";
-        d.addEventListener("click", async () => {
-          if (await askDelete(ctl)) ctl.remove();
-        });
-        live.append(d);
+        live.append(el("span", "hint ok", "Downloaded: works offline." + (deletable ? "" : " (Delete it on the Models page.)")));
+        if (deletable) {
+          const d = el("button", "wide", "Delete " + m.name);
+          d.type = "button";
+          d.addEventListener("click", async () => {
+            if (await askDelete(ctl)) ctl.remove();
+          });
+          live.append(d);
+        }
       }
       if (s.error) live.append(el("span", "hint bad", s.error));
     }
@@ -1863,7 +1865,7 @@
           boxEl.dispose && boxEl.dispose();
           boxEl.remove();
         }
-        boxEl = modelBox("bg:" + modelKey);
+        boxEl = modelBox("bg:" + modelKey, { deletable: false });
         ui.boxHost.append(boxEl);
       }
       picture2.onView(() => {
@@ -2318,7 +2320,7 @@
           sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
           const sec3 = el4("section");
           sec3.append(el4("h2", "", "Model"));
-          sec3.append(modelBox("fill", { compact: true }));
+          sec3.append(modelBox("fill", { compact: true, deletable: false }));
           panel.append(sec1, sec2, sec3);
           refreshButtons();
         },

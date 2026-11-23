@@ -11,7 +11,7 @@ A set of AI tools for pictures that run on your own device. Nothing is uploaded.
 
 ## Before a tool works: download its model
 
-A tool that needs a model shows a red **Download required** and its buttons are greyed out. Press **Download** (in the tool, or on the **Models** page) and confirm in the pop-up, which says what is downloaded, from where, how big it is, and that the model does not connect to the internet. **Delete** removes a model again.
+A tool that needs a model shows a red **Download required** and its buttons are greyed out. Press **Download** (in the tool, or on the **Models** page) and confirm in the pop-up, which says what is downloaded, from where, how big it is, and that the model does not connect to the internet. Models are deleted on the **Models** page only (the tools have no Delete button).
 
 The **Models** page lists every model: its name, what it is for, licence, size, where it comes from, and whether it is on this device, plus the total stored. All models share one AI engine (ONNX Runtime Web, about 16 to 30 MB from cdn.jsdelivr.net), which is downloaded with the first model and removed with the last.
 
