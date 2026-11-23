@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AI upscale speed test</title>
+<style>
+  :root { color-scheme: dark; --bg:#171312; --fg:#f2ece8; --mut:#a99f98; --acc:#e8622a; --card:#241e1c; --bd:#3a312e; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; max-width:900px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; } p { margin:6px 0; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:12px; margin:12px 0; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:12px 16px; font:inherit; font-weight:600; min-height:44px; }
+  button.sec { background:#3a312e; } button:disabled { opacity:.5; }
+  input[type=text], select { background:#171312; color:var(--fg); border:1px solid var(--bd); border-radius:8px; padding:8px; font:13px monospace; }
+  input[type=text] { width:100%; }
+  label { display:block; margin:8px 0 2px; font-size:13px; color:var(--mut); }
+  pre { white-space:pre-wrap; word-break:break-word; background:#100d0c; border:1px solid var(--bd); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace, monospace; margin:8px 0 0; max-height:380px; overflow:auto; }
+  progress { width:100%; height:14px; } .row { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  .imgs { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:8px; margin-top:8px; }
+  .imgs figure { margin:0; } .imgs canvas { width:100%; border-radius:6px; display:block; background:#000; image-rendering:auto; }
+  figcaption { font-size:12px; color:var(--mut); margin-top:4px; }
+</style>
+</head>
+<body>
+<h1>AI upscale speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 1</span></h1>
+<p>A throw-away test page (not part of the apps). It downloads one small open-source upscaling model (Real-ESRGAN general x4v3, BSD-3-Clause licence, about 5 MB), enlarges your picture 2 or 4 times on this device, piece by piece ("tiles"), and times it. Use a SMALL picture first (for example 400 to 800 pixels wide): upscaling is the heaviest of the AI tools. Nothing is uploaded.</p>
+
+<div class="card"><b>Your device</b><pre id="device">checking…</pre></div>
+
+<div class="card">
+  <b>1. Pick a small picture</b>
+  <p>A photo or a scan about 400 to 800 pixels wide is ideal. If you skip this, a small built-in picture is used.</p>
+  <input type="file" id="pic" accept="image/*">
+</div>
+
+<div class="card">
+  <b>2. The model and settings</b>
+  <label for="url">Real-ESRGAN general x4v3 (a copy of realesr-general-x4v3.onnx)</label>
+  <input type="text" id="url" value="https://huggingface.co/OwlMaster/AllFilesRope/resolve/main/realesr-general-x4v3.onnx">
+  <label for="file">…or choose the .onnx file from your device</label>
+  <input type="file" id="file">
+  <div class="row">
+    <label style="margin:0">Enlarge by <select id="scale"><option value="4">4× (the model's own size)</option><option value="2">2× (the 4× result shrunk to half)</option></select></label>
+    <label style="margin:0">Tile size <select id="tile"><option value="64">64 px (gentle on memory)</option><option value="96">96 px</option><option value="128" selected>128 px</option><option value="192">192 px</option></select></label>
+    <label style="margin:0">Overlap <select id="pad"><option value="8">8 px</option><option value="12" selected>12 px</option><option value="16">16 px</option></select></label>
+    <label style="margin:0">Run on <select id="ep"><option value="wasm">the processor (CPU)</option><option value="webgpu">the graphics chip (GPU)</option></select></label>
+  </div>
+  <progress id="prog" value="0" max="1" hidden></progress>
+  <div class="row">
+    <button id="run">Run the test</button>
+    <button id="cancel" class="sec" disabled>Cancel</button>
+    <button id="copy" class="sec">Copy the report</button>
+    <button id="clear" class="sec">Forget the downloaded model</button>
+  </div>
+  <p id="status">Not started. Use Wi-Fi for the first run (about 5 MB).</p>
+</div>
+
+<div class="card" id="results" hidden>
+  <b>Result</b> <span id="info" style="color:var(--mut);font-size:13px"></span>
+  <div class="imgs" id="imgs"></div>
+  <div class="row"><button id="save" class="sec">Save the enlarged picture (PNG)</button></div>
+</div>
+
+<div class="card"><b>Report (send me a screenshot of this, or use "Copy the report")</b><pre id="log">(nothing yet)</pre></div>
+
+<script>
+"use strict";
+const BUILD = 1;
+const ORT_VERSION = "1.31.1";
+const ORT_URL = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/ort.all.min.js";
+const CACHE = "zinenow-ai-upscale-benchmark-model";
+const MODEL_SCALE = 4;
+const MAX_OUT = 8192; // longest side of the result, px
+const $ = (id) => document.getElementById(id);
+const lines = [];
+const log = (s) => { lines.push(s); $("log").textContent = lines.join("\n"); };
+const status = (s) => { $("status").textContent = s; };
+const ms = (a) => Math.round(performance.now() - a);
+let cancelled = false, resultCanvas = null;
+
+async function deviceInfo() {
+  const out = ["Browser: " + navigator.userAgent, "CPU threads reported: " + (navigator.hardwareConcurrency || "?"), "Memory reported (GB, rounded down): " + (navigator.deviceMemory || "?"), "Multi-thread allowed (crossOriginIsolated): " + (self.crossOriginIsolated ? "yes" : "no (the CPU test will use 1 thread)")];
+  let gpu = "not available"; try { if (navigator.gpu && (await navigator.gpu.requestAdapter())) gpu = "available"; } catch (e) { /* none */ }
+  out.push("GPU (WebGPU): " + gpu);
+  $("device").textContent = out.join("\n");
+}
+
+async function getModel() {
+  const f = $("file").files[0];
+  if (f) { log("Model: using the file you chose (" + (f.size / 1048576).toFixed(1) + " MB)"); return await f.arrayBuffer(); }
+  const url = $("url").value.trim();
+  const cache = await caches.open(CACHE);
+  const res = await cache.match(url);
+  if (res) { log("Model: already downloaded earlier, using the saved copy."); return await res.arrayBuffer(); }
+  const t = performance.now();
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Download failed: HTTP " + r.status + " (you can choose the file from your device instead)");
+  const buf = await r.arrayBuffer();
+  try { await cache.put(url, new Response(buf.slice(0), { headers: { "content-type": "application/octet-stream" } })); } catch (e) { log("(could not keep the model for next time: " + e.message + ")"); }
+  log("Model downloaded: " + (buf.byteLength / 1048576).toFixed(1) + " MB in " + ms(t) + " ms");
+  return buf;
+}
+
+function builtInPicture() {
+  const c = document.createElement("canvas"); c.width = 320; c.height = 240;
+  const x = c.getContext("2d"); const g = x.createLinearGradient(0, 0, 320, 240); g.addColorStop(0, "#2b5876"); g.addColorStop(1, "#e8622a"); x.fillStyle = g; x.fillRect(0, 0, 320, 240);
+  x.fillStyle = "#fff"; x.font = "bold 40px sans-serif"; x.fillText("ZineNow", 40, 110); x.font = "20px serif"; x.fillText("upscale test, fine text", 40, 160);
+  x.strokeStyle = "#111"; x.lineWidth = 1; for (let i = 0; i < 12; i++) { x.beginPath(); x.moveTo(20 + i * 24, 190); x.lineTo(40 + i * 24, 225); x.stroke(); }
+  return c;
+}
+async function loadPicture() {
+  const f = $("pic").files[0];
+  if (!f) { log("Picture: the built-in test picture (320×240: pick your own)"); return builtInPicture(); }
+  const bmp = await createImageBitmap(f);
+  const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+  c.getContext("2d").drawImage(bmp, 0, 0);
+  log("Picture: yours, " + c.width + "×" + c.height);
+  return c;
+}
+function modelInputSize(session) {
+  try { const m = session.inputMetadata; const sh = Array.isArray(m) ? m[0].shape : m && m[session.inputNames[0]] && m[session.inputNames[0]].shape; const ok = (v) => Number.isFinite(v) && v > 0 && v < 4096; // a dynamic size shows up as -1 or 4294967295
+    if (sh && ok(sh[2]) && ok(sh[3])) return [sh[3], sh[2]]; } catch (e) { /* dynamic */ }
+  return null;
+}
+
+// One tile: the square T x T of the source starting at (ox, oy) (colours outside the picture copy the nearest edge pixel), as 1 x 3 x T x T floats 0..1.
+function tileTensor(ort, src, sd, W, H, ox, oy, T) {
+  const out = new Float32Array(3 * T * T), n = T * T;
+  for (let y = 0; y < T; y++) {
+    const sy = Math.min(H - 1, Math.max(0, oy + y));
+    for (let x = 0; x < T; x++) {
+      const sx = Math.min(W - 1, Math.max(0, ox + x)), i = (sy * W + sx) * 4, o = y * T + x;
+      out[o] = sd[i] / 255; out[n + o] = sd[i + 1] / 255; out[2 * n + o] = sd[i + 2] / 255;
+    }
+  }
+  return new ort.Tensor("float32", out, [1, 3, T, T]);
+}
+
+$("cancel").onclick = () => { cancelled = true; };
+$("run").onclick = async () => {
+  $("run").disabled = true; $("cancel").disabled = false; cancelled = false; $("results").hidden = true; resultCanvas = null;
+  lines.length = 0; log("ZineNow upscale test · build " + BUILD + " · runtime " + ORT_VERSION + " · " + new Date().toISOString());
+  try {
+    await deviceInfo();
+    if (!self.ort) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = ORT_URL; s.onload = res; s.onerror = () => rej(new Error("Could not load the AI runtime from the internet.")); document.head.append(s); });
+    const ort = self.ort; ort.env.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency || 2);
+    const pic = await loadPicture();
+    const want = Number($("scale").value);
+    if (Math.max(pic.width, pic.height) * want > MAX_OUT) throw new Error("That picture would become more than " + MAX_OUT + " pixels wide. Pick a smaller picture or 2×.");
+    const bytes = await getModel();
+    const ep = $("ep").value;
+    status("Starting the model on the " + (ep === "webgpu" ? "graphics chip" : "processor") + "…");
+    let t = performance.now();
+    const session = await ort.InferenceSession.create(bytes, { executionProviders: [ep], graphOptimizationLevel: "all" });
+    log("[" + (ep === "webgpu" ? "GPU" : "CPU") + "] model started in " + ms(t) + " ms · input " + session.inputNames.join(",") + " · output " + session.outputNames.join(","));
+    const fixed = modelInputSize(session);
+    const pad = Number($("pad").value);
+    let tile = Number($("tile").value), T = tile + 2 * pad;
+    if (fixed) { T = fixed[0]; tile = T - 2 * pad; log("The model has a fixed input size " + fixed[0] + "×" + fixed[1] + ": tiles of " + tile + " px + " + pad + " px overlap on each side"); if (fixed[0] !== fixed[1] || tile < 8) throw new Error("This model needs a fixed non-square or tiny input; send me this report."); }
+    else log("The model takes any input size: tiles of " + tile + " px + " + pad + " px overlap on each side (input " + T + "×" + T + ")");
+    const W = pic.width, H = pic.height;
+    const sx = pic.getContext("2d", { willReadFrequently: true }), sd = sx.getImageData(0, 0, W, H).data;
+    const out = document.createElement("canvas"); out.width = W * MODEL_SCALE; out.height = H * MODEL_SCALE;
+    const ox = out.getContext("2d");
+    const cols = Math.ceil(W / tile), rows = Math.ceil(H / tile), total = cols * rows;
+    log("Picture " + W + "×" + H + " -> " + out.width + "×" + out.height + " (model 4×) in " + total + " tiles");
+    $("prog").hidden = false; $("prog").max = total; $("prog").value = 0;
+    const tTotal = performance.now(); const tileMs = []; let done = 0, note = "";
+    for (let r = 0; r < rows && !cancelled; r++) for (let c = 0; c < cols && !cancelled; c++) {
+      const x0 = c * tile, y0 = r * tile, w = Math.min(tile, W - x0), h = Math.min(tile, H - y0);
+      const t1 = performance.now();
+      const res = await session.run({ [session.inputNames[0]]: tileTensor(ort, sd, sd, W, H, x0 - pad, y0 - pad, T) });
+      const o = res[session.outputNames[0]], od = o.data, OT = o.dims[3], S = OT / T;
+      if (done === 0) { log("First tile output dims " + o.dims.join("×") + " (scale " + S + "×), value range " + (() => { let lo = Infinity, hi = -Infinity; for (let i = 0; i < od.length; i += 7) { if (od[i] < lo) lo = od[i]; if (od[i] > hi) hi = od[i]; } return lo.toFixed(3) + " to " + hi.toFixed(3); })()); }
+      // copy the middle of the output (without the overlap) into the result
+      const cw = w * S, ch = h * S, id = ox.createImageData(cw, ch), n = OT * OT;
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        const si = (pad * S + y) * OT + (pad * S + x), di = (y * cw + x) * 4;
+        const cl = (v) => (v < 0 ? 0 : v > 1 ? 255 : Math.round(v * 255));
+        id.data[di] = cl(od[si]); id.data[di + 1] = cl(od[n + si]); id.data[di + 2] = cl(od[2 * n + si]); id.data[di + 3] = 255;
+      }
+      ox.putImageData(id, x0 * S, y0 * S);
+      done++; tileMs.push(ms(t1)); $("prog").value = done;
+      const avg = tileMs.reduce((a, b) => a + b, 0) / tileMs.length;
+      status("Tile " + done + " of " + total + " · " + Math.round(avg) + " ms each · about " + Math.round(avg * (total - done) / 1000) + " s left");
+      await new Promise((r2) => setTimeout(r2, 0)); // let the page breathe
+    }
+    $("prog").hidden = true;
+    try { await session.release(); } catch (e) { /* ignore */ }
+    if (cancelled) { log("Cancelled after " + done + " of " + total + " tiles."); status("Cancelled."); return; }
+    const sec = (performance.now() - tTotal) / 1000;
+    log("Done: " + total + " tiles in " + sec.toFixed(1) + " s · " + Math.round(tileMs.reduce((a, b) => a + b, 0) / tileMs.length) + " ms per tile on average (first " + tileMs[0] + " ms, slowest " + Math.max(...tileMs) + " ms)");
+    // 2x = the 4x result shrunk to half
+    let final = out;
+    if (want === 2) { final = document.createElement("canvas"); final.width = W * 2; final.height = H * 2; const fx = final.getContext("2d"); fx.imageSmoothingQuality = "high"; fx.drawImage(out, 0, 0, final.width, final.height); }
+    resultCanvas = final;
+    $("imgs").textContent = "";
+    for (const [cv, cap] of [[pic, "original " + W + "×" + H + " (shown enlarged by the browser)"], [final, "AI enlarged " + final.width + "×" + final.height]]) { const f = document.createElement("figure"); const c2 = document.createElement("canvas"); c2.width = cv.width; c2.height = cv.height; c2.getContext("2d").drawImage(cv, 0, 0); f.append(c2); const cp = document.createElement("figcaption"); cp.textContent = cap; f.append(cp); $("imgs").append(f); }
+    $("info").textContent = "(" + sec.toFixed(1) + " s)";
+    $("results").hidden = false;
+    status("Done in " + sec.toFixed(1) + " s. Compare the two pictures (zoom in on the screenshot), then send me the report.");
+    log("== DONE ==");
+  } catch (e) { $("prog").hidden = true; log("ERROR: " + (e && e.message ? e.message : e)); status("Something went wrong: " + (e && e.message ? e.message : e)); }
+  finally { $("run").disabled = false; $("cancel").disabled = true; }
+};
+$("save").onclick = () => { if (!resultCanvas) return; resultCanvas.toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "upscaled.png"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }, "image/png"); };
+$("copy").onclick = async () => { try { await navigator.clipboard.writeText(lines.join("\n")); status("Report copied."); } catch (e) { status("Could not copy: select the report text and copy it by hand."); } };
+$("clear").onclick = async () => { await caches.delete(CACHE); status("The downloaded model was removed from this device."); };
+deviceInfo();
+</script>
+</body>
+</html>
