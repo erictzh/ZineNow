@@ -6,7 +6,7 @@ import { RECT_FILL_CONTROLS } from "../../../model/rect.js";
 import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/strokes.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { CustomColorInput } from "../../controls/inputs.jsx";
-import { MARQUEE_DEFAULTS, isUsableMarquee } from "../../../model/marquee.js";
+import { BRUSH_MAX_SIZE, BRUSH_MIN_SIZE, MARQUEE_DEFAULTS, isUsableMarquee } from "../../../model/marquee.js";
 import { useAiModel } from "../../../state/useAiModel.js";
 import { AiModelDialog } from "../../dialogs/AiModelDialog.jsx";
 import { SliderNumberInput, StepperNumberInput } from "../../controls/inputs.jsx";
@@ -55,16 +55,34 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   const layerName = targetLayer ? (targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Vectorized" : "Image")) : null;
   const ready = Boolean(marquee && isUsableMarquee(marquee.region));
   const polygon = settings.shape === "polygon";
+  const brush = settings.shape === "brush";
   return (
     <FormatPanelShell title="Marquee">
-      <span className="ze-sec-intro">{polygon
+      <span className="ze-sec-intro">{brush
+        ? "Paint over what you want to work on (Brush). Two fingers move and zoom the page. The marks stay until you press Clear marks or Esc, so you can change a setting and try again."
+        : polygon
         ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it."
         : "Drag on the page to draw a box, then move, resize or turn it."} Then choose what to do with what is inside it.</span>
       <PanelSection id="marquee.shape" title="Shape" defaultOpen>
-        <select className="ze-format-select" aria-label="Marquee shape" value={polygon ? "polygon" : "rect"} onChange={(e) => change({ shape: e.target.value })}>
+        <select className="ze-format-select" aria-label="Marquee shape" value={brush ? "brush" : polygon ? "polygon" : "rect"} onChange={(e) => change({ shape: e.target.value })}>
           <option value="rect">Rectangle</option>
           <option value="polygon">Polygon</option>
+          <option value="brush">Brush (paint over it)</option>
         </select>
+        {brush && (
+          <React.Fragment>
+            <div className="ze-format-field">
+              <span className="ze-format-label">Brush size (px)</span>
+              <StepperNumberInput min={BRUSH_MIN_SIZE} max={BRUSH_MAX_SIZE} step={4} label="Brush size" value={settings.brushSize === undefined ? MARQUEE_DEFAULTS.brushSize : settings.brushSize} onChange={(v) => change({ brushSize: v })} />
+              <span className="ze-format-hint">In page pixels. The [ and ] keys change it.</span>
+            </div>
+            <div className="ze-format-row" role="group" aria-label="Brush mode">
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (!settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: false })}>Paint</button>
+              <button type="button" className={"ze-format-toggle ze-format-toggle-wide" + (settings.brushErase ? " active" : "")} onClick={() => change({ brushErase: true })}>Erase mark</button>
+            </div>
+            <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!marquee || !marquee.region} onClick={() => marquee.setRegion(null)}>Clear marks</button>
+          </React.Fragment>
+        )}
         {marquee && marquee.polygonOpen && (
           <div className="ze-format-row">
             <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={marquee.region.points.length < 3} title="Enter" onClick={() => marquee.setRegion({ ...marquee.region, closed: true })}>Close shape</button>
@@ -122,7 +140,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
             </div>
             <span className="ze-format-hint">
-              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "The new layer is selected and the Move tool takes over."}
+              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "The new layer is selected and the Move tool takes over."}
             </span>
           </React.Fragment>
         )}
@@ -183,7 +201,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
               <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail" || useAi} onClick={() => marquee.tryAnotherFill()}>Try another</button>
             </div>
-            <span className="ze-format-hint">{!ready ? "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Not right? Try another, or change a number above and fill again."}</span>
+            <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : "Not right? Try another, or change a number above and fill again."}</span>
           </React.Fragment>
         )}
       </div>

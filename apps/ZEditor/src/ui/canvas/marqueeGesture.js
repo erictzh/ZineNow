@@ -36,3 +36,24 @@ export function pressPolygon(e, { toPagePoint, zoom, region, onChange }) {
   const last = open.points[open.points.length - 1];
   onChange(polygonWithPoint(open, e.shiftKey ? constrainTo45({ x: last[0], y: last[1] }, raw) : raw));
 }
+
+// The Marquee tool's press on empty page in Brush mode: paints a stroke as the pointer moves (`onLive(stroke | null)` shows it while it
+// is being made, `onCommit(stroke)` adds it to the marquee when the pointer is let go). `erase` makes it rub out instead of paint.
+// A stroke is { erase, size, points: [[x, y], ...] } in page px; a plain press paints a dot.
+export function startBrushStroke(e, { toPagePoint, size, erase, onLive, onCommit }) {
+  e.preventDefault();
+  const first = toPagePoint(e);
+  const points = [[first.x, first.y]];
+  const stroke = () => ({ erase, size, points: points.map((p) => [p[0], p[1]]) });
+  onLive(stroke());
+  trackPointerDrag((ev) => {
+    const p = toPagePoint(ev);
+    const last = points[points.length - 1];
+    if (Math.hypot(p.x - last[0], p.y - last[1]) < 1) return; // under a page px: nothing to add
+    points.push([p.x, p.y]);
+    onLive(stroke());
+  }, () => {
+    onLive(null);
+    onCommit(stroke());
+  });
+}

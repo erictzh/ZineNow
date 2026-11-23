@@ -33,6 +33,8 @@ export const MARQUEE_DEFAULTS = {
   fillGrow: 0, // how much bigger than the marquee the filled area is, px of the picture
   fillGrainAmount: 100, // how much grain is added, % of what the picture has
   fillSeed: 0, // Pattern: another number picks other patches ("Try another")
+  brushSize: 24, // Brush shape: the brush's width, page px
+  brushErase: false, // Brush shape: true = painting rubs the marks out
   fillColor: "#ffffff",
 };
 
@@ -49,8 +51,30 @@ export function rectMarquee(box, angle = 0) {
   return { kind: "rect", x: box.x, y: box.y, width: box.width, height: box.height, angle };
 }
 
-// The marquee's outline as a list of points, whatever its shape (a rectangle gives its four corners).
+// A brush marquee: the painted area, kept as the strokes that made it (page px), so it stays sharp at any zoom and in the export.
+//   { kind: "brush", strokes: [{ erase, size, points: [[x, y], ...] }] }   strokes in the order they were made; an `erase` stroke
+//   rubs out what the strokes before it painted.
+export const BRUSH_MIN_SIZE = 2;
+export const BRUSH_MAX_SIZE = 300;
+export function brushRegion(strokes = []) { return { kind: "brush", strokes }; }
+export function brushWithStroke(region, stroke) {
+  const base = region && region.kind === "brush" ? region : brushRegion();
+  return { ...base, strokes: [...base.strokes, stroke] };
+}
+// The box round everything painted (page px, brush width included), or null when nothing is painted.
+export function brushBounds(m) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const s of m.strokes) {
+    if (s.erase) continue;
+    const r = s.size / 2;
+    for (const [x, y] of s.points) { if (x - r < x0) x0 = x - r; if (x + r > x1) x1 = x + r; if (y - r < y0) y0 = y - r; if (y + r > y1) y1 = y + r; }
+  }
+  return x1 < x0 ? null : { x0, y0, x1, y1 };
+}
+
+// The marquee's outline as a list of points, whatever its shape (a rectangle gives its four corners; a brush gives the box round it).
 export function regionPolygon(m) {
+  if (m.kind === "brush") { const b = brushBounds(m); return b ? [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]] : []; }
   if (m.kind === "polygon") return m.points.map(([x, y]) => [x, y]);
   const cx = m.x + m.width / 2, cy = m.y + m.height / 2;
   return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => {
@@ -79,11 +103,13 @@ export function pointInPolygon(x, y, points) {
 // A marquee that can make a layer: a rectangle with some size, or a closed polygon of 3+ points.
 export function isUsableMarquee(m) {
   if (!m) return false;
+  if (m.kind === "brush") return m.strokes.some((s) => !s.erase) && brushBounds(m) !== null;
   if (m.kind === "polygon") return Boolean(m.closed) && m.points.length >= MIN_POLYGON_POINTS;
   return m.width >= MARQUEE_MIN_SIZE && m.height >= MARQUEE_MIN_SIZE;
 }
 
 export function translatedMarquee(m, dx, dy) {
+  if (m.kind === "brush") return { ...m, strokes: m.strokes.map((s) => ({ ...s, points: s.points.map(([x, y]) => [x + dx, y + dy]) })) };
   if (m.kind === "polygon") return { ...m, points: m.points.map(([x, y]) => [x + dx, y + dy]) };
   return { ...m, x: m.x + dx, y: m.y + dy };
 }
@@ -91,6 +117,7 @@ export function translatedMarquee(m, dx, dy) {
 // The marquee turned `degrees` clockwise about (cx, cy). A rectangle keeps being a rectangle (its centre
 // moves round and its angle grows); a polygon's points move.
 export function rotatedMarquee(m, degrees, cx, cy) {
+  if (m.kind === "brush") return { ...m, strokes: m.strokes.map((s) => ({ ...s, points: s.points.map(([x, y]) => { const [dx, dy] = rotatePoint(x - cx, y - cy, degrees); return [cx + dx, cy + dy]; }) })) };
   if (m.kind === "polygon") {
     return { ...m, points: m.points.map(([x, y]) => { const [dx, dy] = rotatePoint(x - cx, y - cy, degrees); return [cx + dx, cy + dy]; }) };
   }
@@ -119,6 +146,10 @@ export function polygonPressAction(m, point, pxPerUnit) {
 
 // The middle of the marquee's box: what a polygon turns about.
 export function marqueeCenter(m) {
+  if (m.kind === "brush") {
+    const b = brushBounds(m);
+    return b ? { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 } : { x: 0, y: 0 };
+  }
   if (m.kind === "polygon") {
     const b = pointsBounds(m.points);
     return { x: b.x + b.width / 2, y: b.y + b.height / 2 };

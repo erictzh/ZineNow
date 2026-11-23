@@ -1,5 +1,5 @@
 // The Marquee tool's geometry and how a new layer joins the page (model/marquee.js).
-import { applyMarqueeResult, dragBox, polygonPressAction, polygonWithPoint, startPolygon, isUsableMarquee, marqueeCenter, pointInPolygon, pointsBounds, rectMarquee, regionPolygon, rotatedMarquee, translatedMarquee } from "../apps/ZEditor/src/model/marquee.js";
+import { applyMarqueeResult, brushBounds, brushRegion, brushWithStroke, dragBox, polygonPressAction, polygonWithPoint, startPolygon, isUsableMarquee, marqueeCenter, pointInPolygon, pointsBounds, rectMarquee, regionPolygon, rotatedMarquee, translatedMarquee } from "../apps/ZEditor/src/model/marquee.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 const near = (a, b) => Math.abs(a - b) < 1e-6;

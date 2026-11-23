@@ -2,7 +2,7 @@
 
 import { EXPORT_SCALE, MAIN_SCALE } from "../constants.js";
 import { rotatePoint } from "../model/geometry.js";
-import { pointsBounds, regionPolygon } from "../model/marquee.js";
+import { brushBounds, pointsBounds, regionPolygon } from "../model/marquee.js";
 import { isThreaded } from "../model/text/threads.js";
 import { rasterizedRectPatch, rasterizedTextPatch, rasterizedTracePatch, trimmedImageFromCanvas } from "./bake.js";
 import { drawPageItem } from "./clipMask.js";
@@ -13,6 +13,7 @@ import { imagePixelAt } from "./softErase.js";
 import { fillFromSurroundings } from "./inpaint.js";
 import { MAX_HOLE_SIDE, patchFill } from "./patchFill.js";
 import { aiFillCanvas } from "./aiFill.js";
+import { areaBounds, areaFromRegion, mapAreaToImage, paintArea } from "./regionArea.js";
 
 const LAYER_NAMES = { copy: "Layer via Copy", cut: "Layer via Cut" };
 const COVER_NAME = "Cut fill";
@@ -76,7 +77,7 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
       if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
       base = { ...target, ...rasterized };
     }
-    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, regionPolygon(marquee), settings, surround ? fillOpts : null, fillInfo) };
+    result.sourcePatch = { ...(rasterized || {}), src: await cutFromImage(base, marquee, settings, surround ? fillOpts : null, fillInfo) };
     if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
   } else {
     // Everything visible can't be erased as one picture, so the spot is covered instead: the cover hides
@@ -117,6 +118,7 @@ async function drawLayerAlone(page, pdfDocsRef, pageFilter, target) {
 // transparent corners, and the item is turned to match. A polygon is cut as an upright picture of its
 // bounding box, with everything outside the polygon see-through.
 function layerFromRegion(picture, marquee, scale, name) {
+  if (marquee.kind === "brush") return layerFromBrush(picture, marquee, scale, name);
   const isRect = marquee.kind === "rect";
   const angle = isRect ? (marquee.angle || 0) : 0;
   const polygon = regionPolygon(marquee);
@@ -170,45 +172,81 @@ function layerFromRegion(picture, marquee, scale, name) {
   };
 }
 
+// The Brush marquee: the picture inside the painted area (an upright picture of its box, see-through everywhere not painted).
+function layerFromBrush(picture, region, scale, name) {
+  const b = brushBounds(region);
+  if (!b) return null;
+  const left = Math.max(0, Math.floor(b.x0 * scale)), top = Math.max(0, Math.floor(b.y0 * scale));
+  const right = Math.min(picture.width, Math.ceil(b.x1 * scale)), bottom = Math.min(picture.height, Math.ceil(b.y1 * scale));
+  const w = right - left, h = bottom - top;
+  if (w < 1 || h < 1) return null;
+  const out = document.createElement("canvas"); out.width = w; out.height = h;
+  const ctx = out.getContext("2d");
+  ctx.drawImage(picture, -left, -top);
+  const mask = document.createElement("canvas"); mask.width = w; mask.height = h;
+  paintArea(mask.getContext("2d"), areaFromRegion(region, scale), { dx: -left, dy: -top });
+  ctx.globalCompositeOperation = "destination-in"; // keep only the painted part
+  ctx.drawImage(mask, 0, 0);
+  const trimmed = trimmedImageFromCanvas(out);
+  if (!trimmed) return null;
+  return {
+    type: "image", name, src: trimmed.src,
+    x: (left + trimmed.left) / scale, y: (top + trimmed.top) / scale, width: trimmed.width / scale, height: trimmed.height / scale,
+    naturalWidth: trimmed.width, naturalHeight: trimmed.height,
+    filter: { type: "none" }, // the page's filter is already in these pixels
+  };
+}
+
 // ---- Cutting ----------------------------------------------------------------------------------
 
-// The image's own pixels with the region taken out (transparent) or painted over (fill). The page-px
-// outline is mapped into the image's pixels with imagePixelAt, which allows for the image's rotation,
-// scale and crop. Returns a PNG data URL.
-async function cutFromImage(image, polygon, settings, fillOpts, fillInfo) {
+// The image's own pixels with the region taken out (transparent), painted over (a colour) or replaced from the surroundings. The
+// region (page px) is mapped into the image's pixels with imagePixelAt, which allows for the image's rotation, scale and crop.
+// Returns a PNG data URL.
+async function cutFromImage(image, marquee, settings, fillOpts, fillInfo) {
   const source = await loadImageElement(image.src);
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth || source.naturalWidth;
   canvas.height = image.naturalHeight || source.naturalHeight;
   const ctx = canvas.getContext("2d");
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-  ctx.beginPath();
-  polygon.forEach(([px, py], i) => {
-    const at = imagePixelAt(image, px, py);
-    if (i === 0) ctx.moveTo(at.x, at.y); else ctx.lineTo(at.x, at.y);
-  });
-  ctx.closePath();
+  const area = mapAreaToImage(areaFromRegion(marquee, 1), image);
   if (fillOpts) {
     // Replaced from the pixels round the region, in the image's own pixels
-    const points = polygon.map(([px, py]) => { const at = imagePixelAt(image, px, py); return [at.x, at.y]; });
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-    await fillCanvasRegion(ctx, canvas.width, canvas.height, points, fillOpts, fillInfo);
-    ctx.restore();
+    await fillCanvasRegion(ctx, canvas.width, canvas.height, area, fillOpts, fillInfo);
     return canvas.toDataURL("image/png");
   }
+  // the area on a mask canvas of its own, then taken out of the picture or painted in a colour
+  const mask = document.createElement("canvas"); mask.width = canvas.width; mask.height = canvas.height;
+  const mx = mask.getContext("2d");
+  paintArea(mx, area);
   if (settings.cutLeaves === "fill") {
-    ctx.fillStyle = settings.fillColor;
+    mx.globalCompositeOperation = "source-in"; mx.fillStyle = settings.fillColor; mx.fillRect(0, 0, mask.width, mask.height);
+    ctx.drawImage(mask, 0, 0);
   } else {
     ctx.globalCompositeOperation = "destination-out";
-    ctx.fillStyle = "#000";
+    ctx.drawImage(mask, 0, 0);
   }
-  ctx.fill();
   return canvas.toDataURL("image/png");
 }
 
 // The shape that covers the spot after a cut from everything visible: a plain rectangle for a rectangle
 // marquee, an image of the polygon for a polygon.
 async function coverForRegion(marquee, color, scale) {
+  if (marquee.kind === "brush") {
+    // the painted area as a picture in the colour
+    const b = brushBounds(marquee);
+    const left = Math.floor(b.x0 * scale), top = Math.floor(b.y0 * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil(b.x1 * scale) - left); canvas.height = Math.max(1, Math.ceil(b.y1 * scale) - top);
+    const g = canvas.getContext("2d");
+    paintArea(g, areaFromRegion(marquee, scale), { dx: -left, dy: -top });
+    g.globalCompositeOperation = "source-in"; g.fillStyle = color; g.fillRect(0, 0, canvas.width, canvas.height);
+    return {
+      type: "image", name: COVER_NAME, src: canvas.toDataURL("image/png"),
+      x: left / scale, y: top / scale, width: canvas.width / scale, height: canvas.height / scale,
+      naturalWidth: canvas.width, naturalHeight: canvas.height, filter: { type: "none" },
+    };
+  }
   if (marquee.kind === "rect") {
     return {
       type: "rect", name: COVER_NAME,
@@ -240,30 +278,26 @@ async function coverForRegion(marquee, color, scale) {
 
 // ---- Filling from the surroundings ------------------------------------------------------------
 
-// Replaces the pixels inside `points` (a polygon, in this canvas's pixels) with a fill made from the pixels round it
-// (render/inpaint.js). Only the polygon's box and a margin are read and written back. Returns false when there was
+// Replaces the pixels inside `area` (see regionArea.js, in this canvas's pixels) with a fill made from the pixels round it
+// (render/inpaint.js). Only the area's box and a margin are read and written back. Returns false when there was
 // nothing to fill from.
-async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, opts, fillInfo) {
+async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, area, opts, fillInfo) {
   const { style } = opts;
   // the AI works on its own window of the whole picture (render/aiFill.js), not on the region below
-  if (style === "ai") return aiFillCanvas(ctx, points, opts.grow || 0, null);
+  if (style === "ai") return aiFillCanvas(ctx, area, opts.grow || 0, null);
   const grow = opts.grow || 0;
   const around = Math.max(FILL_CONTEXT_PX, style === "pattern" ? opts.reach + 8 : 0) + grow;
-  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-  const sx = Math.max(0, Math.floor(Math.min(...xs)) - around), sy = Math.max(0, Math.floor(Math.min(...ys)) - around);
-  const ex = Math.min(canvasWidth, Math.ceil(Math.max(...xs)) + around), ey = Math.min(canvasHeight, Math.ceil(Math.max(...ys)) + around);
+  const b = areaBounds(area);
+  if (!b) return false;
+  const sx = Math.max(0, Math.floor(b.x0) - around), sy = Math.max(0, Math.floor(b.y0) - around);
+  const ex = Math.min(canvasWidth, Math.ceil(b.x1) + around), ey = Math.min(canvasHeight, Math.ceil(b.y1) + around);
   const w = ex - sx, h = ey - sy;
   if (w <= 0 || h <= 0) return false;
-  // The polygon as a mask: any pixel it touches at all is part of the hole, so no rim of the old pixels is left.
+  // The area as a mask: any pixel it touches at all is part of the hole, so no rim of the old pixels is left; "grow" makes it that much bigger all round.
   const maskCanvas = document.createElement("canvas");
   maskCanvas.width = w; maskCanvas.height = h;
   const mctx = maskCanvas.getContext("2d");
-  mctx.fillStyle = "#000";
-  mctx.beginPath();
-  points.forEach(([x, y], i) => (i === 0 ? mctx.moveTo(x - sx, y - sy) : mctx.lineTo(x - sx, y - sy)));
-  mctx.closePath();
-  mctx.fill();
-  mctx.lineWidth = 2 + 2 * grow; mctx.lineJoin = "round"; mctx.strokeStyle = "#000"; mctx.stroke(); // "grow": the area is that much bigger all round
+  paintArea(mctx, area, { grow, dx: -sx, dy: -sy });
   const alpha = mctx.getImageData(0, 0, w, h).data;
   const hole = new Uint8Array(w * h);
   for (let i = 0; i < hole.length; i++) hole[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
@@ -291,15 +325,14 @@ async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, opts, fi
 async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, fillOpts, fillInfo) {
   // The page as it looks, paper included, so the fill sees the paper too.
   const picture = await renderPageToCanvas(page, pdfDocsRef, EXPORT_SCALE, pageFilter, null, false);
-  const polygon = regionPolygon(marquee);
-  const points = polygon.map(([x, y]) => [x * scale, y * scale]);
+  const area = areaFromRegion(marquee, scale);
   const ctx = picture.getContext("2d");
-  if (!(await fillCanvasRegion(ctx, picture.width, picture.height, points, fillOpts, fillInfo))) return null;
+  if (!(await fillCanvasRegion(ctx, picture.width, picture.height, area, fillOpts, fillInfo))) return null;
   // The cover is the filled area as it was GROWN (the Grow setting makes the hole bigger than the outline), cut along that grown outline.
   const grow = fillOpts.grow || 0, pad = grow + 3;
-  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-  const left = Math.max(0, Math.floor(Math.min(...xs)) - pad), top = Math.max(0, Math.floor(Math.min(...ys)) - pad);
-  const right = Math.min(picture.width, Math.ceil(Math.max(...xs)) + pad), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)) + pad);
+  const b = areaBounds(area);
+  const left = Math.max(0, Math.floor(b.x0) - pad), top = Math.max(0, Math.floor(b.y0) - pad);
+  const right = Math.min(picture.width, Math.ceil(b.x1) + pad), bottom = Math.min(picture.height, Math.ceil(b.y1) + pad);
   const out = document.createElement("canvas");
   out.width = Math.max(1, right - left); out.height = Math.max(1, bottom - top);
   const octx = out.getContext("2d");
@@ -307,11 +340,7 @@ async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale,
   // the grown outline on a canvas of its own (fill + stroke), then applied once: each drawing step of "destination-in" would
   // keep only what it touches, so doing the fill and the stroke straight on `out` would leave just the thin ring
   const outline = document.createElement("canvas"); outline.width = out.width; outline.height = out.height;
-  const ox = outline.getContext("2d");
-  ox.fillStyle = ox.strokeStyle = "#000"; ox.lineJoin = "round"; ox.lineWidth = 2 + 2 * grow;
-  ox.beginPath();
-  points.forEach(([x, y], i) => (i === 0 ? ox.moveTo(x - left, y - top) : ox.lineTo(x - left, y - top)));
-  ox.closePath(); ox.fill(); ox.stroke();
+  paintArea(outline.getContext("2d"), area, { grow, dx: -left, dy: -top });
   octx.globalCompositeOperation = "destination-in"; // keep only what is inside the (grown) outline
   octx.drawImage(outline, 0, 0);
   return {

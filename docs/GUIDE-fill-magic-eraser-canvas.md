@@ -37,7 +37,10 @@ You have a picture with something you don't want in it: a stray person, a mark, 
 ## How to use it
 
 1. **Choose the Marquee tool.** Press **M**, or tap the dotted-box icon in the toolbar.
-2. **Draw the area.** Drag a box round the thing, a little **bigger** than the thing, including its shadow or soft edge. For an odd shape, set **Shape** to **Polygon** and tap its corners one by one, then tap the first corner (or press Enter) to close it.
+2. **Mark the area.** Under **Shape** choose how:
+   - **Rectangle:** drag a box round the thing, a little **bigger** than the thing, including its shadow or soft edge.
+   - **Polygon:** tap its corners one by one, then tap the first corner (or press Enter) to close it.
+   - **Brush (paint over it):** paint over the thing, like a highlighter. The best choice for irregular shapes. Set **Brush size** (the **[** and **]** keys also change it), use **Paint** or **Erase mark** to add to the mark or rub part out, and **Clear marks** (or Esc) to start again. Two fingers still move and zoom the page. The marks **stay** after a fill, so you can change a setting and try again. It works for **Make a new layer** too: the new layer has the shape you painted.
 3. **Choose what it works on** (**Works on**):
    - **All visible**: everything you can see on the page, treated as one picture. The fill becomes a **new layer called "Filled area"** on top. Your original is untouched, so hide or delete that layer to get it back.
    - **Selected layer**: only the layer you selected first (select it with the Move tool before pressing M). That layer's own picture is changed.
@@ -70,7 +73,7 @@ You have a picture with something you don't want in it: a stray person, a mark, 
 
 When you press the button, the app first makes a **flat picture** of what you're working on. For "All visible" it draws the whole page into one image at export quality; for "Selected layer" it uses that layer's own pixels.
 
-Then your marquee outline is drawn onto a blank sheet to make a **mask**: a map where every pixel your outline touches is marked **"hole"** and every other pixel is marked **"known"**. (Any pixel the outline touches even slightly counts as hole, so no thin rim of the old thing is left behind.) **"Grow the area by"** simply draws the outline thicker before this, which makes the hole bigger. In maths this is called a **dilation**: the shape swells outwards by N pixels.
+Then your marquee (a rectangle, a polygon, or the strokes you painted with the Brush) is drawn onto a blank sheet to make a **mask**: a map where every pixel your outline touches is marked **"hole"** and every other pixel is marked **"known"**. (Any pixel the outline touches even slightly counts as hole, so no thin rim of the old thing is left behind.) **"Grow the area by"** simply draws the outline thicker before this, which makes the hole bigger. In maths this is called a **dilation**: the shape swells outwards by N pixels.
 
 The app does not work on the whole page, only on the hole plus a margin of known pixels around it (the margin is bigger when "Copy from within" is bigger). That keeps it fast.
 
