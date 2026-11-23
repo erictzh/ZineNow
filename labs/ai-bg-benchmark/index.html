@@ -158,7 +158,7 @@ function toTensor(ort, picture, m) {
   const c = document.createElement("canvas"); c.width = s; c.height = s;
   c.getContext("2d").drawImage(picture, 0, 0, s, s);
   const d = c.getContext("2d").getImageData(0, 0, s, s).data;
-  let mx = 1; if (m.maxNorm) { mx = 1; for (let i = 0; i < d.length; i += 4) mx = Math.max(mx, d[i], d[i + 1], d[i + 2]); }
+  let mx = 255; if (m.maxNorm) { mx = 1; for (let i = 0; i < d.length; i += 4) mx = Math.max(mx, d[i], d[i + 1], d[i + 2]); }
   const out = new Float32Array(3 * s * s);
   for (let i = 0; i < s * s; i++) for (let ch = 0; ch < 3; ch++) out[ch * s * s + i] = (d[i * 4 + ch] / mx - m.mean[ch]) / m.std[ch];
   return new ort.Tensor("float32", out, [1, 3, s, s]);
