@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-<h1>AI background removal speed test</h1>
+<h1>AI background removal speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 3 · MODNet scaling fixed</span></h1>
 <p>A throw-away test page (not part of the apps). It downloads small open-source "find the subject" models once (U²-Netp, about 5 MB, Apache-2.0; MODNet, about 25 MB, Apache-2.0), cuts the background out of a picture, and times it on this device. Nothing is uploaded: your picture never leaves this page.</p>
 
 <div class="card">
@@ -230,7 +230,7 @@ $("thr").oninput = drawResults;
 
 $("run").onclick = async () => {
   $("run").disabled = true; results.length = 0; $("imgs").textContent = ""; $("results").hidden = true;
-  lines.length = 0; log("ZineNow background-removal test · runtime " + ORT_VERSION + " · " + new Date().toISOString());
+  lines.length = 0; log("ZineNow background-removal test · build 3 · runtime " + ORT_VERSION + " · " + new Date().toISOString());
   try {
     const dev = await deviceInfo();
     if (!self.ort) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = ORT_URL; s.onload = res; s.onerror = () => rej(new Error("Could not load the AI runtime from the internet.")); document.head.append(s); });
