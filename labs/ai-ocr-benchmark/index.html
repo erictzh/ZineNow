@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>AI text-from-image (OCR) speed test</title>
+<style>
+  :root { color-scheme: dark; --bg:#171312; --fg:#f2ece8; --mut:#a99f98; --acc:#e8622a; --card:#241e1c; --bd:#3a312e; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; max-width:900px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 4px; } p { margin:6px 0; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:12px; margin:12px 0; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:12px 16px; font:inherit; font-weight:600; min-height:44px; }
+  button.sec { background:#3a312e; } button:disabled { opacity:.5; }
+  input[type=text], select, textarea { background:#171312; color:var(--fg); border:1px solid var(--bd); border-radius:8px; padding:8px; font:13px monospace; }
+  input[type=text] { width:100%; } textarea { width:100%; min-height:180px; }
+  label { display:block; margin:8px 0 2px; font-size:13px; color:var(--mut); }
+  pre { white-space:pre-wrap; word-break:break-word; background:#100d0c; border:1px solid var(--bd); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace, monospace; margin:8px 0 0; max-height:340px; overflow:auto; }
+  progress { width:100%; height:14px; } .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+  canvas { width:100%; border-radius:6px; display:block; background:#000; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>AI text-from-image (OCR) speed test <span style="font-size:13px;font-weight:400;color:var(--mut)">build 1</span></h1>
+<p>A throw-away test page (not part of the apps). It reads the text in a picture on this device with Tesseract.js (Apache-2.0 licence), and times it. Everything is downloaded once from <b>cdn.jsdelivr.net</b> (the reader's code about 4 to 5 MB, plus one language file of about 1 to 3 MB) and kept. Nothing is uploaded; your picture never leaves this page.</p>
+
+<div class="card">
+  <b>Your device</b>
+  <pre id="device">checking…</pre>
+</div>
+
+<div class="card">
+  <b>1. Pick a picture with text</b>
+  <p>Try: a clean printed page, a photo of a sign or a zine page, a decorative font, and handwriting. If you skip this, a plain test picture is used.</p>
+  <input type="file" id="pic" accept="image/*">
+</div>
+
+<div class="card">
+  <b>2. Settings</b>
+  <label for="lang">Language (the file for it is downloaded once)</label>
+  <select id="lang">
+    <option value="eng">English (eng)</option>
+    <option value="msa">Malay / Bahasa Melayu (msa)</option>
+    <option value="ind">Indonesian (ind)</option>
+    <option value="chi_sim">Chinese, simplified (chi_sim)</option>
+    <option value="chi_tra">Chinese, traditional (chi_tra)</option>
+    <option value="tam">Tamil (tam)</option>
+    <option value="other">other: type its code below</option>
+  </select>
+  <input type="text" id="other" placeholder="language code, e.g. fra, deu, spa, jpn (see tesseract-ocr tessdata)" style="margin-top:6px">
+  <label for="psm">How the page is laid out</label>
+  <select id="psm">
+    <option value="3">Automatic (a normal page with paragraphs)</option>
+    <option value="6">One block of text</option>
+    <option value="11">Scattered text (signs, posters, zine pages)</option>
+    <option value="7">One line</option>
+  </select>
+  <progress id="prog" value="0" max="1" hidden></progress>
+  <div class="row">
+    <button id="run">Run the test</button>
+    <button id="copy" class="sec">Copy the report</button>
+    <button id="clear" class="sec">Forget the downloaded language files</button>
+  </div>
+  <p id="status">Not started. Use Wi-Fi for the first run (about 6 to 8 MB) and keep this page open.</p>
+</div>
+
+<div class="card" id="results" hidden>
+  <b>Text found</b> <span id="conf" style="color:var(--mut);font-size:13px"></span>
+  <textarea id="text" readonly></textarea>
+  <div class="row"><button id="copytext" class="sec">Copy the text</button></div>
+  <canvas id="cv"></canvas>
+  <p>Boxes: green = sure, yellow = unsure, red = very unsure.</p>
+</div>
+
+<div class="card">
+  <b>Report (send me a screenshot of this, or use "Copy the report")</b>
+  <pre id="log">(nothing yet)</pre>
+</div>
+
+<script>
+"use strict";
+const BUILD = 1;
+const TJS_VERSION = "5.1.1", CORE_VERSION = "5.1.0";
+const TJS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/tesseract.min.js";
+const WORKER_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@" + TJS_VERSION + "/dist/worker.min.js";
+const CORE_URL = "https://cdn.jsdelivr.net/npm/tesseract.js-core@" + CORE_VERSION;
+const $ = (id) => document.getElementById(id);
+const lines = [];
+const log = (s) => { lines.push(s); $("log").textContent = lines.join("\n"); };
+const status = (s) => { $("status").textContent = s; };
+const ms = (a) => Math.round(performance.now() - a);
+let last = null; // { canvas, words }
+
+async function deviceInfo() {
+  const out = ["Browser: " + navigator.userAgent, "CPU threads reported: " + (navigator.hardwareConcurrency || "?"), "Memory reported (GB, rounded down): " + (navigator.deviceMemory || "?")];
+  $("device").textContent = out.join("\n");
+}
+const langCode = () => ($("lang").value === "other" ? $("other").value.trim() : $("lang").value);
+
+function builtInPicture() {
+  const c = document.createElement("canvas"); c.width = 900; c.height = 400;
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = "#111"; x.font = "bold 56px sans-serif"; x.fillText("ZineNow test page", 40, 100);
+  x.font = "34px serif"; x.fillText("The quick brown fox jumps over the lazy dog.", 40, 190);
+  x.font = "28px monospace"; x.fillText("0123456789 - Copy this text, please!", 40, 270);
+  return c;
+}
+async function loadPicture() {
+  const f = $("pic").files[0];
+  if (!f) { log("Picture: the built-in test picture (printed text: pick your own)"); return builtInPicture(); }
+  const bmp = await createImageBitmap(f);
+  const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  log("Picture: yours, " + c.width + "×" + c.height);
+  return c;
+}
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => rej(new Error("Could not load the reader from the internet (" + src.split("/")[2] + ").")); document.head.append(s); });
+}
+
+function draw() {
+  if (!last) return;
+  const cv = $("cv"); cv.width = last.canvas.width; cv.height = last.canvas.height;
+  const x = cv.getContext("2d"); x.drawImage(last.canvas, 0, 0);
+  x.lineWidth = Math.max(2, cv.width / 400);
+  for (const w of last.words) {
+    x.strokeStyle = w.confidence >= 80 ? "#3fd26f" : w.confidence >= 55 ? "#f2c94c" : "#ff5a5a";
+    x.strokeRect(w.bbox.x0, w.bbox.y0, w.bbox.x1 - w.bbox.x0, w.bbox.y1 - w.bbox.y0);
+  }
+}
+
+$("run").onclick = async () => {
+  $("run").disabled = true; $("results").hidden = true; last = null;
+  lines.length = 0; log("ZineNow OCR test · build " + BUILD + " · Tesseract.js " + TJS_VERSION + " (core " + CORE_VERSION + ") · " + new Date().toISOString());
+  try {
+    await deviceInfo();
+    const lang = langCode();
+    if (!/^[a-z_]{3,12}$/.test(lang)) throw new Error("Type a language code (3 to 12 letters), for example eng.");
+    const picture = await loadPicture();
+    if (!self.Tesseract) { status("Loading the reader…"); await loadScript(TJS_URL); }
+    log("Language: " + lang + " · page layout mode " + $("psm").value);
+    const t0 = performance.now();
+    $("prog").hidden = false; $("prog").value = 0; $("prog").max = 1;
+    const worker = await Tesseract.createWorker(lang, 1, {
+      workerPath: WORKER_URL, corePath: CORE_URL,
+      langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/" + lang + "@1.0.0/4.0.0_best_int",
+      logger: (m) => { if (typeof m.progress === "number") { $("prog").value = m.progress; status(m.status + " " + Math.round(m.progress * 100) + " %"); } },
+    });
+    log("Reader started (downloads included) in " + ms(t0) + " ms");
+    await worker.setParameters({ tessedit_pageseg_mode: $("psm").value });
+    const t1 = performance.now();
+    const { data } = await worker.recognize(picture);
+    log("First read: " + ms(t1) + " ms · confidence " + Math.round(data.confidence) + " % · " + (data.words || []).length + " words · " + data.text.trim().length + " characters");
+    const t2 = performance.now();
+    await worker.recognize(picture);
+    log("Second read (reader already warm): " + ms(t2) + " ms");
+    $("text").value = data.text.trim();
+    $("conf").textContent = "(average confidence " + Math.round(data.confidence) + " %)";
+    last = { canvas: picture, words: (data.words || []).filter((w) => w.text.trim()) };
+    $("results").hidden = false; draw();
+    await worker.terminate();
+    $("prog").hidden = true;
+    status("Done. Check the text against the picture, then send me the report below.");
+    log("== DONE ==");
+  } catch (e) { $("prog").hidden = true; log("ERROR: " + (e && e.message ? e.message : e)); status("Something went wrong: " + (e && e.message ? e.message : e)); }
+  finally { $("run").disabled = false; }
+};
+$("copytext").onclick = async () => { try { await navigator.clipboard.writeText($("text").value); status("Text copied."); } catch (e) { $("text").select(); status("Select the text and copy it by hand."); } };
+$("copy").onclick = async () => { try { await navigator.clipboard.writeText(lines.join("\n")); status("Report copied."); } catch (e) { status("Could not copy: select the report text and copy it by hand."); } };
+$("clear").onclick = async () => {
+  try { const dbs = (await indexedDB.databases ? await indexedDB.databases() : []); for (const d of dbs) if (/tesseract/i.test(d.name || "")) indexedDB.deleteDatabase(d.name); } catch (e) { /* ignore */ }
+  status("The downloaded language files were removed from this device.");
+};
+deviceInfo();
+</script>
+</body>
+</html>

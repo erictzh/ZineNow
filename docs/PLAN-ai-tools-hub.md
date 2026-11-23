@@ -149,7 +149,7 @@ For each tool the order is: benchmark page -> user runs it on the tablet -> gate
 - [x] Tests (stand-in detector), guide, HANDOFF.
 
 **3b Text from image (OCR)**
-- [ ] `labs/ai-ocr-benchmark/index.html`: Tesseract.js (from a CDN, shown) with English; report time and the text read from the user's printed-text photo.
+- [x] `labs/ai-ocr-benchmark/index.html` (build 1, built 2026-11-23): Tesseract.js 5.1.1 (all from cdn.jsdelivr.net) with a language picker (English, Malay, Indonesian, Chinese, Tamil, other), a page-layout picker, word boxes coloured by confidence, text + Copy; report time and confidence. **Waiting for the user to run it on the tablet.**
 - [ ] Gate: Apache-2.0; engine + English data within the size budget; readable result on clean printed text.
 - [ ] Tool `src/tools/ocr.js`: language list on the Models page (each language file with size), recognised text box with Copy and Download .txt, read regions shown on the picture. Offline caching of the engine files and the chosen language data.
 - [ ] Tests, guide, HANDOFF.
