@@ -1199,7 +1199,7 @@
     let view = { s: 1, x: 0, y: 0 };
     let undoStack = [], redoStack = [];
     let handler = null;
-    const openListeners = [];
+    const openListeners = [], viewListeners = [];
     const changed = () => onChange && onChange();
     const toImage = (e) => {
       const r = stage.getBoundingClientRect();
@@ -1207,6 +1207,7 @@
     };
     function applyView() {
       world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")";
+      for (const f of viewListeners) f();
     }
     function fit() {
       const r = stage.getBoundingClientRect();
@@ -1243,6 +1244,12 @@
         return { ok: false, message: "Couldn't open that picture: " + e.message };
       }
     }
+    function setSize(w, h) {
+      for (const c of [imgC, ...overlays]) {
+        c.width = w;
+        c.height = h;
+      }
+    }
     const snapshot = () => createImageBitmap(imgC);
     function commit(before) {
       undoStack.push(before);
@@ -1255,9 +1262,12 @@
       if (!from.length || busy) return false;
       to.push(await createImageBitmap(imgC));
       const bmp = from.pop();
+      const resized = bmp.width !== imgC.width || bmp.height !== imgC.height;
+      if (resized) setSize(bmp.width, bmp.height);
       imgX.clearRect(0, 0, imgC.width, imgC.height);
       imgX.drawImage(bmp, 0, 0);
       bmp.close();
+      if (resized) fit();
       changed();
       return true;
     }
@@ -1364,6 +1374,21 @@
         view = { ...v };
         applyView();
       },
+      // Replaces the picture with `canvas` (any size, e.g. a crop); the caller takes a snapshot first and commits it, so it is one undo step.
+      replaceWith(canvas) {
+        const resized = canvas.width !== imgC.width || canvas.height !== imgC.height;
+        if (resized) setSize(canvas.width, canvas.height);
+        imgX.clearRect(0, 0, imgC.width, imgC.height);
+        imgX.drawImage(canvas, 0, 0);
+        if (resized) fit();
+      },
+      // Is the picture still the same size as the one that was opened (only then can "Hold to compare" show the original)?
+      get comparable() {
+        return imgC.width === origC.width && imgC.height === origC.height;
+      },
+      onView(fn) {
+        viewListeners.push(fn);
+      },
       toImage,
       fit,
       open,
@@ -1415,12 +1440,32 @@
     return n;
   };
   var DEFAULT_CUTOFF = 0.1;
+  var MIN_CROP = 16;
+  function hitCrop(c, pt, tol) {
+    const nearL = Math.abs(pt.x - c.x) <= tol, nearR = Math.abs(pt.x - (c.x + c.w)) <= tol;
+    const nearT = Math.abs(pt.y - c.y) <= tol, nearB = Math.abs(pt.y - (c.y + c.h)) <= tol;
+    const inX = pt.x > c.x - tol && pt.x < c.x + c.w + tol, inY = pt.y > c.y - tol && pt.y < c.y + c.h + tol;
+    if (nearT && nearL) return "nw";
+    if (nearT && nearR) return "ne";
+    if (nearB && nearL) return "sw";
+    if (nearB && nearR) return "se";
+    if (nearT && inX) return "n";
+    if (nearB && inX) return "s";
+    if (nearL && inY) return "w";
+    if (nearR && inY) return "e";
+    if (pt.x > c.x && pt.x < c.x + c.w && pt.y > c.y && pt.y < c.y + c.h) return "move";
+    return null;
+  }
   var removeBackgroundTool = {
     id: "remove-background",
     name: "Remove background",
     summary: "Keep the main subject, make the rest see-through.",
     create(ctx2) {
       const { picture: picture2 } = ctx2;
+      const cropC = picture2.addOverlay(document.createElement("canvas"));
+      cropC.id = "crop";
+      cropC.style.display = "none";
+      const cropX = cropC.getContext("2d");
       const previewC = picture2.addOverlay(document.createElement("canvas"));
       previewC.id = "preview";
       previewC.style.display = "none";
@@ -1429,36 +1474,128 @@
       let modelKey = BG_MODELS[0].key;
       let cutoff = DEFAULT_CUTOFF, soft = 10;
       let found = null;
+      let crop = null;
       let raf = 0;
       const ctl = () => modelControl("bg:" + modelKey);
+      function drawCrop() {
+        cropX.clearRect(0, 0, cropC.width, cropC.height);
+        if (!crop || found) {
+          cropC.style.display = "none";
+          return;
+        }
+        cropC.style.display = "";
+        const s = picture2.view.s, c = crop;
+        cropX.fillStyle = "rgba(0,0,0,.55)";
+        cropX.fillRect(0, 0, cropC.width, cropC.height);
+        cropX.clearRect(c.x, c.y, c.w, c.h);
+        cropX.lineWidth = 2 / s;
+        cropX.strokeStyle = "#fff";
+        cropX.strokeRect(c.x, c.y, c.w, c.h);
+        cropX.strokeStyle = "rgba(255,255,255,.45)";
+        cropX.lineWidth = 1 / s;
+        for (const f of [1 / 3, 2 / 3]) {
+          cropX.beginPath();
+          cropX.moveTo(c.x + c.w * f, c.y);
+          cropX.lineTo(c.x + c.w * f, c.y + c.h);
+          cropX.moveTo(c.x, c.y + c.h * f);
+          cropX.lineTo(c.x + c.w, c.y + c.h * f);
+          cropX.stroke();
+        }
+        const hs = 9 / s;
+        cropX.fillStyle = "#e8622a";
+        cropX.strokeStyle = "#fff";
+        cropX.lineWidth = 1.5 / s;
+        for (const [hx, hy] of [[c.x, c.y], [c.x + c.w, c.y], [c.x, c.y + c.h], [c.x + c.w, c.y + c.h], [c.x + c.w / 2, c.y], [c.x + c.w / 2, c.y + c.h], [c.x, c.y + c.h / 2], [c.x + c.w, c.y + c.h / 2]]) {
+          cropX.fillRect(hx - hs, hy - hs, hs * 2, hs * 2);
+          cropX.strokeRect(hx - hs, hy - hs, hs * 2, hs * 2);
+        }
+        if (ui.cropInfo) ui.cropInfo.textContent = "Crop: " + Math.round(c.w) + " × " + Math.round(c.h) + " px (of " + picture2.width + " × " + picture2.height + ")";
+      }
+      let drag = null;
+      const cropHandler = {
+        down(pt) {
+          if (!crop) return;
+          const part = hitCrop(crop, pt, 18 / picture2.view.s);
+          if (part) drag = { part, start: pt, orig: { ...crop } };
+        },
+        move(pt) {
+          if (!drag || !crop) return;
+          const o = drag.orig, dx = pt.x - drag.start.x, dy = pt.y - drag.start.y, W = picture2.width, H = picture2.height;
+          let x0 = o.x, y0 = o.y, x1 = o.x + o.w, y1 = o.y + o.h;
+          if (drag.part === "move") {
+            const nx = Math.min(Math.max(0, o.x + dx), W - o.w), ny = Math.min(Math.max(0, o.y + dy), H - o.h);
+            crop = { x: nx, y: ny, w: o.w, h: o.h };
+          } else {
+            if (drag.part.includes("w")) x0 = Math.min(Math.max(0, o.x + dx), x1 - MIN_CROP);
+            if (drag.part.includes("e")) x1 = Math.max(Math.min(W, o.x + o.w + dx), x0 + MIN_CROP);
+            if (drag.part.includes("n")) y0 = Math.min(Math.max(0, o.y + dy), y1 - MIN_CROP);
+            if (drag.part.includes("s")) y1 = Math.max(Math.min(H, o.y + o.h + dy), y0 + MIN_CROP);
+            crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+          }
+          drawCrop();
+        },
+        up() {
+          drag = null;
+        },
+        cancel() {
+          drag = null;
+        }
+      };
+      function setCrop(on) {
+        if (on && picture2.loaded) {
+          const mx = picture2.width * 0.1, my = picture2.height * 0.1;
+          crop = crop || { x: mx, y: my, w: picture2.width - 2 * mx, h: picture2.height - 2 * my };
+          discard();
+          picture2.setPointerHandler(cropHandler);
+        } else {
+          crop = null;
+          drag = null;
+          picture2.setPointerHandler(null);
+        }
+        drawCrop();
+        refresh();
+      }
       const discard = () => {
         found = null;
         previewC.style.display = "none";
         previewX.clearRect(0, 0, previewC.width, previewC.height);
         picture2.canvas.style.visibility = "visible";
+        if (crop && mounted) picture2.setPointerHandler(cropHandler);
+        drawCrop();
         refresh();
       };
       function drawPreview() {
         raf = 0;
         if (!found) return;
         previewX.clearRect(0, 0, previewC.width, previewC.height);
-        previewX.drawImage(cutOutCanvas(picture2.canvas, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100), 0, 0);
+        previewX.drawImage(cutOutCanvas(found.src, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100), found.region.x, found.region.y);
       }
       const queuePreview = () => {
         if (!raf) raf = requestAnimationFrame(drawPreview);
       };
+      function regionCanvas() {
+        const r = crop ? { x: Math.round(crop.x), y: Math.round(crop.y), w: Math.round(crop.w), h: Math.round(crop.h) } : { x: 0, y: 0, w: picture2.width, h: picture2.height };
+        const c = document.createElement("canvas");
+        c.width = r.w;
+        c.height = r.h;
+        c.getContext("2d").drawImage(picture2.canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+        return { canvas: c, region: r };
+      }
       async function find() {
         if (picture2.busy || !picture2.loaded || ctl().state.phase !== "ready") return;
         picture2.setBusy(true);
         try {
           ctx2.status("Starting " + bgModel(modelKey).name + "…");
           const t0 = performance.now();
-          const { mask, side } = await segmentCanvas(picture2.canvas, modelKey, (t) => ctx2.status(t));
-          found = { mask, side, depth: picture2.depth };
+          const { canvas: src, region } = regionCanvas();
+          const { mask, side } = await segmentCanvas(src, modelKey, (t) => ctx2.status(t));
+          found = { mask, side, depth: picture2.depth, region, src };
+          picture2.setPointerHandler(null);
           previewC.style.display = "";
           picture2.canvas.style.visibility = "hidden";
           drawPreview();
-          ctx2.status("Found the subject in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s. Adjust the Edge cut-off if needed, then press Apply.", "ok");
+          drawCrop();
+          ctx2.status("Found the subject in " + ((performance.now() - t0) / 1e3).toFixed(1) + " s. Adjust the Edge cut-off if needed, then press Apply." + (crop ? " The picture will become the cropped area." : ""), "ok");
         } catch (e) {
           ctx2.status("Something went wrong: " + (e && e.message ? e.message : e), "bad");
         } finally {
@@ -1468,12 +1605,15 @@
       async function apply() {
         if (!found || picture2.busy) return;
         const before = await picture2.snapshot();
-        const out = cutOutCanvas(picture2.canvas, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100);
-        picture2.ctx.clearRect(0, 0, picture2.width, picture2.height);
-        picture2.ctx.drawImage(out, 0, 0);
+        const out = cutOutCanvas(found.src, found.mask, found.side, cutoff / 100, Math.max(0.1, soft) / 100);
+        const cropped = found.region.w !== picture2.width || found.region.h !== picture2.height;
+        picture2.replaceWith(out);
         picture2.commit(before);
+        crop = null;
+        drag = null;
+        picture2.setPointerHandler(null);
         discard();
-        ctx2.status("Applied. Not right? Undo, then change the Edge cut-off or the model and find the subject again.", "ok");
+        ctx2.status(cropped ? "Applied: the picture is now the cropped area. Undo brings the whole picture back." : "Applied. Not right? Undo, then change the Edge cut-off or the model and find the subject again.", "ok");
       }
       function refresh() {
         if (!mounted) return;
@@ -1487,6 +1627,10 @@
         ui.apply.hidden = ui.discard.hidden = !found;
         ui.apply.disabled = ui.discard.disabled = !idle;
         ui.find.hidden = Boolean(found);
+        ui.cropToggle.disabled = !has || !idle || Boolean(found);
+        ui.cropToggle.textContent = crop ? "Remove the crop box" : "Crop first…";
+        ui.cropBox.hidden = !crop;
+        if (!crop) ui.cropInfo.textContent = "";
       }
       const unsub = [];
       function drawModelBox() {
@@ -1497,10 +1641,20 @@
         boxEl = modelBox("bg:" + modelKey);
         ui.boxHost.append(boxEl);
       }
+      picture2.onView(() => {
+        if (mounted) drawCrop();
+      });
+      picture2.onOpen(() => {
+        crop = null;
+        drag = null;
+        found = null;
+        previewC.style.display = "none";
+        cropC.style.display = "none";
+        picture2.canvas.style.visibility = "visible";
+      });
       return {
         mount(panel) {
           mounted = true;
-          picture2.onOpen(discard);
           const sec1 = el3("section");
           sec1.append(el3("h2", "", "1. Model"));
           const radios = el3("div", "radios");
@@ -1521,8 +1675,25 @@
           }
           ui.boxHost = el3("div");
           sec1.append(radios, ui.boxHost);
+          const secC = el3("section");
+          secC.append(el3("h2", "", "2. Crop first (optional)"));
+          ui.cropToggle = el3("button", "wide", "Crop first…");
+          ui.cropToggle.type = "button";
+          ui.cropToggle.addEventListener("click", () => setCrop(!crop));
+          ui.cropBox = el3("div");
+          ui.cropBox.hidden = true;
+          ui.cropInfo = el3("p", "hint");
+          const cropHint = el3("p", "hint", "Drag the box or its edges and corners. Only what is inside is used, which also helps the model on a busy picture. When you Apply, the picture becomes the cropped area (Undo brings the whole picture back).");
+          const reset = el3("button", "wide", "Reset the box");
+          reset.type = "button";
+          reset.addEventListener("click", () => {
+            crop = null;
+            setCrop(true);
+          });
+          ui.cropBox.append(ui.cropInfo, cropHint, reset);
+          secC.append(ui.cropToggle, ui.cropBox);
           const sec2 = el3("section");
-          sec2.append(el3("h2", "", "2. Cut out"));
+          sec2.append(el3("h2", "", "3. Cut out"));
           const num = (label, key, min, max, step, value, onInput) => {
             const f = el3("label", "field");
             f.append(el3("span", "", label));
@@ -1552,7 +1723,7 @@
           const f1 = num("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
-          const h1 = el3("p", "hint", "Higher keeps less of the edge (a tighter cut). You can type finer values like 0.05.");
+          const h1 = el3("p", "hint", "Higher keeps less of the edge (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
           const f2 = num("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
@@ -1570,14 +1741,21 @@
           });
           const note = el3("p", "hint", "Works on the picture as it is now. Apply makes it the picture (Undo brings it back).");
           sec2.append(f1, ui.need[0], h1, f2, ui.need[1], ui.find, ui.apply, ui.discard, note);
-          panel.append(sec1, sec2);
+          panel.append(sec1, secC, sec2);
           drawModelBox();
           for (const id of BG_MODELS.map((m) => "bg:" + m.key)) unsub.push(modelControl(id).subscribe(refresh));
+          if (crop) picture2.setPointerHandler(cropHandler);
+          drawCrop();
           refresh();
         },
         unmount() {
           mounted = false;
+          drag = null;
+          const keep = crop;
           discard();
+          crop = keep;
+          cropC.style.display = "none";
+          picture2.setPointerHandler(null);
           while (unsub.length) unsub.pop()();
           if (boxEl) {
             boxEl.dispose && boxEl.dispose();
@@ -1586,7 +1764,12 @@
         },
         onPictureChange() {
           if (found && picture2.depth !== found.depth) discard();
-          else refresh();
+          if (crop && (crop.x + crop.w > picture2.width + 1 || crop.y + crop.h > picture2.height + 1)) {
+            crop = null;
+            picture2.setPointerHandler(null);
+            drawCrop();
+          }
+          refresh();
         },
         primary() {
           if (found) apply();
@@ -1959,7 +2142,8 @@
     emptyEl: $("empty"),
     onChange() {
       const has = picture.loaded, busy = picture.busy;
-      for (const id of ["save", "send", "compare"]) $(id).disabled = !has || busy;
+      for (const id of ["save", "send"]) $(id).disabled = !has || busy;
+      $("compare").disabled = !has || busy || !picture.comparable;
       $("undo").disabled = !picture.canUndo || busy;
       $("redo").disabled = !picture.canRedo || busy;
       if (active && active.tool && active.tool.onPictureChange) active.tool.onPictureChange();

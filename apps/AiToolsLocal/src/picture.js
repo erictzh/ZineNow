@@ -13,11 +13,11 @@ export function createPicture({ stage, world, imgC, origC, emptyEl, onChange }) 
   let view = { s: 1, x: 0, y: 0 };
   let undoStack = [], redoStack = [];
   let handler = null; // { down(pt, e), move(pt, e), up(pt, e), cancel() } set by the active tool
-  const openListeners = [];
+  const openListeners = [], viewListeners = [];
   const changed = () => onChange && onChange();
 
   const toImage = (e) => { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.s, y: (e.clientY - r.top - view.y) / view.s }; };
-  function applyView() { world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")"; }
+  function applyView() { world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")"; for (const f of viewListeners) f(); }
   function fit() {
     const r = stage.getBoundingClientRect();
     const s = Math.min(r.width / imgC.width, r.height / imgC.height, 1) * 0.96;
@@ -47,6 +47,9 @@ export function createPicture({ stage, world, imgC, origC, emptyEl, onChange }) 
     } catch (e) { return { ok: false, message: "Couldn't open that picture: " + e.message }; }
   }
 
+  // Sets the picture's size (and its overlays'): clears them.
+  function setSize(w, h) { for (const c of [imgC, ...overlays]) { c.width = w; c.height = h; } }
+
   // ---- history ------------------------------------------------------------------------------------
   const snapshot = () => createImageBitmap(imgC);
   // `before`: an ImageBitmap of the picture as it was before the tool changed it. Becomes one undo step.
@@ -61,7 +64,10 @@ export function createPicture({ stage, world, imgC, origC, emptyEl, onChange }) 
     if (!from.length || busy) return false;
     to.push(await createImageBitmap(imgC));
     const bmp = from.pop();
+    const resized = bmp.width !== imgC.width || bmp.height !== imgC.height;
+    if (resized) setSize(bmp.width, bmp.height); // a tool (crop) changed the picture's size: go back to the old size
     imgX.clearRect(0, 0, imgC.width, imgC.height); imgX.drawImage(bmp, 0, 0); bmp.close();
+    if (resized) fit();
     changed();
     return true;
   }
@@ -130,6 +136,16 @@ export function createPicture({ stage, world, imgC, origC, emptyEl, onChange }) 
     get canUndo() { return undoStack.length > 0; }, get canRedo() { return redoStack.length > 0; },
     get depth() { return undoStack.length; },
     get view() { return { ...view }; }, setView(v) { view = { ...v }; applyView(); },
+    // Replaces the picture with `canvas` (any size, e.g. a crop); the caller takes a snapshot first and commits it, so it is one undo step.
+    replaceWith(canvas) {
+      const resized = canvas.width !== imgC.width || canvas.height !== imgC.height;
+      if (resized) setSize(canvas.width, canvas.height);
+      imgX.clearRect(0, 0, imgC.width, imgC.height); imgX.drawImage(canvas, 0, 0);
+      if (resized) fit();
+    },
+    // Is the picture still the same size as the one that was opened (only then can "Hold to compare" show the original)?
+    get comparable() { return imgC.width === origC.width && imgC.height === origC.height; },
+    onView(fn) { viewListeners.push(fn); },
     toImage, fit, open, snapshot, commit, undo, redo, toBlob,
     setPointerHandler(h) { handler = h; },
     // A canvas a tool draws on top of the picture (same size, follows it). Returns the canvas.

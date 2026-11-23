@@ -27,7 +27,8 @@ const picture = createPicture({
   stage: $("stage"), world: $("world"), imgC: $("img"), origC: $("orig"), emptyEl: $("empty"),
   onChange() {
     const has = picture.loaded, busy = picture.busy;
-    for (const id of ["save", "send", "compare"]) $(id).disabled = !has || busy;
+    for (const id of ["save", "send"]) $(id).disabled = !has || busy;
+    $("compare").disabled = !has || busy || !picture.comparable; // a cropped picture no longer lines up with the original
     $("undo").disabled = !picture.canUndo || busy; $("redo").disabled = !picture.canRedo || busy;
     if (active && active.tool && active.tool.onPictureChange) active.tool.onPictureChange();
   },
