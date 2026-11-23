@@ -30,6 +30,18 @@ The **Models** page lists every model: its name, what it is for, licence, size, 
 4. Adjust **Edge cut-off (%)**, 0 to 100 (the - and + buttons move by 0.125; type finer values like 0.05) and **Soft edge (%)**. The useful cut-offs are very small, and 0 keeps everything. The picture updates live.
 5. **Apply** makes it the picture (Undo brings it back), or **Discard**.
 
+## Face blur
+
+Hides faces with Blur, Pixelate or a Black box. It uses a tiny face detector, **YuNet** (MIT licence, about 0.23 MB, from huggingface.co/opencv/face_detection_yunet), that only finds where faces are. **It does not recognise or identify anyone.**
+
+1. Download the model (about 16 MB in total with the AI engine, if you have not already).
+2. **Find faces.** Orange boxes with a number and a score appear on the picture. **Minimum score (%)** hides the unsure ones (lower shows more, including false ones).
+3. **Tap a box** to leave that face alone (it turns grey and dashed); tap again to include it. A face the detector missed: **Draw a box by hand** and drag on the picture.
+4. Choose **Blur**, **Pixelate** or **Black box**, the **Strength**, and **Grow each box by (%)** (the detector's box is tight; a little extra covers forehead, ears and chin; hand-drawn boxes are used as drawn).
+5. **Hide N faces** applies it to the picture. Undo brings the faces back. Use **Debug** if the boxes look wrong.
+
+Limits: very small, turned away, covered or blurry faces can be missed (draw a box). The detector looks at a 640 pixel version of the picture, so tiny faces in a big group photo may need a crop first (use Remove background's Crop, or crop before you open it).
+
 ## Send to ZEditor
 
 **Send to ZEditor** opens the picture in ZEditor as a new document. A picture that came from ZEditor ("Open in Ai Tools") goes back to that same ZEditor as a new layer.

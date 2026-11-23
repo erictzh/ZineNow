@@ -9,6 +9,8 @@ import { ORT_VERSION, gpuUsable } from "./runtime.js";
 import { releaseSession } from "./session.js";
 import { BG_CACHE, BG_MODELS, bgModel } from "./bgModel.js";
 import { releaseBgSession } from "./bgSession.js";
+import { FACE_CACHE, FACE_MODEL } from "./faceModel.js";
+import { releaseFaceSession } from "./faceSession.js";
 
 const CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
 // Sizes in MB (as published for runtime 1.31.1 and the model file); the numbers in the dialog are rounded from these.
@@ -36,10 +38,10 @@ export async function aiSaved() {
 // Downloads whatever is missing. `onProgress(doneMb, totalMb)`; `signal` (an AbortSignal) cancels it (the model is only kept once it
 // is complete). Resolves when both parts are saved. `which`: "fill" (MI-GAN, the default) or "background" (U²-Netp).
 export async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-  const bg = which === "background";
+  const bg = which === "background", face = which === "face";
   const plan = await downloadPlan();
-  const saved = bg ? await bgSaved(model) : await aiSaved();
-  const modelMb = bg ? bgModel(model).mb : plan.modelMb;
+  const saved = face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+  const modelMb = face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
   const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
   let doneMb = 0;
   const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -57,7 +59,8 @@ export async function downloadAi({ onProgress, signal, which = "fill", model = "
     }
   }
   if (!saved.model) {
-    if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
+    if (face) await getModelBytes(FACE_MODEL.url, (got) => report(got / 1048576), signal, FACE_CACHE);
+    else if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
     else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
   }
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* the browser decides */ }
@@ -74,8 +77,18 @@ export async function bgSaved(key) {
   const saved = await aiSaved();
   return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
 }
-// Is any AI model saved (the fill model or a background-removal one)? The runtime is only deleted when none is.
+// The face-detection model (YuNet): { gpu, modelMb, runtimeMb, totalMb }.
+export async function facePlan() {
+  const plan = await downloadPlan();
+  return { gpu: plan.gpu, modelMb: FACE_MODEL.mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(FACE_MODEL.mb + plan.runtimeMb) };
+}
+export async function faceSaved() {
+  const saved = await aiSaved();
+  return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
+}
+// Is any AI model saved (the fill model, a background-removal one or the face detector)? The runtime is only deleted when none is.
 async function anyModelSaved(except) {
+  if (except !== "face" && (await isModelSaved(FACE_MODEL.url, FACE_CACHE))) return true;
   if (except !== "fill" && (await isModelSaved(DEFAULT_MODEL_URL))) return true;
   for (const m of BG_MODELS) if (m.key !== except && (await isModelSaved(m.url, BG_CACHE))) return true;
   return false;
@@ -88,6 +101,13 @@ async function deleteRuntime() {
       for (const req of await cache.keys()) if (/onnxruntime-web/.test(req.url)) await cache.delete(req);
     }
   } catch (e) { /* nothing more to delete */ }
+}
+
+// Deletes the face-detection model (the runtime goes too only when no other AI model is saved).
+export async function deleteFace() {
+  releaseFaceSession();
+  await forgetModelUrl(FACE_MODEL.url, FACE_CACHE);
+  if (!(await anyModelSaved("face"))) await deleteRuntime();
 }
 
 // Deletes one background-removal model. The runtime goes too only when no other AI model is saved.

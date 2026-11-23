@@ -16756,6 +16756,21 @@
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": mode === "download" ? "Download the AI model" : "Delete the AI model", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, mode === "download" ? "Download AI model?" : "Delete AI model?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, mode === "download" ? /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, bg ? /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI background-remover model (", /* @__PURE__ */ React.createElement("b", null, info ? info.label : "U²-Netp"), ", about ", info ? info.mb : plan.modelMb, " MB, ", info ? info.licence : "Apache-2.0", " licence) from ", /* @__PURE__ */ React.createElement("b", null, info ? info.host : "huggingface.co"), " (", info ? info.repo : "edgetools/u2netp", "),") : /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI object-remover model (MI-GAN, ", mb(plan.modelMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ","), " plus its runtime (about ", mb(plan.runtimeMb), " MB, skipped if you already have it) from ", /* @__PURE__ */ React.createElement("b", null, "cdn.jsdelivr.net"), ". About ", plan.totalMb, " MB in total."), /* @__PURE__ */ React.createElement("li", null, "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Warning:"), " it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).")) : /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "This removes ", bg && info ? info.label : "the AI fill model", " from this device", bg ? "" : " (and the runtime, if the other AI model is not saved)", ". The runtime is only removed when no AI model needs it."), /* @__PURE__ */ React.createElement("li", null, "Ai Tools (Local) uses the same runtime files, so it may need to download them again."), /* @__PURE__ */ React.createElement("li", null, "You can download it again any time."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, mode === "download" ? "Confirm Download" : "Delete"))));
   }
 
+  // shared/js/ai/faceModel.js
+  var FACE_CACHE = "zinenow-ai-face-model";
+  var FACE_MODEL = {
+    key: "yunet",
+    name: "YuNet",
+    kind: "Face detection",
+    label: "YuNet (Face detection)",
+    mb: 0.23,
+    licence: "MIT",
+    host: "huggingface.co",
+    repo: "huggingface.co/opencv/face_detection_yunet",
+    url: "https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",
+    about: "Finds where faces are (boxes only). It does not recognise or identify anyone."
+  };
+
   // shared/js/ai/manager.js
   var CDN = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VERSION + "/dist/";
   var SIZES = { model: 28.2, runtimeGpu: 30.4, runtimeCpu: 15.7 };
@@ -16779,10 +16794,10 @@
     return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
   }
   async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
-    const bg = which === "background";
+    const bg = which === "background", face = which === "face";
     const plan = await downloadPlan();
-    const saved = bg ? await bgSaved(model) : await aiSaved();
-    const modelMb = bg ? bgModel(model).mb : plan.modelMb;
+    const saved = face ? await faceSaved() : bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = face ? FACE_MODEL.mb : bg ? bgModel(model).mb : plan.modelMb;
     const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
     let doneMb = 0;
     const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -16807,7 +16822,8 @@
       }
     }
     if (!saved.model) {
-      if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
+      if (face) await getModelBytes(FACE_MODEL.url, (got) => report(got / 1048576), signal, FACE_CACHE);
+      else if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
       else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
     }
     try {
@@ -16825,7 +16841,12 @@
     const saved = await aiSaved();
     return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
   }
+  async function faceSaved() {
+    const saved = await aiSaved();
+    return { model: await isModelSaved(FACE_MODEL.url, FACE_CACHE), runtime: saved.runtime };
+  }
   async function anyModelSaved(except) {
+    if (except !== "face" && await isModelSaved(FACE_MODEL.url, FACE_CACHE)) return true;
     if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
     for (const m of BG_MODELS) if (m.key !== except && await isModelSaved(m.url, BG_CACHE)) return true;
     return false;
@@ -19301,7 +19322,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f678e6e"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "259eaa3"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

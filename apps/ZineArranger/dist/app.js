@@ -5425,7 +5425,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build cd6ae8f";
+    subtitle.textContent += " · build 7cf364c";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();
