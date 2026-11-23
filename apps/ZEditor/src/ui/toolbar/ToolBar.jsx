@@ -10,10 +10,10 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
   return (
     <div className="ze-tool-bar">
       <div className="ze-tool-bar-group">
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "select" ? " active" : "")} title="Move (V)" onClick={() => selectTool("select")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "select" ? " active" : "")} title="Move (V)" onClick={() => selectTool("select")}>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 3l6.5 16 2-6.5L19 10.5z" fill="currentColor" /></svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "text" ? " active" : "")} title="Text (T)" onClick={() => selectTool("text")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "text" ? " active" : "")} title="Text (T)" onClick={() => selectTool("text")}>
           <span className="ze-tool-icon-text">T</span>
         </button>
         <button type="button" className="ze-tool-icon-btn" title="Insert Image (I)" onClick={edits.handleImageToolClick}>
@@ -23,43 +23,43 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
             <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "rect" ? " active" : "")} title="Rectangle (R)" onClick={() => selectTool("rect")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "rect" ? " active" : "")} title="Rectangle (R)" onClick={() => selectTool("rect")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
             <rect x="3.5" y="6" width="17" height="12" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "ellipse" ? " active" : "")} title="Ellipse (E)" onClick={() => selectTool("ellipse")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "ellipse" ? " active" : "")} title="Ellipse (E)" onClick={() => selectTool("ellipse")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
             <ellipse cx="12" cy="12" rx="8.5" ry="6" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "pen" ? " active" : "")} title="Draw (D)" onClick={() => selectTool("pen")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "pen" ? " active" : "")} title="Draw (D)" onClick={() => selectTool("pen")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 20l1-4L16 5l3 3L8 19z" />
             <path d="M14 7l3 3" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "highlighter" ? " active" : "")} title="Highlight (H)" onClick={() => selectTool("highlighter")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "highlighter" ? " active" : "")} title="Highlight (H)" onClick={() => selectTool("highlighter")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M6 20l1-3.5 8-8 3.5 3.5-8 8z" />
             <path d="M14 9l3.5 3.5" />
             <path d="M3 21h5" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "eraser" ? " active" : "")} title="Eraser" onClick={() => selectTool("eraser")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "eraser" ? " active" : "")} title="Eraser" onClick={() => selectTool("eraser")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M17 3l4 4-9.5 9.5H7L3 12z" />
             <path d="M7 21h13" />
             <path d="M9.5 5.5l6 6" />
           </svg>
         </button>
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "marquee" ? " active" : "")} title="Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)" onClick={() => selectTool("marquee")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "marquee" ? " active" : "")} title="Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)" onClick={() => selectTool("marquee")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="4" y="5.5" width="16" height="13" strokeDasharray="2.6 2.6" />
           </svg>
         </button>
         <span className="ze-tool-bar-divider" role="separator" aria-orientation="vertical" />
-        <button type="button" className={"ze-tool-icon-btn is-choice" + (tool === "measure" ? " active" : "")} title="Measure (U): click two points; a third click clears" onClick={() => selectTool("measure")}>
+        <button type="button" className={"ze-tool-icon-btn" + (tool === "measure" ? " active" : "")} title="Measure (U): click two points; a third click clears" onClick={() => selectTool("measure")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <rect x="2.5" y="8" width="19" height="8" rx="1" transform="rotate(-30 12 12)" />
             <path d="M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" />
