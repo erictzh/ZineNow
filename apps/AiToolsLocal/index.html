@@ -22,67 +22,44 @@
             <div class="topbar-logo">AI</div>
             <div class="topbar-brand-text">
                 <div class="topbar-title">Ai Tools (Local)</div>
-                <div class="topbar-subtitle">Runs on this device. Nothing is uploaded.</div>
+                <div class="topbar-subtitle">Runs on this device. Nothing is uploaded. Experimental.</div>
             </div>
         </div>
         <div class="topbar-actions">
             <input type="file" id="file" accept="image/*" hidden>
             <button type="button" class="btn-solid" id="open">Open picture</button>
+            <button type="button" id="undo" disabled>Undo</button>
+            <button type="button" id="redo" disabled>Redo</button>
+            <button type="button" id="compare" disabled title="Hold to see the picture as it was when opened">Hold to compare</button>
             <button type="button" id="save" disabled>Save PNG</button>
             <button type="button" id="send" disabled title="Opens the picture in ZEditor as a new document">Send to ZEditor</button>
         </div>
     </nav>
 
     <main class="work">
-        <div class="stage" id="stage">
-            <div class="empty" id="empty">
-                <p><b>Remove an object from a picture</b></p>
-                <p>Open a picture, drop one here, or paste it (Ctrl+V). Then paint over what you want gone.</p>
-                <button type="button" class="btn-solid" id="empty-open">Open picture</button>
+        <aside class="tools" aria-label="Tools">
+            <div class="tools-title">Tools</div>
+            <div id="tools-list" class="tools-list"></div>
+        </aside>
+
+        <div class="center">
+            <div class="stage" id="stage">
+                <div class="empty" id="empty">
+                    <p><b>Open a picture to start</b></p>
+                    <p>Open one, drop one here, or paste it (Ctrl+V). Then pick a tool on the left.</p>
+                    <button type="button" class="btn-solid" id="empty-open">Open picture</button>
+                </div>
+                <div class="world" id="world" hidden>
+                    <canvas id="orig" hidden></canvas>
+                    <canvas id="img"></canvas>
+                </div>
             </div>
-            <div class="ring" id="ring" hidden></div>
-            <div class="world" id="world" hidden>
-                <canvas id="img"></canvas>
-                <canvas id="orig" hidden></canvas>
-                <canvas id="mask"></canvas>
-                <canvas id="draft"></canvas>
-            </div>
+            <div id="models" hidden></div>
         </div>
 
         <aside class="panel">
-            <section>
-                <h2>1. Mark what to remove</h2>
-                <div class="seg" role="group" aria-label="Marking tool">
-                    <button type="button" class="active" data-tool="brush">Brush</button>
-                    <button type="button" data-tool="erase">Erase mark</button>
-                    <button type="button" data-tool="box">Box</button>
-                    <button type="button" data-tool="pan">Move</button>
-                </div>
-                <label class="field"><span>Brush size (px)</span><input type="number" id="brush" min="1" max="400" step="5" value="40"></label>
-                <p class="hint">Two fingers always move and zoom the picture.</p>
-                <button type="button" id="clear" disabled>Clear marks</button>
-            </section>
-
-            <section>
-                <h2>2. Remove it</h2>
-                <label class="field"><span>Grow the marked area by (px)</span><input type="number" id="grow" min="0" max="60" step="1" value="6"></label>
-                <p class="hint">A few pixels more than you painted covers shadows and fringes.</p>
-                <button type="button" class="btn-solid big" id="fill" disabled>Remove object</button>
-                <progress id="prog" value="0" max="1" hidden></progress>
-                <div class="row">
-                    <button type="button" id="undo" disabled>Undo</button>
-                    <button type="button" id="redo" disabled>Redo</button>
-                    <button type="button" id="compare" disabled>Hold to compare</button>
-                </div>
-                <p id="status" aria-live="polite">Open a picture to start.</p>
-            </section>
-
-            <details>
-                <summary>Model and device</summary>
-                <p id="model-info" class="hint"></p>
-                <label class="field"><span>Model address</span><input type="text" id="model-url" spellcheck="false"></label>
-                <button type="button" id="forget">Forget the saved model</button>
-            </details>
+            <div id="tool-panel"></div>
+            <p id="status" aria-live="polite">Open a picture to start.</p>
         </aside>
     </main>
 </div>

@@ -1,9 +1,9 @@
 # Ai Tools (Local)
 
-Remove an object from a picture with an AI model (MI-GAN) that runs on your own device. Nothing is uploaded; after the first model download (about 28 MB) it works offline.
+A hub of AI tools that run on your own device. Nothing is uploaded. Each model is downloaded once, only when you choose to (the **Models** page lists every model with its licence, size and where it comes from), then the tools work offline.
 
-Mark the object (Brush or Box), press **Remove object**, then Undo / compare / Save PNG, or **Send to ZEditor**.
+Tools so far (tools list on the left): **Remove object** (MI-GAN) and **Remove background** (U²-Netp General, MODNet Portrait). The whole picture is shared: open it once, switch tools, chain them (remove an object, then the background), Undo / Redo / Hold to compare / Save PNG, or **Send to ZEditor**. More tools are planned: `docs/PLAN-ai-tools-hub.md`.
 
-How it works, in plain words: see `docs/GUIDE-fill-magic-eraser-canvas.md`, Part 5. Notes for maintainers: `HANDOFF.md` and `docs/MAINTAINING.md`.
+How to use it: `docs/GUIDE-ai-tools-local.md`. Notes for maintainers: `HANDOFF.md` and `docs/MAINTAINING.md`.
 
-Build: `npm run build` (from the repo root) bundles `src/main.js` into `dist/app.js`.
+Build: `npm run build` (from the repo root) bundles `src/main.js` into `dist/app.js`. A new tool is one file in `src/tools/` (see `src/registry.js`) and one line in `src/main.js`.

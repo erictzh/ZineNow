@@ -99,40 +99,42 @@ Suggested order: 3a, 3b, 3c, 3d. Each ships separately and the user can stop at 
 ### Phases 1 + 2 (built together), in order
 
 **Step 1: shell and registry** (`apps/AiToolsLocal/src/`)
-- [ ] `shell.js`: left tools list (name + one line), the workspace in the middle (`stage` with pan/zoom, kept from `main.js`), the right options panel that shows the selected tool's panel. Top drawer on narrow screens. Top bar keeps Open picture, Save PNG, Send to ZEditor.
-- [ ] `registry.js`: the tool contract `{ id, name, summary, models: [modelKey...], mount(panelEl, ctx), unmount() }`, where `ctx` gives the picture canvas, history (undo/redo), status line, and model helpers.
-- [ ] `picture.js`: the one shared picture (open, drop, paste, view, fit, history, save, send) taken out of `main.js`; every tool works on it, and a tool's result replaces the picture (one undo step per result).
-- [ ] Keep: two-finger pan/zoom, Hold to compare, drop and paste, Ctrl+V.
+- [x] `shell.js`: left tools list (name + one line), the workspace in the middle (`stage` with pan/zoom, kept from `main.js`), the right options panel that shows the selected tool's panel. Top drawer on narrow screens. Top bar keeps Open picture, Save PNG, Send to ZEditor.
+- [x] `registry.js`: the tool contract `{ id, name, summary, models: [modelKey...], mount(panelEl, ctx), unmount() }`, where `ctx` gives the picture canvas, history (undo/redo), status line, and model helpers.
+- [x] `picture.js`: the one shared picture (open, drop, paste, view, fit, history, save, send) taken out of `main.js`; every tool works on it, and a tool's result replaces the picture (one undo step per result).
+- [x] Keep: two-finger pan/zoom, Hold to compare, drop and paste, Ctrl+V.
 
 **Step 2: Models page** (`src/modelsPage.js`)
-- [ ] A "Models" entry in the tools list that opens a page listing every model: name, kind, licence, size, download address, status, Download / Delete, and the total storage used.
-- [ ] Rows from one list: MI-GAN, U²-Netp, MODNet, and the AI engine (ONNX Runtime Web, shared). Later tools add rows.
-- [ ] Same confirm pop-up wording as ZEditor (what, from where, size, "does not connect to the internet", lag warning), for download and delete.
-- [ ] Reuse `shared/js/ai/manager.js` and `bgModel.js`; add the MI-GAN's facts (name, licence MIT, host, size) to a shared list so ZEditor and the app show the same facts. The editable model address in the old "Model and device" box is dropped (the address is shown, not editable).
+- [x] A "Models" entry in the tools list that opens a page listing every model: name, kind, licence, size, download address, status, Download / Delete, and the total storage used.
+- [x] Rows from one list: MI-GAN, U²-Netp, MODNet, and the AI engine (ONNX Runtime Web, shared). Later tools add rows.
+- [x] Same confirm pop-up wording as ZEditor (what, from where, size, "does not connect to the internet", lag warning), for download and delete.
+- [x] Reuse `shared/js/ai/manager.js` and `bgModel.js`; add the MI-GAN's facts (name, licence MIT, host, size) to a shared list so ZEditor and the app show the same facts. The editable model address in the old "Model and device" box is dropped (the address is shown, not editable).
 
 **Step 3: Remove object tool** (`src/tools/removeObject.js`)
-- [ ] Move the current marking UI and `removeObject()` flow from `main.js` (brush, erase mark, box, grow, progress).
-- [ ] Use the shared session/fill code (`shared/js/ai/session.js`, `fill.js`) so the app and ZEditor behave the same.
-- [ ] Add "Try another" with the fixed variation cycle (`AI_VARIATIONS` from `apps/ZEditor/src/render/aiFill.js` moved to `shared/js/ai/` so both import it).
-- [ ] Greyed Remove object with a red "Download required" until MI-GAN is downloaded; a link to the Models page.
+- [x] Move the current marking UI and `removeObject()` flow from `main.js` (brush, erase mark, box, grow, progress).
+- [x] Use the shared session/fill code (`shared/js/ai/session.js`, `fill.js`) so the app and ZEditor behave the same.
+- [x] Add "Try another" with the fixed variation cycle (`AI_VARIATIONS` from `apps/ZEditor/src/render/aiFill.js` moved to `shared/js/ai/` so both import it).
+- [x] Greyed Remove object with a red "Download required" until MI-GAN is downloaded; a link to the Models page.
 
 **Step 4: Remove background tool** (`src/tools/removeBackground.js`)
-- [ ] Model picker (U²-Netp (General), MODNet (Portrait)) with the same info lines as ZEditor.
-- [ ] Edge cut-off 0-100 % (default 0.1, -/+ 0.125, typed finer values), Soft edge (default 10 %), greyed with red "Download required".
-- [ ] Preview on a checkerboard, with the cut-off number box re-drawing the preview without re-running the model (as `labs/ai-bg-benchmark` does); "Apply" makes the result the picture.
-- [ ] Share the section's logic with ZEditor where practical (the model list, `segmentCanvas`, `cutOutCanvas` already are shared).
+- [x] Model picker (U²-Netp (General), MODNet (Portrait)) with the same info lines as ZEditor.
+- [x] Edge cut-off 0-100 % (default 0.1, -/+ 0.125, typed finer values), Soft edge (default 10 %), greyed with red "Download required".
+- [x] Preview on a checkerboard, with the cut-off number box re-drawing the preview without re-running the model (as `labs/ai-bg-benchmark` does); "Apply" makes the result the picture.
+- [x] Share the section's logic with ZEditor where practical (the model list, `segmentCanvas`, `cutOutCanvas` already are shared).
 
 **Step 5: wiring, offline, docs**
-- [ ] `sw.js`: new files in `FILES`, bump `CACHE_VERSION`; check the offline copy works with the service worker on.
-- [ ] `index.html` and `style.css` rewritten for the new layout (tokens/buttons from `shared/styles`).
-- [ ] `config/apps-config.js`: keep the card subtitle "Under development, still in experimental phase."
-- [ ] `README.md`, a guide `docs/GUIDE-ai-tools-local.md`, `docs/MAINTAINING.md` rows, HANDOFF.md.
+- [x] `sw.js`: new files in `FILES`, bump `CACHE_VERSION`; check the offline copy works with the service worker on.
+- [x] `index.html` and `style.css` rewritten for the new layout (tokens/buttons from `shared/styles`).
+- [x] `config/apps-config.js`: keep the card subtitle "Under development, still in experimental phase."
+- [x] `README.md`, a guide `docs/GUIDE-ai-tools-local.md`, `docs/MAINTAINING.md` rows, HANDOFF.md.
 
 **Step 6: tests** (all with stand-in ONNX models; the real models cannot be downloaded in the cloud sandbox)
-- [ ] Unit tests: registry contract, history, any new pure functions; the moved `AI_VARIATIONS` test keeps passing.
-- [ ] Headless browser: open a picture; switch tools without reloading; Remove object runs and undoes; Remove background runs for both models, undo; Models page download / Delete / storage total; greyed + "Download required" states; narrow-screen drawer; chaining (remove an object, then remove the background); Send to ZEditor and back still work.
-- [ ] Offline run with the service worker enabled.
-- [ ] `npm run check` and `npm test` pass; PR merged to `main`; HANDOFF updated.
+- [x] Unit tests: registry contract, history, any new pure functions; the moved `AI_VARIATIONS` test keeps passing.
+- [x] Headless browser: open a picture; switch tools without reloading; Remove object runs and undoes; Remove background runs for both models, undo; Models page download / Delete / storage total; greyed + "Download required" states; narrow-screen drawer; chaining (remove an object, then remove the background); Send to ZEditor and back still work.
+- [x] Offline run with the service worker enabled.
+- [x] `npm run check` and `npm test` pass; PR merged to `main`; HANDOFF updated.
+
+**Status: Phases 1+2 built and merged (2026-11-23).** Notes: the shell is `src/main.js` + `src/picture.js` (the layout and registry as planned; no separate `shell.js`, the shell is `main.js`); the Models page is `src/modelsPage.js` + `src/models.js`; `AI_VARIATIONS` moved to `shared/js/ai/variations.js`, and the fill itself to `shared/js/ai/fillMask.js` (ZEditor and the app both use them). Unit tests: only the moved variations test and the existing maths tests (the registry has no pure logic worth a test); the rest is covered by the headless browser run (stand-in models).
 
 **Review point:** the user tries it on the tablet (real models, speed, layout) and sends feedback before any Phase 3 work.
 

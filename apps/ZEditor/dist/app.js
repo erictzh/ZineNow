@@ -12471,6 +12471,73 @@
     }
   }
 
+  // shared/js/ai/variations.js
+  var AI_VARIATIONS = [
+    { dx: 0, dy: 0, scale: 1, grow: 0 },
+    { dx: -0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0, dy: -0.12, scale: 1, grow: 1 },
+    { dx: 0, dy: 0.12, scale: 1, grow: 2 },
+    { dx: 0, dy: 0, scale: 1.25, grow: 0 },
+    { dx: 0.08, dy: 0.08, scale: 0.85, grow: 3 }
+  ];
+  function variationFor(n) {
+    return AI_VARIATIONS[((Math.round(n) || 0) % AI_VARIATIONS.length + AI_VARIATIONS.length) % AI_VARIATIONS.length];
+  }
+  function varyCrop(crop, v, bounds, w, h) {
+    let side = Math.min(Math.min(w, h), Math.max(1, Math.round(crop.side * v.scale)));
+    const need = Math.max(bounds.x1 - bounds.x0 + 1, bounds.y1 - bounds.y0 + 1);
+    if (side < need) side = Math.min(Math.min(w, h), crop.side);
+    const cx = crop.x + crop.side / 2 + v.dx * crop.side, cy = crop.y + crop.side / 2 + v.dy * crop.side;
+    let x = Math.round(cx - side / 2), y = Math.round(cy - side / 2);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    x = Math.min(Math.max(x, bounds.x1 + 1 - side), bounds.x0);
+    y = Math.min(Math.max(y, bounds.y1 + 1 - side), bounds.y0);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    if (x > bounds.x0 || y > bounds.y0 || x + side < bounds.x1 + 1 || y + side < bounds.y1 + 1) return crop;
+    return { x, y, side };
+  }
+
+  // shared/js/ai/fillMask.js
+  var FEATHER = 3;
+  var MAX_GROUPS = 12;
+  async function aiFillMask(ctx, buildMask, variation, onStatus) {
+    const v = variationFor(variation);
+    const canvas = ctx.canvas, w = canvas.width, h = canvas.height;
+    const mask = buildMask(v.grow);
+    const { labels, boxes } = labelPieces(mask, w, h);
+    if (!boxes.length) return false;
+    const groups = groupPieces(boxes, w, h);
+    if (groups.some((g) => !g.crop)) throw new Error("That area is too big for the AI: mark a smaller part, or do it in a few steps.");
+    if (groups.length > MAX_GROUPS) throw new Error("That is " + groups.length + " separate areas: do at most " + MAX_GROUPS + " at a time.");
+    for (let i = 0; i < groups.length; i++) {
+      if (groups.length > 1) onStatus && onStatus("Removing area " + (i + 1) + " of " + groups.length + "…");
+      const crop = variation ? varyCrop(groups[i].crop, v, groups[i].bounds, w, h) : groups[i].crop;
+      const gm = groups.length === 1 ? mask : groupMask(labels, groups[i].ids);
+      const win = document.createElement("canvas");
+      win.width = win.height = MODEL_SIZE;
+      const wx = win.getContext("2d", { willReadFrequently: true });
+      wx.imageSmoothingQuality = "high";
+      wx.drawImage(canvas, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
+      const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
+      const answer = await runOnSession(rgba, windowMask(gm, w, crop), onStatus);
+      const ac = document.createElement("canvas");
+      ac.width = ac.height = MODEL_SIZE;
+      ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
+      const sc = document.createElement("canvas");
+      sc.width = sc.height = crop.side;
+      const sx = sc.getContext("2d", { willReadFrequently: true });
+      sx.imageSmoothingQuality = "high";
+      sx.drawImage(ac, 0, 0, crop.side, crop.side);
+      const region = ctx.getImageData(crop.x, crop.y, crop.side, crop.side);
+      paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, sx.getImageData(0, 0, crop.side, crop.side).data, blendWeights(gm, w, crop, FEATHER));
+      ctx.putImageData(region, crop.x, crop.y);
+    }
+    return true;
+  }
+
   // apps/ZEditor/src/render/regionArea.js
   function areaFromRegion(region, scale = 1) {
     if (region.kind === "brush") {
@@ -12536,75 +12603,20 @@
   }
 
   // apps/ZEditor/src/render/aiFill.js
-  var FEATHER = 3;
-  var MAX_GROUPS = 12;
-  var AI_VARIATIONS = [
-    { dx: 0, dy: 0, scale: 1, grow: 0 },
-    { dx: -0.12, dy: 0, scale: 1, grow: 0 },
-    { dx: 0.12, dy: 0, scale: 1, grow: 0 },
-    { dx: 0, dy: -0.12, scale: 1, grow: 1 },
-    { dx: 0, dy: 0.12, scale: 1, grow: 2 },
-    { dx: 0, dy: 0, scale: 1.25, grow: 0 },
-    { dx: 0.08, dy: 0.08, scale: 0.85, grow: 3 }
-  ];
-  function variationFor(n) {
-    return AI_VARIATIONS[((Math.round(n) || 0) % AI_VARIATIONS.length + AI_VARIATIONS.length) % AI_VARIATIONS.length];
-  }
-  function varyCrop(crop, v, bounds, w, h) {
-    let side = Math.min(Math.min(w, h), Math.max(1, Math.round(crop.side * v.scale)));
-    const need = Math.max(bounds.x1 - bounds.x0 + 1, bounds.y1 - bounds.y0 + 1);
-    if (side < need) side = Math.min(Math.min(w, h), crop.side);
-    const cx = crop.x + crop.side / 2 + v.dx * crop.side, cy = crop.y + crop.side / 2 + v.dy * crop.side;
-    let x = Math.round(cx - side / 2), y = Math.round(cy - side / 2);
-    x = Math.min(Math.max(0, x), w - side);
-    y = Math.min(Math.max(0, y), h - side);
-    x = Math.min(Math.max(x, bounds.x1 + 1 - side), bounds.x0);
-    y = Math.min(Math.max(y, bounds.y1 + 1 - side), bounds.y0);
-    x = Math.min(Math.max(0, x), w - side);
-    y = Math.min(Math.max(0, y), h - side);
-    if (x > bounds.x0 || y > bounds.y0 || x + side < bounds.x1 + 1 || y + side < bounds.y1 + 1) return crop;
-    return { x, y, side };
-  }
-  async function aiFillCanvas(ctx, area, grow, onStatus, variation = 0) {
-    const v = variationFor(variation);
-    grow += v.grow;
-    const canvas = ctx.canvas, w = canvas.width, h = canvas.height;
-    const m = document.createElement("canvas");
-    m.width = w;
-    m.height = h;
-    const mx = m.getContext("2d", { willReadFrequently: true });
-    paintArea(mx, area, { grow });
-    const alpha = mx.getImageData(0, 0, w, h).data;
-    const mask = new Uint8Array(w * h);
-    for (let i = 0; i < mask.length; i++) mask[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
-    const { labels, boxes } = labelPieces(mask, w, h);
-    if (!boxes.length) return false;
-    const groups = groupPieces(boxes, w, h);
-    if (groups.some((g) => !g.crop)) throw new Error("That area is too big for the AI: draw a smaller marquee, or do it in a few steps.");
-    if (groups.length > MAX_GROUPS) throw new Error("That is " + groups.length + " separate areas: do at most " + MAX_GROUPS + " at a time.");
-    for (let i = 0; i < groups.length; i++) {
-      const crop = variation ? varyCrop(groups[i].crop, v, groups[i].bounds, w, h) : groups[i].crop;
-      const gm = groups.length === 1 ? mask : groupMask(labels, groups[i].ids);
-      const win = document.createElement("canvas");
-      win.width = win.height = MODEL_SIZE;
-      const wx = win.getContext("2d", { willReadFrequently: true });
-      wx.imageSmoothingQuality = "high";
-      wx.drawImage(canvas, crop.x, crop.y, crop.side, crop.side, 0, 0, MODEL_SIZE, MODEL_SIZE);
-      const rgba = wx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
-      const answer = await runOnSession(rgba, windowMask(gm, w, crop), onStatus);
-      const ac = document.createElement("canvas");
-      ac.width = ac.height = MODEL_SIZE;
-      ac.getContext("2d").putImageData(new ImageData(answer, MODEL_SIZE, MODEL_SIZE), 0, 0);
-      const sc = document.createElement("canvas");
-      sc.width = sc.height = crop.side;
-      const sx = sc.getContext("2d", { willReadFrequently: true });
-      sx.imageSmoothingQuality = "high";
-      sx.drawImage(ac, 0, 0, crop.side, crop.side);
-      const region = ctx.getImageData(crop.x, crop.y, crop.side, crop.side);
-      paste(region.data, crop.side, { x: 0, y: 0, side: crop.side }, sx.getImageData(0, 0, crop.side, crop.side).data, blendWeights(gm, w, crop, FEATHER));
-      ctx.putImageData(region, crop.x, crop.y);
-    }
-    return true;
+  function aiFillCanvas(ctx, area, grow, onStatus, variation = 0) {
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    const buildMask = (extraGrow) => {
+      const m = document.createElement("canvas");
+      m.width = w;
+      m.height = h;
+      const mx = m.getContext("2d", { willReadFrequently: true });
+      paintArea(mx, area, { grow: grow + extraGrow });
+      const alpha = mx.getImageData(0, 0, w, h).data;
+      const mask = new Uint8Array(w * h);
+      for (let i = 0; i < mask.length; i++) mask[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;
+      return mask;
+    };
+    return aiFillMask(ctx, buildMask, variation, onStatus);
   }
 
   // apps/ZEditor/src/render/marqueeLayer.js
@@ -19280,7 +19292,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "834e97d"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "af16832"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
