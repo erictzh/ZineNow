@@ -7,6 +7,8 @@ import { HIGHLIGHTER_COLOR_SWATCHES, PEN_COLOR_SWATCHES } from "../../../model/s
 import { ControlList } from "../../controls/ControlList.jsx";
 import { CustomColorInput } from "../../controls/inputs.jsx";
 import { MARQUEE_DEFAULTS, isUsableMarquee } from "../../../model/marquee.js";
+import { useAiModel } from "../../../state/useAiModel.js";
+import { AiModelDialog } from "../../dialogs/AiModelDialog.jsx";
 import { SliderNumberInput, StepperNumberInput } from "../../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { StrokeFormatFields } from "../../controls/StrokeFormatFields.jsx";
@@ -35,6 +37,9 @@ export function ShapeToolPanel({ tool, toolDefaults }) {
 export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   const { marquee: settings, setMarquee } = toolDefaults;
   const change = (patch) => setMarquee((cur) => ({ ...cur, ...patch }));
+  const ai = useAiModel(); // the AI style needs the model on this device (an opt-in download)
+  const [aiDialog, setAiDialog] = React.useState(null); // "download" | "delete" | null
+  const useAi = settings.fillStyle === "ai";
   const fromLayer = settings.source === "layer";
   // Cutting from everything visible can only cover the spot, so it always fills.
   const leaves = settings.cutLeaves === "surround" ? "surround" : (settings.cutLeaves === "fill" || !fromLayer) ? "fill" : "transparent";
@@ -125,20 +130,48 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
         {fillMode && (
           <React.Fragment>
             <span className="ze-format-hint">Replaces what is inside the area with a fill made from the pixels around it. No new layer is made.</span>
-            <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
+            <select className="ze-format-select" aria-label="Fill style" value={settings.fillStyle === "detail" || settings.fillStyle === "pattern" || settings.fillStyle === "ai" ? settings.fillStyle : "smooth"} onChange={(e) => change({ fillStyle: e.target.value })}>
+              <option value="ai">AI (on-device): the best for removing objects</option>
               <option value="pattern">Pattern: copies texture from the rest of the picture</option>
               <option value="smooth">Smooth: a blend of the edge colours</option>
               <option value="detail">Detailed: lines and edges run on through it (small marks only)</option>
             </select>
-            <span className="ze-format-hint">Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks.</span>
-            <div className="ze-marquee-box-title">Fine-tune</div>
+            <span className="ze-format-hint">AI: removes objects the way a person would paint them out (needs a one-time download). Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks.</span>
+            {useAi && (
+              <div className="ze-ai-box">
+                <div className="ze-marquee-box-title">AI model</div>
+                {ai.phase === "checking" && <span className="ze-format-hint">Checking…</span>}
+                {ai.phase === "none" && (
+                  <React.Fragment>
+                    <span className="ze-format-hint">Not downloaded. It is only downloaded if you choose to, and it then works offline.</span>
+                    <button type="button" className="ze-format-toggle ze-format-toggle-wide active" onClick={() => setAiDialog("download")}>Download AI model{ai.plan ? " (about " + ai.plan.totalMb + " MB)" : ""}</button>
+                  </React.Fragment>
+                )}
+                {ai.phase === "downloading" && (
+                  <React.Fragment>
+                    <progress className="ze-ai-progress" max={ai.totalMb || 1} value={ai.doneMb} />
+                    <span className="ze-format-hint">Downloading… {ai.doneMb.toFixed(1)} of {ai.totalMb.toFixed(1)} MB</span>
+                    <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={ai.cancel}>Cancel download</button>
+                  </React.Fragment>
+                )}
+                {ai.phase === "ready" && (
+                  <React.Fragment>
+                    <span className="ze-format-hint">Downloaded: runs on this device, works offline. A fill takes a few seconds.</span>
+                    <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => setAiDialog("delete")}>Delete model{ai.plan ? " (frees about " + ai.plan.totalMb + " MB)" : ""}</button>
+                  </React.Fragment>
+                )}
+                {ai.error && <span className="ze-format-hint is-error">{ai.error}</span>}
+              </div>
+            )}
+            {!useAi && <div className="ze-marquee-box-title">Fine-tune</div>}
+            {useAi && <div className="ze-marquee-box-title">Fine-tune</div>}
             <span className="ze-format-hint">Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture.</span>
             {[
               { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
               { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
-              { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100) },
+              { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: !useAi && (settings.fillStyle !== "pattern" || (settings.fillMix !== undefined && settings.fillMix < 100)) },
             ].filter((f) => f.show).map((f) => (
               <div className="ze-format-field" key={f.key}>
                 <span className="ze-format-label">{f.label}</span>
@@ -147,13 +180,17 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               </div>
             ))}
             <div className="ze-format-row">
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail"} onClick={() => marquee.tryAnotherFill()}>Try another</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail" || useAi} onClick={() => marquee.tryAnotherFill()}>Try another</button>
             </div>
             <span className="ze-format-hint">{!ready ? "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : "Not right? Try another, or change a number above and fill again."}</span>
           </React.Fragment>
         )}
       </div>
+      <AiModelDialog
+        mode={aiDialog} plan={ai.plan} onCancel={() => setAiDialog(null)}
+        onConfirm={() => { const mode = aiDialog; setAiDialog(null); if (mode === "download") ai.download(); else ai.remove(); }}
+      />
     </FormatPanelShell>
   );
 }

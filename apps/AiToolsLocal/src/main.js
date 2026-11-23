@@ -6,9 +6,9 @@
 import { downloadBlob } from "../../../shared/js/download.js";
 import { AITOOLS_READY_MESSAGE, hasOpener, listenForHandoffImage, sendImageToOpener, sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
 import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
-import { MODEL_SIZE, blendWeights, dilate, groupMask, groupPieces, holeBounds, labelPieces, paste, windowMask } from "./fill.js";
-import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "./modelStore.js";
-import { createSession, findSign, gpuUsable, runModel } from "./runtime.js";
+import { MODEL_SIZE, blendWeights, dilate, groupMask, groupPieces, holeBounds, labelPieces, paste, windowMask } from "../../../shared/js/ai/fill.js";
+import { DEFAULT_MODEL_URL, forgetModel, getModelBytes, isModelSaved } from "../../../shared/js/ai/modelStore.js";
+import { createSession, findSign, gpuUsable, runModel } from "../../../shared/js/ai/runtime.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_SIDE = 4096; // a bigger picture is shrunk to this when opened (memory)

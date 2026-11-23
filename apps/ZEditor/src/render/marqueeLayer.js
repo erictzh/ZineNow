@@ -12,6 +12,7 @@ import { resolvePageText } from "./pageText.js";
 import { imagePixelAt } from "./softErase.js";
 import { fillFromSurroundings } from "./inpaint.js";
 import { MAX_HOLE_SIDE, patchFill } from "./patchFill.js";
+import { aiFillCanvas } from "./aiFill.js";
 
 const LAYER_NAMES = { copy: "Layer via Copy", cut: "Layer via Cut" };
 const COVER_NAME = "Cut fill";
@@ -52,7 +53,7 @@ export async function buildMarqueeLayer({ page, pdfDocsRef, pageFilter, marquee,
   if (mode === "copy") return result;
   // "Remove & fill" always fills from the surroundings; a cut does when the panel says so.
   const surround = fillOnly || settings.cutLeaves === "surround";
-  const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : "smooth";
+  const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : settings.fillStyle === "ai" ? "ai" : "smooth";
   const fillInfo = { fellBack: false }; // set when "pattern" could not be used and Smooth was used instead
   const num = (v, fallback, lo, hi) => (Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : fallback);
   const fillOpts = { // the panel's fine-tune settings (model/marquee.js)
@@ -244,6 +245,8 @@ async function coverForRegion(marquee, color, scale) {
 // nothing to fill from.
 async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, points, opts, fillInfo) {
   const { style } = opts;
+  // the AI works on its own window of the whole picture (render/aiFill.js), not on the region below
+  if (style === "ai") return aiFillCanvas(ctx, points, opts.grow || 0, null);
   const grow = opts.grow || 0;
   const around = Math.max(FILL_CONTEXT_PX, style === "pattern" ? opts.reach + 8 : 0) + grow;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
@@ -292,17 +295,25 @@ async function filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale,
   const points = polygon.map(([x, y]) => [x * scale, y * scale]);
   const ctx = picture.getContext("2d");
   if (!(await fillCanvasRegion(ctx, picture.width, picture.height, points, fillOpts, fillInfo))) return null;
+  // The cover is the filled area as it was GROWN (the Grow setting makes the hole bigger than the outline), cut along that grown outline.
+  const grow = fillOpts.grow || 0, pad = grow + 3;
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-  const left = Math.max(0, Math.floor(Math.min(...xs))), top = Math.max(0, Math.floor(Math.min(...ys)));
-  const right = Math.min(picture.width, Math.ceil(Math.max(...xs))), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)));
+  const left = Math.max(0, Math.floor(Math.min(...xs)) - pad), top = Math.max(0, Math.floor(Math.min(...ys)) - pad);
+  const right = Math.min(picture.width, Math.ceil(Math.max(...xs)) + pad), bottom = Math.min(picture.height, Math.ceil(Math.max(...ys)) + pad);
   const out = document.createElement("canvas");
   out.width = Math.max(1, right - left); out.height = Math.max(1, bottom - top);
   const octx = out.getContext("2d");
-  octx.beginPath();
-  points.forEach(([x, y], i) => (i === 0 ? octx.moveTo(x - left, y - top) : octx.lineTo(x - left, y - top)));
-  octx.closePath();
-  octx.clip();
   octx.drawImage(picture, -left, -top);
+  // the grown outline on a canvas of its own (fill + stroke), then applied once: each drawing step of "destination-in" would
+  // keep only what it touches, so doing the fill and the stroke straight on `out` would leave just the thin ring
+  const outline = document.createElement("canvas"); outline.width = out.width; outline.height = out.height;
+  const ox = outline.getContext("2d");
+  ox.fillStyle = ox.strokeStyle = "#000"; ox.lineJoin = "round"; ox.lineWidth = 2 + 2 * grow;
+  ox.beginPath();
+  points.forEach(([x, y], i) => (i === 0 ? ox.moveTo(x - left, y - top) : ox.lineTo(x - left, y - top)));
+  ox.closePath(); ox.fill(); ox.stroke();
+  octx.globalCompositeOperation = "destination-in"; // keep only what is inside the (grown) outline
+  octx.drawImage(outline, 0, 0);
   return {
     type: "image", name: FILL_NAME, src: out.toDataURL("image/png"),
     x: left / scale, y: top / scale, width: out.width / scale, height: out.height / scale,
