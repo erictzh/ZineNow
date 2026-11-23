@@ -20,6 +20,24 @@
 
   <button id="fab-add" class="zn-fab" type="button" title="Generate a config snippet" aria-label="Generate a config snippet">+</button>
 
+  <!-- Settings gear (bottom left): the "Experimental AI features" switch. Off by default: the experimental apps
+       (those marked experimental: true in config/apps-config.js) are hidden. The same switch as ZEditor's gear. -->
+  <button id="gear" class="zn-gear" type="button" title="Settings" aria-label="Settings" aria-expanded="false">&#9881;</button>
+  <div id="gear-panel" class="zn-gear-panel" hidden>
+    <div class="zn-gear-title">Settings</div>
+    <label class="zn-gear-check"><input type="checkbox" id="ai-toggle"> <span>Experimental AI features</span></label>
+    <div class="zn-gear-hint">Off (default): the experimental apps (Ai Tools (Local)) are hidden here, and ZEditor's AI features are hidden. The same switch is in ZEditor's gear.</div>
+  </div>
+
+  <div id="ai-modal" class="zn-modal" role="dialog" aria-labelledby="ai-modal-title">
+    <div class="zn-modal-head" id="ai-modal-title">Enable experimental AI features?</div>
+    <div class="zn-modal-body">These features are still under development and testing. They may need you to download local AI models and use your device's processing power. You will find them in the Ai Tools (Local) app here, and in ZEditor's Image panel and Marquee panel.</div>
+    <div class="zn-modal-actions">
+      <button id="ai-cancel" type="button">Cancel</button>
+      <button id="ai-enable" class="btn-solid" type="button">Enable</button>
+    </div>
+  </div>
+
   <div id="overlay" class="zn-overlay"></div>
 
   <!-- Readme sidebar -->

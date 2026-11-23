@@ -28,6 +28,7 @@
   const grid = $("grid");
   const overlay = $("overlay");
 
+  let aiModalOpen = false;
   let sidebarOpen = false;
   let addModalOpen = false;
 
@@ -192,6 +193,19 @@
     return card;
   }
 
+  // ------------------------------------------------------------------
+  // "Experimental AI features" (the gear, bottom left): off by default. Experimental apps (experimental: true in the config) are hidden while it
+  // is off. The setting is ZEditor's own (localStorage "zeditor.displayPrefs", key aiFeatures), so one switch controls both places.
+  // ------------------------------------------------------------------
+  const PREFS_KEY = "zeditor.displayPrefs";
+  let memoryAi = false; // used only when the browser blocks storage
+  function readPrefs() { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (e) { return {}; } }
+  function aiOn() { try { return readPrefs().aiFeatures === true; } catch (e) { return memoryAi; } }
+  function setAi(on) {
+    memoryAi = on;
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify({ ...readPrefs(), aiFeatures: on })); } catch (e) { /* not remembered */ }
+  }
+
   function renderGrid() {
     grid.innerHTML = "";
 
@@ -204,7 +218,7 @@
     }
 
     apps
-      .filter((e) => e && e.folder)
+      .filter((e) => e && e.folder && (!e.experimental || aiOn()))
       .forEach((entry) => grid.appendChild(buildCard(entry)));
   }
 
@@ -236,6 +250,7 @@
   // ------------------------------------------------------------------
   function openOverlayPanel(which) {
     overlay.classList.add("is-open");
+    if (which === "ai") { $("ai-modal").classList.add("is-open"); aiModalOpen = true; }
     if (which === "sidebar") { sidebar.classList.add("is-open"); sidebarOpen = true; }
     if (which === "add") { $("add-modal").classList.add("is-open"); addModalOpen = true; }
   }
@@ -244,15 +259,31 @@
     overlay.classList.remove("is-open");
     sidebar.classList.remove("is-open");
     $("add-modal").classList.remove("is-open");
-    sidebarOpen = addModalOpen = false;
+    $("ai-modal").classList.remove("is-open");
+    sidebarOpen = addModalOpen = aiModalOpen = false;
   }
 
   overlay.addEventListener("click", closeAllPanels);
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && (sidebarOpen || addModalOpen)) closeAllPanels();
+    if (e.key === "Escape" && (sidebarOpen || addModalOpen || aiModalOpen)) closeAllPanels();
+    if (e.key === "Escape") closeGear();
     if (e.key === "Escape") closeAllCardMenus();
   });
   document.addEventListener("click", () => closeAllCardMenus());
+
+  // ---- the gear and the AI switch ----
+  const gear = $("gear"), gearPanel = $("gear-panel"), aiToggle = $("ai-toggle");
+  function closeGear() { gearPanel.hidden = true; gear.setAttribute("aria-expanded", "false"); }
+  gear.addEventListener("click", (e) => { e.stopPropagation(); gearPanel.hidden = !gearPanel.hidden; gear.setAttribute("aria-expanded", String(!gearPanel.hidden)); aiToggle.checked = aiOn(); });
+  gearPanel.addEventListener("click", (e) => e.stopPropagation());
+  document.addEventListener("click", closeGear);
+  aiToggle.checked = aiOn();
+  aiToggle.addEventListener("change", () => {
+    if (aiToggle.checked) { aiToggle.checked = false; closeGear(); openOverlayPanel("ai"); return; } // ask first
+    setAi(false); renderGrid();
+  });
+  $("ai-cancel").addEventListener("click", closeAllPanels);
+  $("ai-enable").addEventListener("click", () => { setAi(true); aiToggle.checked = true; closeAllPanels(); renderGrid(); });
 
   // ------------------------------------------------------------------
   // "+" snippet generator — formats a ready-to-paste JS object. Writes

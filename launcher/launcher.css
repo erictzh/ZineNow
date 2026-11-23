@@ -402,3 +402,41 @@ a:focus-visible, button:focus-visible, .app-card:focus-visible {
     outline: 2px solid var(--ui-accent-text);
     outline-offset: 2px;
 }
+
+/* ---- Settings gear (bottom left) and its panel ------------------------------ */
+.zn-gear {
+    position: fixed;
+    left: 30px;
+    bottom: 30px;
+    width: 45px;
+    height: 45px;
+    min-width: unset;
+    border-radius: 50%;
+    background: var(--ui-bg-card);
+    color: var(--ui-fg-muted);
+    border: 1px solid var(--ui-border);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+}
+.zn-gear:hover, .zn-gear[aria-expanded="true"] { color: var(--ui-fg); border-color: var(--ui-accent); }
+.zn-gear-panel {
+    position: fixed;
+    left: 30px;
+    bottom: 86px;
+    width: 280px;
+    max-width: calc(100vw - 60px);
+    padding: 12px 14px;
+    background: var(--ui-bg-card);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    z-index: 31;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.zn-gear-panel[hidden] { display: none; }
+.zn-gear-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ui-fg-muted); margin-bottom: 8px; }
+.zn-gear-check { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 14px; cursor: pointer; }
+.zn-gear-check input { width: 20px; height: 20px; accent-color: var(--ui-accent); }
+.zn-gear-hint { font-size: 11px; color: var(--ui-fg-muted); margin-top: 4px; line-height: 1.4; }

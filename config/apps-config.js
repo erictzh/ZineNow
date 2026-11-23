@@ -10,6 +10,10 @@
    in the About panel. The app's logo (apps/<folder>/app-logo.png) isn't
    listed here — just drop the file in the folder and it's picked up
    automatically; no logo falls back to a letter badge.
+
+   `experimental: true` hides the app from this page unless "Experimental AI
+   features" is switched on in the gear at the bottom left of the page (the same
+   switch as in ZEditor's gear). The app itself still opens if you know its address.
 */
 
 window.ZINENOW_APPS = [  
@@ -27,6 +31,7 @@ window.ZINENOW_APPS = [
   },
   {
     folder: "AiToolsLocal",
-    desc: "Under development, still in experimental phase."
+    desc: "Under development, still in experimental phase.",
+    experimental: true
   }
 ];
