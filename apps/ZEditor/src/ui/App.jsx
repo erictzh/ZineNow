@@ -232,6 +232,7 @@ export function App() {
             croppingAnnId={croppingAnnId}
             onToggleCrop={selection.handleToggleCrop}
             onFlattenImage={edits.handleFlattenImage}
+            onRemoveBackground={edits.handleRemoveBackground}
             onOpenInAiTools={edits.handleOpenInAiTools}
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}

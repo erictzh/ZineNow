@@ -461,17 +461,17 @@
   // shared/js/ai/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
   var CACHE_NAME = "zinenow-ai-tools-model";
-  async function isModelSaved(url) {
+  async function isModelSaved(url, cacheName = CACHE_NAME) {
     try {
-      return Boolean(await (await caches.open(CACHE_NAME)).match(url));
+      return Boolean(await (await caches.open(cacheName)).match(url));
     } catch (e) {
       return false;
     }
   }
-  async function getModelBytes(url, onProgress, signal) {
+  async function getModelBytes(url, onProgress, signal, cacheName = CACHE_NAME) {
     let cache = null;
     try {
-      cache = await caches.open(CACHE_NAME);
+      cache = await caches.open(cacheName);
     } catch (e) {
     }
     if (cache) {
@@ -505,9 +505,9 @@
     }
     return { bytes: bytes.buffer, downloaded: true };
   }
-  async function forgetModel() {
+  async function forgetModel(cacheName = CACHE_NAME) {
     try {
-      await caches.delete(CACHE_NAME);
+      await caches.delete(cacheName);
     } catch (e) {
     }
   }

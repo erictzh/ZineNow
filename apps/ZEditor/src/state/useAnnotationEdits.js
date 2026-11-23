@@ -1,5 +1,6 @@
 // Every change to the items on a page: adding, editing, moving, rotating, grouping, layering, erasing, deleting; plus the page filter.
 
+import { cutOutCanvas, segmentCanvas } from "../../../../shared/js/ai/bgSession.js";
 import { sendImageToAiTools } from "../../../../shared/js/imageHandoff.js";
 import { MAIN_SCALE } from "../constants.js";
 import { orderAfterMove, translatedAnnotation, withGroupMates } from "../model/annotations.js";
@@ -353,6 +354,21 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
   }
 
+  // Remove background (Image panel): bakes the picture as it looks, finds the subject with the on-device model (the model must be
+  // downloaded, shared/js/ai/manager.js), and replaces the picture with the subject only (everything else see-through). One undo step.
+  // opts: { cutoff 0..1, soft 0..1 }. `onStatus(text)` for the slow parts.
+  async function handleRemoveBackground(ann, opts, onStatus) {
+    const pageIdx = selectedIdx;
+    const patch = await flattenedImagePatch(ann, pageFilter);
+    if (!patch) throw new Error("There is nothing visible on that picture.");
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("Couldn't read the picture.")); i.src = patch.src; });
+    const canvas = document.createElement("canvas"); canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    const { mask, side } = await segmentCanvas(canvas, onStatus);
+    const out = cutOutCanvas(canvas, mask, side, opts.cutoff, opts.soft);
+    updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch, src: out.toDataURL("image/png") } : a)));
+  }
+
   // Sends the picture, as it looks (crop, adjustments, effects baked in), to Ai Tools (Local) in a new tab (shared/js/imageHandoff.js).
   // Called straight from the button's click, so the browser allows the new tab. The result comes back as a new layer
   // (state/useImageHandoff.js adds it to the document that is open here).
@@ -423,7 +439,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
-    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleOpenInAiTools, handleRasterizeText, handleRasterizeRect,
+    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRemoveBackground, handleOpenInAiTools, handleRasterizeText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
   };
