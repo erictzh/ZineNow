@@ -1,6 +1,6 @@
 # Plan: Ai Tools (Local) as a hub of on-device AI tools
 
-Status: **plan only, nothing from Phase 1 on is built yet.** Decided in discussion with the user (2026-11-23). Facts about third-party models (licence, size, speed) are from memory and must be checked on each model's own page at its benchmark step.
+Status: **plan only, nothing from Phase 1 on is built yet. Waiting for the user's go.** Decided in discussion with the user (2026-11-23): tools list on the **left**; **Phases 1 and 2 are built together**, then shown for review. Facts about third-party models (licence, size, speed) are from memory and must be checked on each model's own page at its benchmark step.
 
 ## Goal
 
@@ -37,7 +37,7 @@ Storage if everything is downloaded: roughly 150 to 200 MB (shown on the Models 
 - **Model storage.** Cache API (one cache per feature family as today); the apps share an origin, so a model downloaded in one should be usable by the other (to be verified).
 - **Hand-off.** Keep "Send to ZEditor" and the ZEditor round trip (`shared/js/imageHandoff.js`).
 - **Offline.** After downloads, tools must work offline (service worker on; to be tested).
-- **Layout (decision pending):** tool list on the left with the options panel on the right (recommended on desktop); a top drawer on small screens. The alternative is tabs across the top.
+- **Layout (decided):** tools list on the left, the workspace in the middle, the options panel on the right; on small screens the tools list becomes a top drawer.
 
 ## Phases
 
@@ -82,7 +82,93 @@ Suggested order: 3a, 3b, 3c, 3d. Each ships separately and the user can stop at 
 - Memory and freezing on low-end devices: tiles, release sessions after a quiet minute, Cancel buttons.
 - Total storage: shown on the Models page; Delete everywhere.
 
-## Open decisions (waiting for the user)
-1. Layout: left tool list (recommended) or top tabs.
-2. Review points: build Phases 1 and 2 together, or stop for review after Phase 1.
-3. Go for Phase 1.
+## Decisions
+1. Layout: **tools list on the left** (decided).
+2. Review points: **Phases 1 and 2 together**, then review (decided).
+3. Go for Phase 1+2: **not given yet** (the user wants this document first).
+
+## Detailed work breakdown
+
+### Where things are today (so we both remember)
+- `apps/AiToolsLocal/`: `index.html` (top bar + stage + right panel: "1. Mark what to remove", "2. Remove it", a "Model and device" box), `style.css` (40 lines), `src/main.js` (336 lines, plain JS, bundled to `dist/app.js` by `npm run build`), `sw.js`, `manifest.webmanifest`, `icons/`, `README.md`. It does only Remove object. Its model box lets the user edit the model address and "Forget the saved model".
+- `shared/js/ai/`: `fill.js` (MI-GAN picture maths), `modelStore.js`, `runtime.js`, `manager.js`, `session.js`, `bgModel.js`, `bgSession.js`, `segment.js` (background removal maths). ZEditor already has both tools using these (`apps/ZEditor/src/render/aiFill.js`, `RemoveBackgroundSection.jsx`).
+- `shared/js/imageHandoff.js`: Send to ZEditor and the round trip.
+- Test benches: `labs/ai-benchmark/` (fill), `labs/ai-bg-benchmark/` (background removal, build 6).
+- ZEditor's gear has "Experimental AI features" (off by default); the standalone app has no such switch and stays always on.
+
+### Phases 1 + 2 (built together), in order
+
+**Step 1: shell and registry** (`apps/AiToolsLocal/src/`)
+- [ ] `shell.js`: left tools list (name + one line), the workspace in the middle (`stage` with pan/zoom, kept from `main.js`), the right options panel that shows the selected tool's panel. Top drawer on narrow screens. Top bar keeps Open picture, Save PNG, Send to ZEditor.
+- [ ] `registry.js`: the tool contract `{ id, name, summary, models: [modelKey...], mount(panelEl, ctx), unmount() }`, where `ctx` gives the picture canvas, history (undo/redo), status line, and model helpers.
+- [ ] `picture.js`: the one shared picture (open, drop, paste, view, fit, history, save, send) taken out of `main.js`; every tool works on it, and a tool's result replaces the picture (one undo step per result).
+- [ ] Keep: two-finger pan/zoom, Hold to compare, drop and paste, Ctrl+V.
+
+**Step 2: Models page** (`src/modelsPage.js`)
+- [ ] A "Models" entry in the tools list that opens a page listing every model: name, kind, licence, size, download address, status, Download / Delete, and the total storage used.
+- [ ] Rows from one list: MI-GAN, U²-Netp, MODNet, and the AI engine (ONNX Runtime Web, shared). Later tools add rows.
+- [ ] Same confirm pop-up wording as ZEditor (what, from where, size, "does not connect to the internet", lag warning), for download and delete.
+- [ ] Reuse `shared/js/ai/manager.js` and `bgModel.js`; add the MI-GAN's facts (name, licence MIT, host, size) to a shared list so ZEditor and the app show the same facts. The editable model address in the old "Model and device" box is dropped (the address is shown, not editable).
+
+**Step 3: Remove object tool** (`src/tools/removeObject.js`)
+- [ ] Move the current marking UI and `removeObject()` flow from `main.js` (brush, erase mark, box, grow, progress).
+- [ ] Use the shared session/fill code (`shared/js/ai/session.js`, `fill.js`) so the app and ZEditor behave the same.
+- [ ] Add "Try another" with the fixed variation cycle (`AI_VARIATIONS` from `apps/ZEditor/src/render/aiFill.js` moved to `shared/js/ai/` so both import it).
+- [ ] Greyed Remove object with a red "Download required" until MI-GAN is downloaded; a link to the Models page.
+
+**Step 4: Remove background tool** (`src/tools/removeBackground.js`)
+- [ ] Model picker (U²-Netp (General), MODNet (Portrait)) with the same info lines as ZEditor.
+- [ ] Edge cut-off 0-100 % (default 0.1, -/+ 0.125, typed finer values), Soft edge (default 10 %), greyed with red "Download required".
+- [ ] Preview on a checkerboard, with the cut-off number box re-drawing the preview without re-running the model (as `labs/ai-bg-benchmark` does); "Apply" makes the result the picture.
+- [ ] Share the section's logic with ZEditor where practical (the model list, `segmentCanvas`, `cutOutCanvas` already are shared).
+
+**Step 5: wiring, offline, docs**
+- [ ] `sw.js`: new files in `FILES`, bump `CACHE_VERSION`; check the offline copy works with the service worker on.
+- [ ] `index.html` and `style.css` rewritten for the new layout (tokens/buttons from `shared/styles`).
+- [ ] `config/apps-config.js`: keep the card subtitle "Under development, still in experimental phase."
+- [ ] `README.md`, a guide `docs/GUIDE-ai-tools-local.md`, `docs/MAINTAINING.md` rows, HANDOFF.md.
+
+**Step 6: tests** (all with stand-in ONNX models; the real models cannot be downloaded in the cloud sandbox)
+- [ ] Unit tests: registry contract, history, any new pure functions; the moved `AI_VARIATIONS` test keeps passing.
+- [ ] Headless browser: open a picture; switch tools without reloading; Remove object runs and undoes; Remove background runs for both models, undo; Models page download / Delete / storage total; greyed + "Download required" states; narrow-screen drawer; chaining (remove an object, then remove the background); Send to ZEditor and back still work.
+- [ ] Offline run with the service worker enabled.
+- [ ] `npm run check` and `npm test` pass; PR merged to `main`; HANDOFF updated.
+
+**Review point:** the user tries it on the tablet (real models, speed, layout) and sends feedback before any Phase 3 work.
+
+### Phase 3 tools (each starts only after the review point)
+
+For each tool the order is: benchmark page -> user runs it on the tablet -> gate decision -> build -> merge -> user tests.
+
+**3a Face blur**
+- [ ] `labs/ai-face-benchmark/index.html` (build number shown): YuNet and/or BlazeFace on a photo with several faces; report time, number of faces found, boxes drawn.
+- [ ] Gate: MIT/Apache-2.0, small, fast, finds the faces in 3 of the user's photos.
+- [ ] Tool `src/tools/faceBlur.js`: boxes, Blur / Pixelate / Black box, strength slider, untick a face, drag/draw a box by hand, Apply. Models page row.
+- [ ] Tests (stand-in detector), guide, HANDOFF.
+
+**3b Text from image (OCR)**
+- [ ] `labs/ai-ocr-benchmark/index.html`: Tesseract.js (from a CDN, shown) with English; report time and the text read from the user's printed-text photo.
+- [ ] Gate: Apache-2.0; engine + English data within the size budget; readable result on clean printed text.
+- [ ] Tool `src/tools/ocr.js`: language list on the Models page (each language file with size), recognised text box with Copy and Download .txt, read regions shown on the picture. Offline caching of the engine files and the chosen language data.
+- [ ] Tests, guide, HANDOFF.
+
+**3c Click-to-select**
+- [ ] `labs/ai-sam-benchmark/index.html`: MobileSAM encoder + decoder; report the encoder time per picture, the decoder time per click, and the mask drawn for a click.
+- [ ] Gate: Apache-2.0; total download within budget; encoder time acceptable on the tablet (EdgeSAM as backup).
+- [ ] Tool `src/tools/selectObject.js`: click to add, shift/second mode to subtract, mask preview, "Use as mask" for Remove object, "Cut out" (keep the selection, see-through elsewhere).
+- [ ] Tests, guide, HANDOFF.
+
+**3d Upscale**
+- [ ] `labs/ai-upscale-benchmark/index.html`: realesr-general-x4v3 (and Swin2SR) on a 512 px photo, tiled; report time per tile and in total, and the result.
+- [ ] Gate: BSD-3/Apache-2.0; total time acceptable (up to about 30 s) and no freeze on the tablet.
+- [ ] Tool `src/tools/upscale.js`: 2x / 4x, output size limit, before/after, progress bar + Cancel, tiles released from memory as it goes.
+- [ ] Tests, guide, HANDOFF.
+
+### Phase 4 (polish)
+- [ ] "Where it runs" line on every tool and the Models page; clear experimental notice.
+- [ ] Guides for each tool in `docs/`; HANDOFF and MAINTAINING updated.
+- [ ] Optional "Experimental" toggle in the app (like ZEditor's gear).
+
+## How we both remember
+- This file is the plan; HANDOFF.md records what is done. After each step I tick the boxes here and note it in HANDOFF.md.
+- Anything not agreed yet is listed under Decisions; I do not build ahead of it.
