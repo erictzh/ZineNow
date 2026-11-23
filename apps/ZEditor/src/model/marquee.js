@@ -32,7 +32,7 @@ export const MARQUEE_DEFAULTS = {
   fillReach: 80, // Pattern: how far from the area it looks for texture to copy, px of the picture
   fillGrow: 0, // how much bigger than the marquee the filled area is, px of the picture
   fillGrainAmount: 100, // how much grain is added, % of what the picture has
-  fillSeed: 0, // Pattern: another number picks other patches ("Try another")
+  fillSeed: 0, // another number = another variation ("Try another"): Pattern copies other patches, the AI gets a slightly different view
   brushSize: 24, // Brush shape: the brush's width, page px
   brushErase: false, // Brush shape: true = painting rubs the marks out
   fillColor: "#ffffff",

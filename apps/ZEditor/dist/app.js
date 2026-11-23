@@ -11031,7 +11031,7 @@
     fillGrainAmount: 100,
     // how much grain is added, % of what the picture has
     fillSeed: 0,
-    // Pattern: another number picks other patches ("Try another")
+    // another number = another variation ("Try another"): Pattern copies other patches, the AI gets a slightly different view
     brushSize: 24,
     // Brush shape: the brush's width, page px
     brushErase: false,
@@ -12083,7 +12083,36 @@
   // apps/ZEditor/src/render/aiFill.js
   var FEATHER = 3;
   var MAX_GROUPS = 12;
-  async function aiFillCanvas(ctx, area, grow, onStatus) {
+  var AI_VARIATIONS = [
+    { dx: 0, dy: 0, scale: 1, grow: 0 },
+    { dx: -0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0.12, dy: 0, scale: 1, grow: 0 },
+    { dx: 0, dy: -0.12, scale: 1, grow: 1 },
+    { dx: 0, dy: 0.12, scale: 1, grow: 2 },
+    { dx: 0, dy: 0, scale: 1.25, grow: 0 },
+    { dx: 0.08, dy: 0.08, scale: 0.85, grow: 3 }
+  ];
+  function variationFor(n) {
+    return AI_VARIATIONS[((Math.round(n) || 0) % AI_VARIATIONS.length + AI_VARIATIONS.length) % AI_VARIATIONS.length];
+  }
+  function varyCrop(crop, v, bounds, w, h) {
+    let side = Math.min(Math.min(w, h), Math.max(1, Math.round(crop.side * v.scale)));
+    const need = Math.max(bounds.x1 - bounds.x0 + 1, bounds.y1 - bounds.y0 + 1);
+    if (side < need) side = Math.min(Math.min(w, h), crop.side);
+    const cx = crop.x + crop.side / 2 + v.dx * crop.side, cy = crop.y + crop.side / 2 + v.dy * crop.side;
+    let x = Math.round(cx - side / 2), y = Math.round(cy - side / 2);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    x = Math.min(Math.max(x, bounds.x1 + 1 - side), bounds.x0);
+    y = Math.min(Math.max(y, bounds.y1 + 1 - side), bounds.y0);
+    x = Math.min(Math.max(0, x), w - side);
+    y = Math.min(Math.max(0, y), h - side);
+    if (x > bounds.x0 || y > bounds.y0 || x + side < bounds.x1 + 1 || y + side < bounds.y1 + 1) return crop;
+    return { x, y, side };
+  }
+  async function aiFillCanvas(ctx, area, grow, onStatus, variation = 0) {
+    const v = variationFor(variation);
+    grow += v.grow;
     const canvas = ctx.canvas, w = canvas.width, h = canvas.height;
     const m = document.createElement("canvas");
     m.width = w;
@@ -12099,7 +12128,7 @@
     if (groups.some((g) => !g.crop)) throw new Error("That area is too big for the AI: draw a smaller marquee, or do it in a few steps.");
     if (groups.length > MAX_GROUPS) throw new Error("That is " + groups.length + " separate areas: do at most " + MAX_GROUPS + " at a time.");
     for (let i = 0; i < groups.length; i++) {
-      const crop = groups[i].crop;
+      const crop = variation ? varyCrop(groups[i].crop, v, groups[i].bounds, w, h) : groups[i].crop;
       const gm = groups.length === 1 ? mask : groupMask(labels, groups[i].ids);
       const win = document.createElement("canvas");
       win.width = win.height = MODEL_SIZE;
@@ -12365,7 +12394,7 @@
   }
   async function fillCanvasRegion(ctx, canvasWidth, canvasHeight, area, opts, fillInfo) {
     const { style } = opts;
-    if (style === "ai") return aiFillCanvas(ctx, area, opts.grow || 0, null);
+    if (style === "ai") return aiFillCanvas(ctx, area, opts.grow || 0, null, opts.seed || 0);
     const grow = opts.grow || 0;
     const around = Math.max(FILL_CONTEXT_PX, style === "pattern" ? opts.reach + 8 : 0) + grow;
     const b = areaBounds(area);
@@ -17156,7 +17185,7 @@
       { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
       { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
       { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: !useAi && (settings.fillStyle !== "pattern" || settings.fillMix !== void 0 && settings.fillMix < 100) }
-    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again, copying other patches", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle !== "pattern", onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
+    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || settings.fillStyle === "ai" && ai.phase === "ready"), onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
       AiModelDialog,
       {
         mode: aiDialog,
@@ -18668,7 +18697,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2aa4de6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "9aeadd9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

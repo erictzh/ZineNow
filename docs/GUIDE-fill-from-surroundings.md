@@ -32,7 +32,7 @@ The **Marquee Action** dropdown chooses between **Make a new layer** and **Remov
   - **Smooth**: blends the colours round the edge. Best for plain paper, flat colours and soft backgrounds. It also works on big areas.
   - **Detailed**: carries thin lines and edges through the gap. Only good for small marks and scratches.
 - **Remove & fill**: does it. A big area takes a moment; the button says "Filling…".
-- **Try another**: undoes the fill you just made and fills again, copying different patches. Press it several times and keep the best one. (Only for the Pattern style.)
+- **Try another**: undoes the fill you just made and fills again, copying different patches. Press it several times and keep the best one. (Pattern copies different patches. With the AI style each press shows the model a slightly different view of the area, so the changes are small.)
 
 ### 4. Fine-tune (the numbers in the Remove & fill box)
 
