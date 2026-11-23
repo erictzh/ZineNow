@@ -10,8 +10,9 @@ import { ALL_RESIZE_HANDLES, ResizeHandles } from "./ResizeHandles.jsx";
 // on-screen size at any zoom (styles/compose.css) and get bigger for a finger (styles/touch.css).
 // A polygon also needs the page size (for its outline), the pointer's place while it is being drawn
 // (`hover`: { x, y, shift }, for the line that follows it) and `toPagePoint(event)` (to turn it).
-export function MarqueeOverlay({ region, zoom, pageSize, hover, toPagePoint, onChange }) {
-  if (!region) return null;
+export function MarqueeOverlay({ region, zoom, pageSize, hover, toPagePoint, onChange, brushLive }) {
+  if (!region && !brushLive) return null;
+  if ((region && region.kind === "brush") || brushLive) return <BrushMarquee region={region && region.kind === "brush" ? region : null} live={brushLive} pageSize={pageSize} />;
   if (region.kind === "polygon") return <PolygonMarquee region={region} zoom={zoom} pageSize={pageSize} hover={hover} toPagePoint={toPagePoint} onChange={onChange} />;
   return <RectMarquee region={region} zoom={zoom} onChange={onChange} />;
 }
@@ -131,5 +132,23 @@ function PolygonMarquee({ region, zoom, pageSize, hover, toPagePoint, onChange }
       ))}
       {closed && <div className="ze-rotate-handle" title="Rotate (hold Shift to snap to 15°)" style={{ left: bounds.x + bounds.width / 2, top: bounds.y - 22 / zoom }} onMouseDown={startTurn} />}
     </React.Fragment>
+  );
+}
+
+// The Brush marquee: the painted area as a tint over the page. The strokes are drawn into an SVG mask in order (paint white, erase black),
+// so a stroke that rubs out only rubs out what came before it, and the tint stays sharp at any zoom. It takes no presses itself.
+const strokePathD = (s) => s.points.map(([x, y], i) => (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1)).join(" ") + (s.points.length === 1 ? " L" + (s.points[0][0] + 0.01).toFixed(2) + " " + s.points[0][1].toFixed(1) : "");
+function BrushMarquee({ region, live, pageSize }) {
+  const strokes = [...(region ? region.strokes : []), ...(live ? [live] : [])];
+  return (
+    <svg className="ze-brush-mask" width={pageSize.width} height={pageSize.height} aria-hidden="true">
+      <defs>
+        <mask id="ze-brush-mask-shape" maskUnits="userSpaceOnUse" x="0" y="0" width={pageSize.width} height={pageSize.height}>
+          <rect width={pageSize.width} height={pageSize.height} fill="#000" />
+          {strokes.map((s, i) => <path key={i} d={strokePathD(s)} fill="none" stroke={s.erase ? "#000" : "#fff"} strokeWidth={s.size} strokeLinecap="round" strokeLinejoin="round" />)}
+        </mask>
+      </defs>
+      <rect width={pageSize.width} height={pageSize.height} fill="rgba(232, 98, 42, 0.5)" mask="url(#ze-brush-mask-shape)" />
+    </svg>
   );
 }

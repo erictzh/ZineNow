@@ -527,3 +527,6 @@
 .ze-clip-ghost [data-ann-id] { color: transparent !important; background: transparent !important; text-shadow: none !important; }
 .ze-clip-ghost [data-ann-id] > :not(.ze-resize-handle):not(.ze-rotate-handle):not(.ze-text-port) { visibility: hidden; }
 .ze-clip-ghost path[data-ann-id] { stroke-opacity: 0 !important; fill-opacity: 0 !important; }
+
+/* The Brush marquee's tint over the page (an SVG mask of the painted strokes): it never takes a press. */
+.ze-brush-mask { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 40; }

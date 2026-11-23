@@ -4,18 +4,18 @@
 
 import { MODEL_SIZE, blendWeights, groupMask, groupPieces, labelPieces, paste, windowMask } from "../../../../shared/js/ai/fill.js";
 import { runOnSession } from "../../../../shared/js/ai/session.js";
+import { paintArea } from "./regionArea.js";
 
 const FEATHER = 3; // px of soft join round the filled area
 const MAX_GROUPS = 12;
 
-// Fills the polygon `points` (canvas px, grown by `grow` px) on `ctx`'s canvas. Returns false when nothing was marked.
-export async function aiFillCanvas(ctx, points, grow, onStatus) {
+// Fills `area` (render/regionArea.js, canvas px, grown by `grow` px) on `ctx`'s canvas. Returns false when nothing was marked.
+export async function aiFillCanvas(ctx, area, grow, onStatus) {
   const canvas = ctx.canvas, w = canvas.width, h = canvas.height;
   // the marked area as a mask over the whole picture
   const m = document.createElement("canvas"); m.width = w; m.height = h;
   const mx = m.getContext("2d", { willReadFrequently: true });
-  mx.fillStyle = mx.strokeStyle = "#000"; mx.lineJoin = "round"; mx.lineWidth = 2 + 2 * grow;
-  mx.beginPath(); points.forEach(([x, y], i) => (i === 0 ? mx.moveTo(x, y) : mx.lineTo(x, y))); mx.closePath(); mx.fill(); mx.stroke();
+  paintArea(mx, area, { grow });
   const alpha = mx.getImageData(0, 0, w, h).data;
   const mask = new Uint8Array(w * h);
   for (let i = 0; i < mask.length; i++) mask[i] = alpha[i * 4 + 3] > 0 ? 1 : 0;

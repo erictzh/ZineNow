@@ -18,7 +18,7 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status, histor
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const latest = useRef(null);
-  latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee, history };
+  latest.current = { doc, selection, edits, status, region, settings: toolDefaults.marquee, setSettings: toolDefaults.setMarquee, history };
   // The last "Remove & fill": how deep the undo list was just after it, so "Try another" only undoes that very step.
   const lastFill = useRef(null);
   const undoDepth = history ? history.undoStack.length : 0;
@@ -75,10 +75,21 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status, histor
   // Backspace takes its last point back.
   useEffect(() => {
     function handleKeyDown(e) {
-      const { selection: sel, region: m } = latest.current;
-      if (sel.tool !== "marquee" || !m) return;
+      const { selection: sel, region: m, settings: st, setSettings } = latest.current;
+      if (sel.tool !== "marquee") return;
       const t = e.target || {};
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "BUTTON" || t.isContentEditable) return;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      // [ ] and Esc still work with a toolbar button focused (after tapping the Marquee button, say); other keys leave a button alone
+      const fromButton = t.tagName === "BUTTON";
+      if (fromButton && e.key !== "[" && e.key !== "]" && e.key !== "Escape") return;
+      // Brush shape: [ and ] make the brush smaller / bigger
+      if (st.shape === "brush" && (e.key === "[" || e.key === "]") && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const cur = st.brushSize || 24;
+        setSettings((s) => ({ ...s, brushSize: Math.min(300, Math.max(2, Math.round(cur * (e.key === "]" ? 1.2 : 1 / 1.2) + (e.key === "]" ? 1 : -1)))) }));
+        return;
+      }
+      if (!m) return;
       if (e.key === "Escape") { setRegion(null); return; }
       if (m.kind !== "polygon" || m.closed) return;
       if (e.key === "Enter") {

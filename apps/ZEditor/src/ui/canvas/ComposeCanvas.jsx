@@ -20,7 +20,8 @@ import { BrushCursor, LiveStroke, PageOverlays } from "./CanvasOverlays.jsx";
 import { SelectionTurnKnob, selectionTurnFor } from "./SelectionTurn.jsx";
 import { magicEraseAt } from "./magicEraseGesture.js";
 import { MarqueeOverlay } from "./MarqueeOverlay.jsx";
-import { pressPolygon, startMarqueeDraw } from "./marqueeGesture.js";
+import { pressPolygon, startBrushStroke, startMarqueeDraw } from "./marqueeGesture.js";
+import { brushWithStroke } from "../../model/marquee.js";
 import { startSoftEraseGesture, topImageAt } from "./softEraseGesture.js";
 import { usePageBackground } from "./usePageBackground.js";
 import { centerArtboard } from "../../state/useZoom.js";
@@ -39,7 +40,7 @@ export function ComposeCanvas({
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
-  marquee, marqueeShape, onMarqueeChange,
+  marquee, marqueeShape, marqueeBrush, onMarqueeChange,
   zoom, rulerUnit, viewKey,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
@@ -85,6 +86,9 @@ export function ComposeCanvas({
   const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
   const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
   const [polygonHover, setPolygonHover] = useState(null); // Marquee polygon being drawn: { x, y, shift } of the pointer, for the line that follows it
+  const [brushLive, setBrushLive] = useState(null); // Marquee brush stroke being painted: { erase, size, points }
+  const [brushHover, setBrushHover] = useState(null); // where the pointer is (page px), for the brush-size ring
+  const brushing = tool === "marquee" && marqueeShape === "brush";
   const drawingPolygon = tool === "marquee" && Boolean(marquee) && marquee.kind === "polygon" && !marquee.closed;
   const softErasing = tool === "eraser" && eraserMode === "soft";
   const magicErasing = tool === "eraser" && eraserMode === "magic";
@@ -172,7 +176,10 @@ export function ComposeCanvas({
       return;
     }
     if (tool === "marquee") { // draws the marquee; the selected layer (the one "Selected layer" works on) stays selected
-      if (marqueeShape === "polygon") pressPolygon(e, { toPagePoint: overlayPoint, zoom, region: marquee, onChange: onMarqueeChange });
+      if (brushing) {
+        const brush = marqueeBrush || { size: 24, erase: false };
+        startBrushStroke(e, { toPagePoint: overlayPoint, size: brush.size, erase: brush.erase, onLive: setBrushLive, onCommit: (stroke) => onMarqueeChange((cur) => brushWithStroke(cur, stroke)) });
+      } else if (marqueeShape === "polygon") pressPolygon(e, { toPagePoint: overlayPoint, zoom, region: marquee, onChange: onMarqueeChange });
       else startMarqueeDraw(e, { toPagePoint: overlayPoint, zoom, onChange: onMarqueeChange });
       return;
     }
@@ -424,8 +431,8 @@ export function ComposeCanvas({
         className={"ze-annotation-layer " + cursorClass}
         style={{ width: canvasSize.width, height: canvasSize.height }}
         onMouseDown={handleOverlayMouseDown}
-        onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : drawingPolygon ? (e) => setPolygonHover({ ...overlayPoint(e), shift: e.shiftKey }) : undefined}
-        onMouseLeave={softErasing ? () => setBrushPos(null) : drawingPolygon ? () => setPolygonHover(null) : undefined}
+        onMouseMove={softErasing ? (e) => setBrushPos(overlayPoint(e)) : brushing ? (e) => setBrushHover(overlayPoint(e)) : drawingPolygon ? (e) => setPolygonHover({ ...overlayPoint(e), shift: e.shiftKey }) : undefined}
+        onMouseLeave={softErasing ? () => setBrushPos(null) : brushing ? () => setBrushHover(null) : drawingPolygon ? () => setPolygonHover(null) : undefined}
       >
         {/* While the magic eraser has a preview open, that image is drawn from it
             instead of from the document, which stays untouched until Apply. */}
@@ -470,7 +477,8 @@ export function ComposeCanvas({
         )}
         {measuring && measure && <MeasureOverlay measure={measure} pageSize={canvasSize} zoom={zoom} unit={rulerUnit} onHandleDown={dragMeasureEnd} />}
         {softErasing && brushPos && <BrushCursor pos={brushPos} softEraser={softEraser} />}
-        {tool === "marquee" && marquee && <MarqueeOverlay region={marquee} zoom={zoom} pageSize={canvasSize} hover={polygonHover} toPagePoint={overlayPoint} onChange={onMarqueeChange} />}
+        {tool === "marquee" && (marquee || brushLive) && <MarqueeOverlay region={marquee} zoom={zoom} pageSize={canvasSize} hover={polygonHover} toPagePoint={overlayPoint} onChange={onMarqueeChange} brushLive={brushLive} />}
+        {brushing && brushHover && !brushLive && <BrushCursor pos={brushHover} softEraser={{ size: (marqueeBrush && marqueeBrush.size) || 24, softness: 0 }} />}
         {dragRect && (
           <div className="ze-drag-rect" style={{ left: dragRect.x, top: dragRect.y, width: dragRect.width, height: dragRect.height, borderRadius: tool === "ellipse" ? "50%" : undefined }} />
         )}
