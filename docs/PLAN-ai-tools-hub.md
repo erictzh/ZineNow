@@ -8,7 +8,7 @@ One app, **Ai Tools (Local)**, with a tool list. Each tool runs on the user's de
 
 ## Principles (apply to every tool)
 
-1. **FOSS only.** Licence must be OSI-approved (Apache-2.0, MIT, BSD). No non-commercial licences (e.g. BRIA RMBG).
+1. **FOSS only: the FOSS check in `docs/AI-MODELS-POLICY.md`.** An OSI-approved licence for the exact file (Apache-2.0, MIT, BSD, MPL, LGPL/GPL-3/AGPL-3...), commercial use allowed, no use restrictions. Refused: non-commercial (e.g. BRIA RMBG), RAIL, custom community licences. Open weights are allowed, fully open models preferred.
 2. **Local.** All processing in the browser. The only network use is the one-time download of models and runtime files, from hosts shown to the user.
 3. **Transparent.** Name the real model (never just "AI"), its licence, size and download address, in the panel, the Models page and the download pop-up.
 4. **Opt-in downloads.** A confirm pop-up before any download; a Delete button for every model.

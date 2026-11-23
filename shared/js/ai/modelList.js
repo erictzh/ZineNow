@@ -10,6 +10,7 @@ import { UPSCALE_MODEL } from "./upscaleModel.js";
 export const FILL_MODEL = {
   key: "migan", name: "MI-GAN", kind: "Remove object", label: "MI-GAN (Remove object)",
   mb: 28.2, licence: "MIT", host: "huggingface.co", repo: "huggingface.co/lxfater/inpaint-web", url: DEFAULT_MODEL_URL,
+  author: "Picsart AI Research (MI-GAN)", homepage: "https://github.com/Picsart-AI-Research/MI-GAN", openness: "weights",
   about: "Fills the area you mark with what would plausibly be behind it.",
 };
 

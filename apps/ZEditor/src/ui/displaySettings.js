@@ -12,6 +12,7 @@
 // show them wrong.
 
 import { installDisplaySettings } from "../../../../shared/js/displaySettings.js";
+import { ABOUT } from "../../../../shared/js/about.js";
 
 let display = null;
 
@@ -19,6 +20,7 @@ let display = null;
 export function installZeditorDisplaySettings() {
   display = installDisplaySettings({
     storageKey: "zeditor.displayPrefs",
+    about: ABOUT, // where the source code is (a small line in the gear pop-up)
     mount: false, // App.jsx places it next to the touch bar once that's rendered
     sliders: [
       { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },

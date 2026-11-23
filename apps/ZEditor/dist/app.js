@@ -6420,6 +6420,9 @@
       licence: "Apache-2.0",
       host: "huggingface.co",
       repo: "huggingface.co/edgetools/u2netp",
+      author: "Xuebin Qin et al. (U²-Net)",
+      homepage: "https://github.com/xuebinqin/U-2-Net",
+      openness: "weights",
       url: "https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx",
       about: "Any single subject: an object, an animal or a person. Edges are a little rough."
     },
@@ -6432,6 +6435,9 @@
       licence: "Apache-2.0",
       host: "huggingface.co",
       repo: "huggingface.co/Xenova/modnet",
+      author: "Zhanghan Ke et al. (MODNet)",
+      homepage: "https://github.com/ZHKKKe/MODNet",
+      openness: "weights",
       url: "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx",
       about: "Photos of people (head and shoulders): soft hair edges. Not for objects or animals."
     }
@@ -11635,6 +11641,17 @@
       "aria-expanded": "false"
     });
     gear.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    if (options.about) {
+      const about = el("div", "zn-display-about");
+      about.append(options.about.text + " ");
+      (options.about.links || []).forEach((l, i) => {
+        if (i) about.append(" · ");
+        const a = el("a", "", { href: l.href, target: "_blank", rel: "noopener" });
+        a.textContent = l.label;
+        about.append(a);
+      });
+      panel.appendChild(about);
+    }
     wrap.append(panel, gear);
     if (floating) document.body.appendChild(wrap);
     else if (options.mount) options.mount.appendChild(wrap);
@@ -11713,11 +11730,24 @@
     }, set, element: wrap };
   }
 
+  // shared/js/about.js
+  var REPO_URL = "https://github.com/erictzh/ZineNow";
+  var ABOUT = {
+    text: "ZineNow is free software (AGPL-3.0-or-later).",
+    links: [
+      { label: "Source code", href: REPO_URL },
+      { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" }
+    ]
+  };
+  var POLICY_URL = REPO_URL + "/blob/main/docs/AI-MODELS-POLICY.md";
+
   // apps/ZEditor/src/ui/displaySettings.js
   var display = null;
   function installZeditorDisplaySettings() {
     display = installDisplaySettings({
       storageKey: "zeditor.displayPrefs",
+      about: ABOUT,
+      // where the source code is (a small line in the gear pop-up)
       mount: false,
       // App.jsx places it next to the touch bar once that's rendered
       sliders: [
@@ -16767,6 +16797,9 @@
     licence: "MIT",
     host: "huggingface.co",
     repo: "huggingface.co/opencv/face_detection_yunet",
+    author: "Shiqi Yu et al. (YuNet, OpenCV Zoo)",
+    homepage: "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet",
+    openness: "weights",
     url: "https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",
     about: "Finds where faces are (boxes only). It does not recognise or identify anyone."
   };
@@ -16782,6 +16815,9 @@
     licence: "Apache-2.0",
     host: "huggingface.co",
     repo: "huggingface.co/Acly/MobileSAM",
+    author: "Chaoning Zhang et al. (MobileSAM)",
+    homepage: "https://github.com/ChaoningZhang/MobileSAM",
+    openness: "weights",
     encoderUrl: "https://huggingface.co/Acly/MobileSAM/resolve/main/mobile_sam_image_encoder.onnx",
     encoderMb: 28.2,
     decoderUrl: "https://huggingface.co/Acly/MobileSAM/resolve/main/sam_mask_decoder_single.onnx",
@@ -16800,6 +16836,9 @@
     licence: "BSD-3-Clause",
     host: "huggingface.co",
     repo: "huggingface.co/OwlMaster/AllFilesRope",
+    author: "Xintao Wang et al. (Real-ESRGAN)",
+    homepage: "https://github.com/xinntao/Real-ESRGAN",
+    openness: "weights",
     url: "https://huggingface.co/OwlMaster/AllFilesRope/resolve/main/realesr-general-x4v3.onnx",
     about: "Enlarges a picture 2 or 4 times and adds believable detail. It works piece by piece, so big pictures are slow."
   };
@@ -19371,7 +19410,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "68b3ae9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "d6cd0a5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

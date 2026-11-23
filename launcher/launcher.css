@@ -440,3 +440,7 @@ a:focus-visible, button:focus-visible, .app-card:focus-visible {
 .zn-gear-check { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 14px; cursor: pointer; }
 .zn-gear-check input { width: 20px; height: 20px; accent-color: var(--ui-accent); }
 .zn-gear-hint { font-size: 11px; color: var(--ui-fg-muted); margin-top: 4px; line-height: 1.4; }
+
+.zn-gear-about { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ui-border); font-size: 11px; line-height: 1.5; color: var(--ui-fg-muted); }
+.zn-gear-about a { color: inherit; text-decoration: underline; }
+.zn-gear-about a:hover { color: var(--ui-fg); }

@@ -217,3 +217,8 @@
 .zn-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .zn-confirm-actions button { min-height: 40px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .25); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .zn-confirm-actions .zn-confirm-ok { background: #e8622a; border-color: #e8622a; color: #fff; font-weight: 600; }
+
+/* A small line at the bottom of the pop-up: what this is and where the source code is. */
+.zn-display-about { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ui-border, rgba(255,255,255,.12)); font-size: 11px; line-height: 1.5; color: var(--ui-fg-muted, #9a9ca6); }
+.zn-display-about a { color: inherit; text-decoration: underline; }
+.zn-display-about a:hover { color: var(--ui-fg, #fff); }
