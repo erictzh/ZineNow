@@ -78,12 +78,21 @@ export function askDelete(ctl) {
 
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
+// A model's size as grey text: "0.23 MB", "28.2 MB", "1.2 GB".
+export function sizeLabel(mb) {
+  if (mb >= 1000) return (Math.round(mb / 100) / 10) + " GB";
+  return (mb < 1 ? mb.toFixed(2) : String(Math.round(mb * 10) / 10)) + " MB";
+}
+
 // The box for one model: its facts, then the Download / progress / Delete part. `compact`: no "about" line (the tool shows its own).
+// `showSize`: the model's size in grey at the top right of the card (the Models page).
 // `deletable: false`: no Delete button (inside a tool; the Models page is where models are deleted).
-export function modelBox(id, { compact = false, deletable = true } = {}) {
+export function modelBox(id, { compact = false, deletable = true, showSize = false } = {}) {
   const ctl = modelControl(id), m = ctl.row.model;
   const box = el("div", "model-box");
-  const title = el("b", "", m.name + " (" + m.kind + ")");
+  const title = el("div", "model-title");
+  title.append(el("b", "", m.name + " (" + m.kind + ")"));
+  if (showSize) title.append(el("span", "model-size", sizeLabel(m.mb)));
   const facts = el("span", "hint", (compact ? "" : m.about + " ") + m.licence + " licence (free and open source). About " + Math.round(m.mb * 10) / 10 + " MB, downloaded from " + m.repo + ". Runs on your device; nothing is uploaded.");
   const live = el("div", "model-live");
   box.append(title, facts, live);

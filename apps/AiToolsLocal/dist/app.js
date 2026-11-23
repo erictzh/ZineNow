@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "d3100e3" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "449c641" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -1444,10 +1444,16 @@
     if (text != null) n.textContent = text;
     return n;
   };
-  function modelBox(id, { compact = false, deletable = true } = {}) {
+  function sizeLabel(mb) {
+    if (mb >= 1e3) return Math.round(mb / 100) / 10 + " GB";
+    return (mb < 1 ? mb.toFixed(2) : String(Math.round(mb * 10) / 10)) + " MB";
+  }
+  function modelBox(id, { compact = false, deletable = true, showSize = false } = {}) {
     const ctl = modelControl(id), m = ctl.row.model;
     const box = el("div", "model-box");
-    const title = el("b", "", m.name + " (" + m.kind + ")");
+    const title = el("div", "model-title");
+    title.append(el("b", "", m.name + " (" + m.kind + ")"));
+    if (showSize) title.append(el("span", "model-size", sizeLabel(m.mb)));
     const facts = el("span", "hint", (compact ? "" : m.about + " ") + m.licence + " licence (free and open source). About " + Math.round(m.mb * 10) / 10 + " MB, downloaded from " + m.repo + ". Runs on your device; nothing is uploaded.");
     const live = el("div", "model-live");
     box.append(title, facts, live);
@@ -1512,7 +1518,7 @@
       for (const r of MODEL_ROWS) {
         const card = el2("div", "model-card");
         card.append(el2("div", "model-tool", "Used by: " + r.tool));
-        const box = modelBox(r.id);
+        const box = modelBox(r.id, { showSize: true });
         boxes.push(box);
         card.append(box);
         host.append(card);

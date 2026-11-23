@@ -91,3 +91,6 @@ button[hidden] { display: none; }
 .debug-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; }
 .debug-win textarea { flex: 1 1 auto; margin: 0 10px 10px; resize: none; background: #100d0c; color: #e9e2de; border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px; font: 12px/1.4 var(--ui-mono, monospace); white-space: pre; overflow: auto; }
 body.debug-open .shell { height: 58vh; }
+
+.model-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.model-size { margin-left: auto; white-space: nowrap; color: var(--ui-fg-muted); font-size: 13px; }
