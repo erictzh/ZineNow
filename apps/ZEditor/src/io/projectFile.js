@@ -4,6 +4,7 @@ import { legacyLayerOrder } from "../model/annotations.js";
 import { makeBlankThumb, renderPdfThumb } from "../render/pageRender.js";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "./base64.js";
 import { customFontStore, registerCustomFont } from "./customFonts.js";
+import { usedFaces } from "./fontEmbed.js";
 
 // Saves everything needed to reopen and keep editing: every loaded
 // source PDF's original bytes (base64, so the file is fully
@@ -17,15 +18,19 @@ import { customFontStore, registerCustomFont } from "./customFonts.js";
 // Plain JSON under the hood — .znow is just a distinct extension
 // so a saved project doesn't get mistaken for a generic .json
 // file (or opened by something else that happens to claim it).
-export function serializeProject({ title, pdfDocs, pages, textStyles, settings }) {
+// `embeddedFonts`: system fonts to carry in the file ([{ family, data, bold?, italic?, source: "system" }], from io/fontEmbed.js buildEmbeddedFonts).
+export function serializeProject({ title, pdfDocs, pages, textStyles, settings, embeddedFonts = [] }) {
   const docs = {};
   for (const docId of Object.keys(pdfDocs)) {
     docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
   }
-  // Only the uploaded fonts some text actually uses are stored.
-  const usedFamilies = new Set();
-  pages.forEach((p) => (p.annotations || []).forEach((a) => { if (a.type === "text" && a.fontFamily) usedFamilies.add(a.fontFamily); }));
+  // Only the fonts some text actually uses are stored (uploaded ones, ones embedded by an earlier save, and the system fonts embedded now).
+  // A font used only by a restyled stretch of text counts too.
+  const usedFamilies = new Set(usedFaces(pages).map((f) => f.family));
   const fonts = customFontStore.filter((f) => usedFamilies.has(f.family));
+  for (const e of embeddedFonts) {
+    if (!fonts.some((f) => f.family === e.family && Boolean(f.bold) === Boolean(e.bold) && Boolean(f.italic) === Boolean(e.italic))) fonts.push(e);
+  }
   const project = {
     version: 2, // 2: the annotation list is the stacking order
     title,
@@ -56,10 +61,11 @@ export async function readProjectFile(file, nextPageKey) {
 
   const loadedFamilies = [];
   for (const font of project.fonts || []) {
-    if (customFontStore.some((f) => f.family === font.family && f.data === font.data)) { loadedFamilies.push(font.family); continue; }
+    const bold = Boolean(font.bold), italic = Boolean(font.italic);
+    if (customFontStore.some((f) => f.family === font.family && f.data === font.data && Boolean(f.bold) === bold && Boolean(f.italic) === italic)) { loadedFamilies.push(font.family); continue; }
     try {
-      await registerCustomFont(font.family, base64ToArrayBuffer(font.data));
-      customFontStore.push({ family: font.family, data: font.data });
+      await registerCustomFont(font.family, base64ToArrayBuffer(font.data), { bold, italic });
+      customFontStore.push({ family: font.family, data: font.data, ...(bold ? { bold: true } : {}), ...(italic ? { italic: true } : {}), ...(font.source === "system" ? { source: "system" } : {}) });
       loadedFamilies.push(font.family);
     } catch (err) { /* a damaged font falls back to the default; the text is still there */ }
   }

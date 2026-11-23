@@ -47,11 +47,13 @@ export function createFontResolver() {
     if (bytesCache.has(key)) return bytesCache.get(key);
     let found = null;
 
-    // An uploaded font is one file, so it only stands in for the regular style.
-    const uploaded = customFontStore.find((f) => f.family === family);
-    if (uploaded && !bold && !italic) {
-      found = { key, bytes: base64ToArrayBuffer(uploaded.data) };
-    } else if (!uploaded) {
+    // A font file kept in the project (uploaded, or a system font embedded by an earlier save): the exact face if it has it.
+    // An uploaded font is one file, so it only stands in for the regular style; an uploaded family does not fall back to this computer's fonts (a system font embedded earlier may: a style it does not carry is read from this computer).
+    const exact = customFontStore.find((f) => f.family === family && Boolean(f.bold) === Boolean(bold) && Boolean(f.italic) === Boolean(italic));
+    const keptUploaded = customFontStore.some((f) => f.family === family && f.source !== "system"); // an uploaded font is the family's only source
+    if (exact) {
+      found = { key, bytes: base64ToArrayBuffer(exact.data) };
+    } else if (!keptUploaded) {
       const wantWeight = bold ? "bold" : "regular";
       const faces = (await localFonts()).filter((f) => f.family.toLowerCase() === family.toLowerCase());
       const face = faces.find((f) => { const s = parseStyle(f.style); return s.italic === Boolean(italic) && s.weight === wantWeight; });

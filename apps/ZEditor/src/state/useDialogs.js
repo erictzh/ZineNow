@@ -8,6 +8,11 @@ export function useDialogs({ pages, openProjectPicker }) {
   // (so it offers "Open a PDF instead"); false from the empty-state button.
   const [newDocFromProject, setNewDocFromProject] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Project > Embed Fonts…; `embedFontsAskFirst`: opened by switching "Embed system fonts" on, so it starts with the licence question.
+  const [embedFontsOpen, setEmbedFontsOpen] = useState(false);
+  const [embedFontsAskFirst, setEmbedFontsAskFirst] = useState(false);
+  function openEmbedFonts(askFirst = false) { setEmbedFontsAskFirst(askFirst); setEmbedFontsOpen(true); }
+  function closeEmbedFonts() { setEmbedFontsOpen(false); setEmbedFontsAskFirst(false); }
   // Two-step "this erases your work" confirmation, shared by New
   // Project and Load Project — action is null (closed), "newProject",
   // or "loadProject"; step is 1 (first warning) or 2 (final check).
@@ -57,6 +62,7 @@ export function useDialogs({ pages, openProjectPicker }) {
   return {
     newDocOpen, setNewDocOpen, newDocFromProject, openNewDocDialog,
     shortcutsOpen, setShortcutsOpen,
+    embedFontsOpen, embedFontsAskFirst, openEmbedFonts, closeEmbedFonts,
     confirmAction, confirmStep,
     handleNewProjectClick, handleLoadProjectClick, handleConfirmProceed, handleConfirmCancel, handleConfirmYes,
   };

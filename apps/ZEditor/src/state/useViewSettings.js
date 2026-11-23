@@ -23,6 +23,9 @@ export function useViewSettings() {
   const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
   const [layersPosition, setLayersPosition] = useState(null);
   const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
+  // Project > Embed Fonts…: save the system fonts the text uses inside the file (off by default), and the face keys left out of that. Saved with the project.
+  const [embedFonts, setEmbedFonts] = useState(false);
+  const [embedFontsSkip, setEmbedFontsSkip] = useState([]);
 
   // The part of these settings a saved project carries.
   function settingsForSave() {
@@ -30,6 +33,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, snapToGuidesOn,
+      embedFonts, embedFontsSkip,
     };
   }
 
@@ -46,6 +50,8 @@ export function useViewSettings() {
     if (s.rulersOn !== undefined) setRulersOn(s.rulersOn);
     if (s.rulerUnit !== undefined) setRulerUnit(s.rulerUnit);
     if (s.snapToGuidesOn !== undefined) setSnapToGuidesOn(s.snapToGuidesOn);
+    setEmbedFonts(s.embedFonts === true);
+    setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
     setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
   }
 
@@ -55,6 +61,7 @@ export function useViewSettings() {
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn,
+    embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip,
     settingsForSave, applySavedSettings,
   };
 }

@@ -1,5 +1,6 @@
 // The top bar: brand, undo/redo, the zine title, and the Page / Project / Export menus.
 
+import { canReadSystemFonts, fontLicenceSeen } from "../../io/fontEmbed.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, PAGE_FILTER_OPTIONS } from "../../model/pageFilters.js";
 import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
@@ -14,6 +15,7 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
   const { updatePageFilter } = edits;
   const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
   const { exporting, sendingToArranger } = exporter;
+  const canReadFonts = canReadSystemFonts();
 
   return (
     <header className="topbar">
@@ -186,6 +188,27 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                 disabled={status.loading}
                 onClick={dialogs.handleLoadProjectClick}
                 hint="Reopen a saved ZEditor project file"
+              />
+              {/* Embed system fonts: a switch for this project (kept in the project file) and the dialog that lists the fonts */}
+              <div className={"ze-menu-toggle-row" + (pages.length === 0 || !canReadFonts ? " disabled" : "")} title={canReadFonts ? "Saves the fonts this project uses inside the file, so it looks the same on a computer without them" : "Needs a browser that can read this computer's fonts (Chrome or Edge)"}>
+                <div className="ze-menu-toggle-text">
+                  <span className="ze-menu-toggle-label">Embed system fonts</span>
+                  <span className="ze-menu-toggle-detail">in the saved project</span>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox" checked={view.embedFonts} disabled={pages.length === 0 || !canReadFonts}
+                    onChange={(e) => { if (!e.target.checked) view.setEmbedFonts(false); else if (fontLicenceSeen()) view.setEmbedFonts(true); else { close(); dialogs.openEmbedFonts(true); } }}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+              <MenuItem
+                close={close}
+                label="Embed Fonts…"
+                disabled={pages.length === 0}
+                onClick={() => dialogs.openEmbedFonts(false)}
+                hint="See which fonts this project uses, which are inside the file, and choose which system fonts to embed"
               />
             </React.Fragment>
           )}
