@@ -34,6 +34,10 @@ The **Models** page lists every model: its name, what it is for, licence, size, 
 
 **Send to ZEditor** opens the picture in ZEditor as a new document. A picture that came from ZEditor ("Open in Ai Tools") goes back to that same ZEditor as a new layer.
 
+## The Debug window
+
+If something does not work, press **Debug** in the top bar (or Ctrl+Shift+D). A window with a log opens: your device, what each tool did, how long it took, numbers about the model's answer and about the picture (how much is see-through), and, after **Save PNG**, what the saved file really is (for example "RGBA (has transparency)"). Press **Copy** and paste it in a message, ideally with a screenshot. **Snapshot** adds the picture's current numbers, **Clear** empties the log. Nothing is sent anywhere: the text only goes where you paste it.
+
 ## Tips
 
 - It works best on one clear subject. A landscape or a crowd has no main subject.

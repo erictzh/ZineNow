@@ -1,5 +1,5 @@
 // Remove background: the picture maths (shared/js/ai/segment.js).
-import { SEG_PREP, SEG_SIZE, maskToAlpha, segInput, segMask, softCut } from "../shared/js/ai/segment.js";
+import { SEG_PREP, SEG_SIZE, maskStats, maskToAlpha, segInput, segMask, softCut } from "../shared/js/ai/segment.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -34,5 +34,12 @@ ok(cm[0] === 0 && Math.abs(cm[1] - 0.3) < 1e-6 && cm[2] === 1, "MODNet answer is
 ok(softCut(0, 0.001, 0.1) === 0 && softCut(0.01, 0.001, 0.1) === 1, "a tiny cut-off: background 0 is see-through, anything above is solid");
 ok(softCut(1, 0.999, 0.1) === 1 && softCut(0.9, 0.999, 0.1) === 0, "a cut-off near 100%: only the surest pixels stay");
 ok(softCut(0, 0, 0.1) === 1 && softCut(0.00005, 0, 0.1) === 1, "a cut-off of 0 cuts nothing (even the lowest mask values stay solid)");
+// the numbers for the debug window
+const ms = maskStats(new Float32Array([0, 0, 0, 0.00005, 0.5, 1, 1, 1]));
+ok(ms.n === 8 && ms.min === 0 && ms.max === 1 && Math.abs(ms.mean - (0.50005 + 3) / 8) < 1e-6, "mask stats: size, min, max, mean");
+ok(Math.abs(ms.below[0].share - 4 / 8) < 1e-9 && Math.abs(ms.below.reduce((a, b) => a + b.share, 0) - 1) < 1e-9, "mask stats: the range shares add up to 1 (half the values are below 0.0001)");
+ok(ms.p50 <= 0.55 && ms.p95 >= 0.95, "mask stats: percentiles");
+const two = maskStats(new Float32Array([0.01, 0.01, 0.01, 0.01, 0.95, 0.97, 1, 0.99]));
+ok(two.otsu > 0.01 && two.otsu < 0.95, "mask stats: the automatic split falls between the background and the subject values (" + two.otsu.toFixed(3) + ")");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);

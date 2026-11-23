@@ -5,6 +5,8 @@
 import { downloadBlob } from "../../../shared/js/download.js";
 import { AITOOLS_READY_MESSAGE, hasOpener, listenForHandoffImage, sendImageToOpener, sendImageToZEditor } from "../../../shared/js/imageHandoff.js";
 import { installNumberFields, wrapNumberInputs } from "../../../shared/js/numberFields.js";
+import { debug, describePng, installDebug } from "./debug.js";
+import { modelControl } from "./models.js";
 import { createModelsPage } from "./modelsPage.js";
 import { createPicture } from "./picture.js";
 import { allTools, registerTool } from "./registry.js";
@@ -16,7 +18,7 @@ installNumberFields();
 wrapNumberInputs();
 
 // ---- status line ---------------------------------------------------------------------------------
-function status(text, kind) { const s = $("status"); s.textContent = text; s.className = kind || ""; }
+function status(text, kind) { const s = $("status"); s.textContent = text; s.className = kind || ""; debug.log("[" + (kind || "info") + "] " + text); }
 
 // ---- the picture and the top bar -------------------------------------------------------------------
 let cameFromZEditor = false; // the picture was sent here by ZEditor, which is still open
@@ -41,7 +43,7 @@ async function openFile(file) {
 }
 
 // ---- tools ----------------------------------------------------------------------------------------
-const ctx = { picture, status, openModels: () => select("models") };
+const ctx = { picture, status, debug, openModels: () => select("models") };
 registerTool(removeObjectTool);
 registerTool(removeBackgroundTool);
 const instances = new Map();
@@ -89,7 +91,11 @@ const compare = $("compare");
 compare.addEventListener("pointerdown", () => picture.showOriginal(true));
 for (const ev of ["pointerup", "pointerleave", "pointercancel"]) compare.addEventListener(ev, () => picture.showOriginal(false));
 $("save").addEventListener("click", async () => {
-  try { downloadBlob(await picture.toBlob(), picture.name + "-edited.png"); } catch (e) { status("Couldn't save the picture.", "bad"); }
+  try {
+    const blob = await picture.toBlob();
+    downloadBlob(blob, picture.name + "-edited.png");
+    debug.section("Save PNG (what was exported)", await describePng(blob));
+  } catch (e) { status("Couldn't save the picture.", "bad"); }
 });
 $("send").addEventListener("click", async () => {
   if (!picture.loaded) return;
@@ -122,4 +128,13 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && picture.loaded && tool.primary) tool.primary();
 });
 
+installDebug({
+  button: $("debug"),
+  getCanvas: () => picture.canvas,
+  getState: () => ({
+    pictureLoaded: picture.loaded, pictureSize: picture.width + "x" + picture.height, undoSteps: picture.depth,
+    tool: active ? active.id : "none",
+    models: Object.fromEntries(["fill", "bg:u2netp", "bg:modnet"].map((id) => [id, modelControl(id).state.phase])),
+  }),
+});
 select("remove-object");

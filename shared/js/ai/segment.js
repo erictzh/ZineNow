@@ -51,3 +51,32 @@ export function maskToAlpha(mask, cutoff, soft) {
   for (let i = 0; i < mask.length; i++) out[i] = Math.round(softCut(mask[i], cutoff, soft) * 255);
   return out;
 }
+
+// Numbers that describe a mask (0..1 floats), for the debug window: min / max / mean, how many values fall in each range, percentiles, and the
+// split a automatic method (Otsu) would pick. Helps to see why a cut-off leaves background behind.
+const BUCKETS = [1e-4, 1e-3, 1e-2, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0000001];
+export function maskStats(mask) {
+  const n = mask.length;
+  let lo = Infinity, hi = -Infinity, sum = 0;
+  const counts = new Array(BUCKETS.length).fill(0);
+  const BINS = 2000, hist = new Float64Array(BINS);
+  for (let i = 0; i < n; i++) {
+    const v = mask[i];
+    if (v < lo) lo = v; if (v > hi) hi = v; sum += v;
+    let b = 0; while (v >= BUCKETS[b]) b++;
+    counts[b]++;
+    hist[Math.min(BINS - 1, Math.floor(v * BINS))]++;
+  }
+  const pct = (p) => { let acc = 0; for (let b = 0; b < BINS; b++) { acc += hist[b]; if (acc >= p * n) return (b + 0.5) / BINS; } return 1; };
+  // Otsu on 256 linear bins
+  const h2 = new Float64Array(256); for (let b = 0; b < BINS; b++) h2[Math.min(255, Math.floor(b * 256 / BINS))] += hist[b];
+  let total = 0, wsum = 0; for (let b = 0; b < 256; b++) { total += h2[b]; wsum += b * h2[b]; }
+  let wB = 0, sB = 0, best = 0, bestT = 0;
+  for (let t = 0; t < 256; t++) { wB += h2[t]; if (!wB) continue; const wF = total - wB; if (!wF) break; sB += t * h2[t]; const mB = sB / wB, mF = (wsum - sB) / wF, between = wB * wF * (mB - mF) * (mB - mF); if (between > best) { best = between; bestT = t; } }
+  return {
+    n, min: lo, max: hi, mean: sum / n,
+    below: BUCKETS.map((lt, i) => ({ lt: i === BUCKETS.length - 1 ? 1 : lt, share: counts[i] / n })),
+    p5: pct(0.05), p25: pct(0.25), p50: pct(0.5), p75: pct(0.75), p95: pct(0.95),
+    otsu: (bestT + 1) / 256,
+  };
+}
