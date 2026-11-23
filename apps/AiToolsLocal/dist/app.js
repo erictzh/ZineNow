@@ -334,7 +334,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "2b31b91" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "ffafcdd" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
@@ -872,8 +872,8 @@
   }
   function softCut(v, cutoff, soft) {
     if (cutoff <= 0) return 1;
-    const half = Math.max(1e-4, Math.min(soft, cutoff, 1 - cutoff));
-    const a = (v - (cutoff - half)) / (2 * half);
+    const width = Math.max(1e-4, Math.min(soft, 1 - cutoff));
+    const a = (v - cutoff) / width;
     return a < 0 ? 0 : a > 1 ? 1 : a;
   }
   function maskToAlpha(mask, cutoff, soft) {
@@ -1948,8 +1948,8 @@
           const f1 = num2("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => {
             cutoff = v;
           });
-          const h1 = el3("p", "hint", "Higher keeps less of the edge (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
-          const f2 = num2("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => {
+          const h1 = el3("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
+          const f2 = num2("Soft edge (%) — fade above the cut-off", "soft", 0.1, 50, 0.5, soft, (v) => {
             soft = v;
           });
           ui.find = el3("button", "btn-solid big", "Find subject");

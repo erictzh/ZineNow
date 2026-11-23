@@ -35,13 +35,14 @@ export function segMask(data, how = "minmax") {
   return out;
 }
 
-// Edge cut-off (0..1) and softness (0..1): the see-through amount for a mask value. Below the cut-off by `soft` it is fully see-through,
-// above it by `soft` fully solid, and it fades in between.
-// The soft part narrows near 0 and 1 (it can't reach past the ends), so a very small cut-off still cuts cleanly.
+// Edge cut-off (0..1) and softness (0..1): the see-through amount for a mask value. At or below the cut-off it is fully see-through; above
+// it, it fades in over `soft`, and is fully solid from cutoff + soft up. (The fade only goes upwards from the cut-off: the models give
+// the background tiny values that are not exactly 0, and a fade that reached below the cut-off would leave that background half visible.)
+// The fade narrows near 1 (it can't reach past the end). A cut-off of 0 cuts nothing.
 export function softCut(v, cutoff, soft) {
-  if (cutoff <= 0) return 1; // a cut-off of 0 cuts nothing: everything stays (the model's lowest values would otherwise come out half see-through)
-  const half = Math.max(0.0001, Math.min(soft, cutoff, 1 - cutoff));
-  const a = (v - (cutoff - half)) / (2 * half);
+  if (cutoff <= 0) return 1;
+  const width = Math.max(0.0001, Math.min(soft, 1 - cutoff));
+  const a = (v - cutoff) / width;
   return a < 0 ? 0 : a > 1 ? 1 : a;
 }
 
