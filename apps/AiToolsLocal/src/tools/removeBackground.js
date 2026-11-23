@@ -203,8 +203,8 @@ export const removeBackgroundTool = {
         const need = () => { const p = el("p", "hint required", "Download required"); return p; };
         ui.need = [need(), need()];
         const f1 = num("Edge cut-off (%)", "cutoff", 0, 100, 0.125, cutoff, (v) => { cutoff = v; });
-        const h1 = el("p", "hint", "Higher keeps less of the edge (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
-        const f2 = num("Soft edge (%)", "soft", 0.1, 50, 0.5, soft, (v) => { soft = v; });
+        const h1 = el("p", "hint", "Everything the model scores at or below this is see-through. Higher keeps less (a tighter cut). 0 keeps everything. You can type finer values like 0.05.");
+        const f2 = num("Soft edge (%) — fade above the cut-off", "soft", 0.1, 50, 0.5, soft, (v) => { soft = v; });
         ui.find = el("button", "btn-solid big", "Find subject"); ui.find.type = "button"; ui.find.addEventListener("click", find);
         ui.apply = el("button", "btn-solid big", "Apply"); ui.apply.type = "button"; ui.apply.addEventListener("click", apply);
         ui.discard = el("button", "big", "Discard"); ui.discard.type = "button"; ui.discard.addEventListener("click", () => { discard(); ctx.status("Discarded."); });

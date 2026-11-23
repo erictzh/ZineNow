@@ -16,11 +16,11 @@ ok(m[0] === 0 && m[2] === 1 && m[1] > 0 && m[1] < 1, "the answer is stretched to
 ok(segMask(new Float32Array([2, 2]))[0] === 0, "a flat answer does not divide by zero");
 
 ok(softCut(0.9, 0.5, 0.1) === 1 && softCut(0.1, 0.5, 0.1) === 0, "far above the cut-off: solid; far below: see-through");
-ok(Math.abs(softCut(0.5, 0.5, 0.1) - 0.5) < 1e-9, "on the cut-off: half see-through");
+ok(softCut(0.5, 0.5, 0.1) === 0 && Math.abs(softCut(0.55, 0.5, 0.1) - 0.5) < 1e-9, "at the cut-off: fully see-through; half way up the fade: half");
 ok(softCut(0.55, 0.5, 0.1) > softCut(0.52, 0.5, 0.1), "it fades in smoothly");
 ok(softCut(0.6, 0.7, 0.01) === 0, "a harder edge (small soft) cuts sharply");
 const a = maskToAlpha(new Float32Array([0, 0.5, 1]), 0.5, 0.1);
-ok(a[0] === 0 && (a[1] === 127 || a[1] === 128) && a[2] === 255, "mask becomes alpha bytes");
+ok(a[0] === 0 && a[1] === 0 && a[2] === 255, "mask becomes alpha bytes");
 const hi = maskToAlpha(new Float32Array([0.6]), 0.7, 0.05)[0], lo = maskToAlpha(new Float32Array([0.6]), 0.3, 0.05)[0];
 ok(hi < lo, "a higher cut-off keeps less");
 // MODNet: 512 x 512, colours scaled by 255 (not by the brightest value), mean/std 0.5, and its answer is already a 0..1 matte
@@ -31,7 +31,7 @@ ok(Math.abs(segInput(w5, SEG_PREP.modnet)[0] - 1) < 1e-6 && Math.abs(segInput(g5
 const cm = segMask(new Float32Array([-0.2, 0.3, 1.4]), "clamp");
 ok(cm[0] === 0 && Math.abs(cm[1] - 0.3) < 1e-6 && cm[2] === 1, "MODNet answer is kept as it is, only clamped to 0..1");
 // very small cut-offs still cut cleanly (the soft part narrows)
-ok(softCut(0, 0.001, 0.1) === 0 && softCut(0.01, 0.001, 0.1) === 1, "a tiny cut-off: background 0 is see-through, anything above is solid");
+ok(softCut(0.0005, 0.001, 0.1) === 0 && softCut(0.0002, 0.001, 0.1) === 0 && softCut(0.2, 0.001, 0.1) === 1, "a tiny cut-off: the background's tiny values (not exactly 0) are fully see-through, the subject solid");
 ok(softCut(1, 0.999, 0.1) === 1 && softCut(0.9, 0.999, 0.1) === 0, "a cut-off near 100%: only the surest pixels stay");
 ok(softCut(0, 0, 0.1) === 1 && softCut(0.00005, 0, 0.1) === 1, "a cut-off of 0 cuts nothing (even the lowest mask values stay solid)");
 // the numbers for the debug window
@@ -41,5 +41,7 @@ ok(Math.abs(ms.below[0].share - 4 / 8) < 1e-9 && Math.abs(ms.below.reduce((a, b)
 ok(ms.p50 <= 0.55 && ms.p95 >= 0.95, "mask stats: percentiles");
 const two = maskStats(new Float32Array([0.01, 0.01, 0.01, 0.01, 0.95, 0.97, 1, 0.99]));
 ok(two.otsu > 0.01 && two.otsu < 0.95, "mask stats: the automatic split falls between the background and the subject values (" + two.otsu.toFixed(3) + ")");
+// the real case seen on the tablet: background values 0.00025, a cut-off of 0.1 % must make them fully see-through
+ok(softCut(0.00025, 0.001, 0.1) === 0 && softCut(0.9997, 0.001, 0.1) === 1, "background 0.00025 and subject 0.9997 at a 0.1 % cut-off: see-through and solid");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
