@@ -165,7 +165,7 @@ export const removeBackgroundTool = {
     const unsub = [];
     function drawModelBox() {
       if (boxEl) { boxEl.dispose && boxEl.dispose(); boxEl.remove(); }
-      boxEl = modelBox("bg:" + modelKey);
+      boxEl = modelBox("bg:" + modelKey, { deletable: false });
       ui.boxHost.append(boxEl);
     }
     picture.onView(() => { if (mounted) drawCrop(); });

@@ -79,7 +79,8 @@ export function askDelete(ctl) {
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
 // The box for one model: its facts, then the Download / progress / Delete part. `compact`: no "about" line (the tool shows its own).
-export function modelBox(id, { compact = false } = {}) {
+// `deletable: false`: no Delete button (inside a tool; the Models page is where models are deleted).
+export function modelBox(id, { compact = false, deletable = true } = {}) {
   const ctl = modelControl(id), m = ctl.row.model;
   const box = el("div", "model-box");
   const title = el("b", "", m.name + " (" + m.kind + ")");
@@ -99,10 +100,12 @@ export function modelBox(id, { compact = false } = {}) {
       const c = el("button", "wide", "Cancel download"); c.type = "button"; c.addEventListener("click", ctl.cancel);
       live.append(p, t, c);
     } else if (s.phase === "ready") {
-      live.append(el("span", "hint ok", "Downloaded: works offline."));
-      const d = el("button", "wide", "Delete " + m.name); d.type = "button";
-      d.addEventListener("click", async () => { if (await askDelete(ctl)) ctl.remove(); });
-      live.append(d);
+      live.append(el("span", "hint ok", "Downloaded: works offline." + (deletable ? "" : " (Delete it on the Models page.)")));
+      if (deletable) {
+        const d = el("button", "wide", "Delete " + m.name); d.type = "button";
+        d.addEventListener("click", async () => { if (await askDelete(ctl)) ctl.remove(); });
+        live.append(d);
+      }
     }
     if (s.error) live.append(el("span", "hint bad", s.error));
   }

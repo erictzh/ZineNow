@@ -163,7 +163,7 @@ export const removeObjectTool = {
         sec2.append(growField, growHint, ui.need, ui.fill, ui.another);
 
         const sec3 = el("section"); sec3.append(el("h2", "", "Model"));
-        sec3.append(modelBox("fill", { compact: true }));
+        sec3.append(modelBox("fill", { compact: true, deletable: false }));
         panel.append(sec1, sec2, sec3);
         refreshButtons();
       },
