@@ -42,7 +42,7 @@
 <div class="card">
   <b>2. Models (each is downloaded once, then kept for next time)</b>
   <label for="u2url">U²-Netp: works on people and objects, tiny, rougher edges</label>
-  <input type="text" id="u2url" value="https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx">
+  <input type="text" id="u2url" value="https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx">
   <label for="u2file">…or choose the u2netp.onnx file from your device</label>
   <input type="file" id="u2file">
   <label for="mdurl">MODNet: people only, softer hair edges</label>
@@ -238,7 +238,7 @@ $("run").onclick = async () => {
     const picture = await loadPicture();
     for (const m of MODELS) {
       let bytes;
-      try { bytes = await getModel(m); } catch (e) { log("ERROR: " + e.message); continue; }
+      try { bytes = await getModel(m); } catch (e) { log("ERROR (" + m.name + "): " + e.message + " (if it keeps failing, download the .onnx file yourself and choose it in the box for " + m.name + ")"); continue; }
       if (dev.webgpu) await testBackend(ort, bytes, picture, m, "webgpu");
       await testBackend(ort, bytes, picture, m, "wasm");
     }
