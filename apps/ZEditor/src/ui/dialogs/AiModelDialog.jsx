@@ -12,7 +12,7 @@ export function AiModelDialog({ mode, plan, onConfirm, onCancel, kind = "fill" }
         <div className="ze-modal-body">
           {mode === "download" ? (
             <ul className="ze-ai-points">
-              <li>{bg ? <>You are downloading an AI background-remover model (U²-Netp, about {plan.modelMb.toFixed(1)} MB) from <b>github.com</b>,</> : <>You are downloading an AI object-remover model (MI-GAN, {mb(plan.modelMb)} MB) from <b>huggingface.co</b>,</>} plus its runtime (about {mb(plan.runtimeMb)} MB, skipped if you already have it) from <b>cdn.jsdelivr.net</b>. About {plan.totalMb} MB in total.</li>
+              <li>{bg ? <>You are downloading an AI background-remover model (U²-Netp, about {plan.modelMb.toFixed(1)} MB) from <b>huggingface.co</b>,</> : <>You are downloading an AI object-remover model (MI-GAN, {mb(plan.modelMb)} MB) from <b>huggingface.co</b>,</>} plus its runtime (about {mb(plan.runtimeMb)} MB, skipped if you already have it) from <b>cdn.jsdelivr.net</b>. About {plan.totalMb} MB in total.</li>
               <li>The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device.</li>
               <li><b>Warning:</b> it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).</li>
             </ul>
