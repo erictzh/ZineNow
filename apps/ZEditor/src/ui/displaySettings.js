@@ -28,6 +28,10 @@ export function installZeditorDisplaySettings() {
       { title: "Pages panel", checks: [
         { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." },
       ] },
+      { title: "Experimental", checks: [
+        { key: "aiFeatures", label: "Experimental AI features", hint: "Off (default): the AI features are hidden. On: AI Background Removal (Image panel) and the AI fill style (Marquee panel) appear. They need downloaded models.",
+          confirm: { title: "Enable experimental AI features?", text: "These features are still under development and testing. They may need you to download local AI models and use your device's processing power. You can find them in the Image panel and the Marquee panel.", ok: "Enable", cancel: "Cancel" } },
+      ] },
       { title: "Show", checks: [
         { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
       ], choices: [
@@ -49,3 +53,6 @@ export function installZeditorDisplaySettings() {
 export function attachDisplayGear(slot) {
   if (slot && display && display.element.parentNode !== slot) slot.appendChild(display.element);
 }
+
+// Are the experimental AI features switched on (the gear's "Experimental AI features" box; off by default)? Also a React hook.
+export const aiFeaturesOn = () => Boolean(display && display.prefs.aiFeatures);

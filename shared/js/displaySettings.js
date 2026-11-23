@@ -31,7 +31,8 @@ const tidy = (v) => Math.round(v * 1000) / 1000;
  * @param {Array} [options.groups]     { title, checks: [{ key, label, hint, htmlClass, showMeans }],
  *                                       choices: [{ label, hint, initial, flags: [{ key, htmlClass }],
  *                                                   options: [{ label, values: { key: bool } }] }] }
- *                                     A check with `showMeans: true` is a "Show" box: ticked while
+ *                                     A check with `confirm: { title, text, ok, cancel }` asks first when it is being ticked on
+ *                                     (a pop-up; Cancel leaves it off). A check with `showMeans: true` is a "Show" box: ticked while
  *                                     its setting (a "hide" flag) is off.
  *                                     A choice is a dropdown; picking an option sets every one of its
  *                                     flags (a flag missing from `values` is off). `initial` is the
@@ -140,7 +141,11 @@ export function installDisplaySettings(options) {
       text.textContent = c.label;
       label.append(box, text);
       list.appendChild(label);
-      box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
+      box.addEventListener("change", () => {
+        const next = c.showMeans ? !box.checked : box.checked;
+        if (next && c.confirm) { refresh(); askConfirm(c.confirm).then((ok) => { if (ok) set({ [c.key]: true }); }); return; }
+        set({ [c.key]: next });
+      });
       checkViews.push({ c, label, box });
     }
     for (const ch of g.choices || []) {
@@ -186,6 +191,28 @@ export function installDisplaySettings(options) {
   wrap.append(panel, gear);
   if (floating) document.body.appendChild(wrap);
   else if (options.mount) options.mount.appendChild(wrap);
+
+  // A small pop-up with a Cancel and an OK button; resolves true on OK. Escape or a press outside it cancels.
+  function askConfirm(c) {
+    return new Promise((resolve) => {
+      const backdrop = el("div", "zn-confirm-backdrop");
+      const box = el("div", "zn-confirm", { role: "dialog", "aria-modal": "true", "aria-label": c.title });
+      const h = el("div", "zn-confirm-title"); h.textContent = c.title;
+      const t = el("div", "zn-confirm-text"); t.textContent = c.text;
+      const row = el("div", "zn-confirm-actions");
+      const cancel = el("button", "", { type: "button" }); cancel.textContent = c.cancel || "Cancel";
+      const ok = el("button", "zn-confirm-ok", { type: "button" }); ok.textContent = c.ok || "OK";
+      row.append(cancel, ok); box.append(h, t, row); backdrop.appendChild(box); document.body.appendChild(backdrop);
+      const done = (v) => { document.removeEventListener("keydown", onKey, true); backdrop.remove(); resolve(v); };
+      const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(false); } };
+      document.addEventListener("keydown", onKey, true);
+      cancel.addEventListener("click", () => done(false));
+      ok.addEventListener("click", () => done(true));
+      backdrop.addEventListener("pointerdown", (e) => { e.stopPropagation(); if (e.target === backdrop) done(false); });
+      backdrop.addEventListener("mousedown", (e) => e.stopPropagation());
+      ok.focus();
+    });
+  }
 
   // Puts the current settings into the controls.
   function refresh() {

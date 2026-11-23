@@ -5152,7 +5152,17 @@
         text.textContent = c.label;
         label.append(box, text);
         list.appendChild(label);
-        box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
+        box.addEventListener("change", () => {
+          const next = c.showMeans ? !box.checked : box.checked;
+          if (next && c.confirm) {
+            refresh();
+            askConfirm(c.confirm).then((ok) => {
+              if (ok) set({ [c.key]: true });
+            });
+            return;
+          }
+          set({ [c.key]: next });
+        });
         checkViews.push({ c, label, box });
       }
       for (const ch of g.choices || []) {
@@ -5191,6 +5201,45 @@
     wrap.append(panel, gear);
     if (floating) document.body.appendChild(wrap);
     else if (options.mount) options.mount.appendChild(wrap);
+    function askConfirm(c) {
+      return new Promise((resolve) => {
+        const backdrop = el("div", "zn-confirm-backdrop");
+        const box = el("div", "zn-confirm", { role: "dialog", "aria-modal": "true", "aria-label": c.title });
+        const h = el("div", "zn-confirm-title");
+        h.textContent = c.title;
+        const t = el("div", "zn-confirm-text");
+        t.textContent = c.text;
+        const row = el("div", "zn-confirm-actions");
+        const cancel = el("button", "", { type: "button" });
+        cancel.textContent = c.cancel || "Cancel";
+        const ok = el("button", "zn-confirm-ok", { type: "button" });
+        ok.textContent = c.ok || "OK";
+        row.append(cancel, ok);
+        box.append(h, t, row);
+        backdrop.appendChild(box);
+        document.body.appendChild(backdrop);
+        const done = (v) => {
+          document.removeEventListener("keydown", onKey, true);
+          backdrop.remove();
+          resolve(v);
+        };
+        const onKey = (e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            done(false);
+          }
+        };
+        document.addEventListener("keydown", onKey, true);
+        cancel.addEventListener("click", () => done(false));
+        ok.addEventListener("click", () => done(true));
+        backdrop.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          if (e.target === backdrop) done(false);
+        });
+        backdrop.addEventListener("mousedown", (e) => e.stopPropagation());
+        ok.focus();
+      });
+    }
     function refresh() {
       for (const v of sliderViews) {
         const n = prefs[v.s.key];
@@ -5376,7 +5425,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build f5dc2f3";
+    subtitle.textContent += " · build fe86a82";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

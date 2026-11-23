@@ -6000,23 +6000,23 @@
         lines.push("");
         continue;
       }
-      let current3 = "";
+      let current2 = "";
       para.split(" ").forEach((word, wordIndex) => {
         const atoms = word === "" ? [""] : wrapAtoms(word);
         atoms.forEach((atom, atomIndex) => {
           const joiner = atomIndex === 0 && wordIndex > 0 ? " " : "";
-          const test = current3 + joiner + atom;
-          if (current3 && measure(test) > maxWidth) {
-            lines.push(current3);
-            current3 = measure(atom) > maxWidth ? cutToFit(atom) : atom;
-          } else if (!current3 && measure(test) > maxWidth) {
-            current3 = cutToFit(test);
+          const test = current2 + joiner + atom;
+          if (current2 && measure(test) > maxWidth) {
+            lines.push(current2);
+            current2 = measure(atom) > maxWidth ? cutToFit(atom) : atom;
+          } else if (!current2 && measure(test) > maxWidth) {
+            current2 = cutToFit(test);
           } else {
-            current3 = test;
+            current2 = test;
           }
         });
       });
-      lines.push(current3);
+      lines.push(current2);
     }
     return lines;
   }
@@ -6409,9 +6409,34 @@
   }
 
   // shared/js/ai/bgModel.js
-  var BG_MODEL_URL = "https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx";
   var BG_CACHE = "zinenow-ai-bg-model";
-  var BG_MODEL_MB = 4.7;
+  var BG_MODELS = [
+    {
+      key: "u2netp",
+      name: "U²-Netp",
+      kind: "General",
+      label: "U²-Netp (General)",
+      mb: 4.4,
+      licence: "Apache-2.0",
+      host: "huggingface.co",
+      repo: "huggingface.co/edgetools/u2netp",
+      url: "https://huggingface.co/edgetools/u2netp/resolve/main/u2netp.onnx",
+      about: "Any single subject: an object, an animal or a person. Edges are a little rough."
+    },
+    {
+      key: "modnet",
+      name: "MODNet",
+      kind: "Portrait",
+      label: "MODNet (Portrait)",
+      mb: 25,
+      licence: "Apache-2.0",
+      host: "huggingface.co",
+      repo: "huggingface.co/Xenova/modnet",
+      url: "https://huggingface.co/Xenova/modnet/resolve/main/onnx/model.onnx",
+      about: "Photos of people (head and shoulders): soft hair edges. Not for objects or animals."
+    }
+  ];
+  var bgModel = (key) => BG_MODELS.find((m) => m.key === key) || BG_MODELS[0];
 
   // shared/js/ai/modelStore.js
   var DEFAULT_MODEL_URL = "https://huggingface.co/lxfater/inpaint-web/resolve/main/migan.onnx";
@@ -6463,6 +6488,12 @@
   async function forgetModel(cacheName = CACHE_NAME) {
     try {
       await caches.delete(cacheName);
+    } catch (e) {
+    }
+  }
+  async function forgetModelUrl(url, cacheName = CACHE_NAME) {
+    try {
+      await (await caches.open(cacheName)).delete(url);
     } catch (e) {
     }
   }
@@ -6704,24 +6735,35 @@
   }
 
   // shared/js/ai/segment.js
-  var SEG_SIZE = 320;
-  var MEAN = [0.485, 0.456, 0.406];
-  var STD = [0.229, 0.224, 0.225];
-  function segInput(rgba, size = SEG_SIZE) {
+  var SEG_PREP = {
+    u2netp: { size: 320, mean: [0.485, 0.456, 0.406], std: [0.229, 0.224, 0.225], byBrightest: true, mask: "minmax" },
+    modnet: { size: 512, mean: [0.5, 0.5, 0.5], std: [0.5, 0.5, 0.5], byBrightest: false, mask: "clamp" }
+  };
+  function segInput(rgba, prep = SEG_PREP.u2netp) {
+    const size = typeof prep === "number" ? SEG_PREP.u2netp.size : prep.size;
+    const p = typeof prep === "number" ? SEG_PREP.u2netp : prep;
     const n = size * size;
-    let max = 1;
-    for (let i = 0; i < n; i++) {
-      const o = i * 4;
-      if (rgba[o] > max) max = rgba[o];
-      if (rgba[o + 1] > max) max = rgba[o + 1];
-      if (rgba[o + 2] > max) max = rgba[o + 2];
+    let max = 255;
+    if (p.byBrightest) {
+      max = 1;
+      for (let i = 0; i < n; i++) {
+        const o = i * 4;
+        if (rgba[o] > max) max = rgba[o];
+        if (rgba[o + 1] > max) max = rgba[o + 1];
+        if (rgba[o + 2] > max) max = rgba[o + 2];
+      }
     }
     const out = new Float32Array(3 * n);
-    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) out[c * n + i] = (rgba[i * 4 + c] / max - MEAN[c]) / STD[c];
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) out[c * n + i] = (rgba[i * 4 + c] / max - p.mean[c]) / p.std[c];
     return out;
   }
-  function segMask(data) {
+  function segMask(data, how = "minmax") {
     const n = data.length;
+    const out = new Float32Array(n);
+    if (how === "clamp") {
+      for (let i = 0; i < n; i++) out[i] = data[i] < 0 ? 0 : data[i] > 1 ? 1 : data[i];
+      return out;
+    }
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < n; i++) {
       const v = data[i];
@@ -6729,12 +6771,11 @@
       if (v > hi) hi = v;
     }
     const range = hi - lo || 1;
-    const out = new Float32Array(n);
     for (let i = 0; i < n; i++) out[i] = (data[i] - lo) / range;
     return out;
   }
   function softCut(v, cutoff, soft) {
-    const half = Math.max(1e-4, soft);
+    const half = Math.max(1e-4, Math.min(soft, cutoff, 1 - cutoff));
     const a = (v - (cutoff - half)) / (2 * half);
     return a < 0 ? 0 : a > 1 ? 1 : a;
   }
@@ -6746,61 +6787,58 @@
 
   // shared/js/ai/bgSession.js
   var IDLE_MS = 6e4;
-  var current = null;
-  var starting = null;
+  var sessions = /* @__PURE__ */ new Map();
   var timer = 0;
   function releaseBgSession() {
     clearTimeout(timer);
-    const c = current;
-    current = null;
-    starting = null;
-    if (c && c.release) {
-      try {
-        c.release();
-      } catch (e) {
+    const all = [...sessions.values()];
+    sessions.clear();
+    for (const s of all) Promise.resolve(s).then((x) => {
+      if (x && x.release) {
+        try {
+          x.release();
+        } catch (e) {
+        }
       }
-    }
+    }, () => {
+    });
   }
   var touch = () => {
     clearTimeout(timer);
     timer = setTimeout(releaseBgSession, IDLE_MS);
   };
-  async function acquire(onStatus) {
-    if (current) {
-      touch();
-      return current;
-    }
-    if (!starting) {
-      starting = (async () => {
-        if (!await isModelSaved(BG_MODEL_URL, BG_CACHE)) throw new Error("The background-removal model is not downloaded. Download it first (Image panel, Remove background).");
-        onStatus && onStatus("Starting the model…");
-        const { bytes } = await getModelBytes(BG_MODEL_URL, void 0, void 0, BG_CACHE);
-        current = (await createSession(bytes, false)).session;
-        return current;
-      })().catch((e) => {
-        starting = null;
-        throw e;
-      });
-    }
-    const s = await starting;
+  function acquire(key, onStatus) {
     touch();
-    return s;
+    if (!sessions.has(key)) {
+      const m = bgModel(key);
+      sessions.set(key, (async () => {
+        if (!await isModelSaved(m.url, BG_CACHE)) throw new Error(m.name + " is not downloaded. Download it first (Image panel, AI Background Removal).");
+        onStatus && onStatus("Starting " + m.name + "…");
+        const { bytes } = await getModelBytes(m.url, void 0, void 0, BG_CACHE);
+        return (await createSession(bytes, false)).session;
+      })().catch((e) => {
+        sessions.delete(key);
+        throw e;
+      }));
+    }
+    return sessions.get(key);
   }
-  async function segmentCanvas(canvas, onStatus) {
-    const session = await acquire(onStatus);
+  async function segmentCanvas(canvas, key, onStatus) {
+    const prep = SEG_PREP[bgModel(key).key];
+    const session = await acquire(key, onStatus);
     const ort = await loadOrt();
     const small = document.createElement("canvas");
-    small.width = small.height = SEG_SIZE;
+    small.width = small.height = prep.size;
     const sx = small.getContext("2d", { willReadFrequently: true });
     sx.imageSmoothingQuality = "high";
-    sx.drawImage(canvas, 0, 0, SEG_SIZE, SEG_SIZE);
-    const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, SEG_SIZE, SEG_SIZE).data), [1, 3, SEG_SIZE, SEG_SIZE]);
+    sx.drawImage(canvas, 0, 0, prep.size, prep.size);
+    const input = new ort.Tensor("float32", segInput(sx.getImageData(0, 0, prep.size, prep.size).data, prep), [1, 3, prep.size, prep.size]);
     onStatus && onStatus("Finding the subject…");
     const out = await session.run({ [session.inputNames[0]]: input });
     const first = out[session.outputNames[0]];
     const side = Math.round(Math.sqrt(first.data.length));
     touch();
-    return { mask: segMask(first.data), side };
+    return { mask: segMask(first.data, prep.mask), side };
   }
   function cutOutCanvas(canvas, mask, side, cutoff, soft) {
     const m = document.createElement("canvas");
@@ -7087,9 +7125,9 @@
   function resolvedStyleProps(styles, name) {
     const chain = [];
     const seen = /* @__PURE__ */ new Set();
-    for (let current3 = styles.find((s) => s.name === name); current3 && !seen.has(current3.name); current3 = current3.basedOn ? styles.find((s) => s.name === current3.basedOn) : null) {
-      seen.add(current3.name);
-      chain.unshift(current3);
+    for (let current2 = styles.find((s) => s.name === name); current2 && !seen.has(current2.name); current2 = current2.basedOn ? styles.find((s) => s.name === current2.basedOn) : null) {
+      seen.add(current2.name);
+      chain.unshift(current2);
     }
     const merged = Object.assign({}, ...chain.map((s) => s.props));
     for (const key of Object.keys(merged)) if (merged[key] === null) delete merged[key];
@@ -7107,9 +7145,9 @@
     if (!ann || !ann.styleName || "styleName" in patch || "styleOverrides" in patch) return patch;
     const changed = Object.keys(patch).filter((key) => TEXT_STYLE_PROPS.includes(key));
     if (!changed.length) return patch;
-    const current3 = ann.styleOverrides || [];
-    const merged = Array.from(/* @__PURE__ */ new Set([...current3, ...changed]));
-    return merged.length === current3.length ? patch : { ...patch, styleOverrides: merged };
+    const current2 = ann.styleOverrides || [];
+    const merged = Array.from(/* @__PURE__ */ new Set([...current2, ...changed]));
+    return merged.length === current2.length ? patch : { ...patch, styleOverrides: merged };
   }
   function relinkPatch(ann, styles) {
     if (!ann || ann.type !== "text" || !ann.styleName || !styles.some((s) => s.name === ann.styleName)) return null;
@@ -7278,8 +7316,8 @@
       ...result
     };
   }
-  function patchedTraceSettings(current3, patch, presetSettings2) {
-    const now = normalizeTraceSettings(current3);
+  function patchedTraceSettings(current2, patch, presetSettings2) {
+    const now = normalizeTraceSettings(current2);
     if (patch.preset && patch.preset !== now.preset) return normalizeTraceSettings({ ...presetSettings2(patch.preset), view: now.view });
     return normalizeTraceSettings({ ...now, ...patch });
   }
@@ -9191,7 +9229,7 @@
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext("2d").drawImage(img, 0, 0);
-      const { mask, side } = await segmentCanvas(canvas, onStatus);
+      const { mask, side } = await segmentCanvas(canvas, opts.model, onStatus);
       const out = cutOutCanvas(canvas, mask, side, opts.cutoff, opts.soft);
       updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch, src: out.toDataURL("image/png") } : a));
     }
@@ -9433,8 +9471,8 @@
     }
     function zoomStep(direction) {
       leaveZoomBox();
-      const current3 = zoomRef.current;
-      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current3) : [...ZOOM_STEPS].reverse().find((s) => s < current3);
+      const current2 = zoomRef.current;
+      const next = direction > 0 ? ZOOM_STEPS.find((s) => s > current2) : [...ZOOM_STEPS].reverse().find((s) => s < current2);
       handleZoomChange(next != null ? next : direction > 0 ? ZOOM_PERCENT.max : ZOOM_PERCENT.min);
     }
     useLayoutEffect(() => {
@@ -11443,6 +11481,276 @@
     return { active, preview, notice, start, startRefine, commit, cancel };
   }
 
+  // shared/js/displaySettings.js
+  var EVENT = "zn-display-prefs";
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
+  var tidy = (v) => Math.round(v * 1e3) / 1e3;
+  function installDisplaySettings(options) {
+    const { storageKey, sliders = [], groups = [], title = "Display" } = options;
+    const checks = groups.flatMap((g) => g.checks || []);
+    const choices = groups.flatMap((g) => g.choices || []);
+    const optionValues = (ch, o) => Object.fromEntries(ch.flags.map((f) => [f.key, o.values[f.key] === true]));
+    const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
+    const initialOption = (ch) => ch.options[ch.initial || 0];
+    const defaults = {};
+    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const c of checks) defaults[c.key] = false;
+    for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
+    function load2() {
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(storageKey)) || {};
+      } catch (e) {
+      }
+      const prefs2 = {};
+      for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
+      for (const c of checks) prefs2[c.key] = saved[c.key] === true;
+      for (const ch of choices) {
+        for (const f of ch.flags) prefs2[f.key] = saved[f.key] === true;
+        if (optionIndex(ch, prefs2) < 0) Object.assign(prefs2, optionValues(ch, initialOption(ch)));
+      }
+      return prefs2;
+    }
+    function apply() {
+      const root = document.documentElement;
+      for (const s of sliders) root.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
+      for (const c of checks) if (c.htmlClass) root.classList.toggle(c.htmlClass, prefs[c.key]);
+      for (const ch of choices) for (const f of ch.flags) if (f.htmlClass) root.classList.toggle(f.htmlClass, prefs[f.key]);
+      window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
+    }
+    function set(changes) {
+      prefs = { ...prefs, ...changes };
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(prefs));
+      } catch (e) {
+      }
+      apply();
+      refresh();
+    }
+    let prefs = load2();
+    apply();
+    const el = (tag, cls, attrs = {}) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      return n;
+    };
+    const floating = options.mount === void 0 || options.mount === null;
+    const wrap = el("div", "zn-display" + (floating ? " zn-display-floating" : ""));
+    const panel = el("div", "zn-display-panel", { role: "dialog", "aria-label": title + " settings" });
+    panel.hidden = true;
+    const head = el("div", "zn-display-title");
+    head.textContent = title;
+    panel.appendChild(head);
+    const sliderViews = sliders.map((s) => {
+      const row = el("div", "zn-display-row");
+      const label = el("div", "zn-display-label");
+      const name = el("span");
+      name.textContent = s.label;
+      const value = el("span", "zn-display-value");
+      label.append(name, value);
+      const control = el("div", "zn-display-control");
+      const minus = el("button", "zn-display-step", { type: "button", "aria-label": "Smaller " + s.label.toLowerCase() });
+      minus.textContent = "−";
+      const range = el("input", "", { type: "range", min: s.min, max: s.max, step: s.step, "aria-label": s.label });
+      const plus = el("button", "zn-display-step", { type: "button", "aria-label": "Larger " + s.label.toLowerCase() });
+      plus.textContent = "+";
+      control.append(minus, range, plus);
+      row.append(label, control);
+      panel.appendChild(row);
+      minus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] - s.step, s)) }));
+      plus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] + s.step, s)) }));
+      range.addEventListener("input", () => set({ [s.key]: tidy(snap(Number(range.value), s)) }));
+      return { s, value, minus, range, plus };
+    });
+    const checkViews = [];
+    const choiceViews = [];
+    for (const g of groups) {
+      if (g.title) {
+        const sub = el("div", "zn-display-subtitle");
+        sub.textContent = g.title;
+        panel.appendChild(sub);
+      }
+      const list = el("div", "zn-display-checks");
+      for (const c of g.checks || []) {
+        const label = el("label", "zn-display-check");
+        const box = el("input", "", { type: "checkbox" });
+        const text = el("span");
+        text.textContent = c.label;
+        label.append(box, text);
+        list.appendChild(label);
+        box.addEventListener("change", () => {
+          const next = c.showMeans ? !box.checked : box.checked;
+          if (next && c.confirm) {
+            refresh();
+            askConfirm(c.confirm).then((ok) => {
+              if (ok) set({ [c.key]: true });
+            });
+            return;
+          }
+          set({ [c.key]: next });
+        });
+        checkViews.push({ c, label, box });
+      }
+      for (const ch of g.choices || []) {
+        const label = el("label", "zn-display-choice");
+        if (ch.hint) label.title = ch.hint;
+        const text = el("span");
+        text.textContent = ch.label;
+        const select = el("select", "", { "aria-label": ch.label });
+        ch.options.forEach((o, i) => {
+          const opt = el("option", "", { value: String(i) });
+          opt.textContent = o.label;
+          select.appendChild(opt);
+        });
+        label.append(text, select);
+        list.appendChild(label);
+        select.addEventListener("change", () => set(optionValues(ch, ch.options[Number(select.value)])));
+        choiceViews.push({ ch, select });
+      }
+      panel.appendChild(list);
+    }
+    const foot = el("div", "zn-display-foot");
+    const note = el("span", "zn-display-note");
+    note.textContent = "Saved in this browser";
+    const reset = el("button", "zn-display-reset", { type: "button" });
+    reset.textContent = "Reset";
+    reset.addEventListener("click", () => set(defaults));
+    foot.append(note, reset);
+    panel.appendChild(foot);
+    const gear = el("button", "zn-display-gear", {
+      type: "button",
+      title: title + " settings",
+      "aria-label": title + " settings",
+      "aria-expanded": "false"
+    });
+    gear.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+    wrap.append(panel, gear);
+    if (floating) document.body.appendChild(wrap);
+    else if (options.mount) options.mount.appendChild(wrap);
+    function askConfirm(c) {
+      return new Promise((resolve) => {
+        const backdrop = el("div", "zn-confirm-backdrop");
+        const box = el("div", "zn-confirm", { role: "dialog", "aria-modal": "true", "aria-label": c.title });
+        const h = el("div", "zn-confirm-title");
+        h.textContent = c.title;
+        const t = el("div", "zn-confirm-text");
+        t.textContent = c.text;
+        const row = el("div", "zn-confirm-actions");
+        const cancel = el("button", "", { type: "button" });
+        cancel.textContent = c.cancel || "Cancel";
+        const ok = el("button", "zn-confirm-ok", { type: "button" });
+        ok.textContent = c.ok || "OK";
+        row.append(cancel, ok);
+        box.append(h, t, row);
+        backdrop.appendChild(box);
+        document.body.appendChild(backdrop);
+        const done = (v) => {
+          document.removeEventListener("keydown", onKey, true);
+          backdrop.remove();
+          resolve(v);
+        };
+        const onKey = (e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            done(false);
+          }
+        };
+        document.addEventListener("keydown", onKey, true);
+        cancel.addEventListener("click", () => done(false));
+        ok.addEventListener("click", () => done(true));
+        backdrop.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          if (e.target === backdrop) done(false);
+        });
+        backdrop.addEventListener("mousedown", (e) => e.stopPropagation());
+        ok.focus();
+      });
+    }
+    function refresh() {
+      for (const v of sliderViews) {
+        const n = prefs[v.s.key];
+        v.value.textContent = n + (v.s.unit || "");
+        v.range.value = String(n);
+        v.minus.disabled = n <= v.s.min;
+        v.plus.disabled = n >= v.s.max;
+      }
+      for (const v of checkViews) {
+        const on = prefs[v.c.key];
+        v.box.checked = v.c.showMeans ? !on : on;
+        v.label.title = v.c.hint || "";
+      }
+      for (const v of choiceViews) v.select.value = String(Math.max(0, optionIndex(v.ch, prefs)));
+      reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
+    }
+    refresh();
+    function setOpen(open) {
+      panel.hidden = !open;
+      gear.classList.toggle("open", open);
+      gear.setAttribute("aria-expanded", String(open));
+    }
+    gear.addEventListener("click", () => setOpen(panel.hidden));
+    document.addEventListener("pointerdown", (e) => {
+      if (!panel.hidden && !wrap.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !panel.hidden) setOpen(false);
+    });
+    wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
+    wrap.addEventListener("mousedown", (e) => e.stopPropagation());
+    return { get prefs() {
+      return { ...prefs };
+    }, set, element: wrap };
+  }
+
+  // apps/ZEditor/src/ui/displaySettings.js
+  var display = null;
+  function installZeditorDisplaySettings() {
+    display = installDisplaySettings({
+      storageKey: "zeditor.displayPrefs",
+      mount: false,
+      // App.jsx places it next to the touch bar once that's rendered
+      sliders: [
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
+        { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) }
+      ],
+      groups: [
+        { title: "Pages panel", checks: [
+          { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." }
+        ] },
+        { title: "Experimental", checks: [
+          {
+            key: "aiFeatures",
+            label: "Experimental AI features",
+            hint: "Off (default): the AI features are hidden. On: AI Background Removal (Image panel) and the AI fill style (Marquee panel) appear. They need downloaded models.",
+            confirm: { title: "Enable experimental AI features?", text: "These features are still under development and testing. They may need you to download local AI models and use your device's processing power. You can find them in the Image panel and the Marquee panel.", ok: "Enable", cancel: "Cancel" }
+          }
+        ] },
+        { title: "Show", checks: [
+          { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" }
+        ], choices: [
+          {
+            label: "Side panels",
+            hint: "Pages panel: the page thumbnails. Format panel: the selected item's or tool's settings.",
+            initial: 2,
+            flags: [{ key: "hidePages", htmlClass: "ze-hide-pages" }, { key: "hideFormat", htmlClass: "ze-hide-format" }],
+            options: [
+              { label: "Pages panel (left) only", values: { hideFormat: true } },
+              { label: "Format panel (right) only", values: { hidePages: true } },
+              { label: "Show both", values: {} }
+            ]
+          }
+        ] }
+      ]
+    });
+    return display;
+  }
+  function attachDisplayGear(slot) {
+    if (slot && display && display.element.parentNode !== slot) slot.appendChild(display.element);
+  }
+  var aiFeaturesOn = () => Boolean(display && display.prefs.aiFeatures);
+
   // apps/ZEditor/src/model/marquee.js
   var MARQUEE_DEFAULTS = {
     mode: "layer",
@@ -12084,8 +12392,8 @@
 
   // shared/js/ai/session.js
   var IDLE_MS2 = 6e4;
-  var current2 = null;
-  var starting2 = null;
+  var current = null;
+  var starting = null;
   var timer2 = 0;
   var SIGN_KEY = "zinenow.ai.maskSign:" + DEFAULT_MODEL_URL;
   var savedSign = () => {
@@ -12098,9 +12406,9 @@
   };
   function releaseSession() {
     clearTimeout(timer2);
-    const c = current2;
-    current2 = null;
-    starting2 = null;
+    const c = current;
+    current = null;
+    starting = null;
     if (c && c.session && c.session.release) {
       try {
         c.session.release();
@@ -12113,12 +12421,12 @@
     timer2 = setTimeout(releaseSession, IDLE_MS2);
   };
   async function acquireSession(onStatus) {
-    if (current2) {
+    if (current) {
       touch2();
-      return current2;
+      return current;
     }
-    if (!starting2) {
-      starting2 = (async () => {
+    if (!starting) {
+      starting = (async () => {
         if (!await isModelSaved(DEFAULT_MODEL_URL)) throw new Error("The AI model is not downloaded. Download it first (Marquee panel, AI model box).");
         onStatus && onStatus("Starting the AI model…");
         const { bytes } = await getModelBytes(DEFAULT_MODEL_URL);
@@ -12132,14 +12440,14 @@
           } catch (e) {
           }
         }
-        current2 = { session: made.session, backend: made.backend, sign, bytes };
-        return current2;
+        current = { session: made.session, backend: made.backend, sign, bytes };
+        return current;
       })().catch((e) => {
-        starting2 = null;
+        starting = null;
         throw e;
       });
     }
-    const c = await starting2;
+    const c = await starting;
     touch2();
     return c;
   }
@@ -12157,7 +12465,7 @@
         c.session.release && c.session.release();
       } catch (err) {
       }
-      current2 = { session: cpu.session, backend: "cpu", sign: c.sign, bytes: c.bytes };
+      current = { session: cpu.session, backend: "cpu", sign: c.sign, bytes: c.bytes };
       touch2();
       return runModel(cpu.session, rgba, hole, c.sign);
     }
@@ -12629,7 +12937,7 @@
       const { doc: d, selection: sel, edits: ed, status: st, region: m } = latest.current;
       const settings = settingsOverride ? { ...latest.current.settings, ...settingsOverride } : latest.current.settings;
       const action = mode || settings.action;
-      if ((action === "fill" || action === "cut" && settings.cutLeaves === "surround") && !["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle)) {
+      if ((action === "fill" || action === "cut" && settings.cutLeaves === "surround") && (!["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle) || settings.fillStyle === "ai" && !aiFeaturesOn())) {
         latest.current.status.setNotice("Choose how to fill first (Marquee panel: Remove & fill, Style list).");
         return;
       }
@@ -13615,12 +13923,12 @@
         if (plan2) plans.set(p, plan2);
       }
       if (!plans.size) return;
-      const current3 = selectedIdx !== null ? pages[selectedIdx] : null;
-      const plan = current3 && plans.get(current3);
+      const current2 = selectedIdx !== null ? pages[selectedIdx] : null;
+      const plan = current2 && plans.get(current2);
       const board = document.querySelector(".ze-artboard-zoom");
       if (plan && board && (plan.sx || plan.sy)) {
         const r = board.getBoundingClientRect();
-        canvasGrowShift.pending = { key: current3.key, sx: plan.sx, sy: plan.sy, left: r.left, top: r.top, zoom };
+        canvasGrowShift.pending = { key: current2.key, sx: plan.sx, sy: plan.sy, left: r.left, top: r.top, zoom };
       }
       setPages((prev) => prev.map((p) => plans.has(p) ? grownPage(p, plans.get(p)) : p));
     }, [pages, selectedIdx, releaseTick]);
@@ -15713,14 +16021,14 @@
         }
       }
       if (editingAnnId !== null && editingAnnId !== ann.id) onFinishTextEdit();
-      const current3 = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
-      const wasSelected = current3.includes(ann.id);
+      const current2 = [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
+      const wasSelected = current2.includes(ann.id);
       const single = e.altKey && !e.shiftKey && Boolean(ann.groupId);
       if (single) onSelectAnnotation(ann.id, false, true);
       else if (!wasSelected) onSelectAnnotation(ann.id, e.shiftKey);
       const shiftDeselect = e.shiftKey && wasSelected && !single;
       const mates = withGroupMates(annotations, [ann.id]);
-      const movingIds = single ? [ann.id] : wasSelected ? current3 : e.shiftKey ? [...current3, ...mates] : mates;
+      const movingIds = single ? [ann.id] : wasSelected ? current2 : e.shiftKey ? [...current2, ...mates] : mates;
       const originals = annotations.filter((a) => movingIds.includes(a.id));
       const dragDelta = dragDeltaFrom(e, zoom);
       const guideLines = guideLinesPx();
@@ -15741,7 +16049,7 @@
           onSelectAnnotation(ann.id, true);
           return;
         }
-        if (wasSelected && !e.shiftKey && !single && current3.length > 1) onSelectAnnotation(ann.id, false);
+        if (wasSelected && !e.shiftKey && !single && current2.length > 1) onSelectAnnotation(ann.id, false);
         if (onPlainClick) onPlainClick();
       });
     }
@@ -16382,12 +16690,12 @@
   function PresetPicker({ effect, ann, onPatch }) {
     const values = controlValues(ann, effect.controls);
     const same = (preset) => Object.entries(preset.values).every(([prop, v]) => values[prop] === v);
-    const current3 = (effect.presets.find(same) || { key: "custom" }).key;
+    const current2 = (effect.presets.find(same) || { key: "custom" }).key;
     return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Preset"), /* @__PURE__ */ React.createElement(
       SelectInput,
       {
         options: [...effect.presets.map((p) => ({ key: p.key, label: p.label })), { key: "custom", label: "Custom" }],
-        value: current3,
+        value: current2,
         onChange: (key) => {
           const preset = effect.presets.find((p) => p.key === key);
           if (preset) onPatch(preset.values);
@@ -16420,11 +16728,11 @@
   }
 
   // apps/ZEditor/src/ui/dialogs/AiModelDialog.jsx
-  function AiModelDialog({ mode, plan, onConfirm, onCancel, kind = "fill" }) {
+  function AiModelDialog({ mode, plan, onConfirm, onCancel, kind = "fill", info = null }) {
     if (!mode || !plan) return null;
     const mb = (n) => Math.round(n);
     const bg = kind === "background";
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": mode === "download" ? "Download the AI model" : "Delete the AI model", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, mode === "download" ? "Download AI model?" : "Delete AI model?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, mode === "download" ? /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, bg ? /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI background-remover model (U²-Netp, about ", plan.modelMb.toFixed(1), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ",") : /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI object-remover model (MI-GAN, ", mb(plan.modelMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ","), " plus its runtime (about ", mb(plan.runtimeMb), " MB, skipped if you already have it) from ", /* @__PURE__ */ React.createElement("b", null, "cdn.jsdelivr.net"), ". About ", plan.totalMb, " MB in total."), /* @__PURE__ */ React.createElement("li", null, "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Warning:"), " it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).")) : /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "This removes the ", bg ? "background-removal" : "AI fill", " model from this device", bg ? "" : " (and the runtime, if the other AI model is not saved)", ". The runtime is only removed when no AI model needs it."), /* @__PURE__ */ React.createElement("li", null, "Ai Tools (Local) uses the same runtime files, so it may need to download them again."), /* @__PURE__ */ React.createElement("li", null, "You can download it again any time."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, mode === "download" ? "Confirm Download" : "Delete"))));
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": mode === "download" ? "Download the AI model" : "Delete the AI model", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, mode === "download" ? "Download AI model?" : "Delete AI model?"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, mode === "download" ? /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, bg ? /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI background-remover model (", /* @__PURE__ */ React.createElement("b", null, info ? info.label : "U²-Netp"), ", about ", info ? info.mb : plan.modelMb, " MB, ", info ? info.licence : "Apache-2.0", " licence) from ", /* @__PURE__ */ React.createElement("b", null, info ? info.host : "huggingface.co"), " (", info ? info.repo : "edgetools/u2netp", "),") : /* @__PURE__ */ React.createElement(React.Fragment, null, "You are downloading an AI object-remover model (MI-GAN, ", mb(plan.modelMb), " MB) from ", /* @__PURE__ */ React.createElement("b", null, "huggingface.co"), ","), " plus its runtime (about ", mb(plan.runtimeMb), " MB, skipped if you already have it) from ", /* @__PURE__ */ React.createElement("b", null, "cdn.jsdelivr.net"), ". About ", plan.totalMb, " MB in total."), /* @__PURE__ */ React.createElement("li", null, "The AI model will not connect to the internet. It runs on your device and no file or picture leaves your device."), /* @__PURE__ */ React.createElement("li", null, /* @__PURE__ */ React.createElement("b", null, "Warning:"), " it may freeze or cause lag on certain lower-end devices. You can delete it later (Delete model button).")) : /* @__PURE__ */ React.createElement("ul", { className: "ze-ai-points" }, /* @__PURE__ */ React.createElement("li", null, "This removes ", bg && info ? info.label : "the AI fill model", " from this device", bg ? "" : " (and the runtime, if the other AI model is not saved)", ". The runtime is only removed when no AI model needs it."), /* @__PURE__ */ React.createElement("li", null, "Ai Tools (Local) uses the same runtime files, so it may need to download them again."), /* @__PURE__ */ React.createElement("li", null, "You can download it again any time."))), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, mode === "download" ? "Confirm Download" : "Delete"))));
   }
 
   // shared/js/ai/manager.js
@@ -16449,11 +16757,11 @@
     }));
     return { model: await isModelSaved(DEFAULT_MODEL_URL), runtime: runtimeSaved.every(Boolean) };
   }
-  async function downloadAi({ onProgress, signal, which = "fill" } = {}) {
+  async function downloadAi({ onProgress, signal, which = "fill", model = "u2netp" } = {}) {
     const bg = which === "background";
     const plan = await downloadPlan();
-    const saved = bg ? await bgSaved() : await aiSaved();
-    const modelMb = bg ? BG_MODEL_MB : plan.modelMb;
+    const saved = bg ? await bgSaved(model) : await aiSaved();
+    const modelMb = bg ? bgModel(model).mb : plan.modelMb;
     const total = (saved.runtime ? 0 : plan.runtimeMb) + (saved.model ? 0 : modelMb);
     let doneMb = 0;
     const report = (extra) => onProgress && onProgress(Math.min(total, doneMb + extra), total);
@@ -16478,7 +16786,7 @@
       }
     }
     if (!saved.model) {
-      if (bg) await getModelBytes(BG_MODEL_URL, (got) => report(got / 1048576), signal, BG_CACHE);
+      if (bg) await getModelBytes(bgModel(model).url, (got) => report(got / 1048576), signal, BG_CACHE);
       else await getModelBytes(DEFAULT_MODEL_URL, (got) => report(got / 1048576), signal);
     }
     try {
@@ -16487,13 +16795,19 @@
     }
     onProgress && onProgress(total, total);
   }
-  async function bgPlan() {
+  async function bgPlan(key) {
     const plan = await downloadPlan();
-    return { gpu: plan.gpu, modelMb: BG_MODEL_MB, runtimeMb: plan.runtimeMb, totalMb: Math.round(BG_MODEL_MB + plan.runtimeMb) };
+    const mb = bgModel(key).mb;
+    return { gpu: plan.gpu, modelMb: mb, runtimeMb: plan.runtimeMb, totalMb: Math.round(mb + plan.runtimeMb) };
   }
-  async function bgSaved() {
+  async function bgSaved(key) {
     const saved = await aiSaved();
-    return { model: await isModelSaved(BG_MODEL_URL, BG_CACHE), runtime: saved.runtime };
+    return { model: await isModelSaved(bgModel(key).url, BG_CACHE), runtime: saved.runtime };
+  }
+  async function anyModelSaved(except) {
+    if (except !== "fill" && await isModelSaved(DEFAULT_MODEL_URL)) return true;
+    for (const m of BG_MODELS) if (m.key !== except && await isModelSaved(m.url, BG_CACHE)) return true;
+    return false;
   }
   async function deleteRuntime() {
     try {
@@ -16504,20 +16818,20 @@
     } catch (e) {
     }
   }
-  async function deleteBg() {
+  async function deleteBg(key) {
     releaseBgSession();
-    await forgetModel(BG_CACHE);
-    if (!await isModelSaved(DEFAULT_MODEL_URL)) await deleteRuntime();
+    await forgetModelUrl(bgModel(key).url, BG_CACHE);
+    if (!await anyModelSaved(key)) await deleteRuntime();
   }
   async function deleteAi() {
     releaseSession();
     await forgetModel();
-    if (!await isModelSaved(BG_MODEL_URL, BG_CACHE)) await deleteRuntime();
+    if (!await anyModelSaved("fill")) await deleteRuntime();
   }
 
   // apps/ZEditor/src/state/useAiModel.js
   var { useState: useState26, useEffect: useEffect22, useRef: useRef23, useCallback } = React;
-  function useAiModel(which = "fill") {
+  function useAiModel(which = "fill", modelKey = "u2netp") {
     const bg = which === "background";
     const [state, setState] = useState26({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
     const abortRef = useRef23(null);
@@ -16530,13 +16844,14 @@
     };
     const refresh = useCallback(async () => {
       try {
-        const [saved, plan] = await Promise.all(bg ? [bgSaved(), bgPlan()] : [aiSaved(), downloadPlan()]);
+        const [saved, plan] = await Promise.all(bg ? [bgSaved(modelKey), bgPlan(modelKey)] : [aiSaved(), downloadPlan()]);
         set({ phase: saved.model && saved.runtime ? "ready" : "none", plan });
       } catch (e) {
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
       }
-    }, []);
+    }, [modelKey]);
     useEffect22(() => {
+      set({ phase: "checking", error: null });
       refresh();
     }, [refresh]);
     async function download() {
@@ -16544,7 +16859,7 @@
       abortRef.current = ctl;
       set({ phase: "downloading", doneMb: 0, totalMb: state.plan ? state.plan.totalMb : 0, error: null });
       try {
-        await downloadAi({ which, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
+        await downloadAi({ which, model: modelKey, signal: ctl.signal, onProgress: (done, total) => set({ doneMb: done, totalMb: total }) });
         await refresh();
       } catch (e) {
         await refresh();
@@ -16557,7 +16872,7 @@
       if (abortRef.current) abortRef.current.abort();
     };
     async function remove() {
-      await (bg ? deleteBg() : deleteAi());
+      await (bg ? deleteBg(modelKey) : deleteAi());
       await refresh();
     }
     return { ...state, download, cancel, remove };
@@ -16565,18 +16880,43 @@
 
   // apps/ZEditor/src/ui/panels/format/RemoveBackgroundSection.jsx
   var { useState: useState27 } = React;
+  var DEFAULT_CUTOFF = 0.1;
+  function DecimalBox({ value, onChange, min, max, step, label, disabled }) {
+    const [draft, setDraft] = useState27(null);
+    return /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        className: "ze-format-number",
+        min,
+        max,
+        step,
+        "aria-label": label,
+        disabled,
+        value: draft != null ? draft : value,
+        onChange: (e) => {
+          setDraft(e.target.value);
+          const n = Number(e.target.value);
+          if (e.target.value.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+        },
+        onBlur: () => setDraft(null)
+      }
+    );
+  }
   function RemoveBackgroundSection({ ann, onRemoveBackground, disabled }) {
-    const ai = useAiModel("background");
+    const [modelKey, setModelKey] = useState27(BG_MODELS[0].key);
+    const info = bgModel(modelKey);
+    const ai = useAiModel("background", modelKey);
     const [dialog, setDialog] = useState27(null);
-    const [cutoff, setCutoff] = useState27(50);
+    const [cutoff, setCutoff] = useState27(DEFAULT_CUTOFF);
     const [soft, setSoft] = useState27(10);
     const [busy, setBusy] = useState27("");
     const [error, setError] = useState27("");
+    const ready = ai.phase === "ready";
     const run2 = async () => {
       setError("");
       setBusy("Starting…");
       try {
-        await onRemoveBackground(ann, { cutoff: cutoff / 100, soft: Math.max(1, soft) / 100 }, setBusy);
+        await onRemoveBackground(ann, { model: modelKey, cutoff: cutoff / 100, soft: Math.max(0.1, soft) / 100 }, setBusy);
       } catch (e) {
         setError(e && e.message ? e.message : String(e));
       } finally {
@@ -16587,16 +16927,23 @@
       PanelSection,
       {
         id: "image.removebg",
-        title: "Remove background",
+        title: "AI Background Removal",
         hint: "An AI model that runs on your device finds the main subject and makes everything else see-through. It works best on one clear subject. Nothing is uploaded. Not right? Undo (Ctrl+Z), change the numbers and run it again."
       },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-ai-box" }, /* @__PURE__ */ React.createElement("b", null, "AI model"), ai.phase === "checking" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Checking…"), ai.phase === "none" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Not downloaded. It is only downloaded if you choose to."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: () => setDialog("download") }, "Download AI model", ai.plan ? " (about " + ai.plan.totalMb + " MB)" : "")), ai.phase === "downloading" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("progress", { className: "ze-ai-progress", max: ai.totalMb || 1, value: ai.doneMb }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloading… ", ai.doneMb.toFixed(1), " of ", ai.totalMb.toFixed(1), " MB"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: ai.cancel }, "Cancel download")), ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloaded: runs on this device, works offline."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setDialog("delete") }, "Delete model")), ai.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, ai.error)),
-      ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Edge cut-off (%)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: 5, max: 95, step: 5, label: "Edge cut-off", value: cutoff, onChange: setCutoff }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Higher keeps less of the edge (a tighter cut). Lower keeps more.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Soft edge (%)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: 1, max: 50, step: 5, label: "Soft edge", value: soft, onChange: setSoft }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "How gradually the edge fades. Higher is softer.")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: disabled || Boolean(busy), onClick: run2 }, busy || "Remove background")),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Model"), BG_MODELS.map((m) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-check", key: m.key }, /* @__PURE__ */ React.createElement("input", { type: "radio", name: "ze-bg-model", checked: modelKey === m.key, onChange: () => {
+        setModelKey(m.key);
+        setError("");
+      } }), /* @__PURE__ */ React.createElement("span", null, m.label, " · ", m.mb, " MB")))),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-ai-box" }, /* @__PURE__ */ React.createElement("b", null, info.name, " (", info.kind, ")"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, info.about), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, info.licence, " licence (free and open source). Downloaded from ", info.repo, ". It runs on your device and nothing is uploaded. It also needs the AI engine (ONNX Runtime Web, from cdn.jsdelivr.net), shared with the AI fill."), ai.phase === "checking" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Checking…"), ai.phase === "none" && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: () => setDialog("download") }, "Download ", info.name, " (about ", ai.plan ? ai.plan.totalMb : Math.round(info.mb), " MB)"), ai.phase === "downloading" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("progress", { className: "ze-ai-progress", max: ai.totalMb || 1, value: ai.doneMb }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloading… ", ai.doneMb.toFixed(1), " of ", ai.totalMb.toFixed(1), " MB"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: ai.cancel }, "Cancel download")), ready && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloaded: works offline."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setDialog("delete") }, "Delete ", info.name)), ai.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, ai.error)),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", "aria-disabled": !ready }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Edge cut-off (%)"), /* @__PURE__ */ React.createElement(DecimalBox, { min: 0, max: 100, step: 0.125, label: "Edge cut-off", value: cutoff, onChange: setCutoff, disabled: !ready }), !ready ? /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-required" }, "Download required") : /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Higher keeps less of the edge (a tighter cut). You can type finer values like 0.05.")),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", "aria-disabled": !ready }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Soft edge (%)"), /* @__PURE__ */ React.createElement(DecimalBox, { min: 0.1, max: 50, step: 0.5, label: "Soft edge", value: soft, onChange: setSoft, disabled: !ready }), !ready && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-required" }, "Download required")),
+      /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || disabled || Boolean(busy), onClick: run2 }, busy || "Remove background"),
       error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, error),
       /* @__PURE__ */ React.createElement(
         AiModelDialog,
         {
           kind: "background",
+          info,
           mode: dialog,
           plan: ai.plan,
           onCancel: () => setDialog(null),
@@ -16611,11 +16958,24 @@
     );
   }
 
+  // apps/ZEditor/src/state/useAiFeatures.js
+  var { useState: useState28, useEffect: useEffect23 } = React;
+  function useAiFeatures() {
+    const [on, setOn] = useState28(aiFeaturesOn());
+    useEffect23(() => {
+      const h = (e) => setOn(Boolean(e.detail && e.detail.aiFeatures));
+      window.addEventListener("zn-display-prefs", h);
+      setOn(aiFeaturesOn());
+      return () => window.removeEventListener("zn-display-prefs", h);
+    }, []);
+    return on;
+  }
+
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  var { useState: useState28 } = React;
+  var { useState: useState29 } = React;
   var SHOW_AI_TOOLS_SECTION = false;
-  var SHOW_REMOVE_BACKGROUND_SECTION = false;
   function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
+    const aiOn = useAiFeatures();
     const patch = (p) => onUpdate(ann.id, p);
     const isCroppingThis = croppingAnnId === ann.id;
     const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -16666,7 +17026,7 @@
           /* @__PURE__ */ React.createElement(ControlList, { controls: group.controls, source: ann, onPatch: patch })
         );
       })
-    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), SHOW_REMOVE_BACKGROUND_SECTION && /* @__PURE__ */ React.createElement(RemoveBackgroundSection, { ann, onRemoveBackground, disabled: isCroppingThis }), SHOW_AI_TOOLS_SECTION && /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ImageStyleSection, { ann, filterType, filterOption, patch }), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch }), /* @__PURE__ */ React.createElement(ImageTraceSection, { ann, imageTrace, disabled: isCroppingThis }), aiOn && /* @__PURE__ */ React.createElement(RemoveBackgroundSection, { ann, onRemoveBackground, disabled: isCroppingThis }), SHOW_AI_TOOLS_SECTION && /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.aitools",
@@ -16686,7 +17046,7 @@
     ));
   }
   function ImageTraceSection({ ann, imageTrace, disabled }) {
-    const [preset, setPreset] = useState28(DEFAULT_TRACE_PRESET);
+    const [preset, setPreset] = useState29(DEFAULT_TRACE_PRESET);
     const busy = imageTrace.busyId === ann.id;
     return /* @__PURE__ */ React.createElement(
       PanelSection,
@@ -16814,25 +17174,25 @@
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState29, useRef: useRef24, useEffect: useEffect23, useMemo: useMemo3 } = React;
+  var { useState: useState30, useRef: useRef24, useEffect: useEffect24, useMemo: useMemo3 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState29(value || "");
-    const [typed, setTyped] = useState29(false);
-    const [open, setOpen] = useState29(false);
-    const [highlight, setHighlight] = useState29(-1);
+    const [query, setQuery] = useState30(value || "");
+    const [typed, setTyped] = useState30(false);
+    const [open, setOpen] = useState30(false);
+    const [highlight, setHighlight] = useState30(-1);
     const previewFromRef = useRef24(null);
     const listRef = useRef24(null);
-    const [status, setStatus] = useState29(null);
-    const [loadingFonts, setLoadingFonts] = useState29(false);
+    const [status, setStatus] = useState30(null);
+    const [loadingFonts, setLoadingFonts] = useState30(false);
     const containerRef = useRef24(null);
     const uploadInputRef = useRef24(null);
-    useEffect23(() => {
+    useEffect24(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect23(() => {
+    useEffect24(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -16846,7 +17206,7 @@
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect23(() => {
+    useEffect24(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -16997,10 +17357,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState30, useRef: useRef25 } = React;
+  var { useState: useState31, useRef: useRef25 } = React;
   function TextPhotoFill({ ann, patch }) {
     const inputRef = useRef25(null);
-    const [error, setError] = useState30(null);
+    const [error, setError] = useState31(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -17089,10 +17449,10 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState31 } = React;
+  var { useState: useState32 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState31("latin");
-    const [count, setCount] = useState31(3);
+    const [kind, setKind] = useState32("latin");
+    const [count, setCount] = useState32(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -17123,7 +17483,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState32 } = React;
+  var { useState: useState33 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -17131,7 +17491,7 @@
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState32(null);
+    const [message, setMessage] = useState33(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -17149,12 +17509,12 @@
       const sel = selection(false);
       if (sel) patch({ colorRuns: setRunProps(runs, sel.start, sel.end, props) });
     };
-    const current3 = (key) => {
+    const current2 = (key) => {
       const { annId, start } = textSelectionStore;
       const run2 = annId === ann.id ? runAt(runs, start) : null;
       return run2 && run2[key] != null ? run2[key] : ann[key];
     };
-    const toggle = (key) => setProps({ [key]: !current3(key) });
+    const toggle = (key) => setProps({ [key]: !current2(key) });
     const strikeNow = () => {
       const { annId, start } = textSelectionStore;
       const run2 = annId === ann.id ? runAt(runs, start) : null;
@@ -17168,7 +17528,7 @@
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState32(null);
+    const [sizeDraft, setSizeDraft] = useState33(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -17176,7 +17536,7 @@
       if (pt > 0) setProps({ fontSize: Math.round(ptToPx(pt) * 1e3) / 1e3 });
     }
     const count = (runs || []).reduce((total, run2) => total + run2.end - run2.start, 0);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: current3("fontFamily"), onChange: (v) => setProps({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Font"), /* @__PURE__ */ React.createElement(FontCombobox, { fontOptions, setFontOptions, value: current2("fontFamily"), onChange: (v) => setProps({ fontFamily: v }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
       NumberBox,
       {
         className: "ze-format-number",
@@ -17185,7 +17545,7 @@
         step: "0.5",
         "aria-label": "Size of the selected letters (pt)",
         title: "Size of the selected letters (pt). Press Enter or leave the box to apply.",
-        value: sizeDraft != null ? sizeDraft : Math.round(pxToPt(current3("fontSize") || 16) * 10) / 10,
+        value: sizeDraft != null ? sizeDraft : Math.round(pxToPt(current2("fontSize") || 16) * 10) / 10,
         onChange: (e) => setSizeDraft(e.target.value),
         onKeyDown: (e) => {
           if (e.key === "Enter") applySize();
@@ -17202,11 +17562,11 @@
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState33 } = React;
+  var { useState: useState34 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState33("");
-    const [basedOn, setBasedOn] = useState33("");
-    const [message, setMessage] = useState33(null);
+    const [name, setName] = useState34("");
+    const [basedOn, setBasedOn] = useState34("");
+    const [message, setMessage] = useState34(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -17387,26 +17747,27 @@
     const change = (patch) => setMarquee((cur) => ({ ...cur, ...patch }));
     const ai = useAiModel();
     const [aiDialog, setAiDialog] = React.useState(null);
-    const useAi = settings.fillStyle === "ai";
-    const chosen = ["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle);
+    const aiOn = useAiFeatures();
+    const useAi = aiOn && settings.fillStyle === "ai";
+    const chosen = ["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle) && (settings.fillStyle !== "ai" || aiOn);
     const changeFillStyle = (value) => change({ fillStyle: value });
     const fromLayer = settings.source === "layer";
     const leaves = settings.cutLeaves === "surround" ? "surround" : settings.cutLeaves === "fill" || !fromLayer ? "fill" : "transparent";
     const cutNeedsAi = settings.action === "cut" && leaves === "surround" && (!chosen || useAi && ai.phase !== "ready");
     const needsLayer = fromLayer && !targetLayer;
     const fillMode = settings.mode === "fill";
-    const radio = (name, value, label, current3, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current3 === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
+    const radio = (name, value, label, current2, onPick, hint, disabled) => /* @__PURE__ */ React.createElement("label", { className: "ze-format-radio", key: value }, /* @__PURE__ */ React.createElement("input", { type: "radio", name, checked: current2 === value, disabled, onChange: () => onPick(value) }), /* @__PURE__ */ React.createElement("span", null, label), hint && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, hint));
     const layerName2 = targetLayer ? targetLayer.name || (targetLayer.type === "text" ? "Text" : targetLayer.type === "rect" ? "Shape" : targetLayer.type === "stroke" ? "Drawing" : targetLayer.type === "trace" ? "Vectorized" : "Image") : null;
     const ready = Boolean(marquee && isUsableMarquee(marquee.region));
     const polygon = settings.shape === "polygon";
     const brush = settings.shape === "brush";
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, brush ? "Paint over what you want to work on (Brush). Two fingers move and zoom the page. The marks stay until you press Clear marks or Esc, so you can change a setting and try again." : polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Then choose what to do with what is inside it."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: brush ? "brush" : polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon"), /* @__PURE__ */ React.createElement("option", { value: "brush" }, "Brush (paint over it)")), brush && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Brush size (px)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: BRUSH_MIN_SIZE, max: BRUSH_MAX_SIZE, step: 4, label: "Brush size", value: settings.brushSize === void 0 ? MARQUEE_DEFAULTS.brushSize : settings.brushSize, onChange: (v) => change({ brushSize: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "In page pixels. The [ and ] keys change it.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row", role: "group", "aria-label": "Brush mode" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!settings.brushErase ? " active" : ""), onClick: () => change({ brushErase: false }) }, "Paint"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (settings.brushErase ? " active" : ""), onClick: () => change({ brushErase: true }) }, "Erase mark")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !marquee || !marquee.region, onClick: () => marquee.setRegion(null) }, "Clear marks")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Works on", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Works on" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), fillMode ? "Everything you can see on the page. The fill goes on top as a new image layer." : "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), fillMode ? "Only that layer: its own picture is changed." : "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && !fillMode && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box" }, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "Marquee Action"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee Action", value: fillMode ? "fill" : "layer", onChange: (e) => change({ mode: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "layer" }, "Make a new layer"), /* @__PURE__ */ React.createElement("option", { value: "fill" }, "Remove & fill")), !fillMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Turns what is inside the area into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Copy to a new layer", settings.action, (v) => change({ action: v }), "The original stays as it is. (Ctrl+J)"), radio("marquee-action", "cut", "Cut to a new layer", settings.action, (v) => change({ action: v }), "The area is taken out of the original. (Ctrl+Shift+J)")), settings.action === "cut" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "What a cut leaves behind"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v })), radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers saved for Remove & fill.")), leaves === "fill" && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || cutNeedsAi || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : cutNeedsAi ? "This cut is filled from the surroundings with the style chosen under Remove & fill: choose one there first (and, for the AI style, download its model)." : "The new layer is selected and the Move tool takes over.")), fillMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Replaces what is inside the area with a fill made from the pixels around it. No new layer is made."), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Fill style", value: chosen ? settings.fillStyle : "", onChange: (e) => changeFillStyle(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "", disabled: true }, "Choose how to fill…"), /* @__PURE__ */ React.createElement("optgroup", { label: "With AI model" }, /* @__PURE__ */ React.createElement("option", { value: "ai" }, "AI (on-device): the best for removing objects")), /* @__PURE__ */ React.createElement("optgroup", { label: "With math algorithm (classic)" }, /* @__PURE__ */ React.createElement("option", { value: "pattern" }, "Pattern: copies texture from the rest of the picture"), /* @__PURE__ */ React.createElement("option", { value: "smooth" }, "Smooth: a blend of the edge colours"), /* @__PURE__ */ React.createElement("option", { value: "detail" }, "Detailed: lines and edges run on through it (small marks only)"))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "AI: removes objects the way a person would paint them out (needs a one-time download). Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks."), useAi && /* @__PURE__ */ React.createElement("div", { className: "ze-ai-box" }, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "AI model"), ai.phase === "checking" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Checking…"), ai.phase === "none" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Not downloaded. It is only downloaded if you choose to, and it then works offline."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: () => setAiDialog("download") }, "Download AI model", ai.plan ? " (about " + ai.plan.totalMb + " MB)" : "")), ai.phase === "downloading" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("progress", { className: "ze-ai-progress", max: ai.totalMb || 1, value: ai.doneMb }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloading… ", ai.doneMb.toFixed(1), " of ", ai.totalMb.toFixed(1), " MB"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: ai.cancel }, "Cancel download")), ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloaded: runs on this device, works offline. A fill takes a few seconds."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setAiDialog("delete") }, "Delete model", ai.plan ? " (frees about " + ai.plan.totalMb + " MB)" : "")), ai.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, ai.error)), chosen && /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "Fine-tune"), chosen && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture."), [
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Marquee" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sec-intro" }, brush ? "Paint over what you want to work on (Brush). Two fingers move and zoom the page. The marks stay until you press Clear marks or Esc, so you can change a setting and try again." : polygon ? "Click on the page to place the corners of a shape (Shift: 45° lines), then click the first corner, double-click or press Enter to close it. Then move it, drag its corners or turn it." : "Drag on the page to draw a box, then move, resize or turn it.", " Then choose what to do with what is inside it."), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.shape", title: "Shape", defaultOpen: true }, /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee shape", value: brush ? "brush" : polygon ? "polygon" : "rect", onChange: (e) => change({ shape: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "rect" }, "Rectangle"), /* @__PURE__ */ React.createElement("option", { value: "polygon" }, "Polygon"), /* @__PURE__ */ React.createElement("option", { value: "brush" }, "Brush (paint over it)")), brush && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Brush size (px)"), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: BRUSH_MIN_SIZE, max: BRUSH_MAX_SIZE, step: 4, label: "Brush size", value: settings.brushSize === void 0 ? MARQUEE_DEFAULTS.brushSize : settings.brushSize, onChange: (v) => change({ brushSize: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "In page pixels. The [ and ] keys change it.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row", role: "group", "aria-label": "Brush mode" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (!settings.brushErase ? " active" : ""), onClick: () => change({ brushErase: false }) }, "Paint"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide" + (settings.brushErase ? " active" : ""), onClick: () => change({ brushErase: true }) }, "Erase mark")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !marquee || !marquee.region, onClick: () => marquee.setRegion(null) }, "Clear marks")), marquee && marquee.polygonOpen && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: marquee.region.points.length < 3, title: "Enter", onClick: () => marquee.setRegion({ ...marquee.region, closed: true }) }, "Close shape"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Backspace", onClick: () => marquee.setRegion(marquee.region.points.length > 1 ? { ...marquee.region, points: marquee.region.points.slice(0, -1) } : null) }, "Undo point"))), /* @__PURE__ */ React.createElement(PanelSection, { id: "marquee.from", title: "Works on", defaultOpen: true }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Works on" }, radio("marquee-source", "visible", "All visible", settings.source, (v) => change({ source: v }), fillMode ? "Everything you can see on the page. The fill goes on top as a new image layer." : "Everything you can see on the page, as one picture. The new layer goes on top."), radio("marquee-source", "layer", "Selected layer", settings.source, (v) => change({ source: v }), fillMode ? "Only that layer: its own picture is changed." : "Only that layer. The new layer goes just above it.")), fromLayer && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, layerName2 ? "Layer: " + layerName2 : "No layer selected. Select one (Move tool or Layers panel), then press M."), !fromLayer && !fillMode && /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.includePaper, onChange: (e) => change({ includePaper: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, "Include the paper"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Off: where only paper shows, the new layer is see-through. On: it carries the paper's white."))), /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box" }, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "Marquee Action"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Marquee Action", value: fillMode ? "fill" : "layer", onChange: (e) => change({ mode: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "layer" }, "Make a new layer"), /* @__PURE__ */ React.createElement("option", { value: "fill" }, "Remove & fill")), !fillMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Turns what is inside the area into a new image layer, so you can give just that part a filter or effect."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "Make layer" }, radio("marquee-action", "copy", "Copy to a new layer", settings.action, (v) => change({ action: v }), "The original stays as it is. (Ctrl+J)"), radio("marquee-action", "cut", "Cut to a new layer", settings.action, (v) => change({ action: v }), "The area is taken out of the original. (Ctrl+Shift+J)")), settings.action === "cut" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "What a cut leaves behind"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-radio-group", role: "radiogroup", "aria-label": "A cut leaves" }, radio("marquee-leaves", "transparent", "A see-through hole", leaves, (v) => change({ cutLeaves: v }), fromLayer ? void 0 : "Needs one selected layer to cut from.", !fromLayer), radio("marquee-leaves", "fill", "A colour", leaves, (v) => change({ cutLeaves: v })), radio("marquee-leaves", "surround", "Filled from the surroundings", leaves, (v) => change({ cutLeaves: v }), "Uses the style and numbers saved for Remove & fill.")), leaves === "fill" && /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Colour"), /* @__PURE__ */ React.createElement(CustomColorInput, { value: /^#[0-9a-fA-F]{6}$/.test(settings.fillColor) ? settings.fillColor : "#ffffff", onChange: (color) => change({ fillColor: color }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "A text box or shape is turned into an image first, so part of it can be cut. A pen stroke can only be copied.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || cutNeedsAi || Boolean(marquee && marquee.busy), onClick: () => marquee.makeLayer() }, "Make layer")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first." : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : cutNeedsAi ? "This cut is filled from the surroundings with the style chosen under Remove & fill: choose one there first (and, for the AI style, download its model)." : "The new layer is selected and the Move tool takes over.")), fillMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Replaces what is inside the area with a fill made from the pixels around it. No new layer is made."), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", "aria-label": "Fill style", value: chosen ? settings.fillStyle : "", onChange: (e) => changeFillStyle(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "", disabled: true }, "Choose how to fill…"), aiOn && /* @__PURE__ */ React.createElement("optgroup", { label: "With AI model" }, /* @__PURE__ */ React.createElement("option", { value: "ai" }, "AI (on-device): the best for removing objects")), /* @__PURE__ */ React.createElement("optgroup", { label: "With math algorithm (classic)" }, /* @__PURE__ */ React.createElement("option", { value: "pattern" }, "Pattern: copies texture from the rest of the picture"), /* @__PURE__ */ React.createElement("option", { value: "smooth" }, "Smooth: a blend of the edge colours"), /* @__PURE__ */ React.createElement("option", { value: "detail" }, "Detailed: lines and edges run on through it (small marks only)"))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "AI: removes objects the way a person would paint them out (needs a one-time download). Pattern: grass, foliage, brick, road and other texture (areas up to about 350 px of the picture). Smooth: plain paper and soft backgrounds. Detailed: thin lines and small marks."), useAi && /* @__PURE__ */ React.createElement("div", { className: "ze-ai-box" }, /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "AI model"), ai.phase === "checking" && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Checking…"), ai.phase === "none" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Not downloaded. It is only downloaded if you choose to, and it then works offline."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", onClick: () => setAiDialog("download") }, "Download AI model", ai.plan ? " (about " + ai.plan.totalMb + " MB)" : "")), ai.phase === "downloading" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("progress", { className: "ze-ai-progress", max: ai.totalMb || 1, value: ai.doneMb }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloading… ", ai.doneMb.toFixed(1), " of ", ai.totalMb.toFixed(1), " MB"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: ai.cancel }, "Cancel download")), ai.phase === "ready" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Downloaded: runs on this device, works offline. A fill takes a few seconds."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => setAiDialog("delete") }, "Delete model", ai.plan ? " (frees about " + ai.plan.totalMb + " MB)" : "")), ai.error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error" }, ai.error)), chosen && /* @__PURE__ */ React.createElement("div", { className: "ze-marquee-box-title" }, "Fine-tune"), chosen && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Use + and - and press Remove & fill again (Ctrl+Z first to replace the last fill). Sizes are in pixels of the picture."), [
       { key: "fillMix", label: "Pattern amount (%)", hint: "100: all copied texture. Lower mixes in the smooth blend, which hides seams but looks softer.", min: 0, max: 100, step: 10, show: settings.fillStyle === "pattern" || !settings.fillStyle },
       { key: "fillPatch", label: "Patch size", hint: "Small: fine texture. Large: keeps lines and structure (twigs, brick courses).", min: 5, max: 41, step: 2, show: settings.fillStyle === "pattern" || !settings.fillStyle },
       { key: "fillReach", label: "Copy from within", hint: "How far round the area it looks for texture to copy. Small keeps to what is next to it.", min: 20, max: 600, step: 20, show: settings.fillStyle === "pattern" || !settings.fillStyle },
       { key: "fillGrow", label: "Grow the area by", hint: "Makes the filled area bigger all round: removes a halo or fringe left at the edge.", min: 0, max: 40, step: 2, show: true },
       { key: "fillGrainAmount", label: "Grain (%)", hint: "How much noise like the picture's own is added to a smooth fill. 0: none.", min: 0, max: 300, step: 10, show: !useAi && (settings.fillStyle !== "pattern" || settings.fillMix !== void 0 && settings.fillMix < 100) }
-    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.areaVisible !== false, onChange: (e) => change({ areaVisible: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, brush ? "Brush area is visible" : "Selected area is visible"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Untick to hide the marked area and see the result. It stays marked, so Try another still works. Tick again to edit it.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || settings.fillStyle === "ai" && ai.phase === "ready"), onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
+    ].filter((f) => chosen && f.show).map((f) => /* @__PURE__ */ React.createElement("div", { className: "ze-format-field", key: f.key }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label), /* @__PURE__ */ React.createElement(StepperNumberInput, { min: f.min, max: f.max, step: f.step, label: f.label, value: settings[f.key] === void 0 ? MARQUEE_DEFAULTS[f.key] : settings[f.key], onChange: (v) => change({ [f.key]: v }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, f.hint))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-check" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: settings.areaVisible !== false, onChange: (e) => change({ areaVisible: e.target.checked }) }), /* @__PURE__ */ React.createElement("span", null, brush ? "Brush area is visible" : "Selected area is visible"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Untick to hide the marked area and see the result. It stays marked, so Try another still works. Tick again to edit it.")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide active", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !chosen || useAi && ai.phase !== "ready", onClick: () => marquee.makeFill() }, marquee && marquee.busy ? "Filling…" : "Remove & fill"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", title: "Undoes the last fill and fills again: Pattern copies other patches, the AI is shown the area from a slightly different view", disabled: !ready || needsLayer || Boolean(marquee && marquee.busy) || !(settings.fillStyle === "pattern" || useAi && ai.phase === "ready"), onClick: () => marquee.tryAnotherFill() }, "Try another")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, !ready ? brush ? "Paint over what you want first." : "Draw a box on the page first." : needsLayer ? "Select a layer first, or choose All visible." : !chosen ? "Choose how to fill first (the Style list above)." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."))), /* @__PURE__ */ React.createElement(
       AiModelDialog,
       {
         mode: aiDialog,
@@ -17578,11 +17939,11 @@
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState34, useRef: useRef26, useEffect: useEffect24, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState35, useRef: useRef26, useEffect: useEffect25, useLayoutEffect: useLayoutEffect5 } = React;
   function TopMenu({ label, solid, children }) {
-    const [open, setOpen] = useState34(false);
+    const [open, setOpen] = useState35(false);
     const containerRef = useRef26(null);
-    useEffect24(() => {
+    useEffect25(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -17877,7 +18238,7 @@
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState35, useRef: useRef27, useEffect: useEffect25 } = React;
+  var { useState: useState36, useRef: useRef27, useEffect: useEffect26 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -17899,19 +18260,19 @@
     return blocks;
   }
   var collapsedGroups = /* @__PURE__ */ new Set();
-  function RenameInput({ current: current3, onDone }) {
+  function RenameInput({ current: current2, onDone }) {
     return /* @__PURE__ */ React.createElement(
       "input",
       {
         className: "ze-layer-name-input",
-        defaultValue: current3,
+        defaultValue: current2,
         autoFocus: true,
         spellCheck: "false",
         onFocus: (e) => e.target.select(),
         onClick: (e) => e.stopPropagation(),
         onBlur: (e) => onDone(e.target.value),
         onKeyDown: (e) => {
-          if (e.key === "Escape") e.target.value = current3;
+          if (e.key === "Escape") e.target.value = current2;
           if (e.key === "Enter" || e.key === "Escape") e.target.blur();
         }
       }
@@ -17943,11 +18304,11 @@
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
-    const [renamingId, setRenamingId] = useState35(null);
-    const [menuOpen, setMenuOpen] = useState35(false);
+    const [renamingId, setRenamingId] = useState36(null);
+    const [menuOpen, setMenuOpen] = useState36(false);
     const menuRef = useRef27(null);
-    const [dropInfo, setDropInfo] = useState35(null);
-    const [, setCollapseTick] = useState35(0);
+    const [dropInfo, setDropInfo] = useState36(null);
+    const [, setCollapseTick] = useState36(0);
     const dragIdRef = useRef27(null);
     const listRef = useRef27(null);
     const panelRef = useRef27(null);
@@ -17956,9 +18317,9 @@
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState35(null);
+    const [rowMenu, setRowMenu] = useState36(null);
     const rowMenuRef = useRef27(null);
-    useEffect25(() => {
+    useEffect26(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
         setMenuOpen(false);
@@ -18008,7 +18369,7 @@
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect25(() => {
+    useEffect26(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -18053,7 +18414,7 @@
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     }
-    useEffect25(() => {
+    useEffect26(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -18436,7 +18797,7 @@
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState36, useEffect: useEffect26, useRef: useRef29 } = React;
+  var { useState: useState37, useEffect: useEffect27, useRef: useRef29 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -18444,7 +18805,7 @@
   var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
-    const [urls, setUrls] = useState36({});
+    const [urls, setUrls] = useState37({});
     const urlsRef = useRef29({});
     const madeFrom = useRef29(/* @__PURE__ */ new Map());
     const baseCache = useRef29(null);
@@ -18454,11 +18815,11 @@
     const lastEnd = useRef29(0);
     const lastMs = useRef29(0);
     const alive = useRef29(true);
-    const [on, setOn] = useState36(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const [on, setOn] = useState37(() => !document.documentElement.classList.contains("ze-static-thumbs"));
     const onRef = useRef29(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
-    useEffect26(() => {
+    useEffect27(() => {
       const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
       window.addEventListener("zn-display-prefs", listener);
       return () => window.removeEventListener("zn-display-prefs", listener);
@@ -18523,7 +18884,7 @@
       }
       schedule();
     }
-    useEffect26(() => {
+    useEffect27(() => {
       const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
@@ -18539,7 +18900,7 @@
       }
       schedule();
     }, [pages, selectedKey, on]);
-    useEffect26(() => {
+    useEffect27(() => {
       alive.current = true;
       return () => {
         alive.current = false;
@@ -18613,7 +18974,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState37, useRef: useRef30, useEffect: useEffect27 } = React;
+  var { useState: useState38, useRef: useRef30, useEffect: useEffect28 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
@@ -18622,7 +18983,7 @@
     const bodyRef = useRef30(null);
     const scrollDirRef = useRef30(0);
     const rafRef = useRef30(null);
-    const [dragOverInfo, setDragOverInfo] = useState37(null);
+    const [dragOverInfo, setDragOverInfo] = useState38(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -18641,7 +19002,7 @@
       }
       scrollDirRef.current = 0;
     }
-    useEffect27(() => stopAutoScroll, []);
+    useEffect28(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -18752,21 +19113,21 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState38, useEffect: useEffect28 } = React;
+  var { useState: useState39, useEffect: useEffect29 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState38(false);
-    const [alt, setAlt] = useState38(false);
-    useEffect28(() => {
+    const [shift, setShift] = useState39(false);
+    const [alt, setAlt] = useState39(false);
+    useEffect29(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect28(() => {
+    useEffect29(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect28(() => () => {
+    useEffect29(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
     }, []);
@@ -18903,9 +19264,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState39 } = React;
+  var { useState: useState40 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState39(null);
+    const [customizing, setCustomizing] = useState40(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -18919,7 +19280,7 @@
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "31d0ba9"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "834e97d"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -18984,13 +19345,13 @@
             key: "pageNumbers",
             label: "Page Numbers",
             checked: view.pageNumbers.on,
-            onToggle: (on) => view.setPageNumbers((current3) => ({ ...current3, on })),
+            onToggle: (on) => view.setPageNumbers((current2) => ({ ...current2, on })),
             settings: /* @__PURE__ */ React.createElement(
               PageNumbersSettings,
               {
                 settings: view.pageNumbers,
                 pageCount: pages.length,
-                onChange: (patch) => view.setPageNumbers((current3) => ({ ...current3, ...patch }))
+                onChange: (patch) => view.setPageNumbers((current2) => ({ ...current2, ...patch }))
               }
             )
           },
@@ -19115,218 +19476,6 @@
         hint: "Exports the current zine and opens it directly in ZineArranger — no manual save/reopen step"
       }
     )))));
-  }
-
-  // shared/js/displaySettings.js
-  var EVENT = "zn-display-prefs";
-  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
-  var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
-  var tidy = (v) => Math.round(v * 1e3) / 1e3;
-  function installDisplaySettings(options) {
-    const { storageKey, sliders = [], groups = [], title = "Display" } = options;
-    const checks = groups.flatMap((g) => g.checks || []);
-    const choices = groups.flatMap((g) => g.choices || []);
-    const optionValues = (ch, o) => Object.fromEntries(ch.flags.map((f) => [f.key, o.values[f.key] === true]));
-    const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
-    const initialOption = (ch) => ch.options[ch.initial || 0];
-    const defaults = {};
-    for (const s of sliders) defaults[s.key] = s.initial;
-    for (const c of checks) defaults[c.key] = false;
-    for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
-    function load2() {
-      let saved = {};
-      try {
-        saved = JSON.parse(localStorage.getItem(storageKey)) || {};
-      } catch (e) {
-      }
-      const prefs2 = {};
-      for (const s of sliders) prefs2[s.key] = clampTo(Number(saved[s.key]), s);
-      for (const c of checks) prefs2[c.key] = saved[c.key] === true;
-      for (const ch of choices) {
-        for (const f of ch.flags) prefs2[f.key] = saved[f.key] === true;
-        if (optionIndex(ch, prefs2) < 0) Object.assign(prefs2, optionValues(ch, initialOption(ch)));
-      }
-      return prefs2;
-    }
-    function apply() {
-      const root = document.documentElement;
-      for (const s of sliders) root.style.setProperty(s.cssVar, s.cssValue ? s.cssValue(prefs[s.key]) : String(prefs[s.key]));
-      for (const c of checks) if (c.htmlClass) root.classList.toggle(c.htmlClass, prefs[c.key]);
-      for (const ch of choices) for (const f of ch.flags) if (f.htmlClass) root.classList.toggle(f.htmlClass, prefs[f.key]);
-      window.dispatchEvent(new CustomEvent(EVENT, { detail: { ...prefs } }));
-    }
-    function set(changes) {
-      prefs = { ...prefs, ...changes };
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(prefs));
-      } catch (e) {
-      }
-      apply();
-      refresh();
-    }
-    let prefs = load2();
-    apply();
-    const el = (tag, cls, attrs = {}) => {
-      const n = document.createElement(tag);
-      if (cls) n.className = cls;
-      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-      return n;
-    };
-    const floating = options.mount === void 0 || options.mount === null;
-    const wrap = el("div", "zn-display" + (floating ? " zn-display-floating" : ""));
-    const panel = el("div", "zn-display-panel", { role: "dialog", "aria-label": title + " settings" });
-    panel.hidden = true;
-    const head = el("div", "zn-display-title");
-    head.textContent = title;
-    panel.appendChild(head);
-    const sliderViews = sliders.map((s) => {
-      const row = el("div", "zn-display-row");
-      const label = el("div", "zn-display-label");
-      const name = el("span");
-      name.textContent = s.label;
-      const value = el("span", "zn-display-value");
-      label.append(name, value);
-      const control = el("div", "zn-display-control");
-      const minus = el("button", "zn-display-step", { type: "button", "aria-label": "Smaller " + s.label.toLowerCase() });
-      minus.textContent = "−";
-      const range = el("input", "", { type: "range", min: s.min, max: s.max, step: s.step, "aria-label": s.label });
-      const plus = el("button", "zn-display-step", { type: "button", "aria-label": "Larger " + s.label.toLowerCase() });
-      plus.textContent = "+";
-      control.append(minus, range, plus);
-      row.append(label, control);
-      panel.appendChild(row);
-      minus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] - s.step, s)) }));
-      plus.addEventListener("click", () => set({ [s.key]: tidy(snap(prefs[s.key] + s.step, s)) }));
-      range.addEventListener("input", () => set({ [s.key]: tidy(snap(Number(range.value), s)) }));
-      return { s, value, minus, range, plus };
-    });
-    const checkViews = [];
-    const choiceViews = [];
-    for (const g of groups) {
-      if (g.title) {
-        const sub = el("div", "zn-display-subtitle");
-        sub.textContent = g.title;
-        panel.appendChild(sub);
-      }
-      const list = el("div", "zn-display-checks");
-      for (const c of g.checks || []) {
-        const label = el("label", "zn-display-check");
-        const box = el("input", "", { type: "checkbox" });
-        const text = el("span");
-        text.textContent = c.label;
-        label.append(box, text);
-        list.appendChild(label);
-        box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
-        checkViews.push({ c, label, box });
-      }
-      for (const ch of g.choices || []) {
-        const label = el("label", "zn-display-choice");
-        if (ch.hint) label.title = ch.hint;
-        const text = el("span");
-        text.textContent = ch.label;
-        const select = el("select", "", { "aria-label": ch.label });
-        ch.options.forEach((o, i) => {
-          const opt = el("option", "", { value: String(i) });
-          opt.textContent = o.label;
-          select.appendChild(opt);
-        });
-        label.append(text, select);
-        list.appendChild(label);
-        select.addEventListener("change", () => set(optionValues(ch, ch.options[Number(select.value)])));
-        choiceViews.push({ ch, select });
-      }
-      panel.appendChild(list);
-    }
-    const foot = el("div", "zn-display-foot");
-    const note = el("span", "zn-display-note");
-    note.textContent = "Saved in this browser";
-    const reset = el("button", "zn-display-reset", { type: "button" });
-    reset.textContent = "Reset";
-    reset.addEventListener("click", () => set(defaults));
-    foot.append(note, reset);
-    panel.appendChild(foot);
-    const gear = el("button", "zn-display-gear", {
-      type: "button",
-      title: title + " settings",
-      "aria-label": title + " settings",
-      "aria-expanded": "false"
-    });
-    gear.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-    wrap.append(panel, gear);
-    if (floating) document.body.appendChild(wrap);
-    else if (options.mount) options.mount.appendChild(wrap);
-    function refresh() {
-      for (const v of sliderViews) {
-        const n = prefs[v.s.key];
-        v.value.textContent = n + (v.s.unit || "");
-        v.range.value = String(n);
-        v.minus.disabled = n <= v.s.min;
-        v.plus.disabled = n >= v.s.max;
-      }
-      for (const v of checkViews) {
-        const on = prefs[v.c.key];
-        v.box.checked = v.c.showMeans ? !on : on;
-        v.label.title = v.c.hint || "";
-      }
-      for (const v of choiceViews) v.select.value = String(Math.max(0, optionIndex(v.ch, prefs)));
-      reset.disabled = Object.keys(defaults).every((k) => prefs[k] === defaults[k]);
-    }
-    refresh();
-    function setOpen(open) {
-      panel.hidden = !open;
-      gear.classList.toggle("open", open);
-      gear.setAttribute("aria-expanded", String(open));
-    }
-    gear.addEventListener("click", () => setOpen(panel.hidden));
-    document.addEventListener("pointerdown", (e) => {
-      if (!panel.hidden && !wrap.contains(e.target)) setOpen(false);
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !panel.hidden) setOpen(false);
-    });
-    wrap.addEventListener("pointerdown", (e) => e.stopPropagation());
-    wrap.addEventListener("mousedown", (e) => e.stopPropagation());
-    return { get prefs() {
-      return { ...prefs };
-    }, set, element: wrap };
-  }
-
-  // apps/ZEditor/src/ui/displaySettings.js
-  var display = null;
-  function installZeditorDisplaySettings() {
-    display = installDisplaySettings({
-      storageKey: "zeditor.displayPrefs",
-      mount: false,
-      // App.jsx places it next to the touch bar once that's rendered
-      sliders: [
-        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
-        { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) }
-      ],
-      groups: [
-        { title: "Pages panel", checks: [
-          { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." }
-        ] },
-        { title: "Show", checks: [
-          { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" }
-        ], choices: [
-          {
-            label: "Side panels",
-            hint: "Pages panel: the page thumbnails. Format panel: the selected item's or tool's settings.",
-            initial: 2,
-            flags: [{ key: "hidePages", htmlClass: "ze-hide-pages" }, { key: "hideFormat", htmlClass: "ze-hide-format" }],
-            options: [
-              { label: "Pages panel (left) only", values: { hideFormat: true } },
-              { label: "Format panel (right) only", values: { hidePages: true } },
-              { label: "Show both", values: {} }
-            ]
-          }
-        ] }
-      ]
-    });
-    return display;
-  }
-  function attachDisplayGear(slot) {
-    if (slot && display && display.element.parentNode !== slot) slot.appendChild(display.element);
   }
 
   // apps/ZEditor/src/ui/App.jsx

@@ -12,14 +12,14 @@ import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
 import { RemoveBackgroundSection } from "./RemoveBackgroundSection.jsx";
+import { useAiFeatures } from "../../../state/useAiFeatures.js";
 const { useState } = React;
 
 // Hidden for now (Ai Tools (Local) is still experimental). Set to true to show the section again.
 const SHOW_AI_TOOLS_SECTION = false;
-// Hidden until the background-removal model has been tested on the real device (labs/ai-bg-benchmark). Set to true to show it again.
-const SHOW_REMOVE_BACKGROUND_SECTION = false;
 
 export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
+  const aiOn = useAiFeatures(); // the gear's "Experimental AI features"
   const patch = (p) => onUpdate(ann.id, p);
   const isCroppingThis = croppingAnnId === ann.id;
   const hasCrop = ann.cropW != null && (ann.cropX || ann.cropY || ann.cropW !== ann.naturalWidth || ann.cropH !== ann.naturalHeight);
@@ -77,7 +77,7 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
       <ImageStyleSection ann={ann} filterType={filterType} filterOption={filterOption} patch={patch} />
       <EffectControls ann={ann} onPatch={patch} />
       <ImageTraceSection ann={ann} imageTrace={imageTrace} disabled={isCroppingThis} />
-      {SHOW_REMOVE_BACKGROUND_SECTION && <RemoveBackgroundSection ann={ann} onRemoveBackground={onRemoveBackground} disabled={isCroppingThis} />}
+      {aiOn && <RemoveBackgroundSection ann={ann} onRemoveBackground={onRemoveBackground} disabled={isCroppingThis} />}
       {SHOW_AI_TOOLS_SECTION && (
       <PanelSection
         id="image.aitools"

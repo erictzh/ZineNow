@@ -1,5 +1,6 @@
 // The Marquee tool's state: the region drawn on the page, and "make layer" (Layer via Copy / Layer via Cut).
 
+import { aiFeaturesOn } from "../ui/displaySettings.js";
 import { MIN_POLYGON_POINTS, applyMarqueeResult, isUsableMarquee } from "../model/marquee.js";
 import { buildMarqueeLayer } from "../render/marqueeLayer.js";
 
@@ -35,7 +36,7 @@ export function useMarquee({ doc, selection, edits, toolDefaults, status, histor
     const settings = settingsOverride ? { ...latest.current.settings, ...settingsOverride } : latest.current.settings;
     // a fill (or a cut filled from the surroundings) needs a style picked first: none is chosen until the user chooses
     const action = mode || settings.action;
-    if ((action === "fill" || (action === "cut" && settings.cutLeaves === "surround")) && !["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle)) {
+    if ((action === "fill" || (action === "cut" && settings.cutLeaves === "surround")) && (!["ai", "pattern", "smooth", "detail"].includes(settings.fillStyle) || (settings.fillStyle === "ai" && !aiFeaturesOn()))) {
       latest.current.status.setNotice("Choose how to fill first (Marquee panel: Remove & fill, Style list).");
       return;
     }

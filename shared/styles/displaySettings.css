@@ -208,3 +208,12 @@
 [data-ze-input="touch"] .zn-display-choice select {
   padding: 8px;
 }
+
+/* The "are you sure" pop-up a setting can ask for before it is switched on (shared/js/displaySettings.js, `confirm`). */
+.zn-confirm-backdrop { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .55); }
+.zn-confirm { max-width: 420px; width: 100%; padding: 16px; border-radius: 10px; background: var(--zn-panel-bg, #241e1c); color: var(--zn-fg, #f2ece8); border: 1px solid rgba(255, 255, 255, .18); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); font: 14px/1.5 system-ui, sans-serif; }
+.zn-confirm-title { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.zn-confirm-text { margin-bottom: 14px; }
+.zn-confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.zn-confirm-actions button { min-height: 40px; padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .25); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.zn-confirm-actions .zn-confirm-ok { background: #e8622a; border-color: #e8622a; color: #fff; font-weight: 600; }

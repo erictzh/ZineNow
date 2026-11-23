@@ -1657,7 +1657,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "0b587ed"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "1337f92"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -3681,7 +3681,17 @@
         text.textContent = c.label;
         label.append(box, text);
         list.appendChild(label);
-        box.addEventListener("change", () => set({ [c.key]: c.showMeans ? !box.checked : box.checked }));
+        box.addEventListener("change", () => {
+          const next = c.showMeans ? !box.checked : box.checked;
+          if (next && c.confirm) {
+            refresh();
+            askConfirm(c.confirm).then((ok) => {
+              if (ok) set({ [c.key]: true });
+            });
+            return;
+          }
+          set({ [c.key]: next });
+        });
         checkViews.push({ c, label, box });
       }
       for (const ch of g.choices || []) {
@@ -3720,6 +3730,45 @@
     wrap.append(panel, gear);
     if (floating) document.body.appendChild(wrap);
     else if (options.mount) options.mount.appendChild(wrap);
+    function askConfirm(c) {
+      return new Promise((resolve) => {
+        const backdrop = el("div", "zn-confirm-backdrop");
+        const box = el("div", "zn-confirm", { role: "dialog", "aria-modal": "true", "aria-label": c.title });
+        const h = el("div", "zn-confirm-title");
+        h.textContent = c.title;
+        const t = el("div", "zn-confirm-text");
+        t.textContent = c.text;
+        const row = el("div", "zn-confirm-actions");
+        const cancel = el("button", "", { type: "button" });
+        cancel.textContent = c.cancel || "Cancel";
+        const ok = el("button", "zn-confirm-ok", { type: "button" });
+        ok.textContent = c.ok || "OK";
+        row.append(cancel, ok);
+        box.append(h, t, row);
+        backdrop.appendChild(box);
+        document.body.appendChild(backdrop);
+        const done = (v) => {
+          document.removeEventListener("keydown", onKey, true);
+          backdrop.remove();
+          resolve(v);
+        };
+        const onKey = (e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            done(false);
+          }
+        };
+        document.addEventListener("keydown", onKey, true);
+        cancel.addEventListener("click", () => done(false));
+        ok.addEventListener("click", () => done(true));
+        backdrop.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          if (e.target === backdrop) done(false);
+        });
+        backdrop.addEventListener("mousedown", (e) => e.stopPropagation());
+        ok.focus();
+      });
+    }
     function refresh() {
       for (const v of sliderViews) {
         const n = prefs[v.s.key];
