@@ -43,6 +43,8 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
   const fromLayer = settings.source === "layer";
   // Cutting from everything visible can only cover the spot, so it always fills.
   const leaves = settings.cutLeaves === "surround" ? "surround" : (settings.cutLeaves === "fill" || !fromLayer) ? "fill" : "transparent";
+  // a cut that is filled from the surroundings uses the Remove & fill style: with AI chosen it needs the model
+  const cutNeedsAi = settings.action === "cut" && leaves === "surround" && useAi && ai.phase !== "ready";
   const needsLayer = fromLayer && !targetLayer;
   const fillMode = settings.mode === "fill"; // which of the two jobs the panel shows: "layer" (Make layer) or "fill" (Remove & fill)
   const radio = (name, value, label, current, onPick, hint, disabled) => (
@@ -137,10 +139,10 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               </React.Fragment>
             )}
             <div className="ze-format-row">
-              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
+              <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || cutNeedsAi || Boolean(marquee && marquee.busy)} onClick={() => marquee.makeLayer()}>Make layer</button>
             </div>
             <span className="ze-format-hint">
-              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : "The new layer is selected and the Move tool takes over."}
+              {!ready ? (marquee && marquee.polygonOpen ? "Close the shape first." : brush ? "Paint over what you want first." : polygon ? "Place the corners of a shape on the page first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first (Move tool or Layers panel, then M), or choose All visible." : cutNeedsAi ? "This cut is filled with the AI style, which needs its model: switch Marquee Action to Remove & fill to download it, or choose another style there." : "The new layer is selected and the Move tool takes over."}
             </span>
           </React.Fragment>
         )}
@@ -201,7 +203,7 @@ export function MarqueeToolPanel({ toolDefaults, marquee, targetLayer }) {
               <button type="button" className="ze-format-toggle ze-format-toggle-wide active" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || (useAi && ai.phase !== "ready")} onClick={() => marquee.makeFill()}>{marquee && marquee.busy ? "Filling…" : "Remove & fill"}</button>
               <button type="button" className="ze-format-toggle ze-format-toggle-wide" title="Undoes the last fill and fills again, copying other patches" disabled={!ready || needsLayer || Boolean(marquee && marquee.busy) || settings.fillStyle === "smooth" || settings.fillStyle === "detail" || useAi} onClick={() => marquee.tryAnotherFill()}>Try another</button>
             </div>
-            <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : "Not right? Try another, or change a number above and fill again."}</span>
+            <span className="ze-format-hint">{!ready ? (brush ? "Paint over what you want first." : "Draw a box on the page first.") : needsLayer ? "Select a layer first, or choose All visible." : useAi && ai.phase !== "ready" ? "Download the AI model first (the AI model box above), or pick another style." : "Not right? Try another, or change a number above and fill again."}</span>
           </React.Fragment>
         )}
       </div>
