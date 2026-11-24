@@ -9,6 +9,9 @@ ok(findFunction(file.split("\n"), "b") .join() === "4,6", "a whole function is f
 ok(findFunction(["export const f = (a) => {", "  return { a };", "};"], "f").join() === "0,2", "an arrow function assigned to a const is found too");
 ok(locateCode("function a() {\n return 1;\n}", {}, file).pieces[0].to === 2 && locateCode("function a() { return 3; }", {}, file).error, "typed lines are found in the file (spacing ignored), others are rejected");
 ok(locateCode("function a() {\n// …\n  return 2;", {}, file).error === undefined && locateCode("function a() {\n// …\n  return 5;", {}, file).error, "a … line starts a new piece; every piece must exist");
+ok(findFunction(["const place = (a) => {", "  return a;", "};", "const place = (b) => {", "  return b;", "};"], "place", 2).join() === "3,5", "fn=name#2 finds the second function of that name");
+ok(findFunction(["export function w(t) {", "  const re = /[\\p{L}'\u2019_-]/u;", "  return re.test(t);", "}"], "w").join() === "0,3", "a regular expression with a quote in it does not confuse the function finder");
+ok(findFunction(["export const f = (a) => !(a.x)", "  && Boolean(a.y);", "const g = 1;"], "f").join() === "0,1", "a statement that carries on in the next line (&&) is found whole");
 const ctx = () => ({ key: "x/y", readFile: (p) => (p === "f.js" ? file : null), problems: [] });
 let c = ctx();
 renderMarkdown("```js file=f.js\nfunction a() {\n  return 9;\n}\n```", c);

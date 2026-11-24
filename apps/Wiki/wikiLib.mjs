@@ -43,27 +43,43 @@ export function highlight(code, lang) {
 
 // How much deeper the brackets get on one line: ( [ { count up, ) ] } count down. Strings and // comments are skipped.
 function bracketDelta(line) {
-  let d = 0, quote = "";
+  let d = 0, quote = "", prev = "";
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (quote) { if (c === "\\") i++; else if (c === quote) quote = ""; continue; }
     if (c === "/" && line[i + 1] === "/") break;
-    if ((c === '"' || c === "`" || (c === "'" && !/\w/.test(line[i - 1] || ""))) ) { quote = c; continue; }
+    // a regular expression literal (a / where a value is expected): skip to its closing /, mind [...] classes
+    if (c === "/" && (prev === "" || "(,=:[!&|?{};>+-*%~^".includes(prev))) {
+      let inClass = false;
+      for (i++; i < line.length; i++) {
+        if (line[i] === "\\") i++;
+        else if (line[i] === "[") inClass = true;
+        else if (line[i] === "]") inClass = false;
+        else if (line[i] === "/" && !inClass) break;
+      }
+      prev = "/";
+      continue;
+    }
+    if ((c === '"' || c === "`" || (c === "'" && !/\w/.test(line[i - 1] || "")))) { quote = c; continue; }
     if ("([{".includes(c)) d++; else if (")]}".includes(c)) d--;
+    if (c !== " " && c !== "\t") prev = c;
   }
   return d;
 }
 
 // The 0-based first and last line of function `name` (function name(), async function, export function, or const name = ...).
-export function findFunction(lines, name) {
+export function findFunction(lines, name, nth = 1) {
   const re = new RegExp(`^\\s*(?:export\\s+)?(?:default\\s+)?(?:async\\s+)?(?:function\\*?\\s+${name}\\b|(?:const|let|var)\\s+${name}\\s*=)`);
-  const start = lines.findIndex((l) => re.test(l));
+  let start = -1;
+  for (let i = 0, seen = 0; i < lines.length; i++) if (re.test(lines[i]) && ++seen === nth) { start = i; break; }
   if (start < 0) return null;
   let depth = 0;
   for (let i = start; i < lines.length; i++) {
     depth += bracketDelta(lines[i]);
     const t = lines[i].trim();
-    if (depth <= 0 && !t.endsWith("=>") && !t.endsWith("=")) return [start, i];
+    const next = (lines[i + 1] || "").trim();
+    // a statement may carry on in the next line (an arrow body, or a line starting && || ? : + .)
+    if (depth <= 0 && !t.endsWith("=>") && !t.endsWith("=") && !/^(&&|\|\||\?|:|\+|\.[a-zA-Z])/.test(next)) return [start, i];
   }
   return null;
 }
@@ -88,9 +104,10 @@ export function locateCode(code, attrs, fileText) {
   const lines = fileText.split("\n");
   const pieces = [];
   const fns = (attrs.fn || "").split(",").filter(Boolean);
-  for (const name of fns) {
-    const r = findFunction(lines, name);
-    if (!r) return { error: `there is no function ${name}` };
+  for (const entry of fns) {
+    const [name, nth] = entry.split("#");
+    const r = findFunction(lines, name, nth ? Number(nth) : 1);
+    if (!r) return { error: `there is no function ${entry}` };
     pieces.push({ from: r[0], to: r[1], label: name });
   }
   if (!fns.length) {
