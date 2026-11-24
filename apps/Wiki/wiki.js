@@ -110,5 +110,6 @@
   $("search").addEventListener("input", function (e) { query = e.target.value.trim(); renderNav(byKey[location.hash.slice(1).split(":")[0]] || null); if (!query) route(); });
   $("menu-btn").addEventListener("click", function () { document.body.classList.toggle("nav-open"); });
   window.addEventListener("hashchange", route);
+  $("build").textContent = "build " + W.build;
   route();
 })();
