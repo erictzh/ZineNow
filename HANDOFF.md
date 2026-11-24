@@ -743,3 +743,6 @@ New standard (also in `docs/PLAN-wiki.md`): a code block is ```` ```js file=<rep
 
 ## Wiki: worked examples (2026-11-24)
 Every calculating function on the 23 written pages now has a **Worked example.** after its "The Logic" walkthrough (real numbers followed line by line, checked with a script). New standard recorded in `docs/PLAN-wiki.md`.
+
+## Wiki, phase 3: ZEditor text pages (2026-11-24)
+Written (`apps/Wiki/content/zeditor/text/`): text tool and layout engine, composer and hyphenation (Knuth–Plass), caret and selection, character and paragraph, columns and frame, text styles, spans, placeholder text, photo fill, text wrap, threads, fonts. 35 of 135 leaf pages are written. Builder improvements: `fn=name#2` picks the 2nd function of that name, the function finder skips regular-expression literals and carries on over `&&`/`||` continuation lines. Tip: squash-merged PRs make later merges conflict on content.js and the pages; after a merge, merge origin/main into the branch keeping our side (`git checkout --ours` for the conflicting files) and rebuild.
