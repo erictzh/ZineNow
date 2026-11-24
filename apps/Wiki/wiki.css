@@ -36,7 +36,7 @@ a:hover { color: #f06a2d; }
 .wk-page p, .wk-page li { color: #d6d3d8; }
 .wk-page code { font-family: var(--ui-mono); font-size: .88em; padding: 1px 5px; background: rgba(255, 255, 255, .07); border-radius: 4px; }
 figure.code { margin: 14px 0; border: 1px solid var(--ui-border); border-radius: 8px; background: #100d0c; position: relative; overflow: hidden; }
-figure.code figcaption { padding: 5px 12px; font: 12px var(--ui-mono); color: var(--ui-fg-muted); border-bottom: 1px solid var(--ui-border); background: rgba(255, 255, 255, .03); }
+figure.code figcaption { display: flex; justify-content: space-between; gap: 12px; padding: 5px 70px 5px 12px; font: 12px var(--ui-mono); color: var(--ui-fg-muted); border-bottom: 1px solid var(--ui-border); background: rgba(255, 255, 255, .03); }
 figure.code pre { margin: 0; padding: 12px 14px; overflow: auto; font-size: 13px; line-height: 1.5; }
 figure.code code { padding: 0; background: none; font-size: 13px; line-height: 1.55; white-space: pre; }
 .copy-btn { position: absolute; top: 4px; right: 6px; min-height: 0; padding: 2px 8px; font: 12px var(--ui-font); color: var(--ui-fg-muted); background: transparent; border: 1px solid var(--ui-border); border-radius: 6px; cursor: pointer; }
@@ -74,3 +74,12 @@ th { background: rgba(255, 255, 255, .05); }
 .wk-nav details.sub summary { font-weight: 500; }
 .wk-nav details.sub a { padding-left: 24px; }
 .wk-nav > details > a { padding-left: 26px; }
+
+/* code with real line numbers */
+figure.code .line { display: block; }
+figure.code .ln { display: inline-block; width: 3.2em; margin-right: 1em; text-align: right; color: #6f6862; user-select: none; -webkit-user-select: none; }
+figure.code .line.gap .ln { width: auto; margin: 0 0 0 .4em; }
+figure.code .line.gap { padding: 2px 0; }
+figure.code figcaption span:last-child { color: var(--ui-accent-text); }
+.wk-page .reading { margin: 4px 0 18px; padding-left: 18px; }
+.wk-page .reading li { margin: 3px 0; }

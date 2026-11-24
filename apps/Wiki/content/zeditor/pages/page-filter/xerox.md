@@ -34,39 +34,25 @@ Noise is keyed to **image-space cells** (`Math.floor(imageX)`), not canvas pixel
 
 ## Code
 
-The contrast curve:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/render/filters/xerox.js
-  const gain = 1 + contrast / 100 * 15;
-  const cutoff = 1 - exposure / 100;
+### `seededNoise`: repeatable "randomness"
+
+```js file=apps/ZEditor/src/model/noise.js fn=seededNoise
 ```
 
-```js file=apps/ZEditor/src/render/filters/xerox.js
-      let tone = Math.min(1, Math.max(0, (lum - cutoff) * gain + 0.5));
-      tone += (seededNoise(cellX, xeroxVariation, cellY) - 0.5) * speckleAmount;
-      tone += streakShift[x];
+Reading it: `Math.sin(...)` of a big, odd-looking number, multiplied by 43758.5453, gives a value that jumps around wildly for neighbouring inputs. `v - Math.floor(v)` keeps only the **fractional part** (the digits after the decimal point), a number from 0 up to 1. The result looks random but is a pure function: the same inputs `(i, variation, j)` always give the same number. The magic numbers 12.9898, 78.233 and 43758.5453 are a famous recipe from computer graphics for scrambling. `j = 0` is a **default parameter**: used when the caller leaves it out.
+
+### `applyXerox`
+
+```js file=apps/ZEditor/src/render/filters/xerox.js fn=applyXerox
 ```
 
-Pinholes:
-
-```js file=apps/ZEditor/src/render/filters/xerox.js
-      if (seededNoise(cellX + 7919, xeroxVariation, cellY + 104729) < speckleAmount * 0.03) {
-        tone = tone > 0.5 ? 0 : 1;
-      }
-```
-
-Edge wear, strongest at the edge:
-
-```js file=apps/ZEditor/src/render/filters/xerox.js
-        const worn = wearAmount * (1 - edgeDistance / wearZone) ** 2;
-        if (seededNoise(cellX + 15485, xeroxVariation, cellY + 32452) < worn) tone = 1;
-```
-
-The repeatable "noise":
-
-```js file=apps/ZEditor/src/model/noise.js
-export function seededNoise(i, variation, j = 0) {
-  const v = Math.sin((i + variation * 97) * 12.9898 + j * 78.233) * 43758.5453;
-  return v - Math.floor(v);
-}
-```
+Reading it, in order:
+- **Settings.** `controlValues(...)` returns the slider values; they are turned into working numbers: `gain = 1 + contrast / 100 * 15` (1 to 16), `cutoff = 1 - exposure / 100`, and the other sliders become fractions from 0 to 1. `imageW`/`imageH` are the size in editor pixels (`width / scaleFactor`); `wearZone` is 10% of the shorter side.
+- **Streaks.** `streakShift` is a `Float32Array` (a typed list of decimal numbers) with one entry per pixel column. Each column hashes its position (`Math.floor(x / scaleFactor / 2.5)`: a streak is about 2.5 editor pixels wide). If the noise is in the top `darkShare` of its range the column is darkened (negative shift), if in the bottom `paleShare` lightened. The shares come from the slider, so the slider chooses *how many* columns, and each column's own noise *how strongly*.
+- **The pixel loop.** `i = (y * width + x) * 4` finds a pixel in the flat array (row number times row width plus column, times four numbers per pixel). `lum` is its brightness as 0–1.
+- **Contrast curve.** `(lum - cutoff) * gain + 0.5` stretches brightness around the cutoff; the wrapping `Math.min(1, Math.max(0, ...))` clamps it into 0–1, **before** noise is added, so extremes can still be roughened.
+- **Speckle and streaks.** The tone is nudged by noise (`seededNoise(...) - 0.5` ranges from −0.5 to +0.5, times the speckle amount) and by the column's shift. Pinholes: a different hash (with big prime offsets 7919 and 104729 so it is unrelated to the first) below `speckle * 0.03` flips the tone (`tone > 0.5 ? 0 : 1`: dark becomes white, light becomes black).
+- **Edge wear.** `edgeDistance` is the nearest distance to any of the four sides. Inside the wear zone, `worn = wearAmount * (1 - edgeDistance / wearZone) ** 2` grows towards the edge (squared, so it is gentle at first and strong at the edge); a pixel turns to paper (`tone = 1`) when its noise is below `worn`.
+- **Colour.** The final tone, clamped again, picks a colour between ink and paper: `ink + (paper - ink) * tone` for each channel. `putImageData` writes the picture back.

@@ -88,7 +88,7 @@
       var b = document.createElement("button");
       b.type = "button"; b.className = "copy-btn"; b.textContent = "Copy";
       b.onclick = function () {
-        var t = fig.querySelector("code").textContent;
+        var t = Array.prototype.map.call(fig.querySelectorAll(".src"), function (e) { return e.textContent; }).join("\n") || fig.querySelector("code").textContent;
         (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = "Copied"; }, function () { b.textContent = "Press Ctrl+C"; });
         setTimeout(function () { b.textContent = "Copy"; }, 1500);
       };

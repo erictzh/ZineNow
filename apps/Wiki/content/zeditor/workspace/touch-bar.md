@@ -35,36 +35,37 @@ After every press the bridge sets `<html data-ze-input="touch|mouse">`. The styl
 
 ## Code
 
-A button is a key press:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/ui/TouchBar.jsx
-function pressKey(key, mods) {
-  window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
-}
+### A button is a key press
+
+```js file=apps/ZEditor/src/ui/TouchBar.jsx fn=pressKey
 ```
 
-```js file=apps/ZEditor/src/ui/TouchBar.jsx
-          onClick={() => pressKey("g", { ctrlKey: true, altKey: true })}
+Reading it: `new KeyboardEvent("keydown", {...})` makes a pretend key press, and `window.dispatchEvent` sends it, so the one real keyboard handler picks it up. `...mods` spreads extra flags (like `ctrlKey: true`) into the event. `bubbles: true` lets the event travel up through the page like a real one.
+
+### Sticky Shift and Alt
+
+```js file=apps/ZEditor/src/ui/touchInput.js fn=setTouchModifier,withTouchModifier
 ```
 
-The sticky modifiers, and how a made-up mouse event carries them:
+Reading it:
+- `heldKeys` is a plain object living at the top of the file: shared by every function in it. `setTouchModifier("shift", true)` writes into it (`heldKeys[name]` uses the name as a key; `Boolean(on)` forces a true/false value).
+- `withTouchModifier` answers "should this click count as Shift/Alt-held?": `real` is the actual key (`e[name + "Key"]` builds `shiftKey` or `altKey` from the name). The toggle only counts while `<html data-ze-input="touch">`, so a toggle left on never affects the mouse.
 
-```js file=apps/ZEditor/src/ui/touchInput.js
-const heldKeys = { shift: false, alt: false };
-export function setTouchModifier(name, on) {
-  heldKeys[name] = Boolean(on);
-}
+### Pretending to be a mouse
+
+```js file=apps/ZEditor/src/ui/touchInput.js fn=mouseEventFrom,send
 ```
 
-```js file=apps/ZEditor/src/ui/touchInput.js
-    shiftKey: Boolean(e.shiftKey) || heldKeys.shift,
-    altKey: Boolean(e.altKey) || heldKeys.alt,
+Reading it:
+- `mouseEventFrom` builds a fake `MouseEvent` from a finger's **pointer event**: same position (`clientX`, `clientY`), always the left button (`button: 0`), and `buttons: 1` (a button is held) except on release. `...extra` lets the caller add or override fields.
+- `shiftKey: Boolean(e.shiftKey) || heldKeys.shift`: Shift counts if the real key *or* the touch toggle is on (`||` means "or").
+- `send` delivers the event to the element that was pressed; `el.isConnected` is false if a redraw has since removed that element, and then it goes to the `document` instead so nothing is lost.
+
+### Is the finger near a ruler?
+
+```js file=apps/ZEditor/src/ui/touchInput.js fn=rulerNear
 ```
 
-The timings:
-
-```js file=apps/ZEditor/src/ui/touchInput.js
-const FINGER_HOLD_MS = 120; // how long a finger press waits for a possible second finger
-const RULER_SLOP_PX = 12; // a finger this close below/beside a ruler counts as on it
-const DOUBLE_TAP_MS = 350;
-```
+Reading it: it loops over both rulers and measures each with `getBoundingClientRect()`. `inside` is a **rectangle test**: x and y between the edges, but with 12 px (`RULER_SLOP_PX`) of extra reach below the top ruler or right of the left one, because a finger reports its contact point slightly away from where it appears to touch. It returns the first ruler that matches, or `null`.

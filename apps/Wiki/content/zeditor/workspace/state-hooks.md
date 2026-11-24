@@ -42,42 +42,34 @@ The apps are built into one plain script and open from disk, so React is a globa
 
 ## Code
 
-`App` creating the hooks, each given the ones it builds on:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/ui/App.jsx
-  const doc = useDocumentState();
-  const history = useHistory(doc);
-  const view = useViewSettings();
-  const toolDefaults = useToolDefaults();
-  const selection = useSelection(doc);
-  const edits = useAnnotationEdits({ doc, history, selection, toolDefaults });
+### `useDocumentState`: what a document is
+
+```js file=apps/ZEditor/src/state/useDocumentState.js fn=useDocumentState
 ```
 
-What a page is, and where its filter lives:
+Reading it:
+- A **hook** is a function whose name starts with `use` and that uses React's memory features. `useState([])` creates a piece of **state** with an initial value (an empty list) and gives back a pair: the current value (`pages`) and a function to change it (`setPages`). The pair is pulled apart with `const [a, b] = ...`, called **array destructuring**.
+- `selectedPage` is *derived* (worked out from other state): the page at `selectedIdx`, or `null` if nothing is selected. `cond ? a : b` is a **ternary**.
+- `useMemo(() => ..., [selectedPage])` remembers the result of a calculation and only redoes it when `selectedPage` changes. Here it keeps the current filter, falling back to `DEFAULT_PAGE_FILTER` (`||` means "or use this").
+- `useRef(...)` boxes (`pdfDocsRef`, `nextKeyRef`...) hold values that must survive redraws but must **not** cause one when they change: the loaded PDF files and counters for ids.
+- `ids` is an object of three small functions; `nextKeyRef.current++` returns the current number and then adds 1 (`++` is "increase by one"), so every page, document and item gets a number nobody else has.
+- The last line returns one object containing everything, so `App` can hand it to the other hooks.
 
-```js file=apps/ZEditor/src/state/useDocumentState.js
-  const [pages, setPages] = useState([]); // {key, pageNumber, rotation, dataUrl, isBlank, annotations, filter}
+### `settingsForSave`: what a project file remembers
+
+```js file=apps/ZEditor/src/state/useViewSettings.js fn=settingsForSave
 ```
 
-Fresh ids:
+Reading it: the `return { guidesOn, guideFormat, ... }` uses **shorthand properties**: `{ guidesOn }` means `{ guidesOn: guidesOn }`. The result is one plain object that is written into the `.znow` file as JSON text. Anything not listed here is not saved.
 
-```js file=apps/ZEditor/src/state/useDocumentState.js
-  const ids = {
-    pageKey: () => nextKeyRef.current++,
-    docId: () => "doc" + nextDocIdRef.current++,
-    annId: () => nextAnnIdRef.current++,
-  };
+### `applySavedSettings`: reading them back
+
+```js file=apps/ZEditor/src/state/useViewSettings.js fn=applySavedSettings
 ```
 
-Which settings a saved project carries:
-
-```js file=apps/ZEditor/src/state/useViewSettings.js
-  function settingsForSave() {
-    return {
-      guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
-      onionSkinOn, onionSkinOpacity, pageNumbers,
-      rulersOn, rulerUnit, rulerGuides, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip,
-    };
-  }
-```
+Reading it:
+- `if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn)`: a setting is applied only if the file mentions it. An older file that predates a setting leaves the app's own default alone.
+- `setGuidesLocked(s.guidesLocked === true)` and `setEmbedFonts(s.embedFonts !== false)` are two ways of choosing the default for a missing value: "only on if saved as true" (default off) and "on unless saved as false" (default on).
+- `Array.isArray(s.rulerGuides) ? s.rulerGuides.filter(...) : []` checks the saved guides really are a list, then **validates** each one (a known axis, a real number) so a damaged file cannot break the editor.

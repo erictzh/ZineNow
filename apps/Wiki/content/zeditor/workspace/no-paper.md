@@ -29,30 +29,37 @@ Growing is not an undo step of its own. The page's size and its items' positions
 
 ## Code
 
-The trigger and the margin:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/constants.js
-export const CANVAS_GROW_TRIGGER_PX = 40; // content this close to the edge (or past it) makes the canvas grow...
-export const CANVAS_GROW_MARGIN_PX = 240; // ...until there is this much room beyond the content
+### `growthPlan`: does the canvas need to grow?
+
+```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=growthPlan
 ```
 
-Work out how far to grow on each side:
+Reading it:
+- It returns `null` ("nothing to do") if the page is not a no-paper page or has no items. `!page.annotations.length` is true for an empty list.
+- `swapped` is true when the page is turned 90° or 270° (`rotation % 180 !== 0`; `%` is the **remainder** after dividing). A turned page swaps width and height, so `dispW` and `dispH` are the sides as they look on screen, scaled to editor pixels by `MAIN_SCALE`.
+- The `for ... of` loop walks every item and keeps four running numbers: the smallest x and y and the largest right and bottom edges. Starting from `Infinity` and `-Infinity` is the classic trick: any real number beats them on the first try. `Number.isFinite` skips items with broken sizes. The result is the **bounding box** of everything on the page.
+- `T` and `M` are the 40 px trigger and 240 px margin. For each side, *if* the content comes within `T` of the edge, that side moves out to leave `M` of room. `Math.min(0, x0 - M)` is negative: the canvas grows to the left. `Math.max(dispW, x1 + M)` only ever grows to the right, never shrinks.
+- If all four sides are unchanged it returns `null`. Otherwise `sx` and `sy` (how far everything must shift when it grew left or up, rounded up with `Math.ceil`) and the new size come back as a small **object**, converted back from editor pixels to the page's own units.
 
-```js file=apps/ZEditor/src/state/useCanvasGrow.js
-  const left = x0 < T ? Math.min(0, x0 - M) : 0;
-  const top = y0 < T ? Math.min(0, y0 - M) : 0;
-  const right = x1 > dispW - T ? Math.max(dispW, x1 + M) : dispW;
-  const bottom = y1 > dispH - T ? Math.max(dispH, y1 + M) : dispH;
+### `grownPage`: applying the plan
+
+```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=grownPage
 ```
 
-Growing left or up shifts every item by the same amount:
+Reading it: if the canvas grew left or up (`plan.sx || plan.sy` is non-zero), every item is moved by that much with `.map`, so on screen nothing seems to move; otherwise the list is reused untouched. `{ ...page, annotations, width, height, dataUrl }` builds a **new** page object: the `...page` **spread** copies all old fields, and the later ones overwrite. The old page object is never edited, which is what the undo history and the sidebar rely on.
 
-```js file=apps/ZEditor/src/state/useCanvasGrow.js
-  const annotations = plan.sx || plan.sy ? page.annotations.map((a) => translatedAnnotation(a, plan.sx, plan.sy)) : page.annotations;
+### `useCanvasGrow`: waiting for the right moment
+
+A function whose name starts with `use` and which uses React's memory features is called a **hook**.
+
+```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=useCanvasGrow
 ```
 
-Waiting until the mouse is released:
-
-```js file=apps/ZEditor/src/state/useCanvasGrow.js
-    const up = () => { heldRef.current = false; setTimeout(() => setReleaseTick((t) => t + 1), 0); }; // after the gesture's last update
-```
+Reading it:
+- `heldRef` is a ref (a box that does not cause redraws) that says "a mouse button is down". The first `useEffect` adds window listeners in the **capture** phase (`true` as the third argument: they run before any other handler can stop the event).
+- `setTimeout(() => setReleaseTick(...), 0)` waits "zero milliseconds", which really means *after the current event has finished*, so the drag's final update lands first. `releaseTick` is a counter in state: changing it makes React run the second effect again.
+- The second effect (which runs when `pages`, the selected page or `releaseTick` change) first bails out if a button is held or no page is a canvas. It builds a `Map` of pages that need growing (`plans`).
+- If the current page grew left or up, it leaves a note in the shared variable `canvasGrowShift` (the page's old screen position and the shift), which the canvas reads once to scroll by the same amount.
+- `setPages((prev) => prev.map(...))` swaps in the grown pages. Passing a function to a state setter gives it the **latest** value (`prev`), the safe way to update state from the old one.

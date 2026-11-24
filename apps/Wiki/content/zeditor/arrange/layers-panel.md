@@ -36,45 +36,43 @@ The panel groups a *run of layers sharing a group id* into one block under a gro
 
 ## Code
 
-Blend modes, valid for both CSS and canvas:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/controls.js
-export const BLEND_CONTROL = {
-  kind: "select", prop: "blend", label: "Blend", fallback: "normal",
-  options: [
-    { key: "normal", label: "Normal" },
-    { key: "multiply", label: "Multiply" },
-    { key: "screen", label: "Screen" },
+### `layerBlocks`: one row per layer, grouped
+
+```js file=apps/ZEditor/src/ui/panels/LayersPanel.jsx fn=layerBlocks
 ```
 
-Reordering rows (the list is top-first, the page's array is bottom-first):
+Reading it:
+- `topFirst` is the page's list reversed. `forEach((ann, row) => ...)` visits each item with its position `row`.
+- `last` is the most recent block made (`blocks[blocks.length - 1]`, the last element of the list).
+- If the item has a `groupId` **and** the last block belongs to the same group, it is added to that block's `items` (`push`). Otherwise a new block starts. `ann.groupId || null` stores `null` for an item without a group.
+- `row` is kept with every item because reordering works in positions of this top-first list.
 
-```js file=apps/ZEditor/src/state/useAnnotationEdits.js
-    const topFirst = (pages[selectedIdx].annotations || []).slice().reverse();
-    const ids = withGroupMates(topFirst, draggedIds); // a group always moves as one
-    const fromRows = topFirst.flatMap((a, row) => (ids.includes(a.id) ? [row] : []));
-    const newOrder = orderAfterMove(topFirst.length, fromRows, insertBeforeRow);
-    if (newOrder) updateAnnotationsFor(selectedIdx, () => newOrder.map((row) => topFirst[row]).reverse());
+### `layerName`
+
+```js file=apps/ZEditor/src/model/layerNames.js fn=layerName
 ```
 
-The name a layer shows:
+Reading it: a chain of early `return`s, checked from the top: the name you gave, else for text the first line of its text (`.trim()` cuts surrounding spaces, `.split("\n")[0]` takes the first line, `|| "Text"` is the fallback for an empty box), else "Drawing"/"Highlight" for strokes, and so on. The last line, "Image", is what remains.
 
-```js file=apps/ZEditor/src/model/layerNames.js
-  if (ann.name) return ann.name;
-  if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-  if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+### `handleReorderLayers`
+
+```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleReorderLayers
 ```
 
-A group's colour from a hash of its id:
+Reading it: `.slice().reverse()` makes a reversed **copy** (`reverse` alone would reverse the original in place). `withGroupMates` widens the dragged ids to whole groups. `flatMap` turns each matching item into its row number and skips the rest (returning `[]` adds nothing). `orderAfterMove` computes the new order (see [Page operations](zeditor/pages/page-operations)); the result is reversed back into the page's bottom-first order before saving. `() => ...` (an arrow function with no parameters) is passed to `updateAnnotationsFor`, which supplies the edit and the undo step.
 
-```js file=apps/ZEditor/src/model/annotations.js
-  for (const ch of String(groupId)) hash = (hash * 31 + ch.charCodeAt(0)) % 360;
-  return `hsl(${(hash * 47) % 360} 70% 60%)`;
+### Lock and hide
+
+```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleToggleLayerFlag
 ```
 
-Lock and hide are just flags on the item:
+Reading it: `flag` is the text `"locked"` or `"hidden"`. `!ann[flag]` reads that property and flips it (`!` = "not"); `{ [flag]: on }` is a **computed property name** that builds `{ locked: true }` or `{ hidden: true }`. When turning a flag on for an item that is currently selected, the selection is refreshed so a locked or hidden item drops out of it.
 
-```js file=apps/ZEditor/src/state/useAnnotationEdits.js
-    const on = !ann[flag];
-    handleUpdateAnnotation(ann.id, { [flag]: on });
+### A group's colour
+
+```js file=apps/ZEditor/src/model/annotations.js fn=groupColor
 ```
+
+Reading it: the loop goes through the characters of the id (`String(groupId)`), building a number: `hash * 31 + ch.charCodeAt(0)` multiplies the old value by 31 and adds the character's code, then `% 360` keeps it below 360. That is a simple **hash**: the same id always gives the same number. The hash is then spread across the colour wheel (`* 47`, again `% 360`) to give an HSL colour (hue 0–359, 70% saturation, 60% lightness).

@@ -33,37 +33,37 @@ The guides are an SVG laid over the page. The exporter never draws it, which is 
 
 ## Code
 
-The presets, in inches, with their sizes in millimetres:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/guides.js
-  sized("a5", "A5", 148 / 25.4, 210 / 25.4),
-  sized("a6", "A6", 105 / 25.4, 148 / 25.4),
+### The preset list
+
+```js file=apps/ZEditor/src/model/guides.js fn=mmText,sized
 ```
 
-```js file=apps/ZEditor/src/model/guides.js
-export const DEFAULT_GUIDE_MARGIN_IN = 0.25;
-export const DEFAULT_GUIDE_BLEED_IN = 0.125;
+Reading it: `sized` is a function that builds one preset object. `({ ... })` with round brackets around the braces is how an arrow function **returns an object** directly. `label` is a **template literal**: text in backticks where `${...}` inserts a value, so you get "A5 (148mm × 210mm)". `mmText` multiplies inches by 254, rounds, and divides by 10: that is inches × 25.4 mm, rounded to one decimal.
+
+### The overlay
+
+```js file=apps/ZEditor/src/ui/canvas/GuidesOverlay.jsx fn=GuidesOverlay
 ```
 
-Inches to editor pixels, and centring the trim box:
+Reading it:
+- `GUIDE_FORMAT_PRESETS.find(...)` picks the chosen preset, with the first ("Match Page Size") as a fallback (`||`).
+- `toPx` converts inches to editor pixels: inches × 72 points × `MAIN_SCALE`. This is the same unit the page and items use, so the rectangles land exactly where the real sizes are.
+- `Math.min(width, toPx(preset.widthIn))` stops the trim box being bigger than the page. `(width - trimW) / 2` centres it: half the spare room on each side.
+- `showTrim = preset.key !== "match"`: for "Match Page Size" the page edge already is the trim, so no extra line is drawn. `showMargin` is only true if the margin is above zero **and** leaves room (`marginW > 0 && marginH > 0`).
+- The `return` is **SVG**, the web's vector-drawing format, as JSX: one `<rect>` per box. The bleed box is the trim grown by `bleedPx` on every side (`x = trimX - bleedPx`, width plus twice the bleed); the margin box is the trim shrunk. `strokeDasharray="5 3"` draws a dashed line (5 px on, 3 off); `fill="none"` leaves the inside see-through.
+- `{showBleed && (<rect ... />)}` is how JSX shows something *only if* a condition holds.
 
-```js file=apps/ZEditor/src/ui/canvas/GuidesOverlay.jsx
-  const toPx = (inches) => inches * POINTS_PER_INCH * MAIN_SCALE;
-```
-
-```js file=apps/ZEditor/src/ui/canvas/GuidesOverlay.jsx
-  const trimX = (width - trimW) / 2;
-  const trimY = (height - trimH) / 2;
-```
-
-The bleed box, the trim grown outward:
-
-```js file=apps/ZEditor/src/ui/canvas/GuidesOverlay.jsx
-          x={trimX - bleedPx} y={trimY - bleedPx} width={trimW + bleedPx * 2} height={trimH + bleedPx * 2}
-```
-
-The center guide:
+### The centre guide
 
 ```js file=apps/ZEditor/src/ui/canvas/CanvasOverlays.jsx
+        <svg className="ze-guides-overlay" width={pageSize.width} height={pageSize.height} aria-hidden="true">
+          <line
             x1={pageSize.width / 2} y1={0} x2={pageSize.width / 2} y2={pageSize.height}
+            stroke="#1d9bf0" strokeDasharray="6 4" strokeWidth="1.25"
+          />
+        </svg>
 ```
+
+Reading it: a `<line>` from the top middle (`x1 = width / 2, y1 = 0`) to the bottom middle (`x2` the same, `y2 = height`): a vertical line down the middle, in blue, dashed. `aria-hidden` tells screen readers to ignore it, since it is only decoration.

@@ -39,35 +39,44 @@ On export the number is painted last, after the page, filter and items, so it is
 
 ## Code
 
-The default settings:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/pageNumbers.js
-export const DEFAULT_PAGE_NUMBERS = { on: false, from: 1, to: 0, first: 1, position: "bottom-outside", format: "n", size: 10, color: "#1a1a1a", marginIn: 0.4 };
+### The defaults
+
+```js file=apps/ZEditor/src/model/pageNumbers.js fn=DEFAULT_PAGE_NUMBERS
 ```
 
-Which number goes on a page, and which pages get one:
+An **object** is a bundle of named values: `on`, `from`, `to` (0 means "to the last page"), `first`, `position`, `format`, `size`, `color`, `marginIn`. These are the starting values of the settings.
 
-```js file=apps/ZEditor/src/model/pageNumbers.js
-  const position = pageIdx + 1;
-  const last = settings.to > 0 ? Math.min(settings.to, pageCount) : pageCount;
-  if (position < settings.from || position > last) return null;
-  const number = settings.first + (position - settings.from);
+### `pageNumberSpec`: what goes on this page?
+
+```js file=apps/ZEditor/src/model/pageNumbers.js fn=pageNumberSpec
 ```
 
-The booklet rule for the outer corner:
+Reading it:
+- It returns `null` (nothing to print) in three cases: the setting is off, there is no page, or the page's position is outside the range. `pageIdx` counts from 0 but people count pages from 1, so `position = pageIdx + 1`.
+- `last` is the last numbered page: the `to` setting, but never more than the page count (`Math.min`), or the final page if `to` is 0.
+- `number = settings.first + (position - settings.from)`: the first numbered page shows `first`, the next one more, and so on.
+- `text` is chosen by two nested ternaries: "– 5 –", "Page 5" or just "5". The backticks make a **template literal**.
+- `place`: if it ends in `-outside`, replace the word with `right` for odd pages (`position % 2 === 1`, remainder 1 after dividing by 2) and `left` for even pages. That is the booklet rule.
+- `place.split("-")` cuts "bottom-right" into `["bottom", "right"]`, and `const [vertical, horizontal] = ...` unpacks the pair. The function returns an object with everything a drawing routine needs.
 
-```js file=apps/ZEditor/src/model/pageNumbers.js
-  if (place.endsWith("-outside")) place = place.replace("outside", position % 2 === 1 ? "right" : "left");
-```
-
-The live preview, positioned in editor pixels:
+### Where the live number is drawn
 
 ```js file=apps/ZEditor/src/ui/canvas/CanvasOverlays.jsx
+      {numberSpec && (
+        <div
+          className="ze-page-number"
+          style={{
+            fontSize: numberSpec.size * MAIN_SCALE,
+            color: numberSpec.color,
             [numberSpec.vertical]: numberSpec.marginIn * 72 * MAIN_SCALE,
+            ...(numberSpec.horizontal === "center"
+              ? { left: 0, right: 0, textAlign: "center" }
+              : { [numberSpec.horizontal]: numberSpec.marginIn * 72 * MAIN_SCALE }),
+          }}
+        >{numberSpec.text}</div>
+      )}
 ```
 
-The PDF export asks the same function:
-
-```js file=apps/ZEditor/src/io/pdfExport.js
-    const canvas = await renderPageToCanvas(picturePage, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
-```
+Reading it: `{numberSpec && ...}` draws nothing when the value is `null`. `[numberSpec.vertical]: value` is a **computed property name**: if `vertical` is `"bottom"`, this means `bottom: value`, placing the text that far from the bottom edge. `marginIn * 72 * MAIN_SCALE` is inches converted to points, then to editor pixels. Centred numbers stretch from `left: 0` to `right: 0` and centre their text; others are placed at `left` or `right` the same distance in.

@@ -1,17 +1,18 @@
 // The wiki converter (apps/Wiki/wikiLib.mjs): code checking, callouts, links, the four parts.
-import { renderMarkdown, snippetInFile, highlight, PARTS } from "../apps/Wiki/wikiLib.mjs";
+import { renderMarkdown, locateCode, findFunction, highlight, PARTS } from "../apps/Wiki/wikiLib.mjs";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
 const file = "function a() {\n  return 1;\n}\n\nfunction b() {\n  return 2;\n}\n";
-ok(snippetInFile("function a() {\n return 1;\n}", file), "a snippet found in the file (spacing ignored)");
-ok(!snippetInFile("function a() { return 3; }", file), "a snippet that is not in the file is rejected");
-ok(snippetInFile("function a() {\n// …\n  return 2;\n}", file) && !snippetInFile("function a() {\n// …\n  return 5;", file), "a … line splits a snippet into pieces found separately (each must exist)");
 
+ok(findFunction(file.split("\n"), "b") .join() === "4,6", "a whole function is found by its name (first and last line)");
+ok(findFunction(["export const f = (a) => {", "  return { a };", "};"], "f").join() === "0,2", "an arrow function assigned to a const is found too");
+ok(locateCode("function a() {\n return 1;\n}", {}, file).pieces[0].to === 2 && locateCode("function a() { return 3; }", {}, file).error, "typed lines are found in the file (spacing ignored), others are rejected");
+ok(locateCode("function a() {\n// …\n  return 2;", {}, file).error === undefined && locateCode("function a() {\n// …\n  return 5;", {}, file).error, "a … line starts a new piece; every piece must exist");
 const ctx = () => ({ key: "x/y", readFile: (p) => (p === "f.js" ? file : null), problems: [] });
 let c = ctx();
 renderMarkdown("```js file=f.js\nfunction a() {\n  return 9;\n}\n```", c);
-ok(c.problems.length === 1 && /not in f.js/.test(c.problems[0]), "a wrong quoted snippet is reported");
+ok(c.problems.length === 1 && /not in the file/.test(c.problems[0]), "a wrong quoted snippet is reported");
 c = ctx();
 renderMarkdown("```js file=nope.js\nx\n```", c);
 ok(c.problems.length === 1 && /does not exist/.test(c.problems[0]), "a missing file is reported");
@@ -23,5 +24,10 @@ ok(r.html.includes('href="#ai-tools/ocr"') && r.html.includes('target="_blank"')
 ok(r.warnings.length === 1 && PARTS.slice(1).every((p) => r.warnings[0].includes(p)), "missing parts are warned about");
 ok(renderMarkdown("<!-- no-parts -->\n\nhello", ctx()).warnings.length === 0, "no-parts switches the warning off");
 ok(highlight("const a = '<b>'; // hi", "js").includes("&lt;b&gt;") && highlight("if (x)", "js").includes("t-k"), "highlighting escapes code and marks keywords");
+
+const fnPage = renderMarkdown("```js file=f.js fn=b\n```", ctx());
+ok(fnPage.html.includes("lines 5–7") && fnPage.html.includes('<span class="ln">5</span>') && fnPage.html.includes("return"), "a fn= block shows the whole function with the file's real line numbers");
+const gapPage = renderMarkdown("```js file=f.js\nfunction a() {\n// …\n  return 2;\n```", ctx());
+ok(gapPage.html.includes("lines 1, 6") && gapPage.html.includes('class="line gap"'), "pieces of a block are numbered separately and divided by a ⋮ row");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
