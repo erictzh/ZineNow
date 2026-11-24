@@ -62,3 +62,4 @@ Home page: the gear panel has a "Tutorial / Wiki" link (after "Third-party notic
 - Phase status (2026-11-24): phases 1-6 written (59 of 135 pages); next is phase 7 (Markdown to PDF).
 - Phase status (2026-11-24): phases 1-7 written (85 of 135 pages); next is phase 8 (ZineArranger).
 - Phase status (2026-11-24): phases 1-8 written (97 of 135 pages); next is phase 9 (Ai Tools (Local)).
+- Phase status (2026-11-24): phases 1-9 written (115 of 132 pages); next is phase 10 (Start here, Home page, Appendices, final pass). The three non-AI fill pages (harmonic, Telea, Criminisi) were removed from the Ai Tools remove-object menu: Ai Tools uses MI-GAN only, and those methods are in ZEditor (Remove and fill).
