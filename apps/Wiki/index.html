@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZineNow Wiki</title>
+    <link rel="stylesheet" href="../../shared/styles/tokens.css">
+    <link rel="stylesheet" href="../../shared/styles/scrollbars.css">
+    <link rel="stylesheet" href="wiki.css">
+</head>
+<body>
+<header class="wk-top">
+    <button type="button" id="menu-btn" class="wk-menu-btn" aria-label="Show or hide the menu">☰</button>
+    <a class="wk-brand" href="#">ZineNow <span>Wiki</span></a>
+    <input type="search" id="search" class="wk-search" placeholder="Search the wiki…" autocomplete="off">
+    <a class="wk-home" href="../../index.html">← Apps</a>
+</header>
+<div class="wk-body">
+    <nav id="nav" class="wk-nav" aria-label="Contents"></nav>
+    <main class="wk-main"><article id="page" class="wk-page"></article></main>
+</div>
+<noscript><p style="padding:16px">The wiki needs JavaScript (it is one page that swaps its content).</p></noscript>
+<script src="content.js"></script>
+<script src="wiki.js"></script>
+</body>
+</html>
