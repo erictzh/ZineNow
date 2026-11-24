@@ -79,7 +79,7 @@ function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
   }
 }
 
-export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
+export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey }) {
   const topRef = useRef(null);
   const leftRef = useRef(null);
   const [geom, setGeom] = useState(null); // { left, top, width, height, pageW, pageH }: the page's 0 and the pane's size (pane px), the page's size (pt)
@@ -163,6 +163,7 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
   // Drags a guide (a new one from a ruler, or one already placed). Dropped back on its ruler, or
   // outside the pane, it's removed.
   function startDrag(e, guide) {
+    if (locked) return; // frozen guides: nothing to drag, add or remove
     e.preventDefault();
     e.stopPropagation();
     const pane = paneRef.current;
@@ -227,8 +228,8 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
         <div className="ze-ruler-guides">
           {shown.map((g) => (
             <div
-              key={g.id} className={"ze-ruler-guide ze-ruler-guide-" + g.axis} style={lineStyle(g.axis, g.pos)}
-              title={`${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`}
+              key={g.id} className={"ze-ruler-guide ze-ruler-guide-" + g.axis + (locked ? " is-locked" : "")} style={lineStyle(g.axis, g.pos)}
+              title={locked ? `${formatInUnit(g.pos, unit)} · locked` : `${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`}
               onMouseDown={(e) => startDrag(e, g)}
             />
           ))}

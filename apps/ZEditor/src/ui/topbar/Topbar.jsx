@@ -129,6 +129,8 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                       onClearGuides={() => view.setRulerGuides([])}
                       snap={view.snapToGuidesOn}
                       onSnapChange={view.setSnapToGuidesOn}
+                      locked={view.guidesLocked}
+                      onLockedChange={view.setGuidesLocked}
                     />
                   ),
                 },
