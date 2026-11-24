@@ -117,7 +117,7 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                 },
                 {
                   key: "rulers",
-                  label: "Rulers & Guides",
+                  label: "Ruler Guide",
                   detail: view.rulerGuides.length ? String(view.rulerGuides.length) : null,
                   checked: view.rulersOn,
                   onToggle: view.setRulersOn,
@@ -136,7 +136,7 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
                 },
                 {
                   key: "guides",
-                  label: "Guides",
+                  label: "Page Guide",
                   checked: view.guidesOn,
                   onToggle: view.setGuidesOn,
                   settings: (
