@@ -60,7 +60,7 @@ zeditor | ZEditor
     fonts | Fonts | uploaded, system, embedded
   images | Images
     insert-image | Insert Image (I) | PNG, JPG, SVG
-    insert-pdf | Insert PDF | page picker
+    insert-pdf | Insert PDF | choose where its pages go
     crop | Crop
     photo-adjustments | Photo adjustments
     effects | Effects | Lomo, Feather, box effects (shadow, outline)
