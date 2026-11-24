@@ -1,4 +1,4 @@
-// Settings for the rulers and ruler guides (Page menu → Rulers & Guides → Customize).
+// Settings for the rulers and ruler guides (Page menu → Ruler Guide → Customize).
 
 import { RULER_UNITS, formatInUnit } from "../../model/rulers.js";
 
@@ -14,7 +14,11 @@ export function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap
       </div>
       <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={snap} onChange={(e) => onSnapChange(e.target.checked)} />
-        <span>Snap items to guides when moving them</span>
+        <span className="ze-format-label">Snap items to guides when moving them</span>
+      </label>
+      <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={locked} onChange={(e) => onLockedChange(e.target.checked)} />
+        <span className="ze-format-label">Lock guides (freeze them where they are)</span>
       </label>
       <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={locked} onChange={(e) => onLockedChange(e.target.checked)} />

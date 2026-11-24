@@ -8,7 +8,7 @@ Suggested order: Ai Tools, ZEditor Eraser/Marquee, Text, Images, then ZineArrang
 1. Home page: app cards + apps-config.js; gear panel + Experimental AI switch
 2. ZEditor
    2.1 Workspace: top bar/menus, Welcome + New Document, page sidebar (live thumbnails, page gap), zoom + outer canvas, "No paper" canvas, touch bar, shortcuts, undo/redo, state hooks
-   2.2 Pages: page ops, Rulers & Guides (incl. lock + snap), Page Numbers, Onion Skin, Page Filter (halftone, xerox, luma, colour remap)
+   2.2 Pages: page ops, Ruler Guide (incl. lock + snap), Page Numbers, Onion Skin, Page Filter (halftone, xerox, luma, colour remap)
    2.3 Selecting/arranging: Move/resize/rotate, Layers panel, groups (+ .znow group files), clipping masks, Measure
    2.4 Text: Text tool + layout engine, composer + hyphenation, caret/selection, character/paragraph, columns + frame, text styles, spans, placeholder, photo fill, text wrap, threads, fonts (uploaded/system/embedded)
    2.5 Images: Insert Image, Insert PDF, crop, photo adjustments, effects (Lomo, Feather, box effects), Vectorize (quantize, contours, curves, trace layer), AI Background Removal, Flatten
