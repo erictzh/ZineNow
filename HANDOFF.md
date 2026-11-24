@@ -752,3 +752,6 @@ Written: images (insert image, insert PDF, crop, photo adjustments, effects incl
 
 ## Wiki, phase 5: ZEditor Eraser and Marquee (2026-11-24)
 Written (`apps/Wiki/content/zeditor/eraser-marquee/`): eraser (stroke, soft with dabs, magic eraser coverage map), marquee (rectangle, polygon with even-odd rule, brush), make layer (copy/cut), remove and fill (Smooth harmonic/relaxation + multigrid, Detailed Telea fast marching, Pattern Criminisi exemplar fill, grain matching) and remove and fill with AI (MI-GAN windows, grouping, Try another variations, mask-sign calibration). 54 of 135 leaf pages are written. Worked-example numbers were produced by running the real code with esbuild scratch scripts.
+
+## Wiki, phase 6: ZEditor project and export (2026-11-24)
+Written (`apps/Wiki/content/zeditor/project/`): the .znow file (JSON + base64, save handles, reload snapshot), embed system fonts (face collection, Local Font Access, licence reminder), export PDF (200 dpi page picture + real text on top, blockers, overlap pass, y flip), export PNG/JPG/SVG, and send to ZineArranger (postMessage handshake). 59 of 135 leaf pages are written. The ZineArranger receiver is an IIFE, so its page uses typed real lines (main.js 73-111) instead of `fn=`.
