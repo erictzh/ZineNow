@@ -83,3 +83,5 @@ figure.code .line.gap { padding: 2px 0; }
 figure.code figcaption span:last-child { color: var(--ui-accent-text); }
 .wk-page .reading { margin: 4px 0 18px; padding-left: 18px; }
 .wk-page .reading li { margin: 3px 0; }
+.wk-buildtag { color: var(--ui-fg-muted); font-size: 12px; white-space: nowrap; }
+@media (max-width: 800px) { .wk-buildtag { display: none; } }
