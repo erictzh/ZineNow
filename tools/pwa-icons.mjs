@@ -20,7 +20,7 @@ const APPS = [
   { dir: "ZEditor", mark: "ZE" },
   { dir: "ZineArranger", mark: "Z|A" },
   { dir: "AiToolsLocal", mark: "AI" },
-  { dir: "Wiki", mark: "Wi" },
+  { dir: "Wiki", mark: "Wiki" },
 ];
 const ICONS = [
   { file: "icon-192.png", size: 192, maskable: false },
