@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ZineNow Wiki</title>
+    <!-- Installable app (PWA): theme colour and icons here; shared/js/pwa/register.js adds the
+         manifest link and registers sw.js, but only over http(s): from file:// it does nothing. -->
+    <meta name="theme-color" content="#171312">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <script src="../../shared/js/pwa/register.js" defer></script>
     <link rel="stylesheet" href="../../shared/styles/tokens.css">
     <link rel="stylesheet" href="../../shared/styles/scrollbars.css">
     <link rel="stylesheet" href="wiki.css">
