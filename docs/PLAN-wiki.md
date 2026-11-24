@@ -57,3 +57,4 @@ Home page: the gear panel has a "Tutorial / Wiki" link (after "Third-party notic
 - The walkthrough after each block starts with the bold label **The Logic:** (the user's wording).
 - After **The Logic** for every function that calculates something, add a **Worked example.**: invent concrete inputs, follow them line by line to the answer (a small table when several cases help). Pure wiring (event listeners, JSX layout) can skip it. Check every number with a quick script before writing it.
 - Phase status (2026-11-24): phases 1, 2 (workspace, pages, arranging) and 3 (text) are written; next is phase 4 (ZEditor images and shapes).
+- Phase status (2026-11-24): phases 1-4 written (49 of 135 pages); next is phase 5 (ZEditor Eraser and Marquee).
