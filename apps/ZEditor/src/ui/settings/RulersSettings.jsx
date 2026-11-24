@@ -12,17 +12,13 @@ export function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap
           {RULER_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
         </select>
       </div>
-      <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <label className="ze-format-field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={snap} onChange={(e) => onSnapChange(e.target.checked)} />
         <span className="ze-format-label">Snap items to guides when moving them</span>
       </label>
-      <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <label className="ze-format-field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={locked} onChange={(e) => onLockedChange(e.target.checked)} />
         <span className="ze-format-label">Lock guides (freeze them where they are)</span>
-      </label>
-      <label className="ze-format-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <input type="checkbox" checked={locked} onChange={(e) => onLockedChange(e.target.checked)} />
-        <span>Lock guides (freeze them where they are)</span>
       </label>
       <div className="ze-format-field">
         <span className="ze-format-label">Guides ({guides.length})</span>
