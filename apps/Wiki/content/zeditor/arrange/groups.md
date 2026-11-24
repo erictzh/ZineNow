@@ -36,7 +36,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleGroupSelection
 ```
 
-Reading it:
+**The Logic:**
 - It needs at least two selected items (`ids.length < 2` returns early).
 - `used` is a `Set` of every group id on any page; `flatMap` flattens a list of lists into one list and `.filter(Boolean)` throws away empty values. The `while` loop keeps making new ids (`g12`, `g13`...) until one is unused: a safety net for files made by older versions.
 - Inside the edit: `members` are the selected items, each copied with the new `groupId` (`{ ...a, groupId }`). `topIndex` is the highest stack position among them (`Math.max(...)` over a list where non-members count as −1). `rest` is everything else. `rest.splice(position, 0, ...members)` inserts the members, all together, at the place of the topmost member, then `rest` is returned as the new list.
@@ -46,21 +46,21 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleUngroupSelection
 ```
 
-Reading it: `groups` collects the group ids of the selected items. If none is in a group, it stops. Otherwise every item of those groups is replaced by a copy with `groupId` and `groupName` set to `undefined` (nothing).
+**The Logic:** `groups` collects the group ids of the selected items. If none is in a group, it stops. Otherwise every item of those groups is replaced by a copy with `groupId` and `groupName` set to `undefined` (nothing).
 
 ### `withGroupMates`
 
 ```js file=apps/ZEditor/src/model/annotations.js fn=withGroupMates
 ```
 
-Reading it: it takes some ids and returns them **plus** the ids of all their group mates that are visible and unlocked. `new Set([...ids, ...mates])` merges the two lists and removes duplicates, then `[...set]` turns it back into an ordinary list. This one helper is why selecting, moving or reordering one member always brings the group along.
+**The Logic:** it takes some ids and returns them **plus** the ids of all their group mates that are visible and unlocked. `new Set([...ids, ...mates])` merges the two lists and removes duplicates, then `[...set]` turns it back into an ordinary list. This one helper is why selecting, moving or reordering one member always brings the group along.
 
 ### Saving a group as a file
 
 ```js file=apps/ZEditor/src/io/groupFile.js fn=itemsBounds,serializeGroup
 ```
 
-Reading it:
+**The Logic:**
 - `itemsBounds` finds the **bounding box** of items: the same min/max trick as always, starting from `Infinity`/`-Infinity`, skipping items whose size is not a real number. It returns `null` for an empty list.
 - `serializeGroup` throws an **error** if there is nothing to save (`throw new Error(...)`, which stops the function and reports a message). `dx`, `dy` are how far everything must move so the box sits 40 px (`PAD`) from the top-left corner.
 - `items.map((a, i) => ...)` moves every item (`translatedAnnotation`), and for the first, lowest item (`i === 0`) removes `clipToBelow`, because there is nothing below it in the new file.
@@ -71,4 +71,4 @@ Reading it:
 ```js file=apps/ZEditor/src/io/groupFile.js fn=readGroupFile
 ```
 
-Reading it: `await readProjectFile(...)` opens the file like any project. `project.pages.flatMap((p) => p.annotations || [])` gathers the items of every page into one list. `items.find((a) => a.groupName)` looks for an item carrying a group name; the name used is that one, else the project's title, else "Imported group". Writing `(named && named.groupName)` first checks `named` exists before reading from it, to avoid an error.
+**The Logic:** `await readProjectFile(...)` opens the file like any project. `project.pages.flatMap((p) => p.annotations || [])` gathers the items of every page into one list. `items.find((a) => a.groupName)` looks for an item carrying a group name; the name used is that one, else the project's title, else "Imported group". Writing `(named && named.groupName)` first checks `named` exists before reading from it, to avoid an error.

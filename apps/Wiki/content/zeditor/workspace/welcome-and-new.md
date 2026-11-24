@@ -39,7 +39,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx fn=ptToMm,mmToPt,formatMm
 ```
 
-Reading it:
+**The Logic:**
 - `const` names a value that will not be reassigned. `POINTS_PER_INCH` is 72 and `MM_PER_INCH` is 25.4, so `(pts / 72) * 25.4` converts points to millimetres, and `mmToPt` is the same sum reversed.
 - `(pts) => ...` is an **arrow function**: a short way to write a function, here with the result written straight after the arrow, no `return` needed.
 - `formatMm` multiplies by 10, rounds, and divides by 10: that rounds to **one decimal place** (148.0 becomes 148, 139.7 stays 139.7). `String(...)` turns the number into text for display.
@@ -49,7 +49,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx fn=clampMm
 ```
 
-Reading it:
+**The Logic:**
 - The box keeps what you type as **text**, so the first step is `Number(text)`, which turns it into a number (or `NaN`, "not a number", if it cannot).
 - `Number.isFinite(v) && v > 0` checks the value is a real, positive number. `&&` means "and".
 - Then `Math.min(max, ...)` caps it at 1200 and `Math.max(min, ...)` raises it to at least 20: that is **clamping**, squeezing a value into an allowed range. If the test failed, the `fallback` is used (the `? :` is a **ternary**: "if this, then that, otherwise the other").
@@ -66,6 +66,6 @@ Reading it:
   const height = landscape ? preset.width : preset.height;
 ```
 
-Reading it:
+**The Logic:**
 - A chain of ternaries picks the page: a custom size, else the starting size of the "No paper" canvas, else the preset whose `key` matches (`.find` returns the first match). `|| NEW_DOCUMENT_PRESETS[0]` falls back to the first preset (A3) if nothing matched.
 - The preset is always portrait. For landscape, width and height simply swap.

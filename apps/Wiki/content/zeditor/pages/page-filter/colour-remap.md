@@ -36,7 +36,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/render/filters/colorRemap.js fn=applyColorRemap
 ```
 
-Reading it:
+**The Logic:**
 - `ctx.getImageData(0, 0, width, height)` copies every pixel of the picture into memory; `data` is the array of numbers (four per pixel: red, green, blue, alpha). The function changes the numbers and writes them back at the end with `putImageData`.
 - **Grayscale:** `for (let i = 0; i < data.length; i += 4)` is a **loop** that visits each pixel: `i` starts at 0 and jumps by 4, so it always lands on a pixel's red value. The brightness `lum` is the weighted sum of the three colour numbers, and `data[i] = data[i + 1] = data[i + 2] = lum` sets red, green and blue to that one value (chained `=` assigns right to left).
 - **Duotone:** `hexToRgb` turns a colour like `#ffe066` into separate `r`, `g`, `b` numbers. `lum` is divided by 255 so it runs from 0 to 1. Then each channel is `dark + (light - dark) * lum`: at `lum = 0` that is the dark colour, at 1 the light one, and in between a proportional mix. That formula is called **linear interpolation** ("lerp").

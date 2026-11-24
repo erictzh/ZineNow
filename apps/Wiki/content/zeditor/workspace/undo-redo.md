@@ -50,14 +50,14 @@ export const MAX_UNDO_HISTORY = 50;
 ```js file=apps/ZEditor/src/state/useHistory.js fn=stripDataUrls
 ```
 
-Reading it: `.map((page) => ...)` makes a new list from the old. `({ dataUrl, ...rest }) =>` **destructures** each page: it takes the field `dataUrl` out into its own variable and collects *all the other fields* into `rest` (the `...` here is called the **rest** pattern). The function returns `rest`, which is the page *without* its thumbnail picture.
+**The Logic:** `.map((page) => ...)` makes a new list from the old. `({ dataUrl, ...rest }) =>` **destructures** each page: it takes the field `dataUrl` out into its own variable and collects *all the other fields* into `rest` (the `...` here is called the **rest** pattern). The function returns `rest`, which is the page *without* its thumbnail picture.
 
 ### `recordUndoCheckpoint`: take a snapshot, unless it is the same gesture
 
 ```js file=apps/ZEditor/src/state/useHistory.js fn=recordUndoCheckpoint
 ```
 
-Reading it:
+**The Logic:**
 - `Date.now()` is the current time in milliseconds. `lastCommitRef` remembers the key and time of the previous snapshot.
 - The first `if` is **coalescing**: the same key within 700 ms means "still the same gesture", so only the clock is renewed (`time = now`) and the function `return`s without saving anything.
 - Otherwise it remembers this snapshot and pushes one: `[...stack, { pages: ..., selectedIdx, ... }]` builds a **new** array with all old entries plus the new one (never changing the old array). If it has grown past 50, `.slice(next.length - MAX)` keeps only the last 50: the oldest entries fall off.
@@ -68,7 +68,7 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useHistory.js fn=handleUndo,handleRedo
 ```
 
-Reading it:
+**The Logic:**
 - Undo takes the last entry of the undo stack (`undoStack[undoStack.length - 1]`; lists count from 0, so the last is at length − 1). It removes it (`.slice(0, -1)` keeps everything except the last), pushes the *current* state onto the redo stack so you can come back, and then restores the old one with `restoreSnapshot`.
 - Redo is the mirror image with the two stacks swapped.
 - `lastCommitRef.current = { time: 0, key: null }` resets the coalescing clock so the next edit is never merged with the one before the undo.
@@ -78,7 +78,7 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useHistory.js fn=restoreSnapshot
 ```
 
-Reading it:
+**The Logic:**
 - `async` marks a function that may **wait** for slow work; `await` pauses until that work is done. Here the slow work is redrawing thumbnails.
 - `new Map(pages.map((p) => [p.key, p]))` builds a lookup from a page's key to the page itself, so `currentByKey.get(p.key)` is instant.
 - `reusable` asks: is the current page with this key unchanged in rotation, kind, number, source document and size? If yes, its thumbnail is reused (`{ ...p, dataUrl: existing.dataUrl }`). If not, a new one is made: a blank page's thumbnail is drawn at once, a PDF page's needs `await renderPdfThumb(...)`.

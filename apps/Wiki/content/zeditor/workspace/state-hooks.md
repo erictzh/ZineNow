@@ -49,7 +49,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useDocumentState.js fn=useDocumentState
 ```
 
-Reading it:
+**The Logic:**
 - A **hook** is a function whose name starts with `use` and that uses React's memory features. `useState([])` creates a piece of **state** with an initial value (an empty list) and gives back a pair: the current value (`pages`) and a function to change it (`setPages`). The pair is pulled apart with `const [a, b] = ...`, called **array destructuring**.
 - `selectedPage` is *derived* (worked out from other state): the page at `selectedIdx`, or `null` if nothing is selected. `cond ? a : b` is a **ternary**.
 - `useMemo(() => ..., [selectedPage])` remembers the result of a calculation and only redoes it when `selectedPage` changes. Here it keeps the current filter, falling back to `DEFAULT_PAGE_FILTER` (`||` means "or use this").
@@ -62,14 +62,14 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useViewSettings.js fn=settingsForSave
 ```
 
-Reading it: the `return { guidesOn, guideFormat, ... }` uses **shorthand properties**: `{ guidesOn }` means `{ guidesOn: guidesOn }`. The result is one plain object that is written into the `.znow` file as JSON text. Anything not listed here is not saved.
+**The Logic:** the `return { guidesOn, guideFormat, ... }` uses **shorthand properties**: `{ guidesOn }` means `{ guidesOn: guidesOn }`. The result is one plain object that is written into the `.znow` file as JSON text. Anything not listed here is not saved.
 
 ### `applySavedSettings`: reading them back
 
 ```js file=apps/ZEditor/src/state/useViewSettings.js fn=applySavedSettings
 ```
 
-Reading it:
+**The Logic:**
 - `if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn)`: a setting is applied only if the file mentions it. An older file that predates a setting leaves the app's own default alone.
 - `setGuidesLocked(s.guidesLocked === true)` and `setEmbedFonts(s.embedFonts !== false)` are two ways of choosing the default for a missing value: "only on if saved as true" (default off) and "on unless saved as false" (default on).
 - `Array.isArray(s.rulerGuides) ? s.rulerGuides.filter(...) : []` checks the saved guides really are a list, then **validates** each one (a known axis, a real number) so a damaged file cannot break the editor.

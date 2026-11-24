@@ -33,7 +33,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/render/filters/luma.js fn=lumaOverWhite
 ```
 
-Reading it:
+**The Logic:**
 - `data` is the canvas's pixel array: a flat list of numbers, four per pixel in the order red, green, blue, alpha (each 0–255). `index` is where this pixel starts, so `data[index]` is its red, `data[index + 1]` its green, `data[index + 2]` its blue, `data[index + 3]` its alpha.
 - `alpha = data[index + 3] / 255` turns opacity into a fraction from 0 (see-through) to 1 (solid).
 - `luma` is the weighted brightness: 29.9% red, 58.7% green, 11.4% blue (the **Rec. 601** weights; they add up to 1, so white stays 255).
@@ -45,4 +45,4 @@ Reading it:
 export const LUMINANCE_MATRIX_VALUES = "0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0 0 0 1 0";
 ```
 
-Reading it: an SVG **colour matrix** has four rows (red, green, blue, alpha) of five numbers. Rows 1–3 each say "my output = 0.299 × R + 0.587 × G + 0.114 × B + 0 × A + 0", so all three channels become the same grey; row 4, `0 0 0 1 0`, keeps alpha unchanged. The matrix lets the browser grayscale an image on screen without any of our own code touching pixels.
+**The Logic:** an SVG **colour matrix** has four rows (red, green, blue, alpha) of five numbers. Rows 1–3 each say "my output = 0.299 × R + 0.587 × G + 0.114 × B + 0 × A + 0", so all three channels become the same grey; row 4, `0 0 0 1 0`, keeps alpha unchanged. The matrix lets the browser grayscale an image on screen without any of our own code touching pixels.

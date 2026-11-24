@@ -49,14 +49,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/model/pageFilters.js fn=effectiveImageFilter
 ```
 
-Reading it: `ann` is the image item, `pageFilter` the filter of its page. `!f` is true when no filter is set (`!` means "not"). `||` means "or", `===` "is exactly equal to". Three rules, checked from the top, each ending in `return` (which stops the function): no filter or "Match Page" gives the page's filter (or "none" if the page has none); "None" gives no filter; anything else gives the image's own.
+**The Logic:** `ann` is the image item, `pageFilter` the filter of its page. `!f` is true when no filter is set (`!` means "not"). `||` means "or", `===` "is exactly equal to". Three rules, checked from the top, each ending in `return` (which stops the function): no filter or "Match Page" gives the page's filter (or "none" if the page has none); "None" gives no filter; anything else gives the image's own.
 
 ### Setting the filter on the selected pages
 
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=updatePageFilter
 ```
 
-Reading it:
+**The Logic:**
 - `new Set([selectedIdx, ...selectedPageIndices])` makes a collection of the page numbers to change; a `Set` cannot contain the same number twice.
 - `recordUndoCheckpoint("pagefilter:" + ...)` saves an undo step. The text it is given is the **coalesce key**: dragging a colour picker fires many updates with the same key, and they are merged into one undo step.
 - `setPages((prev) => prev.map((p, i) => targets.has(i) ? {...} : p))` goes through all pages: a targeted page becomes a **new** object whose `filter` is the old filter with `patch` laid over it (`{ ...old, ...patch }`: later fields win); other pages are returned as they were.
@@ -66,7 +66,7 @@ Reading it:
 ```js file=apps/ZEditor/src/render/filters/applyFilter.js fn=applyPageFilter
 ```
 
-Reading it:
+**The Logic:**
 - The first line **guards**: no filter, type "none" or an empty canvas means there is nothing to do.
 - `if / else if` picks the routine by type. Grayscale, duotone and threshold go to `applyColorRemap`; xerox to `applyXerox`.
 - Halftone replaces pixels instead of tweaking them, so the function first copies out the picture's **alpha channel** (its see-through-ness: one number per pixel, 0 to 255) into `sourceAlpha`, a `Uint8ClampedArray` (a typed array: a fixed-size list of whole numbers 0–255 that is fast and memory-light). `imageData.data` holds four numbers per pixel (red, green, blue, alpha), so pixel `p`'s alpha is at `p * 4 + 3`.

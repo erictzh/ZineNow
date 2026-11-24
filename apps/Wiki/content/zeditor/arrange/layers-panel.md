@@ -43,7 +43,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/ui/panels/LayersPanel.jsx fn=layerBlocks
 ```
 
-Reading it:
+**The Logic:**
 - `topFirst` is the page's list reversed. `forEach((ann, row) => ...)` visits each item with its position `row`.
 - `last` is the most recent block made (`blocks[blocks.length - 1]`, the last element of the list).
 - If the item has a `groupId` **and** the last block belongs to the same group, it is added to that block's `items` (`push`). Otherwise a new block starts. `ann.groupId || null` stores `null` for an item without a group.
@@ -54,25 +54,25 @@ Reading it:
 ```js file=apps/ZEditor/src/model/layerNames.js fn=layerName
 ```
 
-Reading it: a chain of early `return`s, checked from the top: the name you gave, else for text the first line of its text (`.trim()` cuts surrounding spaces, `.split("\n")[0]` takes the first line, `|| "Text"` is the fallback for an empty box), else "Drawing"/"Highlight" for strokes, and so on. The last line, "Image", is what remains.
+**The Logic:** a chain of early `return`s, checked from the top: the name you gave, else for text the first line of its text (`.trim()` cuts surrounding spaces, `.split("\n")[0]` takes the first line, `|| "Text"` is the fallback for an empty box), else "Drawing"/"Highlight" for strokes, and so on. The last line, "Image", is what remains.
 
 ### `handleReorderLayers`
 
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleReorderLayers
 ```
 
-Reading it: `.slice().reverse()` makes a reversed **copy** (`reverse` alone would reverse the original in place). `withGroupMates` widens the dragged ids to whole groups. `flatMap` turns each matching item into its row number and skips the rest (returning `[]` adds nothing). `orderAfterMove` computes the new order (see [Page operations](zeditor/pages/page-operations)); the result is reversed back into the page's bottom-first order before saving. `() => ...` (an arrow function with no parameters) is passed to `updateAnnotationsFor`, which supplies the edit and the undo step.
+**The Logic:** `.slice().reverse()` makes a reversed **copy** (`reverse` alone would reverse the original in place). `withGroupMates` widens the dragged ids to whole groups. `flatMap` turns each matching item into its row number and skips the rest (returning `[]` adds nothing). `orderAfterMove` computes the new order (see [Page operations](zeditor/pages/page-operations)); the result is reversed back into the page's bottom-first order before saving. `() => ...` (an arrow function with no parameters) is passed to `updateAnnotationsFor`, which supplies the edit and the undo step.
 
 ### Lock and hide
 
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleToggleLayerFlag
 ```
 
-Reading it: `flag` is the text `"locked"` or `"hidden"`. `!ann[flag]` reads that property and flips it (`!` = "not"); `{ [flag]: on }` is a **computed property name** that builds `{ locked: true }` or `{ hidden: true }`. When turning a flag on for an item that is currently selected, the selection is refreshed so a locked or hidden item drops out of it.
+**The Logic:** `flag` is the text `"locked"` or `"hidden"`. `!ann[flag]` reads that property and flips it (`!` = "not"); `{ [flag]: on }` is a **computed property name** that builds `{ locked: true }` or `{ hidden: true }`. When turning a flag on for an item that is currently selected, the selection is refreshed so a locked or hidden item drops out of it.
 
 ### A group's colour
 
 ```js file=apps/ZEditor/src/model/annotations.js fn=groupColor
 ```
 
-Reading it: the loop goes through the characters of the id (`String(groupId)`), building a number: `hash * 31 + ch.charCodeAt(0)` multiplies the old value by 31 and adds the character's code, then `% 360` keeps it below 360. That is a simple **hash**: the same id always gives the same number. The hash is then spread across the colour wheel (`* 47`, again `% 360`) to give an HSL colour (hue 0–359, 70% saturation, 60% lightness).
+**The Logic:** the loop goes through the characters of the id (`String(groupId)`), building a number: `hash * 31 + ch.charCodeAt(0)` multiplies the old value by 31 and adds the character's code, then `% 360` keeps it below 360. That is a simple **hash**: the same id always gives the same number. The hash is then spread across the colour wheel (`* 47`, again `% 360`) to give an HSL colour (hue 0–359, 70% saturation, 60% lightness).

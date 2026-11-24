@@ -52,7 +52,7 @@ It decides which positions get a tick, and which of those get a number.
 ```js file=apps/ZEditor/src/model/rulers.js fn=rulerTicks
 ```
 
-Reading it:
+**The Logic:**
 - `fromPt`, `toPt` are the visible part of the page, `pxPerPt` is the zoom (screen pixels per point) and `unit` is mm, cm, in or pt. `minLabelPx = 48` is a **default value**: used when the caller gives none.
 - `const` makes a **variable** that is never reassigned. `perPt` is how many ruler units fit in one point, `pxPerUnit` how many screen pixels one unit takes.
 - `steps` is an **array** (an ordered list). The nested `for` **loops** build the 1-2-5 series: for each power of ten `e` from −3 to 5, the numbers 1, 2 and 5 times `10 ** e` (`**` is "to the power of"). That gives …, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, ….
@@ -66,7 +66,7 @@ Reading it:
 ```js file=apps/ZEditor/src/model/rulers.js fn=dragGain
 ```
 
-Reading it:
+**The Logic:**
 - It receives the pointer's speed in pixels per millisecond.
 - `Math.min(1, speed / FAST)` scales the speed to a number from 0 to 1 (never above 1), `Math.max(SLOW_GAIN, ...)` makes sure it never drops below 0.1. So the **gain** is 1 at 0.5 px/ms or faster, and 0.1 when the pointer crawls. Min and max used together like this are called **clamping**.
 
@@ -77,7 +77,7 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 ```js file=apps/ZEditor/src/ui/canvas/Rulers.jsx fn=follow
 ```
 
-Reading it:
+**The Logic:**
 - It runs on every `mousemove` while you drag. `c` is the pointer's position on the relevant axis, `dt` the time since the last move (at least 1 ms, to avoid dividing by zero).
 - `speed = speed * 0.3 + (distance / dt) * 0.7` is an **exponential moving average**: a weighted mix of the old speed (30%) and the newest (70%). It smooths jitter but still reacts at once.
 - `raw += (movement × gain) / pxPerPt` adds the scaled movement, converted from screen pixels to points (`+=` means "add to"). `raw` is the guide's unrounded position.
@@ -88,7 +88,7 @@ Reading it:
 ```js file=apps/ZEditor/src/model/rulers.js fn=snapToGuides
 ```
 
-Reading it:
+**The Logic:**
 - `box` is where the moved items would be; `guides` holds the guide positions per axis; `threshold` is how close counts.
 - `nearest` is a function stored in a variable: given a few edge positions and a few guide positions, it tries every pair (a loop inside a loop). `Math.abs` gives the distance regardless of direction. If a pair is closer than the best so far (`d <= bestDist`), it remembers the **signed** move needed, `line - edge`.
 - `bestDist` starts at the threshold, so nothing farther than that is ever chosen. If nothing qualifies, `best` stays `0`: no move.
@@ -99,7 +99,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=guideLinesPx
 ```
 
-Reading it:
+**The Logic:**
 - Guides are stored in points; items live in page pixels, `MAIN_SCALE` (1.1) times larger. This function multiplies each guide by it.
 - `snapGuides && snapGuides.length ? {...} : null` is a **ternary**: "if there are guides, give this object, otherwise give null". `snapGuides` itself is `null` when the Snap switch is off, so switching it off needs no other code.
 - `.filter(...)` keeps the guides of one axis, `.map(...)` turns each into its pixel position.
@@ -113,7 +113,7 @@ Reading it:
       }
 ```
 
-Reading it: this sits inside the drag handler. `dx`, `dy` is how far the pointer has moved. The box is moved by that much, handed to `snapToGuides`, and the nudge it answers with is added on. `!ev.altKey` means "unless Alt is held". `SNAP_PX / zoom` converts the 6 *screen* pixels into page pixels.
+**The Logic:** this sits inside the drag handler. `dx`, `dy` is how far the pointer has moved. The box is moved by that much, handed to `snapToGuides`, and the nudge it answers with is added on. `!ev.altKey` means "unless Alt is held". `SNAP_PX / zoom` converts the 6 *screen* pixels into page pixels.
 
 ### The lock and the saved settings
 

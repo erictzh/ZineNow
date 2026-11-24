@@ -42,14 +42,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useSelection.js fn=pagesActedOn
 ```
 
-Reading it: `selectedPageIndices` holds the extra pages picked with Shift+click, `selectedIdx` the main one. `inMultiSelection` is true when there is a multi-selection **and** the page you acted on belongs to it (`&&` = and, `||` = or). The `? :` then returns either the whole selection (`[selectedIdx, ...selectedPageIndices]`, an array built with the **spread** `...`, which unpacks a list into another list) or just `[idx]`.
+**The Logic:** `selectedPageIndices` holds the extra pages picked with Shift+click, `selectedIdx` the main one. `inMultiSelection` is true when there is a multi-selection **and** the page you acted on belongs to it (`&&` = and, `||` = or). The `? :` then returns either the whole selection (`[selectedIdx, ...selectedPageIndices]`, an array built with the **spread** `...`, which unpacks a list into another list) or just `[idx]`.
 
 ### Rotating
 
 ```js file=apps/ZEditor/src/state/usePageOps.js fn=handleRotate
 ```
 
-Reading it:
+**The Logic:**
 - `async`/`await`: redrawing a PDF page's thumbnail is slow, so the function waits for it. A `for...of` loop handles each acted-on page in turn.
 - `(target.rotation + 90) % 360`: add a quarter turn, and `%` (the **remainder** after dividing by 360) wraps 360 back to 0.
 - A blank page's thumbnail is drawn immediately; a PDF page's needs `await renderPdfThumb(...)`. The results are collected in a `Map` keyed by page key.
@@ -60,14 +60,14 @@ Reading it:
 ```js file=apps/ZEditor/src/state/usePageOps.js fn=handleInsertBlank
 ```
 
-Reading it: `pageSizeRef.current || DEFAULT_PAGE_SIZE` uses the size of the first loaded PDF page, or a default. The new page is an **object literal**; its `key` comes from a counter (`nextKeyRef.current++`), so it is unique. `prev.slice()` copies the list, `next.splice(atIndex, 0, newPage)` inserts at that position (removing 0 items), and the copy is returned: the old list is never edited. Finally the new page becomes the selected one.
+**The Logic:** `pageSizeRef.current || DEFAULT_PAGE_SIZE` uses the size of the first loaded PDF page, or a default. The new page is an **object literal**; its `key` comes from a counter (`nextKeyRef.current++`), so it is unique. `prev.slice()` copies the list, `next.splice(atIndex, 0, newPage)` inserts at that position (removing 0 items), and the copy is returned: the old list is never edited. Finally the new page becomes the selected one.
 
 ### Deleting
 
 ```js file=apps/ZEditor/src/state/usePageOps.js fn=handleDelete
 ```
 
-Reading it: `prev.filter((_, i) => i !== idx)` keeps every page except number `idx` (`_` is a conventional name for a parameter we ignore). The selection is an *index*, so it must be fixed up: deleting the selected page selects nothing; deleting an earlier page shifts it down by one so it still points at the same page.
+**The Logic:** `prev.filter((_, i) => i !== idx)` keeps every page except number `idx` (`_` is a conventional name for a parameter we ignore). The selection is an *index*, so it must be fixed up: deleting the selected page selects nothing; deleting an earlier page shifts it down by one so it still points at the same page.
 
 ### Reordering
 
@@ -77,7 +77,7 @@ Reading it: `prev.filter((_, i) => i !== idx)` keeps every page except number `i
 ```js file=apps/ZEditor/src/model/annotations.js fn=orderAfterMove
 ```
 
-Reading it:
+**The Logic:**
 - `orderAfterMove` is the pure maths: `Array.from({ length: count }, (_, i) => i)` makes the list 0, 1, 2 … count−1. `moving` is a `Set` (a collection with fast "is this in it?" tests via `.has`). `block` are the moved indices, `rest` all the others, both in their original order. `insertAt` counts how many of the rest come before the target slot.
 - `[...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]` builds the new order: the first part of the rest, the block, then the remaining rest. `.every(...)` returns `null` if nothing moved, so a pointless drop makes no undo step.
 - In `handleReorder`, `newIdxOf` is a **lookup table** from old position to new position (`forEach` fills it). `newOrder.map((oldIdx) => prev[oldIdx])` rebuilds the page list, and the selected indices are translated through the table so the same pages stay selected.
