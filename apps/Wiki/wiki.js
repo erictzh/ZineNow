@@ -96,7 +96,7 @@
     });
     renderNav(f);
     var main = document.querySelector(".wk-main"), target = anchor && document.getElementById("h-" + anchor);
-    if (target) target.scrollIntoView(); else main.scrollTop = 0;
+    if (target) { for (var d = target.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true; target.scrollIntoView(); } else main.scrollTop = 0;
     var act = document.querySelector(".wk-nav a.active"); if (act && act.scrollIntoView) act.scrollIntoView({ block: "nearest" });
     document.body.classList.remove("nav-open");
   }
