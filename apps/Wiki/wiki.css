@@ -89,7 +89,7 @@ figure.code figcaption span:last-child { color: var(--wk-text-accent); }
 
 /* "</> Behind the Scene": How it works + Code, folded away until opened. */
 details.wk-bts { margin: 28px 0 8px; border: 1px solid var(--ui-border); border-radius: 10px; background: rgba(255, 255, 255, .02); }
-details.wk-bts > summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--wk-text-accent); list-style: none; user-select: none; }
+details.wk-bts > summary { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; font-weight: 600; font-size: 16px; color: #fff; list-style: none; user-select: none; }
 details.wk-bts > summary::-webkit-details-marker { display: none; }
 details.wk-bts > summary::after { content: "▸"; margin-left: auto; color: var(--ui-fg-muted); transition: transform .15s; }
 details.wk-bts[open] > summary::after { transform: rotate(90deg); }
@@ -97,3 +97,4 @@ details.wk-bts[open] > summary { border-bottom: 1px solid var(--ui-border); }
 details.wk-bts > :not(summary) { margin-left: 16px; margin-right: 16px; }
 details.wk-bts > h2:first-of-type { margin-top: 18px; }
 details.wk-bts > :last-child { margin-bottom: 16px; }
+details.wk-bts > summary .wk-bts-code { color: var(--wk-text-accent); font-family: var(--ui-mono); }
