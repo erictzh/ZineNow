@@ -8,11 +8,11 @@ apps/Wiki/
   wiki.css         orange dark theme (uses shared/styles/tokens.css)
   wiki.js          sidebar, search, prev/next, copy-code buttons
   build.mjs        content/*.md -> content.js (uses the `marked` dev dependency; run by npm run build / check)
-  content/         toc.json (the menu) + <chapter>/<page>.md   <- the only files we hand-edit
+  content/         toc.txt (the menu) + <chapter>/<page>.md   <- the only files we hand-edit
   content.js       GENERATED (committed, so it opens from file://)
 ```
 
-Every page has four parts, as headings: **Intro**, **How to use**, **How it works** (proper technique names, why sliders behave as they do), **Code** (real snippets, with the repo file path above each block). Pages not written yet show "Coming soon" from the menu. The menu is `content/toc.json` (14 chapters, ~90 pages).
+Every page has four parts, as headings: **Intro**, **How to use**, **How it works** (proper technique names, why sliders behave as they do), **Code** (real snippets, with the repo file path above each block). Pages not written yet show "Coming soon" from the menu. The menu is `content/toc.txt` (14 chapters, ~90 pages).
 
 ## Phases (each ends with: build, check, tests, HANDOFF entry, PR merged). Order: ZEditor, then Markdown to PDF, then ZineArranger, then Ai Tools.
 1. **Foundation + pilot.** apps/Wiki shell, build.mjs, theme, sidebar (collapsible chapters), search, prev/next, code highlighting, note/tip callouts, the "four parts" lint (warning), a check that every file path quoted in Code sections exists, `npm run build/check` hooks, home-page card, a test for the builder. One full pilot page: ZEditor > Ruler Guide. User reviews the format before more pages are written.
@@ -28,7 +28,7 @@ Every page has four parts, as headings: **Intro**, **How to use**, **How it work
 
 Rules: read the real code before writing a page; never invent behaviour; keep snippets short and quoted from the repo; flag anything unverified. The older docs/GUIDE-*.md stay untouched until the wiki covers them, then become links.
 
-## Table of contents (the approved outline; the menu in `apps/Wiki/content/toc.json` is its page-level form)
+## Table of contents (the approved outline; the menu in `apps/Wiki/content/toc.txt` is its page-level form)
 Deeper bullets below become headings inside their page, not separate pages.
 
 0. Start here: what ZineNow is; how it is built (esbuild, dist/app.js, build number, build/check/test); offline + PWA; shared parts (number boxes, display gear, About/Source, drop images, leave warning, download, touch input/pinch gate)

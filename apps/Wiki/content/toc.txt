@@ -1,0 +1,168 @@
+# The wiki's menu = its table of contents. One line per page: `slug | Title | optional description (shown on the page, not in the menu)`.
+# Indent 2 spaces per level. Level 1 = chapters (numbered 0, 1, 2…), level 2 = sections (numbered 2.1, 2.2…), deeper = unnumbered.
+# A page with children gets an overview page automatically (add <slug>/index.md to write one). A page's file is
+# content/<parent slugs>/<slug>.md (or .../<slug>/index.md when it has children).
+start | Start here
+  what-is-zinenow | What ZineNow is | browser only, no server, AGPL-3.0-or-later
+  how-its-built | How it is built | esbuild, dist/app.js, build number, npm run build / check / test
+  offline-and-install | Offline and install | PWA, service workers
+  shared-parts | Shared parts
+    number-boxes | Number boxes (− / +)
+    display-gear | Display settings gear
+    about-and-source | About and Source link
+    drop-images | Drag-and-drop images
+    leave-warning | Leave-page warning
+    download-and-save | File download and save
+    touch-and-pinch | Touch input and the pinch gate
+home | Home page
+  app-cards | App cards and apps-config.js
+  gear-and-experimental | Gear panel and the Experimental AI switch
+zeditor | ZEditor
+  workspace | The workspace
+    top-bar-and-menus | Top bar and menus
+    welcome-and-new | Welcome and New Document dialogs
+    page-sidebar | Page sidebar | live thumbnails, page gap
+    zoom-and-canvas | Zoom and the outer canvas
+    no-paper | "No paper" auto-expanding canvas
+    touch-bar | Touch bar
+    keyboard-shortcuts | Keyboard shortcuts
+    undo-redo | Undo / redo (history)
+    state-hooks | State hooks | how the app holds a document
+  pages | Pages
+    page-operations | Page operations
+    ruler-guide | Ruler Guide | rulers, guides, lock and snap (the Page menu's "Ruler Guide")
+    page-guide | Page Guide | trim, margin and bleed lines
+    page-numbers | Page Numbers
+    onion-skin | Onion Skin
+    page-filter | Page Filter
+      halftone | Halftone
+      xerox | Xerox
+      luma | Luma
+      colour-remap | Colour remap
+  arrange | Selecting and arranging
+    move-resize-rotate | Move (V), resize handles, rotate
+    layers-panel | Layers panel | order, hide, lock, opacity, blend
+    groups | Groups | and saving or importing a group as .znow
+    clipping-masks | Clipping masks
+    measure | Measure (U)
+  text | Text
+    text-tool | Text tool (T) and the text layout engine
+    composer-hyphenation | Composer and hyphenation
+    caret-selection | Caret and text selection
+    character-paragraph | Character and paragraph settings
+    columns-frame | Columns and frame
+    text-styles | Text styles
+    spans | Spans (colour runs)
+    placeholder-text | Placeholder text
+    photo-fill | Photo fill
+    text-wrap | Text wrap around shapes
+    threads | Threads (linked frames)
+    fonts | Fonts | uploaded, system, embedded
+  images | Images
+    insert-image | Insert Image (I) | PNG, JPG, SVG
+    insert-pdf | Insert PDF | page picker
+    crop | Crop
+    photo-adjustments | Photo adjustments
+    effects | Effects | Lomo, Feather, box effects (shadow, outline)
+    vectorize | Vectorize
+      quantizing | Colour quantizing
+      contours | Contour tracing
+      curves | Curve fitting
+      trace-layer | Trace layer and settings
+    ai-background-removal | AI Background Removal (experimental)
+    flatten | Flatten (bake)
+  shapes | Shapes and drawing
+    rectangle-ellipse | Rectangle (R), Ellipse (E)
+    stroke-fill | Stroke, fill and gradients
+    draw-highlight | Draw (D), Highlight (H)
+  eraser-marquee | Eraser and Marquee
+    eraser | Eraser | strokes, soft eraser, magic eraser
+    marquee | Marquee (M) | rectangle, polygon, brush
+    make-layer | Make layer (copy and cut)
+    remove-and-fill | Remove & fill | Pattern, Smooth, Detailed
+    remove-and-fill-ai | Remove & fill with AI, and "Try another"
+  project | Project files and export
+    znow-file | The .znow file | structure, embedded images, reload snapshot
+    embed-fonts | Embed system fonts | Local Font Access API
+    export-pdf | Export PDF | pdf-lib, fontkit, vector text
+    export-images | Export PNG, JPG and SVG
+    send-to-zinearranger | Send to ZineArranger
+md2pdf | Markdown to PDF
+  workspace | Workspace
+    header-menu-sidebar | Header, menu and sidebar
+    resizable-panels | Resizable panels
+    keyboard-shortcuts | Keyboard shortcuts
+  editor | Editor
+    format-toolbar | Format toolbar
+    code-languages | Code language list
+    dropped-pictures | Dropped pictures
+    import-document | Import a document
+  typography | Typography panel
+    page | Page
+    body-text | Body text
+    typeface | Typeface and the font box
+    headings | Headings
+    toc | Table of contents
+    page-numbers | Page numbers
+    code-blocks | Code blocks and syntax highlighting
+    config-files | Config files | save, load, normalize
+  building | Building the document
+    markdown-to-html | Markdown to HTML
+    markers-style-block | Markers and the style block
+    fonts | Fonts
+    toc-generation | Table of contents generation
+    preview-pagination | Preview and pagination
+  converters | Converters
+    docx | DOCX
+    epub | EPUB
+    html-to-markdown | HTML to Markdown
+    muse | Muse
+  export | Export
+    print-to-pdf | Print to PDF
+    rasterized | Rasterized export
+zinearranger | ZineArranger
+  load-pdf | Loading a PDF and the page range
+  sheet-sizes | Sheet sizes, sizes and the sheet grid
+  imposition | Imposition
+    layouts | Layouts
+    signatures | Signatures
+    arrange-sheets | Arranging sheets | arrangeZineSheets, impose
+    sheet-html | Sheet HTML
+  reverse-imposition | Reverse imposition
+  options-display | Options panel and display settings
+  zoom-resize | Preview zoom and panel resize
+  print | Print
+  activity-log | Activity log
+  credit | Credit | Nash High's Zine Arranger, MIT
+ai-tools | Ai Tools (Local)
+  hub | The hub
+    shell-registry | Shell and tool registry
+    picture-handling | Picture handling
+    log-window | Log window
+    models-page | Models page
+    dialogs | Dialogs
+    send-to-zeditor | Send to ZEditor
+  remove-object | Remove object
+    harmonic | Harmonic fill
+    telea | Telea
+    criminisi | Criminisi
+    migan | MI-GAN
+    try-another | Try another variations
+  remove-background | Remove background
+    u2net-modnet | U²-Netp and MODNet
+    cutoff-softness | Cut-off and softness
+    otsu | Otsu
+  face-blur | Face blur | YuNet
+  click-to-select | Click-to-select | MobileSAM
+  upscale | Upscale | Real-ESRGAN
+  ocr | Text from image | OCR, Tesseract.js
+  running-models | Running models in the browser
+    onnx-runtime | ONNX Runtime Web, WebGPU and WASM
+    download-flow | The opt-in download flow, the Cache API and model store
+    model-list-licences | Model list and licences
+appendix | Appendices
+  glossary | Glossary
+  file-formats | File formats | .znow, group files, config files
+  handoff-protocol | Cross-app handoff protocol
+  licences | Licence policy and third-party notices
+  contributing | Contributing and maintaining

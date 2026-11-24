@@ -12,7 +12,11 @@ a:hover { color: #f06a2d; }
 .wk-body { display: flex; padding-top: 52px; height: 100%; box-sizing: border-box; }
 .wk-nav { flex: 0 0 290px; overflow: auto; padding: 14px 10px 40px; border-right: 1px solid var(--ui-border); background: var(--ui-bg-card); font-size: 14.5px; }
 .wk-nav details { margin: 2px 0; }
-.wk-nav summary { cursor: pointer; padding: 6px 8px; border-radius: 6px; font-weight: 600; list-style: none; }
+.wk-nav summary { cursor: pointer; padding: 5px 8px; border-radius: 6px; font-weight: 600; list-style: none; border-left: 2px solid transparent; }
+.wk-nav summary a { display: inline; padding: 0; border: 0; background: none; color: inherit; }
+.wk-nav summary.active { border-left-color: var(--ui-accent); background: rgba(221, 83, 26, .12); color: #fff; }
+.wk-nav details details { margin-left: 14px; }
+.wk-nav details details > a, .wk-nav details > a { padding-left: 26px; }
 .wk-nav summary::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--ui-fg-muted); }
 .wk-nav details[open] > summary::before { content: "▾"; }
 .wk-nav summary:hover { background: rgba(255, 255, 255, .05); }
@@ -54,6 +58,9 @@ th { background: rgba(255, 255, 255, .05); }
 .wk-grid a { padding: 12px 14px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-bg-card); color: var(--ui-fg); text-decoration: none; }
 .wk-grid a:hover { border-color: var(--ui-accent); }
 .wk-grid small { display: block; color: var(--ui-fg-muted); }
+.wk-lead { color: var(--ui-fg-muted) !important; font-size: 17px; margin-top: -6px; }
+.wk-crumb a { color: inherit; text-decoration: none; }
+.wk-page ul small { color: var(--ui-fg-muted); }
 .wk-build { margin-top: 28px; font-size: 12.5px; color: var(--ui-fg-muted); }
 @media (max-width: 800px) {
   .wk-menu-btn { display: block; }
@@ -62,3 +69,8 @@ th { background: rgba(255, 255, 255, .05); }
   body.nav-open .wk-nav { transform: none; }
   .wk-page { padding: 20px 16px 60px; }
 }
+.wk-nav .num { display: inline-block; min-width: 1.6em; color: var(--ui-accent-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk-nav details.sub { margin-left: 14px; }
+.wk-nav details.sub summary { font-weight: 500; }
+.wk-nav details.sub a { padding-left: 24px; }
+.wk-nav > details > a { padding-left: 26px; }
