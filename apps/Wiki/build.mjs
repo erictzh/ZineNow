@@ -46,7 +46,7 @@ let written = 0, total = 0;
     const file = join(here, "content", ...(leaf ? [n.key + ".md"] : [n.key, "index.md"]));
     if (existsSync(file)) {
       if (leaf) written++;
-      const r = renderMarkdown(lf(readFileSync(file, "utf8")), { key: n.key, readFile, problems });
+      let r; try { r = renderMarkdown(lf(readFileSync(file, "utf8")), { key: n.key, readFile, problems }); } catch (e) { console.error("FAILED PAGE", n.key); throw e; }
       if (leaf) warnings.push(...r.warnings); // overview pages are free-form
       pages[n.key] = { html: r.html, text: r.text };
     }
