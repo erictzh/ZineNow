@@ -61,6 +61,12 @@ It decides which positions get a tick, and which of those get a number.
 - The final `for` visits every small tick from `start` to `end`. `Math.floor` and `Math.ceil` round down and up, so the ticks cover the whole visible range. `if (end - start > 5000) return ticks;` is a safety valve: never draw an absurd number of ticks.
 - Inside the loop, `onMajor` and `onMid` ask "does this tick land on a whole numbered step (or exactly half of one)?", using a tiny tolerance `1e-6` because computers cannot store most decimals exactly (**floating-point error**). Each tick is pushed into `ticks` as a small **object** `{ pt, value, size }`.
 
+**Worked example.** The page is shown at 1 screen pixel per point, the unit is millimetres.
+1. `perPt = 25.4 / 72 = 0.353` mm per point, so `pxPerUnit = 1 / 0.353 = 2.83` screen pixels per millimetre.
+2. `steps` is …, 1, 2, 5, 10, 20, 50 …. Their widths on screen: 1 mm = 2.8 px, 2 mm = 5.7, 5 mm = 14.2, 10 mm = 28.3, 20 mm = **56.7**. The first one that reaches `minLabelPx = 48` is 20, so `major = 20` mm: a number is printed every 20 mm.
+3. `firstDigit` is 2 (20 starts with a 2), so the candidate splits are `[2, 4, 8]`. A small tick must be at least 4 px wide: 20/2 = 10 mm = 28 px ✓, 20/4 = 5 mm = 14 px ✓, 20/8 = 2.5 mm = 7 px ✓. All three pass, so `minorCount = 8` and `minor = 20 / 8 = 2.5` mm.
+4. The ruler therefore has a tick every 2.5 mm. A tick on a multiple of 20 mm is `"major"` (numbered), one on a multiple of 10 mm is `"mid"` (a longer tick), the rest are `"minor"`. Zoom in to 3 px per point and each millimetre becomes 8.5 px; now 5 mm = 42 px is too narrow but 10 mm = 85 px passes, so the numbers appear every 10 mm instead.
+
 ### `dragGain`: slower hand, finer steps
 
 ```js file=apps/ZEditor/src/model/rulers.js fn=dragGain
@@ -69,6 +75,16 @@ It decides which positions get a tick, and which of those get a number.
 **The Logic:**
 - It receives the pointer's speed in pixels per millisecond.
 - `Math.min(1, speed / FAST)` scales the speed to a number from 0 to 1 (never above 1), `Math.max(SLOW_GAIN, ...)` makes sure it never drops below 0.1. So the **gain** is 1 at 0.5 px/ms or faster, and 0.1 when the pointer crawls. Min and max used together like this are called **clamping**.
+
+**Worked example.** `FAST = 0.5`, `SLOW_GAIN = 0.1`.
+
+| Pointer speed (px/ms) | `speed / FAST` | after `Math.min(1, …)` | after `Math.max(0.1, …)`: the gain |
+|---|---|---|---|
+| 0.02 (crawling) | 0.04 | 0.04 | **0.1**: the floor wins |
+| 0.2 (slow) | 0.4 | 0.4 | **0.4** |
+| 2 (a flick) | 4 | 1 | **1**: the cap wins |
+
+So a 10 px mouse movement moves the guide by 1 px when you crawl, 4 px when slow, and the full 10 px when fast.
 
 ### `follow`: moving the guide by speed-scaled steps
 
@@ -83,6 +99,12 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 - `raw += (movement × gain) / pxPerPt` adds the scaled movement, converted from screen pixels to points (`+=` means "add to"). `raw` is the guide's unrounded position.
 - `last = {...}` remembers this move for the next one.
 
+**Worked example.** `pxPerPt = 1.1` (zoom 100%). The last smoothed speed was 0.05 px/ms.
+1. The pointer moves 2 px in 40 ms: `speed = 0.05 × 0.3 + (2 / 40) × 0.7 = 0.015 + 0.035 = 0.05`.
+2. `dragGain(0.05)`: 0.05 / 0.5 = 0.1, so the gain is 0.1.
+3. `raw += (2 × 0.1) / 1.1 = 0.18` points. The mouse moved 2 px, the guide moved 0.18 pt (about 0.06 mm): fine adjustment.
+4. If instead the pointer had moved 12 px in 20 ms after a speed of 0.3: `speed = 0.09 + 0.42 = 0.51`, the gain is 1, and `raw += 12 / 1.1 = 10.9` points.
+
 ### `snapToGuides`: pull a box onto the nearest guide
 
 ```js file=apps/ZEditor/src/model/rulers.js fn=snapToGuides
@@ -94,6 +116,12 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 - `bestDist` starts at the threshold, so nothing farther than that is ever chosen. If nothing qualifies, `best` stays `0`: no move.
 - The `return` runs it twice, once for the horizontal axis with the box's left, middle and right edges, once for the vertical axis. `(box.x0 + box.x1) / 2` is the middle. `guides.x || []` means "use an empty list if there are no guides".
 
+**Worked example.** The items' box would land at `x0 = 100`, `x1 = 140` (its middle is 120). There are vertical guides at 118 and 300, and `threshold = 6`.
+1. `edges = [100, 120, 140]`, `lines = [118, 300]`.
+2. Pair by pair: |118 − 100| = 18 (too far), |118 − 120| = **2** (within 6: `best = 118 − 120 = −2`, `bestDist = 2`), |118 − 140| = 22. Guide 300 is more than 150 away from every edge.
+3. `dx = −2`: the box is nudged 2 px left, so its middle sits exactly on the guide at 118. There are no horizontal guides, so `dy = 0`.
+4. If two pairs were both within 6, the *closer* one would win, because `bestDist` shrinks every time a better pair is found.
+
 ### `guideLinesPx`: converting points to page pixels
 
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=guideLinesPx
@@ -103,6 +131,8 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 - Guides are stored in points; items live in page pixels, `MAIN_SCALE` (1.1) times larger. This function multiplies each guide by it.
 - `snapGuides && snapGuides.length ? {...} : null` is a **ternary**: "if there are guides, give this object, otherwise give null". `snapGuides` itself is `null` when the Snap switch is off, so switching it off needs no other code.
 - `.filter(...)` keeps the guides of one axis, `.map(...)` turns each into its pixel position.
+
+**Worked example.** A vertical guide at `pos = 100` points becomes `100 × 1.1 = 110` page pixels. With the Snap switch off, `snapGuides` is `null`, the condition is false, and the function returns `null`: no snapping anywhere, with no other code involved.
 
 ### Where moving an item uses it
 

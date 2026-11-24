@@ -109,6 +109,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `JSON.parse(JSON.stringify(ann))` is the common way to make a **deep copy**: `JSON.stringify` writes the object out as text, `JSON.parse` reads it back as a brand-new object that shares nothing with the original. Editing the copy can never change the original.
 - It is stored in `clipboardRef`, a ref, not state: copying should not make the screen redraw.
 
+**Worked example.** You select an image at (100, 100) and press Ctrl+C: a deep copy goes into `clipboardRef`. Ctrl+V adds a copy with a new id, moved by `translatedAnnotation(clip, 20, 20)`, so it appears at **(120, 120)**: down and right of the original, so you can see there are two. A second Ctrl+V pastes another copy at (120, 120) again (the clipboard still holds the original position).
+
 ### Nudging with the arrow keys
 
 ```js file=apps/ZEditor/src/state/useKeyboardShortcuts.js
@@ -123,6 +125,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```
 
 **The Logic:** the first line is a **lookup table**: an object whose keys are key names and whose values are `[dx, dy]` pairs. `[key]` at the end picks the entry for the pressed key; for any other key the result is `undefined`, which `if (nudge && ...)` treats as false. `step` is 10 with Shift, else 1. The selected item and the others in `selectedAnnIds` are collected into one list, and moved together.
+
+**Worked example.** An image is at x = 100, y = 100. You press **→**: `nudge = [1, 0]`, `step = 1`, so the move is (+1, 0) and it goes to x = 101. **Shift+↓**: `nudge = [0, 1]`, `step = 10`, so (0, +10): y becomes 110. Any other key (say "q") gives `nudge = undefined`, and the `if (nudge && …)` test fails.
 
 ### Pasting a picture from the clipboard
 

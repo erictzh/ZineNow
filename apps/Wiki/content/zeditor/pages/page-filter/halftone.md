@@ -60,6 +60,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** red, green and blue are numbers from 0 to 1. `k = 1 - Math.max(r, g, b)` is the black needed: the darkest-possible colour is the one where even the strongest channel is weak. For black (`channel === 3`) that is the answer. For pure black (`k >= 1`) the colours need no ink. Otherwise `(1 - [r, g, b][channel] - k) / (1 - k)` gives the share of cyan (channel 0, from red), magenta (1, from green) or yellow (2, from blue): `[r, g, b][channel]` picks one of the three numbers by position.
 
+**Worked example.** An orange pixel: `r = 1`, `g = 0.5`, `b = 0`.
+- `k = 1 − max(1, 0.5, 0) = 0`: no black needed.
+- Cyan (channel 0, from red): `(1 − 1 − 0) / (1 − 0) = 0`. Magenta (channel 1, from green): `(1 − 0.5 − 0) / 1 = 0.5`. Yellow (channel 2, from blue): `(1 − 0 − 0) / 1 = 1`.
+- So orange is printed as 50% magenta over 100% yellow, with no cyan or black: exactly what a painter would mix. A dark grey (0.2, 0.2, 0.2) gives `k = 0.8` and cyan, magenta and yellow all `(1 − 0.2 − 0.8) / 0.2 = 0`: pure black ink.
+
 ### `drawHalftoneScreen`: one plate or four
 
 ```js file=apps/ZEditor/src/render/filters/halftone.js fn=drawHalftoneScreen
@@ -82,3 +87,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - **Dither:** the cell gets a square if its lightness is below the Bayer number for its place, `BAYER_8X8[gridV & 7][gridU & 7]`. `& 7` is a **bitwise AND** with 7 (binary 111): it keeps the last three bits, which is the same as "remainder after dividing by 8", so the 8 × 8 table repeats across the picture.
 - **Dots and lines:** `radius = (1 - avgLum) * maxRadius`, bigger for darker cells. `toLine` (0 to 1) blends the half-width and half-height from the dot's radius towards a line's. If the mark would be thinner than 0.4 px (`halfHeight > 0.4`) it is skipped. `ctx.arc` adds a circle to the path; `ctx.roundRect` adds a rounded rectangle whose corner rounding shrinks to zero as lines take over (`1 - toLine`).
 - Finally `ctx.fill()` paints what remains in the path, and `ctx.restore()` undoes the rotation.
+
+**Worked example.** `cellSize = 6`, so `maxRadius = 6 × 0.62 = 3.72` px.
+- A cell that is 25% light (`avgLum = 0.25`): `radius = (1 − 0.25) × 3.72 = 2.79` px. A white cell (`avgLum = 1`): radius 0, `halfHeight` is under 0.4, so nothing is drawn. A black cell: radius 3.72, a dot wider than the cell's half, so neighbouring dots overlap and cover it.
+- **Dots ↔ Lines at 50%** (`toLine = 0.5`) for that 25%-light cell: `halfLength = 2.79 + (6 / 2 + 0.25 − 2.79) × 0.5 = 3.02`, `halfHeight = 2.79 + (0.75 × 6 / 2 − 2.79) × 0.5 = 2.52`: a rounded blob a bit wider than high, on its way to a bar.
+- **Dither:** the 8 × 8 table repeats. Cell (`gridU = 11`, `gridV = 2`): `11 & 7 = 3` (binary 1011 AND 0111 = 0011), `2 & 7 = 2`, so the table value is `BAYER_8X8[2][3] = 36` and the threshold is `(36 + 0.5) / 64 = 0.57`. A 50%-light cell (0.5) is below it, so it gets a square. In the same row, `BAYER_8X8[2][0] = 12` gives `0.195`: the same grey is *not* below it, so that cell stays empty. At 50% grey, about half of the 64 table positions are filled, in an evenly spread pattern.

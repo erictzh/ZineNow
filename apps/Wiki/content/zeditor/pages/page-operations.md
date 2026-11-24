@@ -44,6 +44,10 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `selectedPageIndices` holds the extra pages picked with Shift+click, `selectedIdx` the main one. `inMultiSelection` is true when there is a multi-selection **and** the page you acted on belongs to it (`&&` = and, `||` = or). The `? :` then returns either the whole selection (`[selectedIdx, ...selectedPageIndices]`, an array built with the **spread** `...`, which unpacks a list into another list) or just `[idx]`.
 
+**Worked example.** Pages 2 and 4 are Shift-selected, and page 2 is the main one (`selectedIdx = 2`, `selectedPageIndices = [4]`).
+- You press ⟳ on page 4: it is in the selection, so `pagesActedOn(4)` returns `[2, 4]`. Both turn.
+- You press ⟳ on page 3: it is not in the selection, so the function returns `[3]`. Only page 3 turns.
+
 ### Rotating
 
 ```js file=apps/ZEditor/src/state/usePageOps.js fn=handleRotate
@@ -54,6 +58,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `(target.rotation + 90) % 360`: add a quarter turn, and `%` (the **remainder** after dividing by 360) wraps 360 back to 0.
 - A blank page's thumbnail is drawn immediately; a PDF page's needs `await renderPdfThumb(...)`. The results are collected in a `Map` keyed by page key.
 - `recordUndoCheckpoint()` saves the *before* state for Undo. Then `setPages((prev) => prev.map(...))` replaces only the changed pages: `{ ...p, ...updates }` makes a new page object with the new rotation and thumbnail on top of the old fields.
+
+**Worked example.** A page is at `rotation = 270` and you press ⟳. `(270 + 90) % 360 = 360 % 360 = 0`: it wraps back to upright. From 0 the four presses give 90, 180, 270, 0.
 
 ### Inserting a blank page
 
@@ -69,6 +75,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `prev.filter((_, i) => i !== idx)` keeps every page except number `idx` (`_` is a conventional name for a parameter we ignore). The selection is an *index*, so it must be fixed up: deleting the selected page selects nothing; deleting an earlier page shifts it down by one so it still points at the same page.
 
+**Worked example.** There are 4 pages (A, B, C, D) and page C is selected (`prevSel = 2`).
+- Delete A (`idx = 0`): `0 < 2`, so the selection becomes 1. The list is now B, C, D and index 1 is still C.
+- Delete C itself (`idx = 2`): `idx === prevSel`, so the selection becomes `null`.
+- Delete D (`idx = 3`): it comes after the selection, so it stays 2.
+
 ### Reordering
 
 ```js file=apps/ZEditor/src/state/usePageOps.js fn=handleReorder
@@ -81,3 +92,9 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `orderAfterMove` is the pure maths: `Array.from({ length: count }, (_, i) => i)` makes the list 0, 1, 2 … count−1. `moving` is a `Set` (a collection with fast "is this in it?" tests via `.has`). `block` are the moved indices, `rest` all the others, both in their original order. `insertAt` counts how many of the rest come before the target slot.
 - `[...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]` builds the new order: the first part of the rest, the block, then the remaining rest. `.every(...)` returns `null` if nothing moved, so a pointless drop makes no undo step.
 - In `handleReorder`, `newIdxOf` is a **lookup table** from old position to new position (`forEach` fills it). `newOrder.map((oldIdx) => prev[oldIdx])` rebuilds the page list, and the selected indices are translated through the table so the same pages stay selected.
+
+**Worked example.** There are 5 pages, numbered 0 to 4.
+- *Move page 3 before slot 1* (`orderAfterMove(5, [3], 1)`): `block = [3]`, `rest = [0, 1, 2, 4]`. `insertAt` counts the rest items below slot 1: only 0, so 1. The new order is `[0] + [3] + [1, 2, 4]` = **`[0, 3, 1, 2, 4]`**.
+- *Move pages 1 and 3 to the end* (slot 5): `block = [1, 3]`, `rest = [0, 2, 4]`, `insertAt = 3`, so **`[0, 2, 4, 1, 3]`**: the moved pages keep their document order (1 before 3), however you selected them.
+- *Move page 2 before slot 2*: `rest = [0, 1, 3, 4]`, `insertAt = 2`, and the order is `[0, 1, 2, 3, 4]`, the same as before, so the function returns `null` and no undo step is made.
+- `newIdxOf` then maps old to new. After `[0, 3, 1, 2, 4]`, old page 3 is at 1, so a selection that was on 3 is now on 1.

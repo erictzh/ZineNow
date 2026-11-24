@@ -51,6 +51,16 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `ann` is the image item, `pageFilter` the filter of its page. `!f` is true when no filter is set (`!` means "not"). `||` means "or", `===` "is exactly equal to". Three rules, checked from the top, each ending in `return` (which stops the function): no filter or "Match Page" gives the page's filter (or "none" if the page has none); "None" gives no filter; anything else gives the image's own.
 
+**Worked example.** The page filter is Halftone.
+
+| Image's own `filter` | `effectiveImageFilter` returns |
+|---|---|
+| not set, or `{ type: "match" }` | the page's **Halftone** |
+| `{ type: "none" }` | `{ type: "none" }`: the image stays unfiltered |
+| `{ type: "xerox", … }` | the image's own **Xerox** settings |
+
+On a page with no filter at all (`pageFilter` is `undefined`), a "match" image gets `{ type: "none" }`.
+
 ### Setting the filter on the selected pages
 
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=updatePageFilter
@@ -60,6 +70,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `new Set([selectedIdx, ...selectedPageIndices])` makes a collection of the page numbers to change; a `Set` cannot contain the same number twice.
 - `recordUndoCheckpoint("pagefilter:" + ...)` saves an undo step. The text it is given is the **coalesce key**: dragging a colour picker fires many updates with the same key, and they are merged into one undo step.
 - `setPages((prev) => prev.map((p, i) => targets.has(i) ? {...} : p))` goes through all pages: a targeted page becomes a **new** object whose `filter` is the old filter with `patch` laid over it (`{ ...old, ...patch }`: later fields win); other pages are returned as they were.
+
+**Worked example.** Pages 2 and 4 are selected (`selectedIdx = 2`, `selectedPageIndices = [4]`). Page 2 currently has `{ type: "halftone", cellSize: 8 }`. You pick Duotone: `patch = { type: "duotone" }`.
+- `targets = {2, 4}`. Page 2's new filter is `{ ...{ type: "halftone", cellSize: 8 }, ...{ type: "duotone" } }` = `{ type: "duotone", cellSize: 8 }`. Later fields win, but fields the patch does not mention are **kept**, which is why switching back to Halftone later brings your cell size back.
+- Page 4 had no filter (`undefined`), so `p.filter || DEFAULT_PAGE_FILTER` starts from `{ type: "none" }` and becomes `{ type: "duotone" }`.
+- Pages 1 and 3 are returned unchanged: the same objects, so their thumbnails are not redrawn.
 
 ### The dispatcher
 
@@ -72,3 +87,5 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - Halftone replaces pixels instead of tweaking them, so the function first copies out the picture's **alpha channel** (its see-through-ness: one number per pixel, 0 to 255) into `sourceAlpha`, a `Uint8ClampedArray` (a typed array: a fixed-size list of whole numbers 0–255 that is fast and memory-light). `imageData.data` holds four numbers per pixel (red, green, blue, alpha), so pixel `p`'s alpha is at `p * 4 + 3`.
 - After the screen is drawn, if any pixel was see-through (`hasTransparency`), the saved alpha values are written back with `putImageData`, so see-through parts of the image stay see-through.
 - `cellSize * scaleFactor` converts the size from editor pixels to the canvas's real resolution (1 on screen, larger in the export).
+
+**Worked example.** A halftone with `cellSize = 6` is exported at 200 dpi. `EXPORT_SCALE / MAIN_SCALE = (200 / 72) / 1.1 = 2.525`, so `cellSize * scaleFactor = 15.15` canvas pixels: the cells are 2.5 times bigger in pixels but cover the same share of the page as on screen. In the picture, a pixel with alpha 128 (half see-through) is saved in `sourceAlpha` before the halftone paints over everything; afterwards `result.data[p * 4 + 3] = 128` puts its see-through-ness back.

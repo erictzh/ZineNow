@@ -61,6 +61,12 @@ An **object** is a bundle of named values: `on`, `from`, `to` (0 means "to the l
 - `place`: if it ends in `-outside`, replace the word with `right` for odd pages (`position % 2 === 1`, remainder 1 after dividing by 2) and `left` for even pages. That is the booklet rule.
 - `place.split("-")` cuts "bottom-right" into `["bottom", "right"]`, and `const [vertical, horizontal] = ...` unpacks the pair. The function returns an object with everything a drawing routine needs.
 
+**Worked example.** Settings: `from = 3`, `to = 0` (to the end), `first = 1`, `format = "page"`, `position = "bottom-outside"`. The zine has 10 pages. Which text goes on the page at index 4?
+1. `position = 4 + 1 = 5`. `last = 10` (because `to` is 0). 5 is between 3 and 10, so it is numbered.
+2. `number = 1 + (5 − 3) = 3`. `text = "Page 3"`.
+3. `place = "bottom-outside"` ends in `-outside`; `5 % 2 === 1` (odd), so it becomes `"bottom-right"`. `split("-")` gives `vertical = "bottom"`, `horizontal = "right"`.
+4. Page 1 and 2 (positions below `from`) return `null`: no number. Position 6 would give "Page 4" at **bottom-left**.
+
 ### Where the live number is drawn
 
 ```js file=apps/ZEditor/src/ui/canvas/CanvasOverlays.jsx
@@ -80,3 +86,5 @@ An **object** is a bundle of named values: `on`, `from`, `to` (0 means "to the l
 ```
 
 **The Logic:** `{numberSpec && ...}` draws nothing when the value is `null`. `[numberSpec.vertical]: value` is a **computed property name**: if `vertical` is `"bottom"`, this means `bottom: value`, placing the text that far from the bottom edge. `marginIn * 72 * MAIN_SCALE` is inches converted to points, then to editor pixels. Centred numbers stretch from `left: 0` to `right: 0` and centre their text; others are placed at `left` or `right` the same distance in.
+
+**Worked example.** `marginIn = 0.4` and `size = 10`. The text is placed `0.4 × 72 × 1.1 = 31.7` editor pixels from the bottom edge and from the right edge, and its font size is `10 × 1.1 = 11` px: both are scaled the same way as the page, so the preview matches the printed result.

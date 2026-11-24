@@ -61,6 +61,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `gap` is how long to wait. For the edited page it is the larger of 150 ms and four times how long the last redraw took (`lastMs.current * SLOW_FACTOR`): a **throttle** that slows down automatically when drawing is expensive.
 - `setTimeout(run, ...)` schedules `run` after the delay; the `Math.max(0, ...)` makes sure the delay is never negative. The time already passed since the last redraw ended (`lastEnd`) is subtracted, so redraws are spaced by the gap, not gap-plus-draw-time.
 
+**Worked example.** `SELECTED_GAP_MS = 150`, `OTHER_GAP_MS = 25`, `SLOW_FACTOR = 4`.
+- Your page has a heavy photo and the last redraw took **60 ms**: `gap = max(150, 60 × 4) = 240` ms. If that redraw ended at t = 1000 and it is now t = 1100, the timer waits `1000 + 240 − 1100 = 140` ms.
+- A light page where the last redraw took 10 ms: `gap = max(150, 40) = 150` ms: at most about 6 redraws a second.
+- Another (not edited) page: `gap = max(25, lastMs)`, so these are drawn one after another, 25 ms apart at least.
+
 ### Picking the page to draw next
 
 ```js file=apps/ZEditor/src/state/useLiveThumbs.js fn=nextStale
@@ -77,6 +82,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `getBoundingClientRect()` gives the list's position on screen; `e.clientY` is the pointer's. The two distances tell how close the pointer is to the top and bottom edge.
 - Inside 44 pixels of an edge it sets a direction in a ref (`-1` up, `1` down, `0` none). A separate loop (`requestAnimationFrame`, which runs once per screen refresh) reads that direction and moves `scrollTop` by 4 pixels each frame. Splitting "decide direction" from "do the scrolling" keeps the movement smooth even when the pointer is still.
 
+**Worked example.** The list's top edge is at y = 100 and its bottom at y = 700 on screen. The pointer is at y = 120.
+- `distFromTop = 120 − 100 = 20`, which is below `EDGE_SCROLL_ZONE = 44`, so `scrollDirRef = −1` (up).
+- The animation loop adds `−1 × 4` to `scrollTop` every frame; at 60 frames a second that is **240 px per second** upward.
+- At y = 300, both distances are above 44: direction 0, no scrolling.
+
 ### Which half of the thumbnail?
 
 ```js file=apps/ZEditor/src/ui/sidebar/Sidebar.jsx
@@ -86,6 +96,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```
 
 **The Logic:** `rect.top + rect.height / 2` is the vertical middle of the thumbnail under the pointer. If the pointer is above it, the drop line goes before that page, otherwise after it. `setDragOverInfo` stores that, and React draws the drop line.
+
+**Worked example.** The thumbnail under the pointer spans `rect.top = 200` to 320 (`rect.height = 120`). Its middle is `200 + 120 / 2 = 260`. Pointer at y = 250: `250 < 260`, so `before = true`: the drop line appears above this page. Pointer at y = 290 gives `before = false`: below it.
 
 ### Sharp thumbnails: drawn big, shown small
 

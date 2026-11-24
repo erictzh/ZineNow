@@ -43,6 +43,12 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `T` and `M` are the 40 px trigger and 240 px margin. For each side, *if* the content comes within `T` of the edge, that side moves out to leave `M` of room. `Math.min(0, x0 - M)` is negative: the canvas grows to the left. `Math.max(dispW, x1 + M)` only ever grows to the right, never shrinks.
 - If all four sides are unchanged it returns `null`. Otherwise `sx` and `sy` (how far everything must shift when it grew left or up, rounded up with `Math.ceil`) and the new size come back as a small **object**, converted back from editor pixels to the page's own units.
 
+**Worked example.** A fresh canvas is 800 × 600 pt, so `dispW = 880` and `dispH = 660` editor pixels. You place a picture whose bounding box is `x0 = 20, y0 = 100, x1 = 300, y1 = 200`.
+1. `left`: `x0 = 20 < T = 40`, so `left = Math.min(0, 20 − 240) = −220`. The canvas must grow 220 px to the left.
+2. `top`: `y0 = 100`, which is not under 40, so `top = 0`. `right`: `x1 = 300` is far from 840, so it stays 880. `bottom`: 200 is far from 620, so it stays 660.
+3. `sx = 220`, `sy = 0`; the new width is `880 + 220 = 1100` px, the height stays 660. Converted back: `1100 / 1.1 = 1000` pt wide, 600 pt high.
+4. `grownPage` then moves every item 220 px to the right, so the picture still sits 20 + 220 = 240 px from the new left edge, and the view is scrolled by the same 220 px: nothing seems to move.
+
 ### `grownPage`: applying the plan
 
 ```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=grownPage

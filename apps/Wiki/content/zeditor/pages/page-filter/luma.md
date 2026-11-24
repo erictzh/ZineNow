@@ -39,6 +39,18 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `luma` is the weighted brightness: 29.9% red, 58.7% green, 11.4% blue (the **Rec. 601** weights; they add up to 1, so white stays 255).
 - `luma * alpha + 255 * (1 - alpha)` is a **weighted average** between the pixel's brightness and white, by how solid it is. This is how any picture would look over white paper.
 
+**Worked example.**
+
+| Pixel (R, G, B, A) | luma | alpha | result |
+|---|---|---|---|
+| pure red (255, 0, 0, 255) | 0.299 × 255 = 76.2 | 1 | 76.2 × 1 + 255 × 0 = **76.2** |
+| pure green (0, 255, 0, 255) | 0.587 × 255 = 149.7 | 1 | **149.7** |
+| pure blue (0, 0, 255, 255) | 0.114 × 255 = 29.1 | 1 | **29.1** |
+| half-see-through black (0, 0, 0, 128) | 0 | 0.502 | 0 × 0.502 + 255 × 0.498 = **127** |
+| fully see-through (0, 0, 0, 0) | 0 | 0 | 0 + 255 × 1 = **255** (white) |
+
+Green looks about five times brighter than blue to the eye, so a grey photo of a green leaf is light and one of a blue sky is dark.
+
 ### The same weights for the live preview
 
 ```js file=apps/ZEditor/src/render/filters/luma.js

@@ -41,6 +41,10 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `used` is a `Set` of every group id on any page; `flatMap` flattens a list of lists into one list and `.filter(Boolean)` throws away empty values. The `while` loop keeps making new ids (`g12`, `g13`...) until one is unused: a safety net for files made by older versions.
 - Inside the edit: `members` are the selected items, each copied with the new `groupId` (`{ ...a, groupId }`). `topIndex` is the highest stack position among them (`Math.max(...)` over a list where non-members count as −1). `rest` is everything else. `rest.splice(position, 0, ...members)` inserts the members, all together, at the place of the topmost member, then `rest` is returned as the new list.
 
+**Worked example.** The stack, bottom to top, is [A, B, C, D, E]. You select A, C and E and press Ctrl+G.
+- `members = [A, C, E]`, each with `groupId: "g7"` (say). `topIndex = 4` (E is the highest). `rest = [B, D]`.
+- `rest.splice(4 + 1 − 3, 0, A, C, E)`: `splice(2, 0, …)` inserts the three at position 2 of `[B, D]`, giving **[B, D, A, C, E]**. The group is now one solid block, ending where its topmost member was. B and D, which were between them, are now below.
+
 ### `handleUngroupSelection`
 
 ```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleUngroupSelection
@@ -55,6 +59,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** it takes some ids and returns them **plus** the ids of all their group mates that are visible and unlocked. `new Set([...ids, ...mates])` merges the two lists and removes duplicates, then `[...set]` turns it back into an ordinary list. This one helper is why selecting, moving or reordering one member always brings the group along.
 
+**Worked example.** B is in group g1 together with C (visible) and D (locked). You click B: `ids = [B]`, `groups = {g1}`, `mates = [B, C]` (D is locked so it is skipped), and the result is `[B, C]`. Clicking an item with no group returns `ids` unchanged.
+
 ### Saving a group as a file
 
 ```js file=apps/ZEditor/src/io/groupFile.js fn=itemsBounds,serializeGroup
@@ -65,6 +71,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `serializeGroup` throws an **error** if there is nothing to save (`throw new Error(...)`, which stops the function and reports a message). `dx`, `dy` are how far everything must move so the box sits 40 px (`PAD`) from the top-left corner.
 - `items.map((a, i) => ...)` moves every item (`translatedAnnotation`), and for the first, lowest item (`i === 0`) removes `clipToBelow`, because there is nothing below it in the new file.
 - The `page` is an object: a blank no-paper page sized `Math.ceil(width + 2 × PAD) / MAIN_SCALE` (rounded **up** to whole pixels, then converted from editor pixels to points). Finally `serializeProject(...)` turns the page into the text of a `.znow` file.
+
+**Worked example.** Three items sit inside the box `x = 300, y = 200, width = 100, height = 50` (editor pixels).
+- `PAD = 40`, so `dx = 40 − 300 = −260` and `dy = 40 − 200 = −160`. The item that was at (300, 200) is now at **(40, 40)**.
+- The page is `Math.ceil(100 + 80) / 1.1 = 180 / 1.1 =` **163.6 pt** wide and `Math.ceil(50 + 80) / 1.1 = 118.2 pt` tall: the group plus 40 px of room on every side, expressed in points.
+- If the lowest item was clipped to a layer below it, that flag is removed, since the layer below is not in the file.
 
 ### Reading a group file back
 

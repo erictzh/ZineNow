@@ -50,6 +50,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** the pane is a scrollable area; `scrollLeft`/`scrollTop` say how far it is scrolled. A page point `(x, y)` at the new zoom sits at `x × percent` pixels from the page's own corner, plus the page's offset in the pane (`board.offsetLeft`). To put it back at screen position `(fx, fy)`, scroll by that sum minus `fx`. The anchor idea is simply: *remember the page point, zoom, then scroll so it is under the same screen spot*.
 
+**Worked example.** The pane is scrolled 50 px, the board (page) starts 100 px from the pane's left edge, and the anchor is the middle of the view at `fx = 400`. The zoom is 100%.
+1. Before zooming: `point.x = (50 + 400 − 100) / 100 = 3.5` (page pixels per percent of zoom).
+2. The zoom becomes 200%. After the page is redrawn, `scrollPointTo` sets `scrollLeft = 3.5 × 200 + 100 − 400 = 400`.
+3. Check: the anchor is now 700 px from the page's left edge (3.5 × 200), the page starts 100 px into the pane, and the pane is scrolled 400, so it appears at 100 + 700 − 400 = **400**: exactly where `fx` was. The spot you were looking at did not move.
+
 ### `zoomAt`: one zoom request
 
 ```js file=apps/ZEditor/src/state/useZoom.js fn=zoomAt
@@ -61,12 +66,23 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `waiting` is the anchor from a still-undrawn zoom: if wheel events arrive faster than the page can redraw, the *first* anchor is kept (`waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy)`), so the picture does not drift. `...` (the **spread** operator) copies an object's fields into a new one.
 - Finally `setZoomPercent(percent)` changes the state; React redraws, and the layout effect shown above scrolls back to the anchor.
 
+**Worked example.** The wheel gives `deltaY = 100` (one notch) with the zoom at 100%.
+1. In the wheel handler the pixel amount is clamped to ±25 (`Math.max(-25, Math.min(25, 100))` = 25). The factor is `e^(−25 × 0.008) = e^(−0.2) = 0.819`, so `raw = 100 × 0.819 = 81.9`.
+2. `zoomAt` clamps to 10–600 (81.9 is fine), keeps `floatRef = 81.9` and uses `percent = Math.round(81.9) = 82`.
+3. The box shows 82%. The next notch starts from the unrounded 81.9, not from 82, so tiny touchpad steps (say `deltaY = 3`: factor 0.976) are never lost to rounding.
+4. Scrolling the other way: `deltaY = −100` gives `e^(+0.2) = 1.221`, about 22% bigger per notch.
+
 ### `zoomStep`: Ctrl+ and Ctrl−
 
 ```js file=apps/ZEditor/src/state/useZoom.js fn=zoomStep
 ```
 
 **The Logic:** `ZOOM_STEPS.find((s) => s > current)` is the first listed zoom bigger than now; for zooming out, `[...ZOOM_STEPS].reverse().find((s) => s < current)` copies the list, reverses it, and finds the first smaller one. If there is none, the limit is used.
+
+**Worked example.** The steps are 10, 15, 25, 33, 50, 67, 75, 90, 100, 110, 125 ….
+- At 100%, Ctrl+ finds the first step above 100: **110**. Ctrl− reverses the list and finds the first step below 100: **90**.
+- At 105% (possible after a wheel zoom), Ctrl+ gives 110 and Ctrl− gives 100.
+- At 600% (the top), no step is above, so `.find` returns nothing and `ZOOM_PERCENT.max` (600) is used.
 
 ### The mouse wheel
 
@@ -86,6 +102,11 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** the **artboard** is the page element. To centre it, scroll to its middle minus half the pane (`board.offsetLeft + w / 2 - pane.clientWidth / 2`). Vertically, if the page plus a 40 px gap fits in the pane it is centred too; otherwise its top is placed 40 px below the pane's top edge, so a tall page starts at its top.
 
+**Worked example.** The pane is 1000 × 700 px. The page is 400 × 600 px and starts 300 px from the pane's left and 200 px from its top.
+- `scrollLeft = 300 + 400 / 2 − 1000 / 2 = 0`: the page is already centred horizontally.
+- The page is 600 px tall; 600 + 2 × 40 = 680 ≤ 700, so it fits: `scrollTop = 200 + 600 / 2 − 700 / 2 = 150`.
+- If the page were 900 px tall: 900 + 80 = 980 > 700, so it does not fit and `scrollTop = 200 − 40 = 160`: the page's top edge is 40 px below the top of the pane.
+
 ### The pinch gate
 
 ```js file=shared/js/pinchGate.js fn=createPinchGate
@@ -95,3 +116,9 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `createPinchGate` makes and returns a new function, `gate`, which **remembers** `base` between calls. This is a **closure**: an inner function that keeps the variables of the function that made it.
 - `rawScale` is the fingers' gap now divided by the gap when they landed (1 = unchanged). `Math.log(rawScale)` is the natural logarithm: it turns "twice as big" and "half as big" into numbers of equal size and opposite sign (+0.69, −0.69), so shrinking and growing are judged by the same rule: `Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)`.
 - While the change is below 30% it returns exactly `1`: no zoom. The first time it is above, it saves `base = rawScale`, and from then on returns `rawScale / base`: zoom measured from that moment.
+
+**Worked example.** `threshold = 0.3`. Two fingers land 200 px apart.
+1. They drift to 240 px: `rawScale = 1.2`. `|ln 1.2| = 0.18`, and `ln(1.3) = 0.26`. 0.18 < 0.26, so the gate returns **1**: still just a scroll.
+2. They reach 280 px: `rawScale = 1.4`, `|ln 1.4| = 0.34 > 0.26`. The gate wakes up: `base = 1.4`, and it returns 1.4 / 1.4 = **1**. The zoom has "started", but has not jumped.
+3. They reach 350 px: `rawScale = 1.75`, so the gate returns 1.75 / 1.4 = **1.25**: the zoom is 125% of what it was when the fingers landed.
+4. Pinching *in* works the same way: 140 px gives `rawScale = 0.7`, and `|ln 0.7| = 0.36 > 0.26`, so it wakes up. The logarithm treats a 30% shrink and a 30% growth fairly.
