@@ -4,7 +4,7 @@ Ruler Guide gives you **rulers** along the top and left of the page, and **guide
 
 ## How to use
 
-Open **Page menu → Ruler Guide**. The switch turns the rulers on or off; the ▸ arrow opens its settings.
+Open **Page menu → Ruler Guide**. The switch turns the rulers on or off; **Customize…** next to it opens its settings.
 
 - **Add a guide:** press on the top ruler and drag down for a horizontal line, or on the left ruler and drag right for a vertical one.
 - **Move a guide:** drag it. Drag it back onto its ruler, or off the canvas, to remove it (it turns red and says "Remove guide").
