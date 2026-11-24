@@ -37,7 +37,7 @@
 .ze-ruler-guide-x::after { top: 0; bottom: 0; left: 3px; width: 1px; }
 .ze-ruler-guide-y { left: 0; right: 0; height: 7px; margin-top: -3px; cursor: ns-resize; }
 .ze-ruler-guide-y::after { left: 0; right: 0; top: 3px; height: 1px; }
-.ze-ruler-guide.is-dragging { pointer-events: none; }
+.ze-ruler-guide.is-dragging, .ze-ruler-guide.is-locked { pointer-events: none; } /* locked guides let clicks through to the page */
 .ze-ruler-guide.is-removing::after { background: #f87171; opacity: 0.6; }
 .ze-ruler-readout {
     position: absolute;

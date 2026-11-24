@@ -21,6 +21,7 @@ export function useViewSettings() {
   const [rulerUnit, setRulerUnit] = useState(DEFAULT_RULER_UNIT);
   const [rulerGuides, setRulerGuides] = useState([]);
   const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
+  const [guidesLocked, setGuidesLocked] = useState(false); // frozen: guides can't be dragged, removed or added
   const [layersPosition, setLayersPosition] = useState(null);
   const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
   // Project > Embed Fonts…: save the system fonts the text uses inside the file (ON by default: a project saved before this existed gets them on its next save,
@@ -33,7 +34,7 @@ export function useViewSettings() {
     return {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
-      rulersOn, rulerUnit, rulerGuides, snapToGuidesOn,
+      rulersOn, rulerUnit, rulerGuides, snapToGuidesOn, guidesLocked,
       embedFonts, embedFontsSkip,
     };
   }
@@ -51,6 +52,7 @@ export function useViewSettings() {
     if (s.rulersOn !== undefined) setRulersOn(s.rulersOn);
     if (s.rulerUnit !== undefined) setRulerUnit(s.rulerUnit);
     if (s.snapToGuidesOn !== undefined) setSnapToGuidesOn(s.snapToGuidesOn);
+    setGuidesLocked(s.guidesLocked === true);
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
     setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
@@ -61,7 +63,7 @@ export function useViewSettings() {
     guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
-    rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn,
+    rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip,
     settingsForSave, applySavedSettings,
   };

@@ -13962,6 +13962,7 @@
     const [rulerUnit, setRulerUnit] = useState15(DEFAULT_RULER_UNIT);
     const [rulerGuides, setRulerGuides] = useState15([]);
     const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
+    const [guidesLocked, setGuidesLocked] = useState15(false);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
     const [embedFonts, setEmbedFonts] = useState15(true);
@@ -13980,6 +13981,7 @@
         rulerUnit,
         rulerGuides,
         snapToGuidesOn,
+        guidesLocked,
         embedFonts,
         embedFontsSkip
       };
@@ -13996,6 +13998,7 @@
       if (s.rulersOn !== void 0) setRulersOn(s.rulersOn);
       if (s.rulerUnit !== void 0) setRulerUnit(s.rulerUnit);
       if (s.snapToGuidesOn !== void 0) setSnapToGuidesOn(s.snapToGuidesOn);
+      setGuidesLocked(s.guidesLocked === true);
       setEmbedFonts(s.embedFonts !== false);
       setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
       setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
@@ -14031,6 +14034,8 @@
       setRulerGuides,
       snapToGuidesOn,
       setSnapToGuidesOn,
+      guidesLocked,
+      setGuidesLocked,
       embedFonts,
       setEmbedFonts,
       embedFontsSkip,
@@ -16372,7 +16377,7 @@
       ctx.stroke();
     }
   }
-  function Rulers({ paneRef, zoom, unit, guides, setGuides, pageKey }) {
+  function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey }) {
     const topRef = useRef21(null);
     const leftRef = useRef21(null);
     const [geom, setGeom] = useState21(null);
@@ -16449,6 +16454,7 @@
       });
     }, [geom, pxPerPt, unit, cursor, drag, gap && gap.from, gap && gap.to]);
     function startDrag(e, guide) {
+      if (locked) return;
       e.preventDefault();
       e.stopPropagation();
       const pane = paneRef.current;
@@ -16514,9 +16520,9 @@
       "div",
       {
         key: g.id,
-        className: "ze-ruler-guide ze-ruler-guide-" + g.axis,
+        className: "ze-ruler-guide ze-ruler-guide-" + g.axis + (locked ? " is-locked" : ""),
         style: lineStyle(g.axis, g.pos),
-        title: `${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`,
+        title: locked ? `${formatInUnit(g.pos, unit)} · locked` : `${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`,
         onMouseDown: (e) => startDrag(e, g)
       }
     )), gap && /* @__PURE__ */ React.createElement(
@@ -19589,9 +19595,9 @@
   }
 
   // apps/ZEditor/src/ui/settings/RulersSettings.jsx
-  function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap: snap2, onSnapChange }) {
+  function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap: snap2, onSnapChange, locked, onLockedChange }) {
     const sorted = [...guides].sort((a, b) => a.axis === b.axis ? a.pos - b.pos : a.axis === "x" ? -1 : 1);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap2, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Snap items to guides when moving them")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap2, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Snap items to guides when moving them")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: locked, onChange: (e) => onLockedChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", null, "Lock guides (freeze them where they are)")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: locked || !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
@@ -19612,7 +19618,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "72ffc89"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "457b076"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -19701,7 +19707,9 @@
                 guides: view.rulerGuides,
                 onClearGuides: () => view.setRulerGuides([]),
                 snap: view.snapToGuidesOn,
-                onSnapChange: view.setSnapToGuidesOn
+                onSnapChange: view.setSnapToGuidesOn,
+                locked: view.guidesLocked,
+                onLockedChange: view.setGuidesLocked
               }
             )
           },
@@ -19945,6 +19953,7 @@
         unit: view.rulerUnit,
         guides: view.rulerGuides,
         setGuides: view.setRulerGuides,
+        locked: view.guidesLocked,
         pageKey: selectedPage.key
       }
     ), /* @__PURE__ */ React.createElement("div", { className: "preview-pane", ref: zoom.previewPaneRef }, /* @__PURE__ */ React.createElement("div", { className: "preview-canvas-wrapper" }, /* @__PURE__ */ React.createElement(

@@ -147,7 +147,7 @@ export function App() {
           {selectedPage && view.rulersOn && (
             <Rulers
               paneRef={zoom.previewPaneRef} zoom={zoom.zoomPercent / 100} unit={view.rulerUnit}
-              guides={view.rulerGuides} setGuides={view.setRulerGuides} pageKey={selectedPage.key}
+              guides={view.rulerGuides} setGuides={view.setRulerGuides} locked={view.guidesLocked} pageKey={selectedPage.key}
             />
           )}
           <div className="preview-pane" ref={zoom.previewPaneRef}>
