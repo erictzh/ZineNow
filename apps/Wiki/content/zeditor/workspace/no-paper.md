@@ -36,7 +36,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=growthPlan
 ```
 
-Reading it:
+**The Logic:**
 - It returns `null` ("nothing to do") if the page is not a no-paper page or has no items. `!page.annotations.length` is true for an empty list.
 - `swapped` is true when the page is turned 90° or 270° (`rotation % 180 !== 0`; `%` is the **remainder** after dividing). A turned page swaps width and height, so `dispW` and `dispH` are the sides as they look on screen, scaled to editor pixels by `MAIN_SCALE`.
 - The `for ... of` loop walks every item and keeps four running numbers: the smallest x and y and the largest right and bottom edges. Starting from `Infinity` and `-Infinity` is the classic trick: any real number beats them on the first try. `Number.isFinite` skips items with broken sizes. The result is the **bounding box** of everything on the page.
@@ -48,7 +48,7 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=grownPage
 ```
 
-Reading it: if the canvas grew left or up (`plan.sx || plan.sy` is non-zero), every item is moved by that much with `.map`, so on screen nothing seems to move; otherwise the list is reused untouched. `{ ...page, annotations, width, height, dataUrl }` builds a **new** page object: the `...page` **spread** copies all old fields, and the later ones overwrite. The old page object is never edited, which is what the undo history and the sidebar rely on.
+**The Logic:** if the canvas grew left or up (`plan.sx || plan.sy` is non-zero), every item is moved by that much with `.map`, so on screen nothing seems to move; otherwise the list is reused untouched. `{ ...page, annotations, width, height, dataUrl }` builds a **new** page object: the `...page` **spread** copies all old fields, and the later ones overwrite. The old page object is never edited, which is what the undo history and the sidebar rely on.
 
 ### `useCanvasGrow`: waiting for the right moment
 
@@ -57,7 +57,7 @@ A function whose name starts with `use` and which uses React's memory features i
 ```js file=apps/ZEditor/src/state/useCanvasGrow.js fn=useCanvasGrow
 ```
 
-Reading it:
+**The Logic:**
 - `heldRef` is a ref (a box that does not cause redraws) that says "a mouse button is down". The first `useEffect` adds window listeners in the **capture** phase (`true` as the third argument: they run before any other handler can stop the event).
 - `setTimeout(() => setReleaseTick(...), 0)` waits "zero milliseconds", which really means *after the current event has finished*, so the drag's final update lands first. `releaseTick` is a counter in state: changing it makes React run the second effect again.
 - The second effect (which runs when `pages`, the selected page or `releaseTick` change) first bails out if a button is held or no page is a canvas. It builds a `Map` of pages that need growing (`plans`).

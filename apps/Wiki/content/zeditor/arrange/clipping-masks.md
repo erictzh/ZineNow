@@ -47,14 +47,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/model/clipping.js fn=clipBaseIndex
 ```
 
-Reading it: it starts just below the layer (`index - 1`) and walks **down** the stack (`i--` means "subtract one" each round). The first layer that is not itself clipped is the base; `return i` ends the function with it. If the loop finishes without finding one, `-1` is returned: by convention, "no such position".
+**The Logic:** it starts just below the layer (`index - 1`) and walks **down** the stack (`i--` means "subtract one" each round). The first layer that is not itself clipped is the base; `return i` ends the function with it. If the loop finishes without finding one, `-1` is returned: by convention, "no such position".
 
 ### `canClipAt` and `clipTargets`
 
 ```js file=apps/ZEditor/src/model/clipping.js fn=canClipAt,clipTargets
 ```
 
-Reading it:
+**The Logic:**
 - `canClipAt` is true if the layer exists (`Boolean(items[index])`) and a base exists (`clipBaseIndex(...) >= 0`).
 - `clipTargets` turns the selected ids into rows: `items.map((a, i) => ids.includes(a.id) ? i : -1)` gives the position or −1, and `.filter((i) => i >= 0)` drops the −1s. If several are selected, `rows.slice(1)` skips the first (the lowest), which stays as the base; otherwise the one layer itself is the candidate. A final `.filter` keeps those not already clipped and able to be, and `.map` turns positions back into ids.
 
@@ -63,14 +63,14 @@ Reading it:
 ```js file=apps/ZEditor/src/render/clipMask.js fn=maskShapeOf
 ```
 
-Reading it: `{ ...base, opacity: undefined, ... }` copies the base item but cancels its opacity, blend mode, hidden flag and filter; `filter: { type: "none" }` turns filtering off. The loop sets every property of the stroke, shadow, texture and text-label effects to `undefined`, so the mask is the bare silhouette, fully opaque.
+**The Logic:** `{ ...base, opacity: undefined, ... }` copies the base item but cancels its opacity, blend mode, hidden flag and filter; `filter: { type: "none" }` turns filtering off. The loop sets every property of the stroke, shadow, texture and text-label effects to `undefined`, so the mask is the bare silhouette, fully opaque.
 
 ### `drawClippedItem`: cut with the alpha channel
 
 ```js file=apps/ZEditor/src/render/clipMask.js fn=drawClippedItem
 ```
 
-Reading it:
+**The Logic:**
 - `newCanvas` makes an off-screen canvas the size of the page. The item is drawn on it **alone** (`layer`), with no blend mode yet.
 - `layerCtx.globalCompositeOperation = "destination-in"` changes how the next drawing combines with what is there: **destination-in** keeps the existing pixels only where the new drawing has pixels. Drawing the mask now therefore erases the item everywhere the mask is empty. This is the **Porter-Duff "in"** operation from alpha compositing.
 - `ctx.save()` / `ctx.restore()` bracket the final step so the blend mode set there does not stay on. The finished layer is drawn onto the page with the item's own blend mode (`blendOf(item)`), if it is not "normal".
@@ -80,14 +80,14 @@ Reading it:
 ```js file=apps/ZEditor/src/render/clipMask.js fn=drawPageItem
 ```
 
-Reading it: hidden items return at once. For a clipped item it looks up the base; if a base exists and is visible, `drawClippedItem` draws it; if the base is hidden, the item is not drawn at all (the `return` is reached without drawing); a clipped item with no base falls through to the ordinary `drawAnnotationOnCanvas` at the bottom.
+**The Logic:** hidden items return at once. For a clipped item it looks up the base; if a base exists and is visible, `drawClippedItem` draws it; if the base is hidden, the item is not drawn at all (the `return` is reached without drawing); a clipped item with no base falls through to the ordinary `drawAnnotationOnCanvas` at the bottom.
 
 ### In the live editor: the mask region and the signature
 
 ```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx fn=maskRegion,shapeSignature
 ```
 
-Reading it:
+**The Logic:**
 - `maskRegion` takes the base's bounds and grows them by 3 px (`EDGE_PAD`) for its anti-aliased edge, rounding outward (`Math.floor` for the start, `Math.ceil` for the end), with at least 1 px in size (`Math.max(1, ...)`).
 - `shapeSignature` writes the base out as text (`JSON.stringify`) so two versions can be compared by a simple `===`. Pictures inside it can be megabytes long, so they are replaced by their length plus their last 48 characters: a cheap fingerprint. When the signature changes, the mask is redrawn; when only the *clipped* item moves, it does not.
 
@@ -96,7 +96,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx fn=ClipWrap
 ```
 
-Reading it:
+**The Logic:**
 - `useEffect(..., [signature])` makes a new mask only when the base's signature changes. `Math.sqrt(MASK_MAX_PIXELS / area)` reduces the mask's scale for a huge base so it never exceeds 16 million pixels.
 - `clipMaskCanvas(...)` returns a **promise** (a result that arrives later); `.then((canvas) => ...)` runs when it is ready. `canvas.toBlob` encodes it as a PNG file in memory, and `URL.createObjectURL(blob)` makes a temporary address for it, usable as a CSS image.
 - `cancelled` guards against a late result for an outdated base. The old address is released with `URL.revokeObjectURL` one second later, after the new mask has been painted, so memory is freed without a flash.

@@ -48,14 +48,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useZoom.js fn=scrollPointTo
 ```
 
-Reading it: the pane is a scrollable area; `scrollLeft`/`scrollTop` say how far it is scrolled. A page point `(x, y)` at the new zoom sits at `x × percent` pixels from the page's own corner, plus the page's offset in the pane (`board.offsetLeft`). To put it back at screen position `(fx, fy)`, scroll by that sum minus `fx`. The anchor idea is simply: *remember the page point, zoom, then scroll so it is under the same screen spot*.
+**The Logic:** the pane is a scrollable area; `scrollLeft`/`scrollTop` say how far it is scrolled. A page point `(x, y)` at the new zoom sits at `x × percent` pixels from the page's own corner, plus the page's offset in the pane (`board.offsetLeft`). To put it back at screen position `(fx, fy)`, scroll by that sum minus `fx`. The anchor idea is simply: *remember the page point, zoom, then scroll so it is under the same screen spot*.
 
 ### `zoomAt`: one zoom request
 
 ```js file=apps/ZEditor/src/state/useZoom.js fn=zoomAt
 ```
 
-Reading it:
+**The Logic:**
 - `Math.min(max, Math.max(min, raw))` **clamps** the request to 10–600%. The unrounded value is kept in `floatRef` so tiny touchpad steps add up; `Math.round` makes the whole percentage shown.
 - If the rounded value equals the zoom already asked for, it returns early (`return`) and does nothing.
 - `waiting` is the anchor from a still-undrawn zoom: if wheel events arrive faster than the page can redraw, the *first* anchor is kept (`waiting ? { x: waiting.x, y: waiting.y } : pagePointAt(fx, fy)`), so the picture does not drift. `...` (the **spread** operator) copies an object's fields into a new one.
@@ -66,14 +66,14 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useZoom.js fn=zoomStep
 ```
 
-Reading it: `ZOOM_STEPS.find((s) => s > current)` is the first listed zoom bigger than now; for zooming out, `[...ZOOM_STEPS].reverse().find((s) => s < current)` copies the list, reverses it, and finds the first smaller one. If there is none, the limit is used.
+**The Logic:** `ZOOM_STEPS.find((s) => s > current)` is the first listed zoom bigger than now; for zooming out, `[...ZOOM_STEPS].reverse().find((s) => s < current)` copies the list, reverses it, and finds the first smaller one. If there is none, the limit is used.
 
 ### The mouse wheel
 
 ```js file=apps/ZEditor/src/state/useZoom.js fn=onWheel
 ```
 
-Reading it:
+**The Logic:**
 - It only reacts when Ctrl or Cmd is held (`e.ctrlKey || e.metaKey`) and the pointer is over the page area (`closest(".ze-ruler-frame")`).
 - `e.preventDefault()` stops the browser zooming the whole window. That is why the listener is registered with `{ passive: false }`: browsers treat wheel listeners as "will never cancel" for speed unless told otherwise.
 - `deltaMode` says whether the wheel reports pixels, lines or pages; the code converts to pixels.
@@ -84,14 +84,14 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useZoom.js fn=centerArtboard
 ```
 
-Reading it: the **artboard** is the page element. To centre it, scroll to its middle minus half the pane (`board.offsetLeft + w / 2 - pane.clientWidth / 2`). Vertically, if the page plus a 40 px gap fits in the pane it is centred too; otherwise its top is placed 40 px below the pane's top edge, so a tall page starts at its top.
+**The Logic:** the **artboard** is the page element. To centre it, scroll to its middle minus half the pane (`board.offsetLeft + w / 2 - pane.clientWidth / 2`). Vertically, if the page plus a 40 px gap fits in the pane it is centred too; otherwise its top is placed 40 px below the pane's top edge, so a tall page starts at its top.
 
 ### The pinch gate
 
 ```js file=shared/js/pinchGate.js fn=createPinchGate
 ```
 
-Reading it:
+**The Logic:**
 - `createPinchGate` makes and returns a new function, `gate`, which **remembers** `base` between calls. This is a **closure**: an inner function that keeps the variables of the function that made it.
 - `rawScale` is the fingers' gap now divided by the gap when they landed (1 = unchanged). `Math.log(rawScale)` is the natural logarithm: it turns "twice as big" and "half as big" into numbers of equal size and opposite sign (+0.69, −0.69), so shrinking and growing are judged by the same rule: `Math.abs(Math.log(rawScale)) < Math.log(1 + threshold)`.
 - While the change is below 30% it returns exactly `1`: no zoom. The first time it is above, it saves `base = rawScale`, and from then on returns `rawScale / base`: zoom measured from that moment.

@@ -35,7 +35,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useOnionGhost.js fn=useOnionGhost
 ```
 
-Reading it:
+**The Logic:**
 - `useState(null)` holds the ghost picture (or nothing). A **data URL** (`canvas.toDataURL()`) is an image written out as one long piece of text that an `<img>` can show directly.
 - `useEffect(() => {...}, [onionSkinOn, selectedIdx])` runs when those two values change, **and only then** (the second argument lists what it depends on). Deliberately, `pages` is not in the list: that is what keeps it from redrawing on every mouse movement.
 - The first line is a **guard**: switched off, no page selected, or the first page (`selectedIdx === 0`, no previous one): clear the ghost and stop.

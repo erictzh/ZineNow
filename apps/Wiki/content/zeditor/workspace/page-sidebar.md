@@ -46,7 +46,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useLiveThumbs.js fn=needsLive,isStale
 ```
 
-Reading it:
+**The Logic:**
 - `needsLive` says a page needs one if it has at least one item (`p.annotations.length > 0`) **or** a filter is on. `p.annotations && ...` first checks the list exists, to avoid an error on a page without one.
 - `isStale` looks up what the thumbnail was last drawn from (`m`) in a `Map` (a dictionary from page key to a record). It is stale if there is no record, or if the annotation list, filter or base picture are **not the same object** (`!==`). In JavaScript, `!==` on objects compares **identity**, not content, so it is instant. That only works because edits always make new objects (see [State hooks](zeditor/workspace/state-hooks)).
 
@@ -55,7 +55,7 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useLiveThumbs.js fn=schedule
 ```
 
-Reading it:
+**The Logic:**
 - It does nothing if a redraw is already **running** (`running.current`), a timer is already waiting, or the sidebar is gone (`alive`).
 - `nextStale()` picks a page to draw (the one you are editing first). If none, stop.
 - `gap` is how long to wait. For the edited page it is the larger of 150 ms and four times how long the last redraw took (`lastMs.current * SLOW_FACTOR`): a **throttle** that slows down automatically when drawing is expensive.
@@ -66,14 +66,14 @@ Reading it:
 ```js file=apps/ZEditor/src/state/useLiveThumbs.js fn=nextStale
 ```
 
-Reading it: it loops over all pages (`for (const p of ps)`), skips the ones that need nothing (`continue` jumps to the next round), returns the selected page at once if it is stale, and otherwise remembers the first stale one in `first`. `!first` is true while `first` is still empty.
+**The Logic:** it loops over all pages (`for (const p of ps)`), skips the ones that need nothing (`continue` jumps to the next round), returns the selected page at once if it is stale, and otherwise remembers the first stale one in `first`. `!first` is true while `first` is still empty.
 
 ### Auto-scrolling while you drag
 
 ```js file=apps/ZEditor/src/ui/sidebar/Sidebar.jsx fn=handleContainerDragOver
 ```
 
-Reading it:
+**The Logic:**
 - `getBoundingClientRect()` gives the list's position on screen; `e.clientY` is the pointer's. The two distances tell how close the pointer is to the top and bottom edge.
 - Inside 44 pixels of an edge it sets a direction in a ref (`-1` up, `1` down, `0` none). A separate loop (`requestAnimationFrame`, which runs once per screen refresh) reads that direction and moves `scrollTop` by 4 pixels each frame. Splitting "decide direction" from "do the scrolling" keeps the movement smooth even when the pointer is still.
 
@@ -85,7 +85,7 @@ Reading it:
         setDragOverInfo({ idx, before });
 ```
 
-Reading it: `rect.top + rect.height / 2` is the vertical middle of the thumbnail under the pointer. If the pointer is above it, the drop line goes before that page, otherwise after it. `setDragOverInfo` stores that, and React draws the drop line.
+**The Logic:** `rect.top + rect.height / 2` is the vertical middle of the thumbnail under the pointer. If the pointer is above it, the drop line goes before that page, otherwise after it. `setDragOverInfo` stores that, and React draws the drop line.
 
 ### Sharp thumbnails: drawn big, shown small
 
@@ -93,4 +93,4 @@ Reading it: `rect.top + rect.height / 2` is the vertical middle of the thumbnail
         <img srcSet={src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x"} draggable="false" alt={p.isBlank ? "Blank page" : "Page " + p.pageNumber} />
 ```
 
-Reading it: `srcSet` tells the browser "this picture has 1.5 times the pixels" (0.45 ÷ 0.3). On a **high-density** (retina) screen, where one CSS pixel is several real pixels, it uses them all, so the thumbnail is crisp. `alt` is the text read by screen readers.
+**The Logic:** `srcSet` tells the browser "this picture has 1.5 times the pixels" (0.45 ÷ 0.3). On a **high-density** (retina) screen, where one CSS pixel is several real pixels, it uses them all, so the thumbnail is crisp. `alt` is the text read by screen readers.

@@ -41,14 +41,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/model/noise.js fn=seededNoise
 ```
 
-Reading it: `Math.sin(...)` of a big, odd-looking number, multiplied by 43758.5453, gives a value that jumps around wildly for neighbouring inputs. `v - Math.floor(v)` keeps only the **fractional part** (the digits after the decimal point), a number from 0 up to 1. The result looks random but is a pure function: the same inputs `(i, variation, j)` always give the same number. The magic numbers 12.9898, 78.233 and 43758.5453 are a famous recipe from computer graphics for scrambling. `j = 0` is a **default parameter**: used when the caller leaves it out.
+**The Logic:** `Math.sin(...)` of a big, odd-looking number, multiplied by 43758.5453, gives a value that jumps around wildly for neighbouring inputs. `v - Math.floor(v)` keeps only the **fractional part** (the digits after the decimal point), a number from 0 up to 1. The result looks random but is a pure function: the same inputs `(i, variation, j)` always give the same number. The magic numbers 12.9898, 78.233 and 43758.5453 are a famous recipe from computer graphics for scrambling. `j = 0` is a **default parameter**: used when the caller leaves it out.
 
 ### `applyXerox`
 
 ```js file=apps/ZEditor/src/render/filters/xerox.js fn=applyXerox
 ```
 
-Reading it, in order:
+**The Logic**, in order:
 - **Settings.** `controlValues(...)` returns the slider values; they are turned into working numbers: `gain = 1 + contrast / 100 * 15` (1 to 16), `cutoff = 1 - exposure / 100`, and the other sliders become fractions from 0 to 1. `imageW`/`imageH` are the size in editor pixels (`width / scaleFactor`); `wearZone` is 10% of the shorter side.
 - **Streaks.** `streakShift` is a `Float32Array` (a typed list of decimal numbers) with one entry per pixel column. Each column hashes its position (`Math.floor(x / scaleFactor / 2.5)`: a streak is about 2.5 editor pixels wide). If the noise is in the top `darkShare` of its range the column is darkened (negative shift), if in the bottom `paleShare` lightened. The shares come from the slider, so the slider chooses *how many* columns, and each column's own noise *how strongly*.
 - **The pixel loop.** `i = (y * width + x) * 4` finds a pixel in the flat array (row number times row width plus column, times four numbers per pixel). `lum` is its brightness as 0–1.

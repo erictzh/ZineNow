@@ -53,7 +53,7 @@ An **object** is a bundle of named values: `on`, `from`, `to` (0 means "to the l
 ```js file=apps/ZEditor/src/model/pageNumbers.js fn=pageNumberSpec
 ```
 
-Reading it:
+**The Logic:**
 - It returns `null` (nothing to print) in three cases: the setting is off, there is no page, or the page's position is outside the range. `pageIdx` counts from 0 but people count pages from 1, so `position = pageIdx + 1`.
 - `last` is the last numbered page: the `to` setting, but never more than the page count (`Math.min`), or the final page if `to` is 0.
 - `number = settings.first + (position - settings.from)`: the first numbered page shows `first`, the next one more, and so on.
@@ -79,4 +79,4 @@ Reading it:
       )}
 ```
 
-Reading it: `{numberSpec && ...}` draws nothing when the value is `null`. `[numberSpec.vertical]: value` is a **computed property name**: if `vertical` is `"bottom"`, this means `bottom: value`, placing the text that far from the bottom edge. `marginIn * 72 * MAIN_SCALE` is inches converted to points, then to editor pixels. Centred numbers stretch from `left: 0` to `right: 0` and centre their text; others are placed at `left` or `right` the same distance in.
+**The Logic:** `{numberSpec && ...}` draws nothing when the value is `null`. `[numberSpec.vertical]: value` is a **computed property name**: if `vertical` is `"bottom"`, this means `bottom: value`, placing the text that far from the bottom edge. `marginIn * 72 * MAIN_SCALE` is inches converted to points, then to editor pixels. Centred numbers stretch from `left: 0` to `right: 0` and centre their text; others are placed at `left` or `right` the same distance in.

@@ -58,7 +58,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
   appRef.current = app;
 ```
 
-Reading it: `useRef(app)` makes a box holding the app's state; the second line puts the newest state into the box on every redraw. The listener is only installed once, but it reads `appRef.current` each time a key is pressed, so it always sees fresh state. Without this, the listener would see the **stale** values from the moment it was installed (a "stale closure").
+**The Logic:** `useRef(app)` makes a box holding the app's state; the second line puts the newest state into the box on every redraw. The listener is only installed once, but it reads `appRef.current` each time a key is pressed, so it always sees fresh state. Without this, the listener would see the **stale** values from the moment it was installed (a "stale closure").
 
 ### The first checks: Save, then "am I typing?"
 
@@ -76,7 +76,7 @@ Reading it: `useRef(app)` makes a box holding the app's state; the second line p
       const mod = e.ctrlKey || e.metaKey;
 ```
 
-Reading it:
+**The Logic:**
 - `e` is the **event**: an object describing the key press. `e.preventDefault()` stops the browser doing its own thing (here, the "Save page" dialog). `e.key.toLowerCase()` makes "S" and "s" the same; `e.metaKey` is the Cmd key on a Mac.
 - The `…` row in the block marks where lines in between are left out. These are the next checks, further down the same function.
 - `e.target` is the element that had the focus. If it is a text field (`INPUT`, `TEXTAREA`, or any `isContentEditable` element), the function **returns**, ending the handler so typing, and the browser's own undo, work normally. This is called an **early return** or **guard clause**.
@@ -88,7 +88,7 @@ Reading it:
         if ((key === "z" && e.shiftKey) || key === "y") { e.preventDefault(); history.handleRedo(); return; }
 ```
 
-Reading it: Z without Shift is undo; Z with Shift, or Y, is redo (`!` means "not"). Each line stops the browser's default, runs the action and `return`s so no later line also reacts.
+**The Logic:** Z without Shift is undo; Z with Shift, or Y, is redo (`!` means "not"). Each line stops the browser's default, runs the action and `return`s so no later line also reacts.
 
 ### Copy
 
@@ -104,7 +104,7 @@ Reading it: Z without Shift is undo; Z with Shift, or Y, is redo (`!` means "not
         }
 ```
 
-Reading it:
+**The Logic:**
 - `.find(...)` returns the first item with the selected id, or nothing.
 - `JSON.parse(JSON.stringify(ann))` is the common way to make a **deep copy**: `JSON.stringify` writes the object out as text, `JSON.parse` reads it back as a brand-new object that shares nothing with the original. Editing the copy can never change the original.
 - It is stored in `clipboardRef`, a ref, not state: copying should not make the screen redraw.
@@ -122,11 +122,11 @@ Reading it:
       }
 ```
 
-Reading it: the first line is a **lookup table**: an object whose keys are key names and whose values are `[dx, dy]` pairs. `[key]` at the end picks the entry for the pressed key; for any other key the result is `undefined`, which `if (nudge && ...)` treats as false. `step` is 10 with Shift, else 1. The selected item and the others in `selectedAnnIds` are collected into one list, and moved together.
+**The Logic:** the first line is a **lookup table**: an object whose keys are key names and whose values are `[dx, dy]` pairs. `[key]` at the end picks the entry for the pressed key; for any other key the result is `undefined`, which `if (nudge && ...)` treats as false. `step` is 10 with Shift, else 1. The selected item and the others in `selectedAnnIds` are collected into one list, and moved together.
 
 ### Pasting a picture from the clipboard
 
 ```js file=apps/ZEditor/src/state/useKeyboardShortcuts.js fn=handlePaste
 ```
 
-Reading it: `e.clipboardData.items` lists what is on the clipboard. `Array.from(items).find(...)` converts that list into a real array and finds the first whose `type` starts with `image/` (a **MIME type**, the standard label for a kind of file, like `image/png`). `getAsFile()` hands back the picture as a file, which is added to the page like any picture. This needs its own `paste` listener because only that event is allowed to read clipboard files.
+**The Logic:** `e.clipboardData.items` lists what is on the clipboard. `Array.from(items).find(...)` converts that list into a real array and finds the first whose `type` starts with `image/` (a **MIME type**, the standard label for a kind of file, like `image/png`). `getAsFile()` hands back the picture as a file, which is added to the page like any picture. This needs its own `paste` listener because only that event is allowed to read clipboard files.

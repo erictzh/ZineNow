@@ -43,7 +43,7 @@ Every menu in the bar (Page, Project, Export) is this one component. A **compone
 ```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx fn=TopMenu
 ```
 
-Reading it:
+**The Logic:**
 - `useState(false)` creates a piece of memory called **state**: `open` is its current value, `setOpen` changes it (and makes React redraw). Menus start closed.
 - `useRef` makes a **ref**: a box that survives redraws and can hold a pointer to a real page element (`containerRef`) or any value, without causing a redraw.
 - `useEffect(() => {...}, [open])` runs code **after** the screen is drawn, and again whenever `open` changes. This one adds two **event listeners** (`mousedown`, `keydown`) only while the menu is open. The function it returns, `return () => {...}`, is the **cleanup**: React calls it to remove the listeners again, so none are left behind.
@@ -57,14 +57,14 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx fn=MenuItem
 ```
 
-Reading it: the curly braces in the parameters, `{ label, detail, ... }`, **destructure** one object into separate variables. `onClick={() => { close(); onClick(); }}` is an **arrow function**: pressing the row closes the menu first, then runs the real action. `{detail && <span>...}` shows the second line only if there is one.
+**The Logic:** the curly braces in the parameters, `{ label, detail, ... }`, **destructure** one object into separate variables. `onClick={() => { close(); onClick(); }}` is an **arrow function**: pressing the row closes the menu first, then runs the real action. `{detail && <span>...}` shows the second line only if there is one.
 
 ### `PageMenuBody`: rows as data
 
 ```js file=apps/ZEditor/src/ui/topbar/PageMenu.jsx fn=PageMenuBody
 ```
 
-Reading it:
+**The Logic:**
 - `rows` is an array of plain **objects** (`{ key, label, checked, onToggle, settings }`), built in `Topbar.jsx`. The menu does not know what a "Filter" is: it just draws one row per object.
 - `customizing` remembers which row's settings are open. `rows.find(...)` looks for the object with that key; if there is one, the menu draws its `settings` with a back arrow instead of the list.
 - `rows.map((row) => ...)` turns each data object into a screen element; `key={row.key}` helps React tell the rows apart.
@@ -77,7 +77,7 @@ This function is in the build script, not in the app. It runs when the app is bu
 ```js file=tools/build.mjs fn=buildNumberFor
 ```
 
-Reading it:
+**The Logic:**
 - It lists every file that decides how the app looks and behaves (`src/`, `styles/`, `index.html`, `shared/`), sorted so the order never varies.
 - For each file it feeds the file's name and its text (with Windows line endings `\r\n` turned into `\n`, so the number is the same on every computer) into a **SHA-1 hash**. A hash function turns any amount of text into a short fixed-size fingerprint; change one character and the fingerprint changes completely, while the same text always gives the same fingerprint.
 - `.digest("hex").slice(0, 7)` writes the fingerprint in hexadecimal and keeps its first 7 characters: the build number you see under the app name.

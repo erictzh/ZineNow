@@ -42,14 +42,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/ui/TouchBar.jsx fn=pressKey
 ```
 
-Reading it: `new KeyboardEvent("keydown", {...})` makes a pretend key press, and `window.dispatchEvent` sends it, so the one real keyboard handler picks it up. `...mods` spreads extra flags (like `ctrlKey: true`) into the event. `bubbles: true` lets the event travel up through the page like a real one.
+**The Logic:** `new KeyboardEvent("keydown", {...})` makes a pretend key press, and `window.dispatchEvent` sends it, so the one real keyboard handler picks it up. `...mods` spreads extra flags (like `ctrlKey: true`) into the event. `bubbles: true` lets the event travel up through the page like a real one.
 
 ### Sticky Shift and Alt
 
 ```js file=apps/ZEditor/src/ui/touchInput.js fn=setTouchModifier,withTouchModifier
 ```
 
-Reading it:
+**The Logic:**
 - `heldKeys` is a plain object living at the top of the file: shared by every function in it. `setTouchModifier("shift", true)` writes into it (`heldKeys[name]` uses the name as a key; `Boolean(on)` forces a true/false value).
 - `withTouchModifier` answers "should this click count as Shift/Alt-held?": `real` is the actual key (`e[name + "Key"]` builds `shiftKey` or `altKey` from the name). The toggle only counts while `<html data-ze-input="touch">`, so a toggle left on never affects the mouse.
 
@@ -58,7 +58,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/touchInput.js fn=mouseEventFrom,send
 ```
 
-Reading it:
+**The Logic:**
 - `mouseEventFrom` builds a fake `MouseEvent` from a finger's **pointer event**: same position (`clientX`, `clientY`), always the left button (`button: 0`), and `buttons: 1` (a button is held) except on release. `...extra` lets the caller add or override fields.
 - `shiftKey: Boolean(e.shiftKey) || heldKeys.shift`: Shift counts if the real key *or* the touch toggle is on (`||` means "or").
 - `send` delivers the event to the element that was pressed; `el.isConnected` is false if a redraw has since removed that element, and then it goes to the `document` instead so nothing is lost.
@@ -68,4 +68,4 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/touchInput.js fn=rulerNear
 ```
 
-Reading it: it loops over both rulers and measures each with `getBoundingClientRect()`. `inside` is a **rectangle test**: x and y between the edges, but with 12 px (`RULER_SLOP_PX`) of extra reach below the top ruler or right of the left one, because a finger reports its contact point slightly away from where it appears to touch. It returns the first ruler that matches, or `null`.
+**The Logic:** it loops over both rulers and measures each with `getBoundingClientRect()`. `inside` is a **rectangle test**: x and y between the edges, but with 12 px (`RULER_SLOP_PX`) of extra reach below the top ruler or right of the left one, because a finger reports its contact point slightly away from where it appears to touch. It returns the first ruler that matches, or `null`.

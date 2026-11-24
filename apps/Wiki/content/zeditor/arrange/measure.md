@@ -47,7 +47,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/model/rulers.js fn=measureBetween
 ```
 
-Reading it:
+**The Logic:**
 - `dx` and `dy` are the horizontal and vertical legs between the points: end minus start.
 - `Math.hypot(dx, dy)` is the square root of `dx² + dy²`: the **Pythagorean** distance, the straight line between the points.
 - `Math.atan2(-dy, dx)` is the angle. The minus sign flips `dy` because screen y grows downwards but paper angles grow upwards. Multiplying by `180 / Math.PI` converts radians to degrees; `Math.round(... * 10) / 10` rounds to one decimal. `(deg + 360) % 360` turns the −180…180 result into 0…360.
@@ -58,21 +58,21 @@ Reading it:
 ```js file=apps/ZEditor/src/model/rulers.js fn=constrainTo45
 ```
 
-Reading it: `step` is π/4 radians (45°). `Math.atan2(dy, dx) / step` says "how many 45° steps is this angle?"; `Math.round(...)` picks the nearest whole number of steps; multiplying back by `step` gives the snapped angle `a`. The result keeps the **same length** `len` (from `Math.hypot`) but along that angle: `from.x + cos(a) · len`, `from.y + sin(a) · len`.
+**The Logic:** `step` is π/4 radians (45°). `Math.atan2(dy, dx) / step` says "how many 45° steps is this angle?"; `Math.round(...)` picks the nearest whole number of steps; multiplying back by `step` gives the snapped angle `a`. The result keeps the **same length** `len` (from `Math.hypot`) but along that angle: `from.x + cos(a) · len`, `from.y + sin(a) · len`.
 
 ### `measurePoint`: where a click lands
 
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=measurePoint
 ```
 
-Reading it: `let p = overlayPoint(ev)` is the pointer in page coordinates (`let` allows reassigning later, unlike `const`). If there are guides and Alt is not held (`!ev.altKey`), the point is treated as a box of zero size and `snapToGuides` returns the nudge, which is added. Then, if Shift is held and a start point exists (`ev.shiftKey && from`), `constrainTo45` is applied. `cond ? a : b` returns one of the two.
+**The Logic:** `let p = overlayPoint(ev)` is the pointer in page coordinates (`let` allows reassigning later, unlike `const`). If there are guides and Alt is not held (`!ev.altKey`), the point is treated as a box of zero size and `snapToGuides` returns the nudge, which is added. Then, if Shift is held and a start point exists (`ev.shiftKey && from`), `constrainTo45` is applied. `cond ? a : b` returns one of the two.
 
 ### `startMeasure`: the click logic
 
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=startMeasure
 ```
 
-Reading it:
+**The Logic:**
 - It uses the state `measure`, which is `null` (nothing), or `{ a, b, pending }`. `pending` means "point a is set, waiting for the second click".
 - Three cases, each ending in `return`: if pending, this click is the **second** (it sets `b`); if a measurement exists, this is the **third** click and clears it; otherwise it is the first click.
 - On a first press it sets `a`, then calls `trackPointerDrag` (see [Move, resize and rotate](zeditor/arrange/move-resize-rotate)). If the pointer moves further than `DRAG_THRESHOLD`, it is a drag and `b` follows the pointer; if it was only a click (`!moved`), `pending: true` is set and the next click fixes `b`.

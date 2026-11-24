@@ -54,3 +54,4 @@ Home page: the gear panel has a "Tutorial / Wiki" link (after "Third-party notic
 - Every block shows its **file path and line numbers** (the build adds them: a caption with the path and "lines 12–31", and a gutter with the real numbers).
 - After each block, explain it so that a layman learns the **jargon and the logic** like an IT professional: name the technique, define each term the first time (function, parameter, array, loop, closure, hook, state, ref, clamp, hash, alpha channel, etc.), then walk through the code in order, and say why it is written that way.
 - Prose must not quote line numbers (they change); it refers to names and shapes of code instead.
+- The walkthrough after each block starts with the bold label **The Logic:** (the user's wording).

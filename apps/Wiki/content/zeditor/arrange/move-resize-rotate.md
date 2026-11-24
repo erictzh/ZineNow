@@ -46,7 +46,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/ui/pointer.js fn=trackPointerDrag
 ```
 
-Reading it:
+**The Logic:**
 - It takes two **callbacks**: functions handed in to be called later. `onMove` runs on every mouse movement, the optional `onUp` once at the end.
 - `move` and `up` are small functions defined inside. `window.addEventListener("mousemove", move)` tells the browser "call `move` whenever the mouse moves anywhere in the window". Attaching to the window (not the item) is why dragging keeps working when the pointer leaves the page.
 - When the button is released, `up` runs: it **removes both listeners** (so nothing keeps running), then calls `onUp` if one was given (`if (onUp)`). Because `move` and `up` are the very same function objects that were added, `removeEventListener` can find and remove them.
@@ -56,21 +56,21 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/pointer.js fn=dragDeltaFrom
 ```
 
-Reading it: it receives the event that started the drag and returns **a function** (it builds the function `(ev) => ...`, which remembers `startX`, `startY`, `zoom` and `angle`: a **closure**). Each later mouse event goes through it: the pointer's change since the start is divided by `zoom` (screen pixels to page pixels), then rotated by `-angle` so the result is expressed along the item's own axes.
+**The Logic:** it receives the event that started the drag and returns **a function** (it builds the function `(ev) => ...`, which remembers `startX`, `startY`, `zoom` and `angle`: a **closure**). Each later mouse event goes through it: the pointer's change since the start is divided by `zoom` (screen pixels to page pixels), then rotated by `-angle` so the result is expressed along the item's own axes.
 
 ### `rotatePoint`: the rotation formula
 
 ```js file=apps/ZEditor/src/model/geometry.js fn=rotatePoint
 ```
 
-Reading it: `degrees * Math.PI / 180` converts to **radians**. The classic 2D rotation is `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`: that is the returned pair `[..., ...]` (an array of two numbers). On a screen, y points down, so positive angles turn **clockwise**.
+**The Logic:** `degrees * Math.PI / 180` converts to **radians**. The classic 2D rotation is `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`: that is the returned pair `[..., ...]` (an array of two numbers). On a screen, y points down, so positive angles turn **clockwise**.
 
 ### `resizedBox`: resizing while the opposite side stays put
 
 ```js file=apps/ZEditor/src/model/geometry.js fn=resizedBox
 ```
 
-Reading it:
+**The Logic:**
 - `handle` is a compass name like `"se"`. `handle.includes("e")` asks whether the letter is in it, giving the sign: +1 (east or south), −1 (west or north), 0 (that axis not moved). `signX * dx` is how the width changes.
 - With `keepAspect`, the two scale factors are compared; for a corner the bigger wins, for a side the one that moves. `minScale` stops the box shrinking below 20 px on its short side. Without it, each side is just clamped to at least `minSize`.
 - **The anchor trick.** A box is stored by its top-left corner but rotates about its centre. To keep the opposite side fixed after a resize, the code computes the anchor's position *relative to the centre* before and after (`oldOffset`, `newOffset`, each rotated by the box's angle) and shifts the centre by the difference. The final line turns the centre back into a top-left corner: `centerX - width / 2`.
@@ -80,7 +80,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/canvas/ResizeHandles.jsx fn=startRotateDrag
 ```
 
-Reading it:
+**The Logic:**
 - `e.currentTarget.parentElement.getBoundingClientRect()` measures the item's box on screen; its middle is `centerX`, `centerY`. (The knob's parent is the item, already rotated, so the box is centred on the item.)
 - `Math.atan2(y, x)` returns the angle of a direction in radians, correct in all four quadrants (plain division would not tell "up-left" from "down-right"). Times `180 / Math.PI` gives degrees; `+ 90` makes straight up the zero point.
 - With Shift the angle is `Math.round(degrees / 15) * 15`: divide, round to a whole number, multiply back, which snaps to the nearest 15°.
@@ -91,7 +91,7 @@ Reading it:
 ```js file=apps/ZEditor/src/ui/canvas/SelectionTurn.jsx fn=selectionTurnFor,startSelectionTurn
 ```
 
-Reading it:
+**The Logic:**
 - `selectionTurnFor` decides whether a knob is needed: only for the Move tool, and for more than one item or a single stroke. `.filter` keeps visible, unlocked, selected items.
 - It computes the four edges of the whole selection with `Math.min(...)` and `Math.max(...)` over all the items' bounding boxes (`...bounds.map(...)` spreads a list into separate arguments), and returns the box and its centre `(cx, cy)`.
 - `startSelectionTurn` records the pointer's angle at the press (`startAngle`). On each move it computes the **change** in angle (`delta`), optionally snapped to 15°, and asks `onRotateAnnotations` to turn all the items about the centre by it. Using the change, not the absolute angle, means grabbing the knob does not make the items jump.

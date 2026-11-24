@@ -51,28 +51,28 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/render/filters/halftone.js fn=BAYER_8X8,CMYK_PLATES
 ```
 
-Reading it: `BAYER_8X8` is an array of arrays: an 8 × 8 grid of the numbers 0–63, in the **Bayer** order that spreads thresholds evenly. `CMYK_PLATES` is a list of four small objects, one per ink, each with its colour, extra angle and the colour channel it measures (0 = cyan … 3 = black).
+**The Logic:** `BAYER_8X8` is an array of arrays: an 8 × 8 grid of the numbers 0–63, in the **Bayer** order that spreads thresholds evenly. `CMYK_PLATES` is a list of four small objects, one per ink, each with its colour, extra angle and the colour channel it measures (0 = cyan … 3 = black).
 
 ### `cmykCoverage`: how much of one ink is needed
 
 ```js file=apps/ZEditor/src/render/filters/halftone.js fn=cmykCoverage
 ```
 
-Reading it: red, green and blue are numbers from 0 to 1. `k = 1 - Math.max(r, g, b)` is the black needed: the darkest-possible colour is the one where even the strongest channel is weak. For black (`channel === 3`) that is the answer. For pure black (`k >= 1`) the colours need no ink. Otherwise `(1 - [r, g, b][channel] - k) / (1 - k)` gives the share of cyan (channel 0, from red), magenta (1, from green) or yellow (2, from blue): `[r, g, b][channel]` picks one of the three numbers by position.
+**The Logic:** red, green and blue are numbers from 0 to 1. `k = 1 - Math.max(r, g, b)` is the black needed: the darkest-possible colour is the one where even the strongest channel is weak. For black (`channel === 3`) that is the answer. For pure black (`k >= 1`) the colours need no ink. Otherwise `(1 - [r, g, b][channel] - k) / (1 - k)` gives the share of cyan (channel 0, from red), magenta (1, from green) or yellow (2, from blue): `[r, g, b][channel]` picks one of the three numbers by position.
 
 ### `drawHalftoneScreen`: one plate or four
 
 ```js file=apps/ZEditor/src/render/filters/halftone.js fn=drawHalftoneScreen
 ```
 
-Reading it: it paints the whole canvas white (the paper), then calls `drawHalftonePlate` once for a single ink, or, for full colour, once per plate. `ctx.save()` and `ctx.restore()` bracket a change of drawing state so it does not leak out. `globalCompositeOperation = "multiply"` makes each new plate **multiply** with what is already there, like transparent ink overprinting: the mix of cyan and yellow is green. `(angle + plate.angleOffset) % 180` tilts each plate differently (the remainder keeps it under 180).
+**The Logic:** it paints the whole canvas white (the paper), then calls `drawHalftonePlate` once for a single ink, or, for full colour, once per plate. `ctx.save()` and `ctx.restore()` bracket a change of drawing state so it does not leak out. `globalCompositeOperation = "multiply"` makes each new plate **multiply** with what is already there, like transparent ink overprinting: the mix of cyan and yellow is green. `(angle + plate.angleOffset) % 180` tilts each plate differently (the remainder keeps it under 180).
 
 ### `drawHalftonePlate`: the heart of it
 
 ```js file=apps/ZEditor/src/render/filters/halftone.js fn=drawHalftonePlate
 ```
 
-Reading it, in order:
+**The Logic**, in order:
 - **Setup.** `controlValues` reads the settings. `maxRadius = cellSize * 0.62` is the biggest a dot can be. `radians = angle * Math.PI / 180` converts degrees to radians (the unit trigonometry uses; π radians = 180°). `cos` and `sin` of that angle are the numbers that rotate a point.
 - **Covering a rotated grid.** The grid lives in a rotated frame `(u, v)`. `us` and `vs` rotate the four canvas corners into it; their smallest and largest values give the range the loops must cover. Without this, the rotated grid would leave empty triangles at the corners.
 - **Batching.** A canvas **path** is a shape under construction; `ctx.fill()` paints it. Filling 100,000 dots one by one is slow, so lines and dither squares are collected into one path and filled every 4096 (`batchSize`). `markAdded` counts them. Pure dots are filled one at a time, because overlapping dots build up tone.

@@ -40,14 +40,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/model/guides.js fn=mmText,sized
 ```
 
-Reading it: `sized` is a function that builds one preset object. `({ ... })` with round brackets around the braces is how an arrow function **returns an object** directly. `label` is a **template literal**: text in backticks where `${...}` inserts a value, so you get "A5 (148mm × 210mm)". `mmText` multiplies inches by 254, rounds, and divides by 10: that is inches × 25.4 mm, rounded to one decimal.
+**The Logic:** `sized` is a function that builds one preset object. `({ ... })` with round brackets around the braces is how an arrow function **returns an object** directly. `label` is a **template literal**: text in backticks where `${...}` inserts a value, so you get "A5 (148mm × 210mm)". `mmText` multiplies inches by 254, rounds, and divides by 10: that is inches × 25.4 mm, rounded to one decimal.
 
 ### The overlay
 
 ```js file=apps/ZEditor/src/ui/canvas/GuidesOverlay.jsx fn=GuidesOverlay
 ```
 
-Reading it:
+**The Logic:**
 - `GUIDE_FORMAT_PRESETS.find(...)` picks the chosen preset, with the first ("Match Page Size") as a fallback (`||`).
 - `toPx` converts inches to editor pixels: inches × 72 points × `MAIN_SCALE`. This is the same unit the page and items use, so the rectangles land exactly where the real sizes are.
 - `Math.min(width, toPx(preset.widthIn))` stops the trim box being bigger than the page. `(width - trimW) / 2` centres it: half the spare room on each side.
@@ -66,4 +66,4 @@ Reading it:
         </svg>
 ```
 
-Reading it: a `<line>` from the top middle (`x1 = width / 2, y1 = 0`) to the bottom middle (`x2` the same, `y2 = height`): a vertical line down the middle, in blue, dashed. `aria-hidden` tells screen readers to ignore it, since it is only decoration.
+**The Logic:** a `<line>` from the top middle (`x1 = width / 2, y1 = 0`) to the bottom middle (`x2` the same, `y2 = height`): a vertical line down the middle, in blue, dashed. `aria-hidden` tells screen readers to ignore it, since it is only decoration.
