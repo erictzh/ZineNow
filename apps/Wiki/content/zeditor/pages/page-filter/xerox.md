@@ -43,6 +43,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `Math.sin(...)` of a big, odd-looking number, multiplied by 43758.5453, gives a value that jumps around wildly for neighbouring inputs. `v - Math.floor(v)` keeps only the **fractional part** (the digits after the decimal point), a number from 0 up to 1. The result looks random but is a pure function: the same inputs `(i, variation, j)` always give the same number. The magic numbers 12.9898, 78.233 and 43758.5453 are a famous recipe from computer graphics for scrambling. `j = 0` is a **default parameter**: used when the caller leaves it out.
 
+**Worked example.** `seededNoise(1, 0)`: `sin(1 × 12.9898) × 43758.5453 = −0.1573… × 43758.5453`. The part after the decimal point, `v − floor(v)`, comes out as about **0.9217**. `seededNoise(2, 0)` is about **0.0572**, and `seededNoise(0, 0)` is exactly **0** (since `sin(0) = 0`). Neighbouring inputs give unrelated numbers, and asking again always gives the same answer. Changing `variation` to 1 gives `seededNoise(1, 1) = 0.0558`: a new random pattern, same settings.
+
 ### `applyXerox`
 
 ```js file=apps/ZEditor/src/render/filters/xerox.js fn=applyXerox
@@ -56,3 +58,17 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - **Speckle and streaks.** The tone is nudged by noise (`seededNoise(...) - 0.5` ranges from −0.5 to +0.5, times the speckle amount) and by the column's shift. Pinholes: a different hash (with big prime offsets 7919 and 104729 so it is unrelated to the first) below `speckle * 0.03` flips the tone (`tone > 0.5 ? 0 : 1`: dark becomes white, light becomes black).
 - **Edge wear.** `edgeDistance` is the nearest distance to any of the four sides. Inside the wear zone, `worn = wearAmount * (1 - edgeDistance / wearZone) ** 2` grows towards the edge (squared, so it is gentle at first and strong at the edge); a pixel turns to paper (`tone = 1`) when its noise is below `worn`.
 - **Colour.** The final tone, clamped again, picks a colour between ink and paper: `ink + (paper - ink) * tone` for each channel. `putImageData` writes the picture back.
+
+**Worked example.** The defaults: contrast 75, exposure 50, so `gain = 1 + 0.75 × 15 = 12.25` and `cutoff = 0.5`. The curve is `tone = clamp((lum − 0.5) × 12.25 + 0.5)`:
+
+| brightness `lum` | tone |
+|---|---|
+| 0.30 | (−0.2 × 12.25) + 0.5 = −1.95 → clamped to **0** (ink) |
+| 0.46 | −0.49 + 0.5 = 0.01 → **0.01** |
+| 0.50 | **0.5** (grey) |
+| 0.54 | 0.49 + 0.5 = **0.99** |
+| 0.70 | 2.95 → clamped to **1** (paper) |
+
+Only brightnesses between about 0.46 and 0.54 stay grey; everything else snaps to black or white. That is the photocopy look. Raise **Exposure** to 80 and `cutoff = 0.2`: a pixel with `lum = 0.5` now gets `(0.3 × 12.25) + 0.5 = 4.2`, clamped to 1: paper. The picture gets lighter.
+- **Streaks** at 25: `darkShare = 0.2 × 25 / 100 = 0.05`, so 5% of the columns get a dark line (those whose noise is above 0.95) and `paleShare = 0.025`: 2.5% get a pale band.
+- **Edge wear** at 30 on a 400 px wide image: `wearZone = 0.1 × 400 = 40` px. At 10 px from the edge `worn = 0.3 × (1 − 10 / 40)² = 0.3 × 0.5625 = 0.169`: 17% of the pixels there lose their ink. At 30 px: `0.3 × (0.25)² = 0.019`: about 2%.

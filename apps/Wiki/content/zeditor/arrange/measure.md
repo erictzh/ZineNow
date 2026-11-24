@@ -53,6 +53,12 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `Math.atan2(-dy, dx)` is the angle. The minus sign flips `dy` because screen y grows downwards but paper angles grow upwards. Multiplying by `180 / Math.PI` converts radians to degrees; `Math.round(... * 10) / 10` rounds to one decimal. `(deg + 360) % 360` turns the −180…180 result into 0…360.
 - The function returns an object with four values at once.
 
+**Worked example.** Point a is (10, 10) and point b is (13, 6) (y grows downward, so b is 4 *up* from a).
+- `dx = 3`, `dy = −4`.
+- `Math.hypot(3, −4) = √(9 + 16) =` **5**.
+- `Math.atan2(−(−4), 3) = atan2(4, 3) = 0.927 rad = 53.13°`, rounded to a tenth: **53.1°**, anticlockwise from the right (up and to the right).
+- A point straight down from a, (10, 20): `dx = 0, dy = 10`: `atan2(−10, 0) = −90°`, and `(−90 + 360) % 360 =` **270°**.
+
 ### `constrainTo45`
 
 ```js file=apps/ZEditor/src/model/rulers.js fn=constrainTo45
@@ -60,12 +66,21 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `step` is π/4 radians (45°). `Math.atan2(dy, dx) / step` says "how many 45° steps is this angle?"; `Math.round(...)` picks the nearest whole number of steps; multiplying back by `step` gives the snapped angle `a`. The result keeps the **same length** `len` (from `Math.hypot`) but along that angle: `from.x + cos(a) · len`, `from.y + sin(a) · len`.
 
+**Worked example.** From a = (0, 0) with the pointer at (10, 3), Shift held.
+- `len = hypot(10, 3) = 10.44`. The angle is `atan2(3, 10) = 16.7°`; `16.7° / 45° = 0.37`, which rounds to 0 steps: the snapped angle is **0°**. The result is (10.44, 0): flat right, the same distance.
+- Pointer at (10, 8): `len = 12.81`, the angle is 38.7° → `0.86` steps → 1 step: **45°**. The result is `(12.81 × cos 45°, 12.81 × sin 45°) = (9.06, 9.06)`.
+
 ### `measurePoint`: where a click lands
 
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=measurePoint
 ```
 
 **The Logic:** `let p = overlayPoint(ev)` is the pointer in page coordinates (`let` allows reassigning later, unlike `const`). If there are guides and Alt is not held (`!ev.altKey`), the point is treated as a box of zero size and `snapToGuides` returns the nudge, which is added. Then, if Shift is held and a start point exists (`ev.shiftKey && from`), `constrainTo45` is applied. `cond ? a : b` returns one of the two.
+
+**Worked example.** There is a vertical guide at page x = 181 px. The pointer is at x = 182.5.
+- At zoom 100%: `SNAP_PX / zoom = 6`; the distance is 1.5, so within 6: the point snaps to 181.
+- At zoom 300%: the threshold is `6 / 3 = 2` page px; 1.5 is still within it: snaps. At a pointer x of 184: the distance 3 is above 2, so no snap, even though on screen (3 × 3 = 9 px) it is further away than 6 px.
+- Hold Alt: `!ev.altKey` is false, the snapping block is skipped, and the point is exactly where the pointer is.
 
 ### `startMeasure`: the click logic
 
@@ -77,3 +92,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - Three cases, each ending in `return`: if pending, this click is the **second** (it sets `b`); if a measurement exists, this is the **third** click and clears it; otherwise it is the first click.
 - On a first press it sets `a`, then calls `trackPointerDrag` (see [Move, resize and rotate](zeditor/arrange/move-resize-rotate)). If the pointer moves further than `DRAG_THRESHOLD`, it is a drag and `b` follows the pointer; if it was only a click (`!moved`), `pending: true` is set and the next click fixes `b`.
 - `gesture = (measureGesture.current = {})` creates a fresh object as an **identity tag** for this press. Later callbacks compare against it (`measureGesture.current !== gesture`) so a stale release from an earlier press cannot act on a newer one.
+
+**Worked example.** What each click does:
+
+| Click | State before | What happens | State after |
+|---|---|---|---|
+| 1st: press and release without moving | `null` | `a` is set; no drag, so on release `pending: true` | `{ a, b: a, pending: true }` (a dot) |
+| 2nd | pending | `b` is set to the click | `{ a, b, pending: false }` (line and readout) |
+| 3rd | a measurement | cleared | `null` |
+| 4th | `null` | like the 1st | |
+
+Pressing at a and dragging (more than `DRAG_THRESHOLD = 4` px) to b is the shortcut: `moved` becomes true, b follows the pointer, and on release `pending` is not set, so the line stays.

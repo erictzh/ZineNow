@@ -55,6 +55,13 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - The `return` is **SVG**, the web's vector-drawing format, as JSX: one `<rect>` per box. The bleed box is the trim grown by `bleedPx` on every side (`x = trimX - bleedPx`, width plus twice the bleed); the margin box is the trim shrunk. `strokeDasharray="5 3"` draws a dashed line (5 px on, 3 off); `fill="none"` leaves the inside see-through.
 - `{showBleed && (<rect ... />)}` is how JSX shows something *only if* a condition holds.
 
+**Worked example.** A4 page (595.28 × 841.89 pt) with the **A5** format, margin 0.25 in, bleed 0.125 in.
+1. The page is `595.28 × 1.1 = 654.8` by `841.89 × 1.1 = 926.1` editor pixels.
+2. A5 is `148 / 25.4 = 5.83` in by `210 / 25.4 = 8.27` in. `toPx(5.83) = 5.83 × 72 × 1.1 = 461.5` px wide and `toPx(8.27) = 654.8` px tall. Both fit in the page, so `Math.min` keeps them.
+3. Centring: `trimX = (654.8 − 461.5) / 2 = 96.7`, `trimY = (926.1 − 654.8) / 2 = 135.6`.
+4. Margin: `0.25 in = 19.8 px`, so the margin box starts at (116.5, 155.4) and is `461.5 − 39.6 = 421.9` wide. Bleed: `0.125 in = 9.9 px`, so the bleed box starts at (86.8, 125.7) and is `461.5 + 19.8 = 481.3` wide. Three rectangles, one inside the next.
+5. If you choose a format *bigger* than the page, e.g. A3 on A5, `Math.min` clamps the trim box to the page's size.
+
 ### The centre guide
 
 ```js file=apps/ZEditor/src/ui/canvas/CanvasOverlays.jsx

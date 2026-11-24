@@ -63,6 +63,13 @@ export const MAX_UNDO_HISTORY = 50;
 - Otherwise it remembers this snapshot and pushes one: `[...stack, { pages: ..., selectedIdx, ... }]` builds a **new** array with all old entries plus the new one (never changing the old array). If it has grown past 50, `.slice(next.length - MAX)` keeps only the last 50: the oldest entries fall off.
 - `setRedoStack([])`: a new edit throws away anything you could have redone, as in every editor.
 
+**Worked example.** You drag an image. The drag calls `recordUndoCheckpoint("ann:7")` on every mouse move.
+- t = 0 ms: nothing recorded yet, so the key is new. A snapshot is **pushed**; `lastCommit = { time: 0, key: "ann:7" }`.
+- t = 16 ms, 32 ms, …: same key, and each is less than 700 ms after the last (`time` is renewed every time). Nothing is pushed.
+- You hold still for 1 second, then keep dragging: that is more than 700 ms since the last call, so a **new** snapshot is pushed. One continuous drag is one undo step; a drag with a long pause is two.
+- A click that deletes an item passes no key: it always pushes.
+- With 50 snapshots stored, the 51st makes `next.length = 51`, and `slice(51 − 50)` drops the oldest one.
+
 ### Undo and redo
 
 ```js file=apps/ZEditor/src/state/useHistory.js fn=handleUndo,handleRedo
@@ -72,6 +79,12 @@ export const MAX_UNDO_HISTORY = 50;
 - Undo takes the last entry of the undo stack (`undoStack[undoStack.length - 1]`; lists count from 0, so the last is at length − 1). It removes it (`.slice(0, -1)` keeps everything except the last), pushes the *current* state onto the redo stack so you can come back, and then restores the old one with `restoreSnapshot`.
 - Redo is the mirror image with the two stacks swapped.
 - `lastCommitRef.current = { time: 0, key: null }` resets the coalescing clock so the next edit is never merged with the one before the undo.
+
+**Worked example.** `undoStack = [S1, S2, S3]`, `redoStack = []`, and the page now is state C.
+- **Undo:** `entry = S3`. The stacks become `undo = [S1, S2]`, `redo = [C]`, and the page is restored to S3.
+- **Undo again:** `entry = S2`; `undo = [S1]`, `redo = [C, S3]`; the page is S2.
+- **Redo:** `entry = S3` (the last item of redo); `redo = [C]`, `undo = [S1, S2]`, and S3 is restored.
+- **A new edit** now: `recordUndoCheckpoint` pushes onto `undo` and sets `redo = []`. C and the other redo states are gone for good.
 
 ### Restoring a snapshot (and its thumbnails)
 

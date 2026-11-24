@@ -740,3 +740,6 @@ Known wording to double-check against the app if a page looks off: the Page menu
 
 ## Wiki: Code sections now show whole functions with real line numbers (2026-11-24)
 New standard (also in `docs/PLAN-wiki.md`): a code block is ```` ```js file=<repo path> fn=<function name> ```` and the builder (`apps/Wiki/wikiLib.mjs`: `findFunction`, `locateCode`, `renderLines`) cuts the function out of the real file and shows it with the file's own line numbers and a "path · lines a–b" caption (several names: `fn=a,b`; a few real lines instead of `fn=` work too, `…` lines start a new piece). Missing file/function/lines fail the build, and `npm run check` fails when the code changed so the wiki is stale. All 23 written pages were rewritten with a plain-language walkthrough after every block (jargon defined, logic explained). Copy button copies only the code, not the numbers.
+
+## Wiki: worked examples (2026-11-24)
+Every calculating function on the 23 written pages now has a **Worked example.** after its "The Logic" walkthrough (real numbers followed line by line, checked with a script). New standard recorded in `docs/PLAN-wiki.md`.

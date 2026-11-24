@@ -42,3 +42,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - **Duotone:** `hexToRgb` turns a colour like `#ffe066` into separate `r`, `g`, `b` numbers. `lum` is divided by 255 so it runs from 0 to 1. Then each channel is `dark + (light - dark) * lum`: at `lum = 0` that is the dark colour, at 1 the light one, and in between a proportional mix. That formula is called **linear interpolation** ("lerp").
 - **Threshold:** `controlValues(filter, THRESHOLD_FILTER_CONTROLS)` reads the cutoff and colours, using each control's default if you have not set one. For each pixel, `lum >= level ? paper : ink` is a **ternary**: "if the brightness reaches the cutoff, paper, otherwise ink". Every pixel ends up one of two colours.
 - `else if` chains make sure only one of the three branches runs.
+
+**Worked example.** One pixel is a muddy orange: (200, 100, 50).
+- **Grayscale:** `lum = 200 × 0.299 + 100 × 0.587 + 50 × 0.114 = 59.8 + 58.7 + 5.7 = 124.2`, so the pixel becomes (124, 124, 124).
+- **Duotone** with the defaults dark `#1a1a1a` (26, 26, 26) and light `#ffe066` (255, 224, 102): `lum = 124.2 / 255 = 0.487`. Red = 26 + (255 − 26) × 0.487 = **137.5**, green = 26 + 198 × 0.487 = **122.4**, blue = 26 + 76 × 0.487 = **63**: a mid golden brown. At `lum = 0` the pixel is exactly `#1a1a1a`, at 1 exactly `#ffe066`.
+- **Threshold** with the cutoff 128: `124.2 >= 128` is false, so the pixel becomes **ink**. A slightly brighter pixel with luma 130 would become **paper**. Drag the cutoff to 100 and the same pixel becomes paper.

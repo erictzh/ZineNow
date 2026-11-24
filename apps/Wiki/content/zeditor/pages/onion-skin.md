@@ -42,3 +42,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `(async () => {...})()` defines an anonymous `async` function and runs it at once, so the effect can use `await` (an effect function itself must not be `async`). `await renderPageToCanvas(...)` waits for the previous page to be drawn at editor size with its own filter.
 - `try { ... } catch (err) { ... }` runs the risky part, and if it fails, the `catch` clears the ghost instead of crashing.
 - `let cancelled = false` and the returned cleanup `() => { cancelled = true; }` solve a **race condition**: if you change page before the drawing finishes, React runs the cleanup, the flag flips, and the late result is thrown away (`if (!cancelled) ...`) instead of appearing on the wrong page.
+
+**Worked example.** The zine has 5 pages and Onion Skin is on.
+- You select page index 3: `prevPage = pages[2]`. The ghost is that page drawn at editor size, shown at your chosen opacity.
+- You select index 0: `selectedIdx === 0`, so the ghost is cleared: there is no earlier page.
+- You edit page 2 while looking at page 3: the effect does not run (its dependencies are only the switch and `selectedIdx`), so the ghost is not redrawn yet. When you select page 4 and come back to 3, `selectedIdx` has changed twice, the effect runs, and the ghost is rebuilt from the edited page 2.

@@ -44,6 +44,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `(pts) => ...` is an **arrow function**: a short way to write a function, here with the result written straight after the arrow, no `return` needed.
 - `formatMm` multiplies by 10, rounds, and divides by 10: that rounds to **one decimal place** (148.0 becomes 148, 139.7 stays 139.7). `String(...)` turns the number into text for display.
 
+**Worked example.** A5 is 419.53 pt wide. `(419.53 / 72) × 25.4 = 148.0009`. `formatMm`: `148.0009 × 10 = 1480.009`, `Math.round` gives 1480, `/ 10` gives 148, and `String(148)` is `"148"`. A Half Letter page is 396 pt: `(396 / 72) × 25.4 = 139.7`, shown as `"139.7"`.
+
 ### `clampMm`: never trust what was typed
 
 ```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx fn=clampMm
@@ -53,6 +55,16 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - The box keeps what you type as **text**, so the first step is `Number(text)`, which turns it into a number (or `NaN`, "not a number", if it cannot).
 - `Number.isFinite(v) && v > 0` checks the value is a real, positive number. `&&` means "and".
 - Then `Math.min(max, ...)` caps it at 1200 and `Math.max(min, ...)` raises it to at least 20: that is **clamping**, squeezing a value into an allowed range. If the test failed, the `fallback` is used (the `? :` is a **ternary**: "if this, then that, otherwise the other").
+
+**Worked example.** The limits are 20 and 1200 mm; the fallback is 148.
+
+| You type | `Number(text)` | Result |
+|---|---|---|
+| `300` | 300 | `min(1200, max(20, 300))` = **300** |
+| `5000` | 5000 | `min(1200, max(20, 5000))` = **1200** |
+| `10` | 10 | `min(1200, max(20, 10))` = **20** |
+| `-5` | −5 | not above 0, so the fallback **148** |
+| `abc` | `NaN` | `Number.isFinite(NaN)` is false, so **148** |
 
 ### Choosing the final page size
 

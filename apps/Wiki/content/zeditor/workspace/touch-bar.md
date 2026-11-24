@@ -63,9 +63,15 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `shiftKey: Boolean(e.shiftKey) || heldKeys.shift`: Shift counts if the real key *or* the touch toggle is on (`||` means "or").
 - `send` delivers the event to the element that was pressed; `el.isConnected` is false if a redraw has since removed that element, and then it goes to the `document` instead so nothing is lost.
 
+**Worked example.** The Shift switch on the touch bar is on (`heldKeys.shift = true`). Your finger presses at (300, 200) on the page. `mouseEventFrom("mousedown", e, …)` builds a fake `MouseEvent` with `clientX = 300`, `clientY = 200`, `button = 0`, `buttons = 1` and `shiftKey = Boolean(false) || true = true`. The Move tool sees a normal Shift+click and adds the item to the selection. On release, the `mouseup` event has `buttons = 0`.
+
 ### Is the finger near a ruler?
 
 ```js file=apps/ZEditor/src/ui/touchInput.js fn=rulerNear
 ```
 
 **The Logic:** it loops over both rulers and measures each with `getBoundingClientRect()`. `inside` is a **rectangle test**: x and y between the edges, but with 12 px (`RULER_SLOP_PX`) of extra reach below the top ruler or right of the left one, because a finger reports its contact point slightly away from where it appears to touch. It returns the first ruler that matches, or `null`.
+
+**Worked example.** The top ruler occupies `x 18…800`, `y 0…18` on screen, and `RULER_SLOP_PX = 12`.
+- A finger at (300, 27): `x` is inside, and `y = 27 ≤ 18 + 12 = 30`, so it counts as on the ruler.
+- A finger at (300, 40): `40 > 30`, so it is not near; `rulerNear` returns `null` and the press goes to the page instead.

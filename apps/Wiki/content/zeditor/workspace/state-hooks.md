@@ -57,6 +57,8 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `ids` is an object of three small functions; `nextKeyRef.current++` returns the current number and then adds 1 (`++` is "increase by one"), so every page, document and item gets a number nobody else has.
 - The last line returns one object containing everything, so `App` can hand it to the other hooks.
 
+**Worked example.** `nextAnnIdRef.current` is 5. `ids.annId()` returns **5** and the ref becomes 6 (`x++` returns the old value, then adds 1). The next call returns 6. Two items can therefore never share an id, even after deleting one, because the counter only goes up.
+
 ### `settingsForSave`: what a project file remembers
 
 ```js file=apps/ZEditor/src/state/useViewSettings.js fn=settingsForSave
@@ -73,3 +75,9 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `if (s.guidesOn !== undefined) setGuidesOn(s.guidesOn)`: a setting is applied only if the file mentions it. An older file that predates a setting leaves the app's own default alone.
 - `setGuidesLocked(s.guidesLocked === true)` and `setEmbedFonts(s.embedFonts !== false)` are two ways of choosing the default for a missing value: "only on if saved as true" (default off) and "on unless saved as false" (default on).
 - `Array.isArray(s.rulerGuides) ? s.rulerGuides.filter(...) : []` checks the saved guides really are a list, then **validates** each one (a known axis, a real number) so a damaged file cannot break the editor.
+
+**Worked example.** You open an older project whose settings contain `{ "rulersOn": true }` and nothing else.
+- `s.guidesOn !== undefined` is false: the guides setting is left at its current value.
+- `setGuidesLocked(s.guidesLocked === true)`: `undefined === true` is false, so the guides are **unlocked**.
+- `setEmbedFonts(s.embedFonts !== false)`: `undefined !== false` is true, so fonts embedding is **on**, the default.
+- `Array.isArray(s.rulerGuides)` is false, so `rulerGuides` becomes `[]`.

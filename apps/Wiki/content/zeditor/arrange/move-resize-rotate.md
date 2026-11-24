@@ -58,6 +58,10 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** it receives the event that started the drag and returns **a function** (it builds the function `(ev) => ...`, which remembers `startX`, `startY`, `zoom` and `angle`: a **closure**). Each later mouse event goes through it: the pointer's change since the start is divided by `zoom` (screen pixels to page pixels), then rotated by `-angle` so the result is expressed along the item's own axes.
 
+**Worked example.** The page is shown at 200% (`zoom = 2`). The pointer moved 100 px right on screen.
+- Item not rotated (`angle = 0`): `rotatePoint(100 / 2, 0 / 2, 0)` = (50, 0). The item moves 50 page pixels right.
+- Item turned 90° clockwise (`angle = 90`): its own x-axis now points *down* the screen. `rotatePoint(50, 0, −90) = [50 × cos(−90°) − 0, 50 × sin(−90°) + 0]` = **(0, −50)**: moving right on screen is "50 in the negative y direction of the item", which is what a resize handle on the item's side needs to know.
+
 ### `rotatePoint`: the rotation formula
 
 ```js file=apps/ZEditor/src/model/geometry.js fn=rotatePoint
@@ -75,6 +79,12 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - With `keepAspect`, the two scale factors are compared; for a corner the bigger wins, for a side the one that moves. `minScale` stops the box shrinking below 20 px on its short side. Without it, each side is just clamped to at least `minSize`.
 - **The anchor trick.** A box is stored by its top-left corner but rotates about its centre. To keep the opposite side fixed after a resize, the code computes the anchor's position *relative to the centre* before and after (`oldOffset`, `newOffset`, each rotated by the box's angle) and shifts the centre by the difference. The final line turns the centre back into a top-left corner: `centerX - width / 2`.
 
+**Worked example.** A box at x = 100, y = 100, 200 wide, 100 tall; no rotation.
+- Drag the **east** handle by `dx = 40`: `signX = 1`, `signY = 0`, so `width = 240`, `height = 100`. The anchor is the west edge (`anchorX = 0`). `oldOffsetX = (0 − 0.5) × 200 = −100`, `newOffsetX = (0 − 0.5) × 240 = −120`. `centerX = 100 + 100 + (−100) − (−120) = 220`, and `x = 220 − 120 = 100`: the west edge stays at 100 and the box is now 240 wide.
+- Drag the **west** handle by `dx = −40` (outward): `signX = −1`, `width = 200 + (−1)(−40) = 240`. The anchor is the east edge (`anchorX = 1`): `oldOffsetX = +100`, `newOffsetX = +120`, `centerX = 200 + 100 − 120 = 180`, `x = 180 − 120 = 60`. The box now spans 60…300: the east edge stayed at 300.
+- **Shift on the south-east corner**, `dx = 40`, `dy = 0`: `scaleX = 240 / 200 = 1.2`, `scaleY = 100 / 100 = 1`; for a corner the larger one is used, 1.2, so the box becomes **240 × 120**: proportions kept.
+- **Rotated 90°**: the same east drag of 40 along the box's own axis. `oldOffset = rotatePoint(−100, 0, 90) = (0, −100)` and `newOffset = rotatePoint(−120, 0, 90) = (0, −120)`. The centre moves by `(0, −100) − (0, −120) = (0, +20)`: **20 px down the screen**, which is "east" for a box turned 90°. The west side, now the top, stays where it was.
+
 ### `startRotateDrag`: the rotation knob
 
 ```js file=apps/ZEditor/src/ui/canvas/ResizeHandles.jsx fn=startRotateDrag
@@ -86,6 +96,14 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - With Shift the angle is `Math.round(degrees / 15) * 15`: divide, round to a whole number, multiply back, which snaps to the nearest 15°.
 - `((degrees % 360) + 360) % 360` brings any number into 0–359. In JavaScript, `%` can give negative results for negative numbers; adding 360 first and taking `%` again fixes that.
 
+**Worked example.** The item's centre is at (200, 200) on screen.
+- Pointer at (300, 200), straight right: `atan2(0, 100) = 0°`, `+ 90` = **90°**. The knob points right.
+- Pointer at (200, 100), straight up: `atan2(−100, 0) = −90°`, `+ 90` = **0°**: upright.
+- Pointer at (100, 200), straight left: `atan2(0, −100) = 180°`, `+ 90` = 270°.
+- Pointer at (200, 300), straight down: `atan2(100, 0) = 90°`, `+ 90` = 180°.
+- **With Shift**, an angle of 37° becomes `Math.round(37 / 15) × 15 = 2 × 15 =` **30°**.
+- A negative angle, `−20`: `((−20 % 360) + 360) % 360 = (−20 + 360) % 360 =` **340°**.
+
 ### Rotating several items
 
 ```js file=apps/ZEditor/src/ui/canvas/SelectionTurn.jsx fn=selectionTurnFor,startSelectionTurn
@@ -95,3 +113,5 @@ Below is the real code, copied from the repository when the wiki is built. The g
 - `selectionTurnFor` decides whether a knob is needed: only for the Move tool, and for more than one item or a single stroke. `.filter` keeps visible, unlocked, selected items.
 - It computes the four edges of the whole selection with `Math.min(...)` and `Math.max(...)` over all the items' bounding boxes (`...bounds.map(...)` spreads a list into separate arguments), and returns the box and its centre `(cx, cy)`.
 - `startSelectionTurn` records the pointer's angle at the press (`startAngle`). On each move it computes the **change** in angle (`delta`), optionally snapped to 15°, and asks `onRotateAnnotations` to turn all the items about the centre by it. Using the change, not the absolute angle, means grabbing the knob does not make the items jump.
+
+**Worked example.** You grab the selection's knob when the pointer is at an angle of 10° from the centre, then drag until it is at 55°. `delta = 55 − 10 = 45°`, and every item turns 45° about the shared centre. With Shift: `Math.round(45 / 15) × 15 = 45`; at 50° the delta is 40°, which Shift snaps to 45°. Because only the *change* matters, grabbing the knob at any angle does not make the items jump.

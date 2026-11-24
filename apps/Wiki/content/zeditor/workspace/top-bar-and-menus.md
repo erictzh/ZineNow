@@ -52,6 +52,8 @@ Every menu in the bar (Page, Project, Export) is this one component. A **compone
 - A `ResizeObserver` calls `fit` again whenever the panel changes size. Its cleanup `disconnect()`s it.
 - The `return (...)` is the JSX: a button, and, only when `open` is true (`{open && (...)}`), the panel. `children({ close })` is a **render prop**: the menu's contents are a function that receives `close`, so each item can close the menu after it runs.
 
+**Worked example.** You open the Export menu on a narrow window and its panel's left edge ends up at `left = −20` px (off-screen). `fit()` runs: `left < 8`, so it sets `translateX((8 − (−20)) / zoom)`. At zoom 1 that is `translateX(28px)`: the panel moves 28 px right, so its left edge is at 8 px, a small margin from the edge. A panel already at `left = 50` is left alone.
+
 ### `MenuItem`: one action row
 
 ```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx fn=MenuItem
