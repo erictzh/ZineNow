@@ -147,11 +147,10 @@ function renderLines(lines, pieces, lang) {
 const rangeText = (pieces) => "line" + (pieces.length > 1 || pieces[0].to > pieces[0].from ? "s " : " ") + pieces.map((p) => (p.to > p.from ? `${p.from + 1}–${p.to + 1}` : `${p.from + 1}`)).join(", ");
 
 // "How it works" and "Code" (everything from the first of them to the end of the page) go in one folded-away box, closed by default.
-const CODE_ICON = '<svg class="wk-bts-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5 2 10l5 5M13 5l5 5-5 5"/></svg>';
 export function behindTheScene(html) {
   const at = html.search(/<h2 id="h-(how-it-works|code)">/);
   if (at < 0) return html;
-  return html.slice(0, at) + `<details class="wk-bts"><summary>${CODE_ICON}<span>&lt;/&gt; Behind the Scene</span></summary>\n` + html.slice(at) + "</details>\n";
+  return html.slice(0, at) + `<details class="wk-bts"><summary><span class="wk-bts-code">&lt;/&gt;</span> <span class="wk-bts-title">Behind the Scene</span></summary>\n` + html.slice(at) + "</details>\n";
 }
 
 // ctx: { key: "chapter/page", readFile(path) -> string|null, problems: [] }

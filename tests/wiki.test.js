@@ -35,6 +35,6 @@ ok(gapPage.html.includes("lines 1, 6") && gapPage.html.includes('class="line gap
 const bts = renderMarkdown("## Intro\n\nhi\n\n## How to use\n\nx\n\n## How it works\n\ny\n\n## Code\n\nz", ctx()).html;
 ok(/<details class="wk-bts">/.test(bts) && !/<details class="wk-bts"[^>]* open/.test(bts), "How it works and Code sit in one folded box, closed by default");
 ok(bts.indexOf("h-how-to-use") < bts.indexOf("<details") && bts.indexOf("h-how-it-works") > bts.indexOf("<details") && bts.trim().endsWith("</details>"), "the box starts at How it works and runs to the end; Intro and How to use stay outside");
-ok(bts.includes("&lt;/&gt; Behind the Scene") && behindTheScene("<h2 id=\"h-intro\">Intro</h2>") === "<h2 id=\"h-intro\">Intro</h2>", "titled </> Behind the Scene; a page without those parts is left alone");
+ok(bts.includes("&lt;/&gt;</span> <span class=\"wk-bts-title\">Behind the Scene") && behindTheScene("<h2 id=\"h-intro\">Intro</h2>") === "<h2 id=\"h-intro\">Intro</h2>", "titled </> Behind the Scene; a page without those parts is left alone");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
