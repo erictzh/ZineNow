@@ -39,51 +39,59 @@ For a selection of several items (or a stroke, which has no box of its own), the
 
 ## Code
 
-Following the mouse, wherever it goes:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/ui/pointer.js
-export function trackPointerDrag(onMove, onUp) {
-  const move = (ev) => onMove(ev);
-  const up = (ev) => {
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
-    if (onUp) onUp(ev);
-  };
-  window.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
-}
+### `trackPointerDrag`: follow the mouse everywhere
+
+```js file=apps/ZEditor/src/ui/pointer.js fn=trackPointerDrag
 ```
 
-The pointer's movement in the item's own axes:
+Reading it:
+- It takes two **callbacks**: functions handed in to be called later. `onMove` runs on every mouse movement, the optional `onUp` once at the end.
+- `move` and `up` are small functions defined inside. `window.addEventListener("mousemove", move)` tells the browser "call `move` whenever the mouse moves anywhere in the window". Attaching to the window (not the item) is why dragging keeps working when the pointer leaves the page.
+- When the button is released, `up` runs: it **removes both listeners** (so nothing keeps running), then calls `onUp` if one was given (`if (onUp)`). Because `move` and `up` are the very same function objects that were added, `removeEventListener` can find and remove them.
 
-```js file=apps/ZEditor/src/ui/pointer.js
-    const [dx, dy] = rotatePoint((ev.clientX - startX) / zoom, (ev.clientY - startY) / zoom, -angle);
+### `dragDeltaFrom`: how far, in the item's own axes
+
+```js file=apps/ZEditor/src/ui/pointer.js fn=dragDeltaFrom
 ```
 
-Resizing: which sides a handle moves, and keeping the anchor in place:
+Reading it: it receives the event that started the drag and returns **a function** (it builds the function `(ev) => ...`, which remembers `startX`, `startY`, `zoom` and `angle`: a **closure**). Each later mouse event goes through it: the pointer's change since the start is divided by `zoom` (screen pixels to page pixels), then rotated by `-angle` so the result is expressed along the item's own axes.
 
-```js file=apps/ZEditor/src/model/geometry.js
-  const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
-  const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
+### `rotatePoint`: the rotation formula
+
+```js file=apps/ZEditor/src/model/geometry.js fn=rotatePoint
 ```
 
-```js file=apps/ZEditor/src/model/geometry.js
-  const centerX = box.x + box.width / 2 + oldOffsetX - newOffsetX;
-  const centerY = box.y + box.height / 2 + oldOffsetY - newOffsetY;
+Reading it: `degrees * Math.PI / 180` converts to **radians**. The classic 2D rotation is `x' = x·cos θ − y·sin θ`, `y' = x·sin θ + y·cos θ`: that is the returned pair `[..., ...]` (an array of two numbers). On a screen, y points down, so positive angles turn **clockwise**.
+
+### `resizedBox`: resizing while the opposite side stays put
+
+```js file=apps/ZEditor/src/model/geometry.js fn=resizedBox
 ```
 
-Rotating towards the pointer, with the 15° snap:
+Reading it:
+- `handle` is a compass name like `"se"`. `handle.includes("e")` asks whether the letter is in it, giving the sign: +1 (east or south), −1 (west or north), 0 (that axis not moved). `signX * dx` is how the width changes.
+- With `keepAspect`, the two scale factors are compared; for a corner the bigger wins, for a side the one that moves. `minScale` stops the box shrinking below 20 px on its short side. Without it, each side is just clamped to at least `minSize`.
+- **The anchor trick.** A box is stored by its top-left corner but rotates about its centre. To keep the opposite side fixed after a resize, the code computes the anchor's position *relative to the centre* before and after (`oldOffset`, `newOffset`, each rotated by the box's angle) and shifts the centre by the difference. The final line turns the centre back into a top-left corner: `centerX - width / 2`.
 
-```js file=apps/ZEditor/src/ui/canvas/ResizeHandles.jsx
-    let degrees = Math.atan2(ev.clientY - centerY, ev.clientX - centerX) * 180 / Math.PI + 90;
-    degrees = ev.shiftKey ? Math.round(degrees / 15) * 15 : Math.round(degrees);
-    onRotate(((degrees % 360) + 360) % 360);
+### `startRotateDrag`: the rotation knob
+
+```js file=apps/ZEditor/src/ui/canvas/ResizeHandles.jsx fn=startRotateDrag
 ```
 
-Rotating a whole selection by the change in angle:
+Reading it:
+- `e.currentTarget.parentElement.getBoundingClientRect()` measures the item's box on screen; its middle is `centerX`, `centerY`. (The knob's parent is the item, already rotated, so the box is centred on the item.)
+- `Math.atan2(y, x)` returns the angle of a direction in radians, correct in all four quadrants (plain division would not tell "up-left" from "down-right"). Times `180 / Math.PI` gives degrees; `+ 90` makes straight up the zero point.
+- With Shift the angle is `Math.round(degrees / 15) * 15`: divide, round to a whole number, multiply back, which snaps to the nearest 15°.
+- `((degrees % 360) + 360) % 360` brings any number into 0–359. In JavaScript, `%` can give negative results for negative numbers; adding 360 first and taking `%` again fixes that.
 
-```js file=apps/ZEditor/src/ui/canvas/SelectionTurn.jsx
-      let delta = pointerAngle(ev) - startAngle;
-      delta = ev.shiftKey ? Math.round(delta / 15) * 15 : delta;
-      onRotateAnnotations(items, delta, cx, cy);
+### Rotating several items
+
+```js file=apps/ZEditor/src/ui/canvas/SelectionTurn.jsx fn=selectionTurnFor,startSelectionTurn
 ```
+
+Reading it:
+- `selectionTurnFor` decides whether a knob is needed: only for the Move tool, and for more than one item or a single stroke. `.filter` keeps visible, unlocked, selected items.
+- It computes the four edges of the whole selection with `Math.min(...)` and `Math.max(...)` over all the items' bounding boxes (`...bounds.map(...)` spreads a list into separate arguments), and returns the box and its centre `(cx, cy)`.
+- `startSelectionTurn` records the pointer's angle at the press (`startAngle`). On each move it computes the **change** in angle (`delta`), optionally snapped to 15°, and asks `onRotateAnnotations` to turn all the items about the centre by it. Using the change, not the absolute angle, means grabbing the knob does not make the items jump.

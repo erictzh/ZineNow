@@ -34,43 +34,52 @@ A restored page needs its thumbnail again. If the current page with the same key
 
 ## Code
 
-The limits:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
+
+### The two numbers that shape the history
 
 ```js file=apps/ZEditor/src/model/history.js
 export const UNDO_COALESCE_MS = 700;
 export const MAX_UNDO_HISTORY = 50;
 ```
 
-Leaving the thumbnail out of a snapshot:
+`export` makes a value available to other files. "MS" means milliseconds. These two constants are the whole policy: how long edits are merged, and how many are kept.
 
-```js file=apps/ZEditor/src/state/useHistory.js
-function stripDataUrls(pagesArr) {
-  return pagesArr.map(({ dataUrl, ...rest }) => rest);
-}
+### Leaving the heavy part out of a snapshot
+
+```js file=apps/ZEditor/src/state/useHistory.js fn=stripDataUrls
 ```
 
-Merging a gesture into one step:
+Reading it: `.map((page) => ...)` makes a new list from the old. `({ dataUrl, ...rest }) =>` **destructures** each page: it takes the field `dataUrl` out into its own variable and collects *all the other fields* into `rest` (the `...` here is called the **rest** pattern). The function returns `rest`, which is the page *without* its thumbnail picture.
 
-```js file=apps/ZEditor/src/state/useHistory.js
-    if (coalesceKey && lastCommitRef.current.key === coalesceKey && now - lastCommitRef.current.time < UNDO_COALESCE_MS) {
-      lastCommitRef.current.time = now;
-      return;
-    }
+### `recordUndoCheckpoint`: take a snapshot, unless it is the same gesture
+
+```js file=apps/ZEditor/src/state/useHistory.js fn=recordUndoCheckpoint
 ```
 
-Pushing a snapshot, capped at 50, and clearing redo:
+Reading it:
+- `Date.now()` is the current time in milliseconds. `lastCommitRef` remembers the key and time of the previous snapshot.
+- The first `if` is **coalescing**: the same key within 700 ms means "still the same gesture", so only the clock is renewed (`time = now`) and the function `return`s without saving anything.
+- Otherwise it remembers this snapshot and pushes one: `[...stack, { pages: ..., selectedIdx, ... }]` builds a **new** array with all old entries plus the new one (never changing the old array). If it has grown past 50, `.slice(next.length - MAX)` keeps only the last 50: the oldest entries fall off.
+- `setRedoStack([])`: a new edit throws away anything you could have redone, as in every editor.
 
-```js file=apps/ZEditor/src/state/useHistory.js
-      const next = [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }];
-      return next.length > MAX_UNDO_HISTORY ? next.slice(next.length - MAX_UNDO_HISTORY) : next;
-    });
-    setRedoStack([]);
+### Undo and redo
+
+```js file=apps/ZEditor/src/state/useHistory.js fn=handleUndo,handleRedo
 ```
 
-Undo: pop, push the current state onto redo, restore:
+Reading it:
+- Undo takes the last entry of the undo stack (`undoStack[undoStack.length - 1]`; lists count from 0, so the last is at length − 1). It removes it (`.slice(0, -1)` keeps everything except the last), pushes the *current* state onto the redo stack so you can come back, and then restores the old one with `restoreSnapshot`.
+- Redo is the mirror image with the two stacks swapped.
+- `lastCommitRef.current = { time: 0, key: null }` resets the coalescing clock so the next edit is never merged with the one before the undo.
 
-```js file=apps/ZEditor/src/state/useHistory.js
-    const entry = undoStack[undoStack.length - 1];
-    setUndoStack((stack) => stack.slice(0, -1));
-    setRedoStack((stack) => [...stack, { pages: stripDataUrls(pages), selectedIdx, selectedPageIndices }]);
+### Restoring a snapshot (and its thumbnails)
+
+```js file=apps/ZEditor/src/state/useHistory.js fn=restoreSnapshot
 ```
+
+Reading it:
+- `async` marks a function that may **wait** for slow work; `await` pauses until that work is done. Here the slow work is redrawing thumbnails.
+- `new Map(pages.map((p) => [p.key, p]))` builds a lookup from a page's key to the page itself, so `currentByKey.get(p.key)` is instant.
+- `reusable` asks: is the current page with this key unchanged in rotation, kind, number, source document and size? If yes, its thumbnail is reused (`{ ...p, dataUrl: existing.dataUrl }`). If not, a new one is made: a blank page's thumbnail is drawn at once, a PDF page's needs `await renderPdfThumb(...)`.
+- `Promise.all(...)` waits until *all* the pages are ready, working on them at the same time instead of one after another. Then the pages and the selection are put back with the `set...` functions.

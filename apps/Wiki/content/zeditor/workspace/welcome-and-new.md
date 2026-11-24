@@ -32,31 +32,40 @@ The width, height and page-count boxes keep what you type as text, and only chec
 
 ## Code
 
-The paper presets (portrait, in points):
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/constants.js
-  { key: "a4", label: "A4", width: 595.28, height: 841.89 },
-  { key: "a5", label: "A5", width: 419.53, height: 595.28 },
-  { key: "a6", label: "A6", width: 297.64, height: 419.53 },
+### Points and millimetres
+
+```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx fn=ptToMm,mmToPt,formatMm
 ```
 
-Points to millimetres, and the clamping of a typed size:
+Reading it:
+- `const` names a value that will not be reassigned. `POINTS_PER_INCH` is 72 and `MM_PER_INCH` is 25.4, so `(pts / 72) * 25.4` converts points to millimetres, and `mmToPt` is the same sum reversed.
+- `(pts) => ...` is an **arrow function**: a short way to write a function, here with the result written straight after the arrow, no `return` needed.
+- `formatMm` multiplies by 10, rounds, and divides by 10: that rounds to **one decimal place** (148.0 becomes 148, 139.7 stays 139.7). `String(...)` turns the number into text for display.
 
-```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
-const ptToMm = (pts) => (pts / POINTS_PER_INCH) * MM_PER_INCH;
-const mmToPt = (mm) => (mm / MM_PER_INCH) * POINTS_PER_INCH;
+### `clampMm`: never trust what was typed
+
+```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx fn=clampMm
 ```
 
-```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
-const clampMm = (text, fallback) => {
-  const v = Number(text);
-  return Number.isFinite(v) && v > 0 ? Math.max(CUSTOM_MIN_MM, Math.min(CUSTOM_MAX_MM, v)) : fallback;
-};
-```
+Reading it:
+- The box keeps what you type as **text**, so the first step is `Number(text)`, which turns it into a number (or `NaN`, "not a number", if it cannot).
+- `Number.isFinite(v) && v > 0` checks the value is a real, positive number. `&&` means "and".
+- Then `Math.min(max, ...)` caps it at 1200 and `Math.max(min, ...)` raises it to at least 20: that is **clamping**, squeezing a value into an allowed range. If the test failed, the `fallback` is used (the `? :` is a **ternary**: "if this, then that, otherwise the other").
 
-Landscape just swaps the two sides:
+### Choosing the final page size
 
 ```js file=apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
+  const preset = custom
+    ? { width: mmToPt(customW), height: mmToPt(customH) }
+    : noPaper ? CANVAS_PAGE_START
+    : NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
+  const landscape = orientation === "landscape";
   const width = landscape ? preset.height : preset.width;
   const height = landscape ? preset.width : preset.height;
 ```
+
+Reading it:
+- A chain of ternaries picks the page: a custom size, else the starting size of the "No paper" canvas, else the preset whose `key` matches (`.find` returns the first match). `|| NEW_DOCUMENT_PRESETS[0]` falls back to the first preset (A3) if nothing matched.
+- The preset is always portrait. For landscape, width and height simply swap.

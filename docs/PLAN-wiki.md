@@ -48,3 +48,9 @@ Deeper bullets below become headings inside their page, not separate pages.
 6. Appendices: glossary; file formats; cross-app handoff; licence policy + notices; contributing/maintaining
 
 Home page: the gear panel has a "Tutorial / Wiki" link (after "Third-party notices") opening apps/Wiki/index.html. (Decided instead of a card.)
+
+## Standard for every page's Code section (set by the user, 2026-11-24)
+- Show **whole functions** in code blocks: ```` ```js file=<path> fn=<name> ```` (several names: `fn=a,b`). The builder cuts the function out of the real file, so it is exact and never stale. For a few lines inside a bigger function, put the real lines in the block (a line of just `…` starts a new piece).
+- Every block shows its **file path and line numbers** (the build adds them: a caption with the path and "lines 12–31", and a gutter with the real numbers).
+- After each block, explain it so that a layman learns the **jargon and the logic** like an IT professional: name the technique, define each term the first time (function, parameter, array, loop, closure, hook, state, ref, clamp, hash, alpha channel, etc.), then walk through the code in order, and say why it is written that way.
+- Prose must not quote line numbers (they change); it refers to names and shapes of code instead.

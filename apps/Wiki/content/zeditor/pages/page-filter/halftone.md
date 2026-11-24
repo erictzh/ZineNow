@@ -44,45 +44,41 @@ The cell size is in editor pixels; the dispatcher multiplies it by the `scaleFac
 
 ## Code
 
-The dot's size from its cell's lightness:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/render/filters/halftone.js
-      const radius = (1 - avgLum) * maxRadius;
-      const halfLength = radius + (cellSize / 2 + 0.25 - radius) * toLine;
-      const halfHeight = radius + ((1 - avgLum) * cellSize / 2 - radius) * toLine;
+### The two tables the screens use
+
+```js file=apps/ZEditor/src/render/filters/halftone.js fn=BAYER_8X8,CMYK_PLATES
 ```
 
-The four CMYK plates and their screen angles:
+Reading it: `BAYER_8X8` is an array of arrays: an 8 × 8 grid of the numbers 0–63, in the **Bayer** order that spreads thresholds evenly. `CMYK_PLATES` is a list of four small objects, one per ink, each with its colour, extra angle and the colour channel it measures (0 = cyan … 3 = black).
 
-```js file=apps/ZEditor/src/render/filters/halftone.js
-const CMYK_PLATES = [
-  { ink: "#00ffff", angleOffset: 15, channel: 0 },
-  { ink: "#ff00ff", angleOffset: 75, channel: 1 },
-  { ink: "#ffff00", angleOffset: 0, channel: 2 },
-  { ink: "#000000", angleOffset: 45, channel: 3 },
-];
+### `cmykCoverage`: how much of one ink is needed
+
+```js file=apps/ZEditor/src/render/filters/halftone.js fn=cmykCoverage
 ```
 
-How much of one ink a colour needs:
+Reading it: red, green and blue are numbers from 0 to 1. `k = 1 - Math.max(r, g, b)` is the black needed: the darkest-possible colour is the one where even the strongest channel is weak. For black (`channel === 3`) that is the answer. For pure black (`k >= 1`) the colours need no ink. Otherwise `(1 - [r, g, b][channel] - k) / (1 - k)` gives the share of cyan (channel 0, from red), magenta (1, from green) or yellow (2, from blue): `[r, g, b][channel]` picks one of the three numbers by position.
 
-```js file=apps/ZEditor/src/render/filters/halftone.js
-function cmykCoverage(r, g, b, channel) {
-  const k = 1 - Math.max(r, g, b);
-  if (channel === 3) return k;
-  if (k >= 1) return 0;
-  return (1 - [r, g, b][channel] - k) / (1 - k);
-}
+### `drawHalftoneScreen`: one plate or four
+
+```js file=apps/ZEditor/src/render/filters/halftone.js fn=drawHalftoneScreen
 ```
 
-The plates multiply together like overprinted ink:
+Reading it: it paints the whole canvas white (the paper), then calls `drawHalftonePlate` once for a single ink, or, for full colour, once per plate. `ctx.save()` and `ctx.restore()` bracket a change of drawing state so it does not leak out. `globalCompositeOperation = "multiply"` makes each new plate **multiply** with what is already there, like transparent ink overprinting: the mix of cyan and yellow is green. `(angle + plate.angleOffset) % 180` tilts each plate differently (the remainder keeps it under 180).
 
-```js file=apps/ZEditor/src/render/filters/halftone.js
-  ctx.globalCompositeOperation = "multiply";
-  for (const plate of CMYK_PLATES) {
+### `drawHalftonePlate`: the heart of it
+
+```js file=apps/ZEditor/src/render/filters/halftone.js fn=drawHalftonePlate
 ```
 
-Ordered dithering with an 8×8 Bayer matrix:
-
-```js file=apps/ZEditor/src/render/filters/halftone.js
-        if (avgLum < (BAYER_8X8[gridV & 7][gridU & 7] + 0.5) / 64) {
-```
+Reading it, in order:
+- **Setup.** `controlValues` reads the settings. `maxRadius = cellSize * 0.62` is the biggest a dot can be. `radians = angle * Math.PI / 180` converts degrees to radians (the unit trigonometry uses; π radians = 180°). `cos` and `sin` of that angle are the numbers that rotate a point.
+- **Covering a rotated grid.** The grid lives in a rotated frame `(u, v)`. `us` and `vs` rotate the four canvas corners into it; their smallest and largest values give the range the loops must cover. Without this, the rotated grid would leave empty triangles at the corners.
+- **Batching.** A canvas **path** is a shape under construction; `ctx.fill()` paints it. Filling 100,000 dots one by one is slow, so lines and dither squares are collected into one path and filled every 4096 (`batchSize`). `markAdded` counts them. Pure dots are filled one at a time, because overlapping dots build up tone.
+- **The two loops** (`gridV` for rows, `gridU` for columns) visit every cell. `centerU`/`centerV` is the cell's centre in the rotated frame; `cx`, `cy` rotate it back to canvas pixels (the usual rotation formula: `u·cos − v·sin`, `u·sin + v·cos`).
+- **Measuring the cell.** `x0..x1`, `y0..y1` are whole-pixel bounds of the cell, kept inside the canvas (`Math.max(0, ...)`, `Math.min(width, ...)`). Two nested loops add up the brightness (monochrome) or the red/green/blue (colour) of every pixel in the cell; `count` counts them. Colour is blended over white by alpha, like `lumaOverWhite`. `continue` skips to the next cell if there were no pixels.
+- **Lightness.** `avgLum` is the average brightness from 0 (black) to 1 (white); for a colour plate it is `1 - coverage`.
+- **Dither:** the cell gets a square if its lightness is below the Bayer number for its place, `BAYER_8X8[gridV & 7][gridU & 7]`. `& 7` is a **bitwise AND** with 7 (binary 111): it keeps the last three bits, which is the same as "remainder after dividing by 8", so the 8 × 8 table repeats across the picture.
+- **Dots and lines:** `radius = (1 - avgLum) * maxRadius`, bigger for darker cells. `toLine` (0 to 1) blends the half-width and half-height from the dot's radius towards a line's. If the mark would be thinner than 0.4 px (`halfHeight > 0.4`) it is skipped. `ctx.arc` adds a circle to the path; `ctx.roundRect` adds a rounded rectangle whose corner rounding shrinks to zero as lines take over (`1 - toLine`).
+- Finally `ctx.fill()` paints what remains in the path, and `ctx.restore()` undoes the rotation.

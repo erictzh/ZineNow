@@ -28,25 +28,17 @@ It looks at the previous page only (not the next one, and not "left page of a sp
 
 ## Code
 
-The effect that makes the ghost, watching only the switch and the page:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/state/useOnionGhost.js
-    if (!onionSkinOn || selectedIdx === null || selectedIdx === 0) { setOnionGhostSrc(null); return; }
-    const prevPage = pages[selectedIdx - 1];
+### `useOnionGhost`: making the faded previous page
+
+```js file=apps/ZEditor/src/state/useOnionGhost.js fn=useOnionGhost
 ```
 
-```js file=apps/ZEditor/src/state/useOnionGhost.js
-        const canvas = await renderPageToCanvas(prevPage, pdfDocsRef, MAIN_SCALE, prevPage.filter || DEFAULT_PAGE_FILTER);
-        if (!cancelled) setOnionGhostSrc(canvas.toDataURL());
-```
-
-```js file=apps/ZEditor/src/state/useOnionGhost.js
-    return () => { cancelled = true; };
-  }, [onionSkinOn, selectedIdx]);
-```
-
-The opacity slider's range:
-
-```js file=apps/ZEditor/src/ui/settings/OnionSkinSettings.jsx
-          type="range" className="ze-format-slider" min="0.05" max="0.8" step="0.05"
-```
+Reading it:
+- `useState(null)` holds the ghost picture (or nothing). A **data URL** (`canvas.toDataURL()`) is an image written out as one long piece of text that an `<img>` can show directly.
+- `useEffect(() => {...}, [onionSkinOn, selectedIdx])` runs when those two values change, **and only then** (the second argument lists what it depends on). Deliberately, `pages` is not in the list: that is what keeps it from redrawing on every mouse movement.
+- The first line is a **guard**: switched off, no page selected, or the first page (`selectedIdx === 0`, no previous one): clear the ghost and stop.
+- `(async () => {...})()` defines an anonymous `async` function and runs it at once, so the effect can use `await` (an effect function itself must not be `async`). `await renderPageToCanvas(...)` waits for the previous page to be drawn at editor size with its own filter.
+- `try { ... } catch (err) { ... }` runs the risky part, and if it fails, the `catch` clears the ghost instead of crashing.
+- `let cancelled = false` and the returned cleanup `() => { cancelled = true; }` solve a **race condition**: if you change page before the drawing finishes, React runs the cleanup, the flag flips, and the late result is thrown away (`if (!cancelled) ...`) instead of appearing on the wrong page.

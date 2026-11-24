@@ -40,42 +40,40 @@ A measurement belongs to the page and the tool it was made on: it is cleared whe
 
 ## Code
 
-Distance and angle between two points:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/rulers.js
-export function measureBetween(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const deg = Math.round(((Math.atan2(-dy, dx) * 180) / Math.PI) * 10) / 10; // -180..180, to a tenth
-  return { dx, dy, length: Math.hypot(dx, dy), angle: (deg + 360) % 360 };
-}
+### `measureBetween`
+
+```js file=apps/ZEditor/src/model/rulers.js fn=measureBetween
 ```
 
-Shift: the nearest 45° line, same distance.
+Reading it:
+- `dx` and `dy` are the horizontal and vertical legs between the points: end minus start.
+- `Math.hypot(dx, dy)` is the square root of `dx² + dy²`: the **Pythagorean** distance, the straight line between the points.
+- `Math.atan2(-dy, dx)` is the angle. The minus sign flips `dy` because screen y grows downwards but paper angles grow upwards. Multiplying by `180 / Math.PI` converts radians to degrees; `Math.round(... * 10) / 10` rounds to one decimal. `(deg + 360) % 360` turns the −180…180 result into 0…360.
+- The function returns an object with four values at once.
 
-```js file=apps/ZEditor/src/model/rulers.js
-  const step = Math.PI / 4, len = Math.hypot(dx, dy);
-  const a = Math.round(Math.atan2(dy, dx) / step) * step;
-  return { x: from.x + Math.cos(a) * len, y: from.y + Math.sin(a) * len };
+### `constrainTo45`
+
+```js file=apps/ZEditor/src/model/rulers.js fn=constrainTo45
 ```
 
-Editor pixels to points:
+Reading it: `step` is π/4 radians (45°). `Math.atan2(dy, dx) / step` says "how many 45° steps is this angle?"; `Math.round(...)` picks the nearest whole number of steps; multiplying back by `step` gives the snapped angle `a`. The result keeps the **same length** `len` (from `Math.hypot`) but along that angle: `from.x + cos(a) · len`, `from.y + sin(a) · len`.
 
-```js file=apps/ZEditor/src/ui/canvas/MeasureOverlay.jsx
-  const pt = measureBetween({ x: a.x / MAIN_SCALE, y: a.y / MAIN_SCALE }, { x: b.x / MAIN_SCALE, y: b.y / MAIN_SCALE });
+### `measurePoint`: where a click lands
+
+```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=measurePoint
 ```
 
-A clicked point snaps to a guide unless Alt is held:
+Reading it: `let p = overlayPoint(ev)` is the pointer in page coordinates (`let` allows reassigning later, unlike `const`). If there are guides and Alt is not held (`!ev.altKey`), the point is treated as a box of zero size and `snapToGuides` returns the nudge, which is added. Then, if Shift is held and a start point exists (`ev.shiftKey && from`), `constrainTo45` is applied. `cond ? a : b` returns one of the two.
 
-```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
-    if (lines && !ev.altKey) {
-      const snap = snapToGuides({ x0: p.x, y0: p.y, x1: p.x, y1: p.y }, lines, SNAP_PX / zoom);
-      p = { x: p.x + snap.dx, y: p.y + snap.dy };
-    }
+### `startMeasure`: the click logic
+
+```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx fn=startMeasure
 ```
 
-The three clicks:
-
-```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
-    if (measure && measure.pending) { // the 2nd click
-      setMeasure({ ...measure, b: measurePoint(e, measure.a), pending: false });
-```
+Reading it:
+- It uses the state `measure`, which is `null` (nothing), or `{ a, b, pending }`. `pending` means "point a is set, waiting for the second click".
+- Three cases, each ending in `return`: if pending, this click is the **second** (it sets `b`); if a measurement exists, this is the **third** click and clears it; otherwise it is the first click.
+- On a first press it sets `a`, then calls `trackPointerDrag` (see [Move, resize and rotate](zeditor/arrange/move-resize-rotate)). If the pointer moves further than `DRAG_THRESHOLD`, it is a drag and `b` follows the pointer; if it was only a click (`!moved`), `pending: true` is set and the next click fixes `b`.
+- `gesture = (measureGesture.current = {})` creates a fresh object as an **identity tag** for this press. Later callbacks compare against it (`measureGesture.current !== gesture`) so a stale release from an earlier press cannot act on a newer one.

@@ -34,45 +34,50 @@ The Page menu does not hard-code its rows. `Topbar` hands `PageMenuBody` a list 
 
 ## Code
 
-How a menu closes itself:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
+### `TopMenu`: the drop-down shell
+
+Every menu in the bar (Page, Project, Export) is this one component. A **component** is a function that returns a piece of the screen (written in **JSX**, HTML-like syntax inside JavaScript); **React**, the library ZEditor is built on, redraws it whenever its data changes.
+
+```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx fn=TopMenu
 ```
 
-Nudging a panel back on screen:
+Reading it:
+- `useState(false)` creates a piece of memory called **state**: `open` is its current value, `setOpen` changes it (and makes React redraw). Menus start closed.
+- `useRef` makes a **ref**: a box that survives redraws and can hold a pointer to a real page element (`containerRef`) or any value, without causing a redraw.
+- `useEffect(() => {...}, [open])` runs code **after** the screen is drawn, and again whenever `open` changes. This one adds two **event listeners** (`mousedown`, `keydown`) only while the menu is open. The function it returns, `return () => {...}`, is the **cleanup**: React calls it to remove the listeners again, so none are left behind.
+- `containerRef.current.contains(e.target)` asks: was the click inside this menu? If not, close it. `e.key === "Escape"` closes it on the Escape key.
+- `useLayoutEffect` is like `useEffect` but runs before the browser paints, so the menu can be moved back on screen without a visible jump. `getBoundingClientRect()` measures an element on screen; if `left < 8` the panel is pushed right with a CSS `translateX`.
+- A `ResizeObserver` calls `fit` again whenever the panel changes size. Its cleanup `disconnect()`s it.
+- The `return (...)` is the JSX: a button, and, only when `open` is true (`{open && (...)}`), the panel. `children({ close })` is a **render prop**: the menu's contents are a function that receives `close`, so each item can close the menu after it runs.
 
-```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx
-      if (left < 8) menu.style.transform = `translateX(${(8 - left) / zoom}px)`;
+### `MenuItem`: one action row
+
+```js file=apps/ZEditor/src/ui/topbar/TopMenu.jsx fn=MenuItem
 ```
 
-One Page menu row, as data:
+Reading it: the curly braces in the parameters, `{ label, detail, ... }`, **destructure** one object into separate variables. `onClick={() => { close(); onClick(); }}` is an **arrow function**: pressing the row closes the menu first, then runs the real action. `{detail && <span>...}` shows the second line only if there is one.
 
-```js file=apps/ZEditor/src/ui/topbar/Topbar.jsx
-                {
-                  key: "onion",
-                  label: "Onion Skin",
-                  checked: view.onionSkinOn,
-                  onToggle: view.setOnionSkinOn,
-                  settings: <OnionSkinSettings opacity={view.onionSkinOpacity} onOpacityChange={view.setOnionSkinOpacity} />,
-                },
+### `PageMenuBody`: rows as data
+
+```js file=apps/ZEditor/src/ui/topbar/PageMenu.jsx fn=PageMenuBody
 ```
 
-How the row turns into a switch plus Customize…:
+Reading it:
+- `rows` is an array of plain **objects** (`{ key, label, checked, onToggle, settings }`), built in `Topbar.jsx`. The menu does not know what a "Filter" is: it just draws one row per object.
+- `customizing` remembers which row's settings are open. `rows.find(...)` looks for the object with that key; if there is one, the menu draws its `settings` with a back arrow instead of the list.
+- `rows.map((row) => ...)` turns each data object into a screen element; `key={row.key}` helps React tell the rows apart.
+- The switch is a `<input type="checkbox">` dressed up with CSS: `checked={row.checked}` shows the state, `onChange` calls `row.onToggle` with the new value.
 
-```js file=apps/ZEditor/src/ui/topbar/PageMenu.jsx
-      <button type="button" className="ze-menu-customize" disabled={row.disabled} onClick={() => setCustomizing(row.key)}>
-        Customize…
-      </button>
+### `buildNumberFor`: where the build number comes from
+
+This function is in the build script, not in the app. It runs when the app is built.
+
+```js file=tools/build.mjs fn=buildNumberFor
 ```
 
-Where the build number is replaced in the build script:
-
-```js file=tools/build.mjs
-    define: { __BUILD__: JSON.stringify(buildNumberFor(app)) },
-```
+Reading it:
+- It lists every file that decides how the app looks and behaves (`src/`, `styles/`, `index.html`, `shared/`), sorted so the order never varies.
+- For each file it feeds the file's name and its text (with Windows line endings `\r\n` turned into `\n`, so the number is the same on every computer) into a **SHA-1 hash**. A hash function turns any amount of text into a short fixed-size fingerprint; change one character and the fingerprint changes completely, while the same text always gives the same fingerprint.
+- `.digest("hex").slice(0, 7)` writes the fingerprint in hexadecimal and keeps its first 7 characters: the build number you see under the app name.

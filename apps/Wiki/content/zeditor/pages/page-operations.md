@@ -35,40 +35,49 @@ Every operation builds a new array (`slice`, `filter`, `map`) rather than editin
 
 ## Code
 
-Which pages an action applies to:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/state/useSelection.js
-  function pagesActedOn(idx) {
-    const inMultiSelection = selectedPageIndices.length > 0 && (idx === selectedIdx || selectedPageIndices.includes(idx));
-    return inMultiSelection ? [selectedIdx, ...selectedPageIndices] : [idx];
-  }
+### Which pages does an action touch?
+
+```js file=apps/ZEditor/src/state/useSelection.js fn=pagesActedOn
 ```
 
-Rotating a quarter turn:
+Reading it: `selectedPageIndices` holds the extra pages picked with Shift+click, `selectedIdx` the main one. `inMultiSelection` is true when there is a multi-selection **and** the page you acted on belongs to it (`&&` = and, `||` = or). The `? :` then returns either the whole selection (`[selectedIdx, ...selectedPageIndices]`, an array built with the **spread** `...`, which unpacks a list into another list) or just `[idx]`.
 
-```js file=apps/ZEditor/src/state/usePageOps.js
-      const rotation = (target.rotation + 90) % 360;
+### Rotating
+
+```js file=apps/ZEditor/src/state/usePageOps.js fn=handleRotate
 ```
 
-Keeping the selection on the same page after a delete:
+Reading it:
+- `async`/`await`: redrawing a PDF page's thumbnail is slow, so the function waits for it. A `for...of` loop handles each acted-on page in turn.
+- `(target.rotation + 90) % 360`: add a quarter turn, and `%` (the **remainder** after dividing by 360) wraps 360 back to 0.
+- A blank page's thumbnail is drawn immediately; a PDF page's needs `await renderPdfThumb(...)`. The results are collected in a `Map` keyed by page key.
+- `recordUndoCheckpoint()` saves the *before* state for Undo. Then `setPages((prev) => prev.map(...))` replaces only the changed pages: `{ ...p, ...updates }` makes a new page object with the new rotation and thumbnail on top of the old fields.
 
-```js file=apps/ZEditor/src/state/usePageOps.js
-      if (prevSel === null) return null;
-      if (idx === prevSel) return null;
-      if (idx < prevSel) return prevSel - 1;
-      return prevSel;
+### Inserting a blank page
+
+```js file=apps/ZEditor/src/state/usePageOps.js fn=handleInsertBlank
 ```
 
-Moving a block of pages to a slot:
+Reading it: `pageSizeRef.current || DEFAULT_PAGE_SIZE` uses the size of the first loaded PDF page, or a default. The new page is an **object literal**; its `key` comes from a counter (`nextKeyRef.current++`), so it is unique. `prev.slice()` copies the list, `next.splice(atIndex, 0, newPage)` inserts at that position (removing 0 items), and the copy is returned: the old list is never edited. Finally the new page becomes the selected one.
 
-```js file=apps/ZEditor/src/model/annotations.js
-export function orderAfterMove(count, fromIndices, insertBefore) {
-  const moving = new Set(fromIndices);
-  const allIndices = Array.from({ length: count }, (_, i) => i);
-  const block = allIndices.filter((i) => moving.has(i));
-  const rest = allIndices.filter((i) => !moving.has(i));
-  const insertAt = rest.filter((i) => i < insertBefore).length;
-  const newOrder = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)];
-  return newOrder.every((oldIdx, newIdx) => oldIdx === newIdx) ? null : newOrder;
-}
+### Deleting
+
+```js file=apps/ZEditor/src/state/usePageOps.js fn=handleDelete
 ```
+
+Reading it: `prev.filter((_, i) => i !== idx)` keeps every page except number `idx` (`_` is a conventional name for a parameter we ignore). The selection is an *index*, so it must be fixed up: deleting the selected page selects nothing; deleting an earlier page shifts it down by one so it still points at the same page.
+
+### Reordering
+
+```js file=apps/ZEditor/src/state/usePageOps.js fn=handleReorder
+```
+
+```js file=apps/ZEditor/src/model/annotations.js fn=orderAfterMove
+```
+
+Reading it:
+- `orderAfterMove` is the pure maths: `Array.from({ length: count }, (_, i) => i)` makes the list 0, 1, 2 … count−1. `moving` is a `Set` (a collection with fast "is this in it?" tests via `.has`). `block` are the moved indices, `rest` all the others, both in their original order. `insertAt` counts how many of the rest come before the target slot.
+- `[...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]` builds the new order: the first part of the rest, the block, then the remaining rest. `.every(...)` returns `null` if nothing moved, so a pointless drop makes no undo step.
+- In `handleReorder`, `newIdxOf` is a **lookup table** from old position to new position (`forEach` fills it). `newOrder.map((oldIdx) => prev[oldIdx])` rebuilds the page list, and the selected indices are translated through the table so the same pages stay selected.

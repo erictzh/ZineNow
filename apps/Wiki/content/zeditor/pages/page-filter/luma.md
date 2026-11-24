@@ -26,18 +26,23 @@ On screen, an image can show Grayscale or Duotone live without redrawing pixels,
 
 ## Code
 
-Luminance over white paper:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/render/filters/luma.js
-export function lumaOverWhite(data, index) {
-  const alpha = data[index + 3] / 255;
-  const luma = data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
-  return luma * alpha + 255 * (1 - alpha);
-}
+### `lumaOverWhite`
+
+```js file=apps/ZEditor/src/render/filters/luma.js fn=lumaOverWhite
 ```
 
-The same weights as an SVG colour matrix:
+Reading it:
+- `data` is the canvas's pixel array: a flat list of numbers, four per pixel in the order red, green, blue, alpha (each 0–255). `index` is where this pixel starts, so `data[index]` is its red, `data[index + 1]` its green, `data[index + 2]` its blue, `data[index + 3]` its alpha.
+- `alpha = data[index + 3] / 255` turns opacity into a fraction from 0 (see-through) to 1 (solid).
+- `luma` is the weighted brightness: 29.9% red, 58.7% green, 11.4% blue (the **Rec. 601** weights; they add up to 1, so white stays 255).
+- `luma * alpha + 255 * (1 - alpha)` is a **weighted average** between the pixel's brightness and white, by how solid it is. This is how any picture would look over white paper.
+
+### The same weights for the live preview
 
 ```js file=apps/ZEditor/src/render/filters/luma.js
 export const LUMINANCE_MATRIX_VALUES = "0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0.299 0.587 0.114 0 0 0 0 0 1 0";
 ```
+
+Reading it: an SVG **colour matrix** has four rows (red, green, blue, alpha) of five numbers. Rows 1–3 each say "my output = 0.299 × R + 0.587 × G + 0.114 × B + 0 × A + 0", so all three channels become the same grey; row 4, `0 0 0 1 0`, keeps alpha unchanged. The matrix lets the browser grayscale an image on screen without any of our own code touching pixels.

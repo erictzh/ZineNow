@@ -40,53 +40,64 @@ Details that keep it cheap and correct:
 
 ## Code
 
-Finding what a layer is clipped to:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/clipping.js
-export function clipBaseIndex(items, index) {
-  for (let i = index - 1; i >= 0; i--) {
-    if (!isClipped(items[i])) return i;
-  }
-  return -1;
-}
+### `clipBaseIndex`: what is this layer clipped to?
+
+```js file=apps/ZEditor/src/model/clipping.js fn=clipBaseIndex
 ```
 
-Several layers at once: the bottom-most stays as the base.
+Reading it: it starts just below the layer (`index - 1`) and walks **down** the stack (`i--` means "subtract one" each round). The first layer that is not itself clipped is the base; `return i` ends the function with it. If the loop finishes without finding one, `-1` is returned: by convention, "no such position".
 
-```js file=apps/ZEditor/src/model/clipping.js
-  const candidates = rows.length > 1 ? rows.slice(1) : rows;
-  return candidates.filter((i) => !isClipped(items[i]) && canClipAt(items, i)).map((i) => items[i].id);
+### `canClipAt` and `clipTargets`
+
+```js file=apps/ZEditor/src/model/clipping.js fn=canClipAt,clipTargets
 ```
 
-Cutting a layer to the mask with the alpha channel:
+Reading it:
+- `canClipAt` is true if the layer exists (`Boolean(items[index])`) and a base exists (`clipBaseIndex(...) >= 0`).
+- `clipTargets` turns the selected ids into rows: `items.map((a, i) => ids.includes(a.id) ? i : -1)` gives the position or −1, and `.filter((i) => i >= 0)` drops the −1s. If several are selected, `rows.slice(1)` skips the first (the lowest), which stays as the base; otherwise the one layer itself is the candidate. A final `.filter` keeps those not already clipped and able to be, and `.map` turns positions back into ids.
 
-```js file=apps/ZEditor/src/render/clipMask.js
-  await drawAnnotationOnCanvas(layerCtx, { ...item, blend: undefined }, scaleFactor, pageFilter);
-  layerCtx.globalCompositeOperation = "destination-in";
-  layerCtx.drawImage(await clipMaskCanvas(base, width, height, scaleFactor, pageFilter), 0, 0);
+### `maskShapeOf`: only the shape counts
+
+```js file=apps/ZEditor/src/render/clipMask.js fn=maskShapeOf
 ```
 
-The mask is only the base's shape: no stroke, shadow, texture, opacity or filter.
+Reading it: `{ ...base, opacity: undefined, ... }` copies the base item but cancels its opacity, blend mode, hidden flag and filter; `filter: { type: "none" }` turns filtering off. The loop sets every property of the stroke, shadow, texture and text-label effects to `undefined`, so the mask is the bare silhouette, fully opaque.
 
-```js file=apps/ZEditor/src/render/clipMask.js
-export function maskShapeOf(base) {
-  const shape = { ...base, opacity: undefined, blend: undefined, hidden: undefined, filter: { type: "none" } };
-  for (const prop of NOT_SHAPE_PROPS) shape[prop] = undefined;
-  return shape;
-}
+### `drawClippedItem`: cut with the alpha channel
+
+```js file=apps/ZEditor/src/render/clipMask.js fn=drawClippedItem
 ```
 
-In the editor: the CSS mask, and no flash before it is ready:
+Reading it:
+- `newCanvas` makes an off-screen canvas the size of the page. The item is drawn on it **alone** (`layer`), with no blend mode yet.
+- `layerCtx.globalCompositeOperation = "destination-in"` changes how the next drawing combines with what is there: **destination-in** keeps the existing pixels only where the new drawing has pixels. Drawing the mask now therefore erases the item everywhere the mask is empty. This is the **Porter-Duff "in"** operation from alpha compositing.
+- `ctx.save()` / `ctx.restore()` bracket the final step so the blend mode set there does not stay on. The finished layer is drawn onto the page with the item's own blend mode (`blendOf(item)`), if it is not "normal".
 
-```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx
-        WebkitMaskImage: mask, maskImage: mask,
-        mixBlendMode: blend && blend !== "normal" ? blend : undefined,
-        visibility: maskUrl ? undefined : "hidden", // until the mask is ready, so the image never flashes unclipped
+### `drawPageItem`: the rule for any item
+
+```js file=apps/ZEditor/src/render/clipMask.js fn=drawPageItem
 ```
 
-Limits on the mask's size:
+Reading it: hidden items return at once. For a clipped item it looks up the base; if a base exists and is visible, `drawClippedItem` draws it; if the base is hidden, the item is not drawn at all (the `return` is reached without drawing); a clipped item with no base falls through to the ordinary `drawAnnotationOnCanvas` at the bottom.
 
-```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx
-const MASK_MAX_SCALE = 2;          // mask px per page px at most (a page is 1.1 px per pt: this is ~2x sharper than the screen at 100%)
-const MASK_MAX_PIXELS = 16000000;  // keeps a huge base's mask from growing without limit
+### In the live editor: the mask region and the signature
+
+```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx fn=maskRegion,shapeSignature
 ```
+
+Reading it:
+- `maskRegion` takes the base's bounds and grows them by 3 px (`EDGE_PAD`) for its anti-aliased edge, rounding outward (`Math.floor` for the start, `Math.ceil` for the end), with at least 1 px in size (`Math.max(1, ...)`).
+- `shapeSignature` writes the base out as text (`JSON.stringify`) so two versions can be compared by a simple `===`. Pictures inside it can be megabytes long, so they are replaced by their length plus their last 48 characters: a cheap fingerprint. When the signature changes, the mask is redrawn; when only the *clipped* item moves, it does not.
+
+### The wrapper that applies the mask
+
+```js file=apps/ZEditor/src/ui/canvas/ClipWrap.jsx fn=ClipWrap
+```
+
+Reading it:
+- `useEffect(..., [signature])` makes a new mask only when the base's signature changes. `Math.sqrt(MASK_MAX_PIXELS / area)` reduces the mask's scale for a huge base so it never exceeds 16 million pixels.
+- `clipMaskCanvas(...)` returns a **promise** (a result that arrives later); `.then((canvas) => ...)` runs when it is ready. `canvas.toBlob` encodes it as a PNG file in memory, and `URL.createObjectURL(blob)` makes a temporary address for it, usable as a CSS image.
+- `cancelled` guards against a late result for an outdated base. The old address is released with `URL.revokeObjectURL` one second later, after the new mask has been painted, so memory is freed without a flash.
+- The returned JSX is a `<div>` whose CSS `maskImage` is that address: the browser shows the content only where the mask picture is opaque. `visibility: "hidden"` until the mask exists prevents a flash of the unclipped image. The inner `<div>` shifted by `-region.x`, `-region.y` keeps the content in the page's own coordinates.

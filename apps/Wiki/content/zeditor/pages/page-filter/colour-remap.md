@@ -29,32 +29,16 @@ All three loop over every pixel of the `ImageData` array (4 numbers per pixel: R
 
 ## Code
 
-Grayscale:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/render/filters/colorRemap.js
-    for (let i = 0; i < data.length; i += 4) {
-      const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      data[i] = data[i + 1] = data[i + 2] = lum;
-    }
+### `applyColorRemap`: grayscale, duotone and threshold
+
+```js file=apps/ZEditor/src/render/filters/colorRemap.js fn=applyColorRemap
 ```
 
-Duotone, a lerp per channel:
-
-```js file=apps/ZEditor/src/render/filters/colorRemap.js
-      data[i] = dark.r + (light.r - dark.r) * lum;
-      data[i + 1] = dark.g + (light.g - dark.g) * lum;
-      data[i + 2] = dark.b + (light.b - dark.b) * lum;
-```
-
-Threshold:
-
-```js file=apps/ZEditor/src/render/filters/colorRemap.js
-      const lum = lumaOverWhite(data, i);
-      const c = lum >= level ? paper : ink;
-```
-
-The threshold's controls:
-
-```js file=apps/ZEditor/src/model/pageFilters.js
-  { kind: "slider", prop: "level", label: "Cutoff", min: 0, max: 255, fallback: 128 },
-```
+Reading it:
+- `ctx.getImageData(0, 0, width, height)` copies every pixel of the picture into memory; `data` is the array of numbers (four per pixel: red, green, blue, alpha). The function changes the numbers and writes them back at the end with `putImageData`.
+- **Grayscale:** `for (let i = 0; i < data.length; i += 4)` is a **loop** that visits each pixel: `i` starts at 0 and jumps by 4, so it always lands on a pixel's red value. The brightness `lum` is the weighted sum of the three colour numbers, and `data[i] = data[i + 1] = data[i + 2] = lum` sets red, green and blue to that one value (chained `=` assigns right to left).
+- **Duotone:** `hexToRgb` turns a colour like `#ffe066` into separate `r`, `g`, `b` numbers. `lum` is divided by 255 so it runs from 0 to 1. Then each channel is `dark + (light - dark) * lum`: at `lum = 0` that is the dark colour, at 1 the light one, and in between a proportional mix. That formula is called **linear interpolation** ("lerp").
+- **Threshold:** `controlValues(filter, THRESHOLD_FILTER_CONTROLS)` reads the cutoff and colours, using each control's default if you have not set one. For each pixel, `lum >= level ? paper : ink` is a **ternary**: "if the brightness reaches the cutoff, paper, otherwise ink". Every pixel ends up one of two colours.
+- `else if` chains make sure only one of the three branches runs.

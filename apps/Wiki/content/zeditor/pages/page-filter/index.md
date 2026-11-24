@@ -42,41 +42,33 @@ An image with see-through parts keeps its own alpha after a halftone: the paper 
 
 ## Code
 
-Which filter an image really gets:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/model/pageFilters.js
-export function effectiveImageFilter(ann, pageFilter) {
-  const f = ann.filter;
-  if (!f || f.type === "match") return pageFilter || { type: "none" };
-  if (f.type === "none") return { type: "none" };
-  return f;
-}
+### Which filter does an image really get?
+
+```js file=apps/ZEditor/src/model/pageFilters.js fn=effectiveImageFilter
 ```
 
-Setting the filter on every selected page (and merging the patch):
+Reading it: `ann` is the image item, `pageFilter` the filter of its page. `!f` is true when no filter is set (`!` means "not"). `||` means "or", `===` "is exactly equal to". Three rules, checked from the top, each ending in `return` (which stops the function): no filter or "Match Page" gives the page's filter (or "none" if the page has none); "None" gives no filter; anything else gives the image's own.
 
-```js file=apps/ZEditor/src/state/useAnnotationEdits.js
-    const targets = new Set([selectedIdx, ...selectedPageIndices]);
-    recordUndoCheckpoint("pagefilter:" + [...targets].sort((a, b) => a - b).join(","));
-    setPages((prev) => prev.map((p, i) => (targets.has(i) ? { ...p, filter: { ...(p.filter || DEFAULT_PAGE_FILTER), ...patch } } : p)));
+### Setting the filter on the selected pages
+
+```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=updatePageFilter
 ```
 
-The dispatcher:
+Reading it:
+- `new Set([selectedIdx, ...selectedPageIndices])` makes a collection of the page numbers to change; a `Set` cannot contain the same number twice.
+- `recordUndoCheckpoint("pagefilter:" + ...)` saves an undo step. The text it is given is the **coalesce key**: dragging a colour picker fires many updates with the same key, and they are merged into one undo step.
+- `setPages((prev) => prev.map((p, i) => targets.has(i) ? {...} : p))` goes through all pages: a targeted page becomes a **new** object whose `filter` is the old filter with `patch` laid over it (`{ ...old, ...patch }`: later fields win); other pages are returned as they were.
 
-```js file=apps/ZEditor/src/render/filters/applyFilter.js
-  if (filter.type === "grayscale" || filter.type === "duotone" || filter.type === "threshold") {
-    applyColorRemap(ctx, canvas, filter);
-  } else if (filter.type === "halftone") {
+### The dispatcher
+
+```js file=apps/ZEditor/src/render/filters/applyFilter.js fn=applyPageFilter
 ```
 
-```js file=apps/ZEditor/src/render/filters/applyFilter.js
-  } else if (filter.type === "xerox") {
-    applyXerox(ctx, canvas, filter, scaleFactor);
-  }
-```
-
-Keeping the image's transparency after a halftone:
-
-```js file=apps/ZEditor/src/render/filters/applyFilter.js
-      for (let p = 0; p < sourceAlpha.length; p++) result.data[p * 4 + 3] = sourceAlpha[p];
-```
+Reading it:
+- The first line **guards**: no filter, type "none" or an empty canvas means there is nothing to do.
+- `if / else if` picks the routine by type. Grayscale, duotone and threshold go to `applyColorRemap`; xerox to `applyXerox`.
+- Halftone replaces pixels instead of tweaking them, so the function first copies out the picture's **alpha channel** (its see-through-ness: one number per pixel, 0 to 255) into `sourceAlpha`, a `Uint8ClampedArray` (a typed array: a fixed-size list of whole numbers 0–255 that is fast and memory-light). `imageData.data` holds four numbers per pixel (red, green, blue, alpha), so pixel `p`'s alpha is at `p * 4 + 3`.
+- After the screen is drawn, if any pixel was see-through (`hasTransparency`), the saved alpha values are written back with `putImageData`, so see-through parts of the image stay see-through.
+- `cellSize * scaleFactor` converts the size from editor pixels to the canvas's real resolution (1 on screen, larger in the export).

@@ -29,41 +29,46 @@ One detail: the lowest item cannot stay **clipped** to a layer that is not in th
 
 ## Code
 
-Making a group:
+Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
-```js file=apps/ZEditor/src/state/useAnnotationEdits.js
-    let groupId = "g" + nextAnnIdRef.current++;
-    while (used.has(groupId)) groupId = "g" + nextAnnIdRef.current++;
-    updateAnnotationsFor(selectedIdx, (anns) => {
-      const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
+### `handleGroupSelection`
+
+```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleGroupSelection
 ```
 
-Ungrouping:
+Reading it:
+- It needs at least two selected items (`ids.length < 2` returns early).
+- `used` is a `Set` of every group id on any page; `flatMap` flattens a list of lists into one list and `.filter(Boolean)` throws away empty values. The `while` loop keeps making new ids (`g12`, `g13`...) until one is unused: a safety net for files made by older versions.
+- Inside the edit: `members` are the selected items, each copied with the new `groupId` (`{ ...a, groupId }`). `topIndex` is the highest stack position among them (`Math.max(...)` over a list where non-members count as −1). `rest` is everything else. `rest.splice(position, 0, ...members)` inserts the members, all together, at the place of the topmost member, then `rest` is returned as the new list.
 
-```js file=apps/ZEditor/src/state/useAnnotationEdits.js
-    updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (groups.has(a.groupId) ? { ...a, groupId: undefined, groupName: undefined } : a)));
+### `handleUngroupSelection`
+
+```js file=apps/ZEditor/src/state/useAnnotationEdits.js fn=handleUngroupSelection
 ```
 
-Finding the rest of a group:
+Reading it: `groups` collects the group ids of the selected items. If none is in a group, it stops. Otherwise every item of those groups is replaced by a copy with `groupId` and `groupName` set to `undefined` (nothing).
 
-```js file=apps/ZEditor/src/model/annotations.js
-  const groups = new Set(annotations.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
-  if (groups.size === 0) return ids;
-  const mates = annotations.filter((a) => groups.has(a.groupId) && !a.hidden && !a.locked).map((a) => a.id);
+### `withGroupMates`
+
+```js file=apps/ZEditor/src/model/annotations.js fn=withGroupMates
 ```
 
-A group saved as a one-page, no-paper project:
+Reading it: it takes some ids and returns them **plus** the ids of all their group mates that are visible and unlocked. `new Set([...ids, ...mates])` merges the two lists and removes duplicates, then `[...set]` turns it back into an ordinary list. This one helper is why selecting, moving or reordering one member always brings the group along.
 
-```js file=apps/ZEditor/src/io/groupFile.js
-  const page = {
-    key: 1, isBlank: true, isCanvas: true, rotation: 0,
-    width: Math.ceil(b.width + 2 * PAD) / MAIN_SCALE, height: Math.ceil(b.height + 2 * PAD) / MAIN_SCALE,
-    annotations: moved,
-  };
+### Saving a group as a file
+
+```js file=apps/ZEditor/src/io/groupFile.js fn=itemsBounds,serializeGroup
 ```
 
-The lowest item cannot stay clipped to a missing layer:
+Reading it:
+- `itemsBounds` finds the **bounding box** of items: the same min/max trick as always, starting from `Infinity`/`-Infinity`, skipping items whose size is not a real number. It returns `null` for an empty list.
+- `serializeGroup` throws an **error** if there is nothing to save (`throw new Error(...)`, which stops the function and reports a message). `dx`, `dy` are how far everything must move so the box sits 40 px (`PAD`) from the top-left corner.
+- `items.map((a, i) => ...)` moves every item (`translatedAnnotation`), and for the first, lowest item (`i === 0`) removes `clipToBelow`, because there is nothing below it in the new file.
+- The `page` is an object: a blank no-paper page sized `Math.ceil(width + 2 × PAD) / MAIN_SCALE` (rounded **up** to whole pixels, then converted from editor pixels to points). Finally `serializeProject(...)` turns the page into the text of a `.znow` file.
 
-```js file=apps/ZEditor/src/io/groupFile.js
-    return i === 0 && m.clipToBelow ? { ...m, clipToBelow: undefined } : m;
+### Reading a group file back
+
+```js file=apps/ZEditor/src/io/groupFile.js fn=readGroupFile
 ```
+
+Reading it: `await readProjectFile(...)` opens the file like any project. `project.pages.flatMap((p) => p.annotations || [])` gathers the items of every page into one list. `items.find((a) => a.groupName)` looks for an item carrying a group name; the name used is that one, else the project's title, else "Imported group". Writing `(named && named.groupName)` first checks `named` exists before reading from it, to avoid an error.
