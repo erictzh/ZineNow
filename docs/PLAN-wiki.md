@@ -61,3 +61,4 @@ Home page: the gear panel has a "Tutorial / Wiki" link (after "Third-party notic
 - Phase status (2026-11-24): phases 1-5 written (54 of 135 pages); next is phase 6 (ZEditor project and export).
 - Phase status (2026-11-24): phases 1-6 written (59 of 135 pages); next is phase 7 (Markdown to PDF).
 - Phase status (2026-11-24): phases 1-7 written (85 of 135 pages); next is phase 8 (ZineArranger).
+- Phase status (2026-11-24): phases 1-8 written (97 of 135 pages); next is phase 9 (Ai Tools (Local)).
