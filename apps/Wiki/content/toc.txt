@@ -143,9 +143,6 @@ ai-tools | Ai Tools (Local)
     dialogs | Dialogs
     send-to-zeditor | Send to ZEditor
   remove-object | Remove object
-    harmonic | Harmonic fill
-    telea | Telea
-    criminisi | Criminisi
     migan | MI-GAN
     try-another | Try another variations
   remove-background | Remove background
