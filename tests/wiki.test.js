@@ -1,5 +1,5 @@
 // The wiki converter (apps/Wiki/wikiLib.mjs): code checking, callouts, links, the four parts.
-import { renderMarkdown, locateCode, findFunction, highlight, PARTS } from "../apps/Wiki/wikiLib.mjs";
+import { behindTheScene, renderMarkdown, locateCode, findFunction, highlight, PARTS } from "../apps/Wiki/wikiLib.mjs";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -32,5 +32,9 @@ const fnPage = renderMarkdown("```js file=f.js fn=b\n```", ctx());
 ok(fnPage.html.includes("lines 5–7") && fnPage.html.includes('<span class="ln">5</span>') && fnPage.html.includes("return"), "a fn= block shows the whole function with the file's real line numbers");
 const gapPage = renderMarkdown("```js file=f.js\nfunction a() {\n// …\n  return 2;\n```", ctx());
 ok(gapPage.html.includes("lines 1, 6") && gapPage.html.includes('class="line gap"'), "pieces of a block are numbered separately and divided by a ⋮ row");
+const bts = renderMarkdown("## Intro\n\nhi\n\n## How to use\n\nx\n\n## How it works\n\ny\n\n## Code\n\nz", ctx()).html;
+ok(/<details class="wk-bts">/.test(bts) && !/<details class="wk-bts"[^>]* open/.test(bts), "How it works and Code sit in one folded box, closed by default");
+ok(bts.indexOf("h-how-to-use") < bts.indexOf("<details") && bts.indexOf("h-how-it-works") > bts.indexOf("<details") && bts.trim().endsWith("</details>"), "the box starts at How it works and runs to the end; Intro and How to use stay outside");
+ok(bts.includes("&lt;/&gt; Behind the Scene") && behindTheScene("<h2 id=\"h-intro\">Intro</h2>") === "<h2 id=\"h-intro\">Intro</h2>", "titled </> Behind the Scene; a page without those parts is left alone");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);
