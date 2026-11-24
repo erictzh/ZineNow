@@ -1,0 +1,64 @@
+/* The wiki: the suite's orange dark theme (tokens come from ../../shared/styles/tokens.css). */
+html, body { height: 100%; margin: 0; background: var(--ui-bg); color: var(--ui-fg); font: 16px/1.65 var(--ui-font); }
+a { color: var(--ui-accent-text); }
+a:hover { color: #f06a2d; }
+.wk-top { position: fixed; z-index: 10; left: 0; right: 0; top: 0; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--ui-bg-alt); backdrop-filter: blur(8px); border-bottom: 1px solid var(--ui-border); }
+.wk-brand { font-weight: 700; font-size: 18px; color: var(--ui-fg); text-decoration: none; white-space: nowrap; }
+.wk-brand span { color: var(--ui-accent-text); }
+.wk-search { flex: 1 1 auto; max-width: 420px; margin-left: auto; box-sizing: border-box; min-height: 34px; padding: 4px 12px; background: #100d0c; color: var(--ui-fg); border: 1px solid var(--ui-border); border-radius: 8px; font: 14px var(--ui-font); }
+.wk-search:focus { outline: none; border-color: var(--ui-accent); }
+.wk-home { font-size: 14px; white-space: nowrap; }
+.wk-menu-btn { display: none; min-height: 34px; padding: 2px 10px; background: transparent; color: var(--ui-fg); border: 1px solid var(--ui-border); border-radius: 8px; font-size: 18px; cursor: pointer; }
+.wk-body { display: flex; padding-top: 52px; height: 100%; box-sizing: border-box; }
+.wk-nav { flex: 0 0 290px; overflow: auto; padding: 14px 10px 40px; border-right: 1px solid var(--ui-border); background: var(--ui-bg-card); font-size: 14.5px; }
+.wk-nav details { margin: 2px 0; }
+.wk-nav summary { cursor: pointer; padding: 6px 8px; border-radius: 6px; font-weight: 600; list-style: none; }
+.wk-nav summary::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--ui-fg-muted); }
+.wk-nav details[open] > summary::before { content: "▾"; }
+.wk-nav summary:hover { background: rgba(255, 255, 255, .05); }
+.wk-nav a { display: block; padding: 4px 8px 4px 26px; color: var(--ui-fg); text-decoration: none; border-radius: 6px; border-left: 2px solid transparent; }
+.wk-nav a:hover { background: rgba(255, 255, 255, .05); }
+.wk-nav a.soon { color: var(--ui-fg-muted); }
+.wk-nav a.active { border-left-color: var(--ui-accent); background: rgba(221, 83, 26, .12); color: #fff; }
+.wk-nav .hit small { display: block; color: var(--ui-fg-muted); font-size: 12.5px; line-height: 1.4; }
+.wk-nav .none { padding: 8px; color: var(--ui-fg-muted); }
+.wk-main { flex: 1 1 auto; min-width: 0; overflow: auto; }
+.wk-page { max-width: 820px; margin: 0 auto; padding: 28px 28px 80px; }
+.wk-crumb { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ui-fg-muted); margin-bottom: 4px; }
+.wk-page h1 { margin: 0 0 14px; font-size: 32px; line-height: 1.2; }
+.wk-page h2 { margin: 36px 0 10px; padding-top: 14px; border-top: 1px solid var(--ui-border); font-size: 22px; color: #fff; }
+.wk-page h3 { margin: 24px 0 6px; font-size: 17px; color: var(--ui-accent-text); }
+.wk-page h2 .anchor, .wk-page h3 .anchor { color: inherit; text-decoration: none; }
+.wk-page p, .wk-page li { color: #d6d3d8; }
+.wk-page code { font-family: var(--ui-mono); font-size: .88em; padding: 1px 5px; background: rgba(255, 255, 255, .07); border-radius: 4px; }
+figure.code { margin: 14px 0; border: 1px solid var(--ui-border); border-radius: 8px; background: #100d0c; position: relative; overflow: hidden; }
+figure.code figcaption { padding: 5px 12px; font: 12px var(--ui-mono); color: var(--ui-fg-muted); border-bottom: 1px solid var(--ui-border); background: rgba(255, 255, 255, .03); }
+figure.code pre { margin: 0; padding: 12px 14px; overflow: auto; font-size: 13px; line-height: 1.5; }
+figure.code code { padding: 0; background: none; font-size: 13px; line-height: 1.55; white-space: pre; }
+.copy-btn { position: absolute; top: 4px; right: 6px; min-height: 0; padding: 2px 8px; font: 12px var(--ui-font); color: var(--ui-fg-muted); background: transparent; border: 1px solid var(--ui-border); border-radius: 6px; cursor: pointer; }
+.copy-btn:hover { color: var(--ui-fg); border-color: var(--ui-accent); }
+.t-c { color: #7d766f; font-style: italic; } .t-s { color: #e3a46b; } .t-k { color: #f06a2d; } .t-n { color: #9bd1c4; }
+blockquote.callout { margin: 16px 0; padding: 4px 16px; border-left: 3px solid var(--ui-border); background: rgba(255, 255, 255, .03); border-radius: 0 8px 8px 0; }
+blockquote.callout.tip { border-color: #6fd38c; } blockquote.callout.note { border-color: var(--ui-accent); }
+blockquote.callout.why { border-color: #7aa7ff; } blockquote.callout.warning { border-color: #ff8a7a; }
+table { border-collapse: collapse; margin: 14px 0; font-size: 15px; }
+th, td { border: 1px solid var(--ui-border); padding: 6px 10px; text-align: left; }
+th { background: rgba(255, 255, 255, .05); }
+.wk-soon { padding: 18px; border: 1px dashed var(--ui-border); border-radius: 10px; color: var(--ui-fg-muted); }
+.wk-pn { display: flex; justify-content: space-between; gap: 12px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--ui-border); }
+.wk-pn a { flex: 1 1 0; padding: 10px 14px; border: 1px solid var(--ui-border); border-radius: 8px; text-decoration: none; color: var(--ui-fg); }
+.wk-pn a:hover { border-color: var(--ui-accent); }
+.wk-pn a small { display: block; color: var(--ui-fg-muted); }
+.wk-pn a.next { text-align: right; }
+.wk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 18px; }
+.wk-grid a { padding: 12px 14px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-bg-card); color: var(--ui-fg); text-decoration: none; }
+.wk-grid a:hover { border-color: var(--ui-accent); }
+.wk-grid small { display: block; color: var(--ui-fg-muted); }
+.wk-build { margin-top: 28px; font-size: 12.5px; color: var(--ui-fg-muted); }
+@media (max-width: 800px) {
+  .wk-menu-btn { display: block; }
+  .wk-home { display: none; }
+  .wk-nav { position: fixed; z-index: 9; top: 52px; bottom: 0; left: 0; width: 290px; max-width: 86vw; transform: translateX(-100%); transition: transform .15s; }
+  body.nav-open .wk-nav { transform: none; }
+  .wk-page { padding: 20px 16px 60px; }
+}

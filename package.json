@@ -4,14 +4,15 @@
   "description": "ZineNow zine-making tools. Apps run from plain files (file://); this package only builds each app's src/ into dist/app.js.",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "build": "node tools/build.mjs",
+    "build": "node tools/build.mjs && node apps/Wiki/build.mjs",
     "watch": "node tools/build.mjs --watch",
-    "check": "node tools/build.mjs --check",
+    "check": "node tools/build.mjs --check && node apps/Wiki/build.mjs --check",
     "test": "node tools/test.mjs"
   },
   "devDependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "esbuild": "0.24.0",
-    "hyphen": "^1.14.1"
+    "hyphen": "^1.14.1",
+    "marked": "^12.0.2"
   }
 }

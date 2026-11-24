@@ -1,0 +1,111 @@
+[
+ {"slug":"start","title":"Start here","pages":[
+  ["what-is-zinenow","What ZineNow is"],
+  ["how-its-built","How it is built"],
+  ["offline-and-install","Offline use and installing (PWA)"],
+  ["shared-parts","Shared parts (number boxes, gear, drop images…)"]
+ ]},
+ {"slug":"home","title":"Home page","pages":[
+  ["app-cards","App cards and apps-config.js"],
+  ["gear-and-experimental","Gear panel and the Experimental AI switch"]
+ ]},
+ {"slug":"zeditor-workspace","title":"ZEditor: the workspace","pages":[
+  ["menus-and-welcome","Top bar, menus, Welcome and New Document"],
+  ["page-sidebar","Page sidebar and live thumbnails"],
+  ["zoom-and-canvas","Zoom, the outer canvas and \"No paper\""],
+  ["touch-and-shortcuts","Touch bar and keyboard shortcuts"],
+  ["history-and-state","Undo/redo and how the app holds a document"]
+ ]},
+ {"slug":"zeditor-pages","title":"ZEditor: pages","pages":[
+  ["page-operations","Page operations"],
+  ["ruler-guide","Ruler Guide (rulers, guides, lock, snap)"],
+  ["page-guide","Page Guide (trim, margin, bleed)"],
+  ["page-numbers","Page Numbers"],
+  ["onion-skin","Onion Skin"],
+  ["page-filter","Page Filter (halftone, xerox, luma, colour remap)"]
+ ]},
+ {"slug":"zeditor-arrange","title":"ZEditor: selecting and arranging","pages":[
+  ["move-resize-rotate","Move, resize and rotate"],
+  ["layers-panel","Layers panel"],
+  ["groups","Groups and group files"],
+  ["clipping-masks","Clipping masks"],
+  ["measure","Measure"]
+ ]},
+ {"slug":"zeditor-text","title":"ZEditor: text","pages":[
+  ["text-tool-and-layout","Text tool and the layout engine"],
+  ["composer-and-hyphenation","Composer and hyphenation"],
+  ["caret-and-selection","Caret and text selection"],
+  ["character-and-paragraph","Character and paragraph settings"],
+  ["columns-and-frame","Columns and frame"],
+  ["text-styles","Text styles"],
+  ["spans","Spans (colour runs)"],
+  ["placeholder-text","Placeholder text"],
+  ["photo-fill","Photo fill"],
+  ["text-wrap","Text wrap"],
+  ["threads","Threads (linked frames)"],
+  ["fonts","Fonts: uploaded, system, embedded"]
+ ]},
+ {"slug":"zeditor-images","title":"ZEditor: images","pages":[
+  ["insert-image","Insert Image"],
+  ["insert-pdf","Insert PDF"],
+  ["crop","Crop"],
+  ["photo-adjustments","Photo adjustments"],
+  ["effects","Effects (Lomo, Feather, box effects)"],
+  ["vectorize","Vectorize"],
+  ["ai-background-removal","AI Background Removal"],
+  ["flatten","Flatten (bake)"]
+ ]},
+ {"slug":"zeditor-shapes","title":"ZEditor: shapes and drawing","pages":[
+  ["rectangle-ellipse","Rectangle and Ellipse"],
+  ["stroke-fill-gradients","Stroke, fill and gradients"],
+  ["draw-highlight","Draw and Highlight"]
+ ]},
+ {"slug":"zeditor-eraser-marquee","title":"ZEditor: Eraser and Marquee","pages":[
+  ["eraser","Eraser (strokes, soft, magic)"],
+  ["marquee","Marquee (rectangle, polygon, brush)"],
+  ["make-layer","Make layer"],
+  ["remove-and-fill","Remove & fill (Pattern, Smooth, Detailed)"],
+  ["remove-and-fill-ai","Remove & fill with AI and Try another"]
+ ]},
+ {"slug":"zeditor-project","title":"ZEditor: project and export","pages":[
+  ["znow-file","The .znow project file"],
+  ["embed-fonts","Embed system fonts"],
+  ["export-pdf","Export PDF"],
+  ["export-images","Export PNG, JPG and SVG"],
+  ["send-to-zinearranger","Send to ZineArranger"]
+ ]},
+ {"slug":"md2pdf","title":"Markdown to PDF","pages":[
+  ["workspace","Workspace"],
+  ["editor","Editor and format toolbar"],
+  ["typography","Typography panel"],
+  ["building-the-document","Building the document"],
+  ["converters","Converters (DOCX, EPUB, HTML, Muse)"],
+  ["export","Export"]
+ ]},
+ {"slug":"zinearranger","title":"ZineArranger","pages":[
+  ["load-and-page-range","Loading a PDF and the page range"],
+  ["sheet-sizes","Sheet sizes and the sheet grid"],
+  ["imposition","Imposition"],
+  ["reverse-imposition","Reverse imposition"],
+  ["options-and-zoom","Options panel, zoom and panel resize"],
+  ["print-and-log","Print and the activity log"],
+  ["credit","Credit"]
+ ]},
+ {"slug":"ai-tools","title":"Ai Tools (Local)","pages":[
+  ["hub","The hub (shell, Log window, Models page)"],
+  ["remove-object","Remove object"],
+  ["remove-background","Remove background"],
+  ["face-blur","Face blur"],
+  ["click-to-select","Click-to-select"],
+  ["upscale","Upscale"],
+  ["ocr","Text from image (OCR)"],
+  ["running-models","Running models in the browser"]
+ ]},
+ {"slug":"appendix","title":"Appendices","pages":[
+  ["glossary","Glossary"],
+  ["file-formats","File formats"],
+  ["handoff-protocol","Cross-app handoff"],
+  ["licences","Licence policy and notices"],
+  ["contributing","Contributing and maintaining"]
+ ]}
+]
