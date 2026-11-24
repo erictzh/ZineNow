@@ -1,10 +1,11 @@
 /* The wiki: the suite's orange dark theme (tokens come from ../../shared/styles/tokens.css). */
+:root { --wk-text-accent: #ff8547; } /* the orange used for titles, highlights and links */
 html, body { height: 100%; margin: 0; background: var(--ui-bg); color: var(--ui-fg); font: 16px/1.65 var(--ui-font); }
-a { color: var(--ui-accent-text); }
-a:hover { color: #f06a2d; }
+a { color: var(--wk-text-accent); }
+a:hover { color: #ffa070; }
 .wk-top { position: fixed; z-index: 10; left: 0; right: 0; top: 0; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--ui-bg-alt); backdrop-filter: blur(8px); border-bottom: 1px solid var(--ui-border); }
 .wk-brand { font-weight: 700; font-size: 18px; color: var(--ui-fg); text-decoration: none; white-space: nowrap; }
-.wk-brand span { color: var(--ui-accent-text); }
+.wk-brand span { color: var(--wk-text-accent); }
 .wk-search { flex: 1 1 auto; max-width: 420px; margin-left: auto; box-sizing: border-box; min-height: 34px; padding: 4px 12px; background: #100d0c; color: var(--ui-fg); border: 1px solid var(--ui-border); border-radius: 8px; font: 14px var(--ui-font); }
 .wk-search:focus { outline: none; border-color: var(--ui-accent); }
 .wk-home { font-size: 14px; white-space: nowrap; }
@@ -31,7 +32,7 @@ a:hover { color: #f06a2d; }
 .wk-crumb { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--ui-fg-muted); margin-bottom: 4px; }
 .wk-page h1 { margin: 0 0 14px; font-size: 32px; line-height: 1.2; }
 .wk-page h2 { margin: 36px 0 10px; padding-top: 14px; border-top: 1px solid var(--ui-border); font-size: 22px; color: #fff; }
-.wk-page h3 { margin: 24px 0 6px; font-size: 17px; color: var(--ui-accent-text); }
+.wk-page h3 { margin: 24px 0 6px; font-size: 17px; color: var(--wk-text-accent); }
 .wk-page h2 .anchor, .wk-page h3 .anchor { color: inherit; text-decoration: none; }
 .wk-page p, .wk-page li { color: #d6d3d8; }
 .wk-page code { font-family: var(--ui-mono); font-size: .88em; padding: 1px 5px; background: rgba(255, 255, 255, .07); border-radius: 4px; }
@@ -41,7 +42,7 @@ figure.code pre { margin: 0; padding: 12px 14px; overflow: auto; font-size: 13px
 figure.code code { padding: 0; background: none; font-size: 13px; line-height: 1.55; white-space: pre; }
 .copy-btn { position: absolute; top: 4px; right: 6px; min-height: 0; padding: 2px 8px; font: 12px var(--ui-font); color: var(--ui-fg-muted); background: transparent; border: 1px solid var(--ui-border); border-radius: 6px; cursor: pointer; }
 .copy-btn:hover { color: var(--ui-fg); border-color: var(--ui-accent); }
-.t-c { color: #7d766f; font-style: italic; } .t-s { color: #e3a46b; } .t-k { color: #f06a2d; } .t-n { color: #9bd1c4; }
+.t-c { color: #7d766f; font-style: italic; } .t-s { color: #e3a46b; } .t-k { color: #ff8547; } .t-n { color: #9bd1c4; }
 blockquote.callout { margin: 16px 0; padding: 4px 16px; border-left: 3px solid var(--ui-border); background: rgba(255, 255, 255, .03); border-radius: 0 8px 8px 0; }
 blockquote.callout.tip { border-color: #6fd38c; } blockquote.callout.note { border-color: var(--ui-accent); }
 blockquote.callout.why { border-color: #7aa7ff; } blockquote.callout.warning { border-color: #ff8a7a; }
@@ -69,7 +70,7 @@ th { background: rgba(255, 255, 255, .05); }
   body.nav-open .wk-nav { transform: none; }
   .wk-page { padding: 20px 16px 60px; }
 }
-.wk-nav .num { display: inline-block; min-width: 1.6em; color: var(--ui-accent-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.wk-nav .num { display: inline-block; min-width: 1.6em; color: var(--wk-text-accent); font-weight: 600; font-variant-numeric: tabular-nums; }
 .wk-nav details.sub { margin-left: 14px; }
 .wk-nav details.sub summary { font-weight: 500; }
 .wk-nav details.sub a { padding-left: 24px; }
@@ -80,7 +81,7 @@ figure.code .line { display: block; }
 figure.code .ln { display: inline-block; width: 3.2em; margin-right: 1em; text-align: right; color: #6f6862; user-select: none; -webkit-user-select: none; }
 figure.code .line.gap .ln { width: auto; margin: 0 0 0 .4em; }
 figure.code .line.gap { padding: 2px 0; }
-figure.code figcaption span:last-child { color: var(--ui-accent-text); }
+figure.code figcaption span:last-child { color: var(--wk-text-accent); }
 .wk-page .reading { margin: 4px 0 18px; padding-left: 18px; }
 .wk-page .reading li { margin: 3px 0; }
 .wk-buildtag { color: var(--ui-fg-muted); font-size: 12px; white-space: nowrap; }
