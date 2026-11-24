@@ -158,6 +158,46 @@ export function useZoom() {
     return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, []);
 
+  // Pressing the mouse wheel (the middle button) and dragging pans the page area, like two fingers do on a touchscreen. It works
+  // whatever tool is chosen, and the press never reaches the page's own handlers (no selecting, drawing or pasting). Only over the
+  // page area, and not in a text box.
+  useEffect(() => {
+    let drag = null; // { x, y, left, top } the pointer and the pane's scroll when the button went down
+    const overPageArea = (e) => e.target instanceof Element && e.target.closest(".ze-ruler-frame") && !e.target.closest("input, textarea, select, [contenteditable]");
+    function onDown(e) {
+      const pane = previewPaneRef.current;
+      if (e.button !== 1 || !pane || !overPageArea(e)) return;
+      e.preventDefault(); // no browser auto-scroll, no paste on Linux
+      e.stopPropagation();
+      drag = { x: e.clientX, y: e.clientY, left: pane.scrollLeft, top: pane.scrollTop };
+      document.documentElement.classList.add("ze-panning");
+    }
+    function onMove(e) {
+      const pane = previewPaneRef.current;
+      if (!drag || !pane) return;
+      if (!(e.buttons & 4)) { onEnd(); return; } // the button was let go outside the window
+      pane.scrollLeft = drag.left - (e.clientX - drag.x);
+      pane.scrollTop = drag.top - (e.clientY - drag.y);
+    }
+    function onEnd() {
+      drag = null;
+      document.documentElement.classList.remove("ze-panning");
+    }
+    function onAux(e) { if (e.button === 1 && overPageArea(e)) e.preventDefault(); }
+    window.addEventListener("mousedown", onDown, true);
+    window.addEventListener("mousemove", onMove);
+    const onUp = (e) => { if (e.button === 1) onEnd(); };
+    window.addEventListener("mouseup", onUp, true);
+    window.addEventListener("auxclick", onAux, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown, true);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("auxclick", onAux, true);
+      onEnd();
+    };
+  }, []);
+
   // A document was created or opened: 100%, no anchor to keep, and the page centred (ComposeCanvas, on the new viewKey).
   useEffect(() => {
     function onDocumentOpened() {
