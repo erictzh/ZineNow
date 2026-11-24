@@ -80,3 +80,6 @@
     pointer-events: none;
 }
 
+
+/* Middle-button drag pans the page area (state/useZoom.js). */
+html.ze-panning, html.ze-panning * { cursor: grabbing !important; }
