@@ -4,6 +4,8 @@
 # content/<parent slugs>/<slug>.md (or .../<slug>/index.md when it has children).
 start | Start here
   what-is-zinenow | What ZineNow is | browser only, no server, AGPL-3.0-or-later
+  first-minizine | Your first minizine | one sheet of paper, eight pages, one cut
+  status | What works, and what doesn't yet | an honest list
   how-its-built | How it is built | esbuild, dist/app.js, build number, npm run build / check / test
   offline-and-install | Offline and install | PWA, service workers
   shared-parts | Shared parts
