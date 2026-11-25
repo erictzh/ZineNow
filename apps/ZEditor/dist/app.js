@@ -14251,14 +14251,14 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/model/guideSet.js
   var GUIDE_COLORS = [
-    { key: "white", label: "White", css: "#ffffff" },
-    { key: "yellow", label: "Yellow", css: "#ffd93d" },
-    { key: "lightblue", label: "Light blue", css: "#5ccdf2" },
-    { key: "lightgreen", label: "Light green", css: "#86efac" },
-    { key: "lightred", label: "Light red", css: "#fca5a5" },
-    { key: "pink", label: "Pink", css: "#f9a8d4" },
-    { key: "lightgrey", label: "Light grey", css: "#c9ced6" },
-    { key: "orange", label: "Orange", css: "#fb923c" }
+    { key: "white", label: "White", css: "#ffffff", purpose: "Free", description: "No set purpose. Use it for anything of your own." },
+    { key: "yellow", label: "Yellow", css: "#ffd93d", purpose: "Alignment", description: "Lines you line things up by: edges, centres, the thing a picture should sit on." },
+    { key: "lightblue", label: "Light blue", css: "#5ccdf2", purpose: "Margins and columns", description: "Where text may start and stop: page margins, column edges, gutters." },
+    { key: "lightgreen", label: "Light green", css: "#86efac", purpose: "Baseline and grid", description: "A steady rhythm: baselines, rows of a grid, equal steps." },
+    { key: "lightred", label: "Light red", css: "#fca5a5", purpose: "Bleed and cut", description: "Where the page is trimmed, and how far a picture must run past it." },
+    { key: "pink", label: "Pink", css: "#f9a8d4", purpose: "Safe area", description: "Keep text and faces inside it, so nothing important is cut off or lost in the fold." },
+    { key: "lightgrey", label: "Light grey", css: "#c9ced6", purpose: "Layout", description: "Added by page layouts: the edges of their pictures and text areas." },
+    { key: "orange", label: "Orange", css: "#fb923c", purpose: "Notes", description: "Reminders to yourself. Not for placing things." }
   ];
   var DEFAULT_GUIDE_COLOR = "lightblue";
   var LAYOUT_GUIDE_COLOR = "lightgrey";
@@ -17861,18 +17861,7 @@ ${parts.join("\n")}</g>`);
       if (Number.isFinite(v)) guides.update(guide.id, { pos: Math.round(unitToPt(v, unit) * 100) / 100 });
       else setText(String(shown));
     };
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Guide", sections: false }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Colour"), /* @__PURE__ */ React.createElement("div", { className: "ze-guide-swatches" }, GUIDE_COLORS.map((c) => /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        key: c.key,
-        type: "button",
-        className: "ze-guide-swatch" + (guide.color === c.key ? " active" : ""),
-        style: { background: c.css },
-        title: c.label,
-        "aria-label": c.label,
-        onClick: () => guides.update(guide.id, { color: c.key })
-      }
-    )))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, guide.axis === "x" ? "Position from the left" : "Position from the top", " (", unit, ")"), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Guide", sections: false }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, guide.axis === "x" ? "Position from the left" : "Position from the top", " (", unit, ")"), /* @__PURE__ */ React.createElement(
       NumberBox,
       {
         className: "ze-format-number",
@@ -17885,7 +17874,19 @@ ${parts.join("\n")}</g>`);
           if (e.key === "Enter") e.currentTarget.blur();
         }
       }
-    )), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Shown on"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide is-choice" + (guide.scope === "page" ? " active" : ""), onClick: () => guides.setScope([guide.id], "page") }, "This page"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide is-choice" + (guide.scope === "global" ? " active" : ""), onClick: () => guides.setScope([guide.id], "global") }, "All pages"))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: Boolean(guide.locked), onChange: (e) => guides.update(guide.id, { locked: e.target.checked || void 0 }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Lock this guide")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: Boolean(guide.hidden), onChange: (e) => guides.update(guide.id, { hidden: e.target.checked || void 0 }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Hide this guide")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => guides.remove(guide.id) }, "Delete guide"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag a guide to move it, or drag it back onto the ruler to remove it. Items snap to visible guides."));
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Shown on"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide is-choice" + (guide.scope === "page" ? " active" : ""), onClick: () => guides.setScope([guide.id], "page") }, "This page"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide is-choice" + (guide.scope === "global" ? " active" : ""), onClick: () => guides.setScope([guide.id], "global") }, "All pages"))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: Boolean(guide.locked), onChange: (e) => guides.update(guide.id, { locked: e.target.checked || void 0 }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Lock this guide")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: Boolean(guide.hidden), onChange: (e) => guides.update(guide.id, { hidden: e.target.checked || void 0 }) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Hide this guide")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => guides.remove(guide.id) }, "Delete guide"), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag a guide to move it, or drag it back onto the ruler to remove it. Items snap to visible guides."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Colour and purpose"), /* @__PURE__ */ React.createElement("div", { className: "ze-guide-cards", role: "radiogroup", "aria-label": "Guide colour and purpose" }, GUIDE_COLORS.map((c) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: c.key,
+        type: "button",
+        role: "radio",
+        "aria-checked": guide.color === c.key,
+        className: "ze-guide-card" + (guide.color === c.key ? " active" : ""),
+        onClick: () => guides.update(guide.id, { color: c.key })
+      },
+      /* @__PURE__ */ React.createElement("span", { className: "ze-guide-card-title" }, /* @__PURE__ */ React.createElement("span", { className: "ze-guide-dot", style: { background: c.css }, "aria-hidden": "true" }), c.purpose),
+      /* @__PURE__ */ React.createElement("span", { className: "ze-guide-card-desc" }, c.description)
+    )))));
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
@@ -19398,7 +19399,7 @@ ${parts.join("\n")}</g>`);
       const ids = group.guides.map((g) => g.id);
       const allLocked = group.guides.every((g) => g.locked), allHidden = group.guides.every((g) => g.hidden);
       const isFolded = Boolean(folded[group.key]);
-      return /* @__PURE__ */ React.createElement(React.Fragment, { key: group.key }, /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-group-row ze-guide-group-row", style: { "--ze-group-color": guideColor(group.color).css }, title: group.label }, /* @__PURE__ */ React.createElement(
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: group.key }, /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-group-row ze-guide-group-row", style: { "--ze-group-color": guideColor(group.color).css }, title: group.label + " · " + guideColor(group.color).purpose }, /* @__PURE__ */ React.createElement(
         "button",
         {
           type: "button",
@@ -20863,7 +20864,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "1837aac"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "c4dfc20"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

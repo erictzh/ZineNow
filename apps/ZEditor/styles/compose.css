@@ -543,8 +543,13 @@
 .ze-snap-line-x { top: 0; bottom: 0; }
 .ze-snap-line-y { left: 0; right: 0; }
 
-/* Guide colour swatches in the Format panel. */
-.ze-guide-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
-.ze-guide-swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(0,0,0,.5); cursor: pointer; }
-.ze-guide-swatch.active { border-color: var(--ui-bg, #111); box-shadow: 0 0 0 2px var(--ui-accent-text, #ff8547); }
 .ze-guide-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
+
+/* Colour and purpose cards in the guide's Format panel. */
+.ze-guide-cards { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
+.ze-guide-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; text-align: left; border: 1px solid var(--ui-border); border-radius: 8px; background: transparent; color: var(--ui-fg); cursor: pointer; }
+.ze-guide-card:hover { background: var(--ui-bg-alt, rgba(255,255,255,.04)); }
+.ze-guide-card.active { border-color: var(--ui-accent-text, #ff8547); background: var(--ui-bg-alt, rgba(255,255,255,.06)); }
+.ze-guide-card-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.ze-guide-card-title .ze-guide-dot { margin: 0; }
+.ze-guide-card-desc { font-size: 12px; line-height: 1.35; color: var(--ui-fg-muted); font-weight: 400; }

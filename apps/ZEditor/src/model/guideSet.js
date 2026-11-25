@@ -5,14 +5,14 @@
 // live in the project's view settings (`view.rulerGuides`). Which store a guide is in is its scope.
 
 export const GUIDE_COLORS = [
-  { key: "white", label: "White", css: "#ffffff" },
-  { key: "yellow", label: "Yellow", css: "#ffd93d" },
-  { key: "lightblue", label: "Light blue", css: "#5ccdf2" },
-  { key: "lightgreen", label: "Light green", css: "#86efac" },
-  { key: "lightred", label: "Light red", css: "#fca5a5" },
-  { key: "pink", label: "Pink", css: "#f9a8d4" },
-  { key: "lightgrey", label: "Light grey", css: "#c9ced6" },
-  { key: "orange", label: "Orange", css: "#fb923c" },
+  { key: "white", label: "White", css: "#ffffff", purpose: "Free", description: "No set purpose. Use it for anything of your own." },
+  { key: "yellow", label: "Yellow", css: "#ffd93d", purpose: "Alignment", description: "Lines you line things up by: edges, centres, the thing a picture should sit on." },
+  { key: "lightblue", label: "Light blue", css: "#5ccdf2", purpose: "Margins and columns", description: "Where text may start and stop: page margins, column edges, gutters." },
+  { key: "lightgreen", label: "Light green", css: "#86efac", purpose: "Baseline and grid", description: "A steady rhythm: baselines, rows of a grid, equal steps." },
+  { key: "lightred", label: "Light red", css: "#fca5a5", purpose: "Bleed and cut", description: "Where the page is trimmed, and how far a picture must run past it." },
+  { key: "pink", label: "Pink", css: "#f9a8d4", purpose: "Safe area", description: "Keep text and faces inside it, so nothing important is cut off or lost in the fold." },
+  { key: "lightgrey", label: "Light grey", css: "#c9ced6", purpose: "Layout", description: "Added by page layouts: the edges of their pictures and text areas." },
+  { key: "orange", label: "Orange", css: "#fb923c", purpose: "Notes", description: "Reminders to yourself. Not for placing things." },
 ];
 export const DEFAULT_GUIDE_COLOR = "lightblue"; // what guides drawn before colours existed look like
 export const LAYOUT_GUIDE_COLOR = "lightgrey";   // the guides a layout adds

@@ -41,7 +41,7 @@ export function GuideGroups({ guides, unit }) {
         const isFolded = Boolean(folded[group.key]);
         return (
           <React.Fragment key={group.key}>
-            <div className="ze-layer-row ze-layer-group-row ze-guide-group-row" style={{ "--ze-group-color": guideColor(group.color).css }} title={group.label}>
+            <div className="ze-layer-row ze-layer-group-row ze-guide-group-row" style={{ "--ze-group-color": guideColor(group.color).css }} title={group.label + " · " + guideColor(group.color).purpose}>
               <button type="button" className="ze-layer-caret" aria-expanded={!isFolded} title={isFolded ? "Show the guides" : "Fold the guides away"}
                 onClick={() => setFolded((f) => ({ ...f, [group.key]: !f[group.key] }))}>
                 <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: isFolded ? "rotate(-90deg)" : undefined }}><path d="M5.5 7.5l4.5 4.5 4.5-4.5" /></svg>
