@@ -807,3 +807,5 @@ Done: a short welcome above the app cards on the launcher (`index.html` `.zn-int
 
 ## Housekeeping (Phase 0 leftovers, 2026-11-25)
 The wiki build number now also covers `wiki.css`, `wiki.js` and `index.html` (apps/Wiki/build.mjs). Launcher cards accept an optional `name` in `config/apps-config.js` (RGB to CMYK uses it). Tracking check: letter spacing is whole-box only (`textLook().letterSpacingPx`); text spans (`colorRuns`) carry font, size, bold, italic, underline, strike and colour but not spacing, so per-selection Tracking does not exist: building it means a span property, per-run measuring in `render/textLayout.js`/`textRuns.js`, the canvas draw and the PDF/SVG exporters. Still waiting on the maintainer: the middle-button pan test.
+
+Layout typography (2026-11-25): layout settings now hold `bodyPt` (11), `titlePt` (25) and `lineSpacing` (150) instead of `titleScale`/the Text tool's size; titles get a thin rectangle beneath them (layoutRole "rule", not turned into a guide); body text carries `lineSpacing`. Older saved projects lose their `titleScale` (ignored) and get the new defaults.

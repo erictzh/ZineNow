@@ -7,11 +7,11 @@
 1. **Page → Layout → Choose…**
 2. Pick where it goes at the top: **New page after** (the default) adds a new blank page after the current one holding the layout, or **On this page** applies it to the current page, **under** your own items. Picking another layout on the same page **replaces** the earlier one instead of stacking; the text area keeps its words and moves into the new layout's text area. Both are **one undo step**. The same picker is also the **Layout** button at the top of the page strip on the left.
 3. Click a layout's little picture.
-4. **Layout settings (this file)** (fold-out at the bottom): **Margin**, **Gap between pieces**, **Split** of the half-and-half layouts, **Title size**, **Caption size**, **Column gap**. **Reset to defaults** puts them back. These are saved **in the project file**, so a different document keeps the app's defaults.
+4. **Layout settings (this file)** (fold-out at the bottom): **Margin**, **Gap between pieces**, **Split** of the half-and-half layouts, **Body text size**, **Title size**, **Body line spacing**, **Caption size**, **Column gap**. **Reset to defaults** puts them back. These are saved **in the project file**, so a different document keeps the app's defaults.
 - All layout text is **justified** (both edges straight); change it in the Format panel like any text.
 - Layouts already on a page are not re-flowed when you change the settings: only layouts added afterwards use the new sizes.
 - The **margin** is the Page Guide's margin when the Page Guide is on, otherwise 8% of the page width.
-- Text uses the **Text tool's current font, size and colour**; titles are 2.5 times that size and bold; captions 0.85 times.
+- Text uses the **Text tool's current font and colour**. The sizes come from the Layout settings: **body 11 pt with 150% line spacing**, **titles 25 pt, bold, with a thin line beneath them**, captions 0.85 times the body size.
 
 ## How it works
 
@@ -42,7 +42,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** it starts from a copy of the defaults (`{ ...DEFAULT_LAYOUT_SETTINGS }`: the three dots copy every entry into a new object). For each editable field it reads the saved value with `Number(...)`; only a real number (`Number.isFinite`) is used, and `Math.min(max, Math.max(min, v))` **clamps** it between the field's minimum and maximum. The grey colour must look like `#rrggbb` (a **regular expression**: a pattern for text).
 
-**Worked example.** `{ marginPct: 999, gapPct: "x", titleScale: 3, bogus: 1 }` becomes margin **30** (the maximum), gap **4** (the default, since `"x"` is not a number), title **3**, and `bogus` is dropped.
+**Worked example.** `{ marginPct: 999, gapPct: "x", titlePt: 30, bogus: 1 }` becomes margin **30** (the maximum), gap **4** (the default, since `"x"` is not a number), title **30 pt**, and `bogus` is dropped.
 
 ### The room inside the margin
 

@@ -31,29 +31,33 @@ export function fitTextToFrame(ann) {
 // Returns the items in drawing order (bottom first).
 // The boxes of a layout on a page, as buildLayoutItems places them (for the guides a layout adds).
 export function layoutBoxes({ layout, page, settings, defaults, guide }) {
-  const bodyPt = Number(defaults.textFontSize) || 12;
+  const bodyPt = settings.bodyPt;
   return place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
 }
 
 export function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
-  const bodyPt = Number(defaults.textFontSize) || 12;
+  const bodyPt = settings.bodyPt;
   const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
   const rect = controlValues({}, RECT_CONTROLS);
   const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: "justify" }; // every layout text is justified (the last line of a paragraph stays left)
   return boxes.map((b) => {
     const id = nextId();
+    if (b.role === "rule") {
+      // The line under a title: a thin rectangle in the text colour.
+      return { id, type: "rect", layoutKey: layout.key, layoutRole: "rule", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: defaults.textColor || "#1a1a1a", fillAlpha: 100 };
+    }
     if (b.role === "picture") {
       return { id, type: "rect", layoutKey: layout.key, layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
     }
     const base = { id, type: "text", layoutKey: layout.key, layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
-    if (b.role === "title") return { ...base, fontSize: Math.round(bodyPt * settings.titleScale * 10) / 10, bold: true, text: TITLE_TEXT };
+    if (b.role === "title") return { ...base, fontSize: settings.titlePt, bold: true, text: TITLE_TEXT };
     const framed = { ...base, frameHeight: Math.max(12, Math.round(pxToPt(b.h))) };
     if (b.role === "caption") {
       const sized = { ...framed, fontSize: Math.round(bodyPt * settings.captionScale * 10) / 10 };
       return { ...sized, text: fitTextToFrame({ ...sized, text: CAPTION_TEXT }) };
     }
     const cols = b.columns > 1 ? { columns: b.columns, columnGap: settings.columnGapPt } : {};
-    const body = { ...framed, ...cols };
+    const body = { ...framed, ...cols, lineSpacing: settings.lineSpacing };
     return { ...body, text: fitTextToFrame({ ...body, text: placeholderText("latin", 40) }) };
   });
 }

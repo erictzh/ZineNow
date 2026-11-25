@@ -23,7 +23,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status, gu
   const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
 
   // The guides a layout adds: its boxes' edges (not the page's own), as ruler guides in points.
-  const guideLinesFor = (layout, size) => layoutGuideLines(layoutBoxes({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide() }), MAIN_SCALE, size.width, size.height);
+  const guideLinesFor = (layout, size) => layoutGuideLines(layoutBoxes({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide() }).filter((b) => b.role !== "rule"), MAIN_SCALE, size.width, size.height);
 
   // A new blank page after page `at - 1`, the same size as `like` (a blank page) or the default.
   function insertPage(at, like, annotations, guideLines) {
