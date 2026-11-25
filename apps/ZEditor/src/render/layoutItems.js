@@ -39,7 +39,7 @@ export function buildLayoutItems({ layout, page, settings, defaults, guide, next
   const bodyPt = Number(defaults.textFontSize) || 12;
   const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
   const rect = controlValues({}, RECT_CONTROLS);
-  const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: defaults.textAlign };
+  const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: "justify" }; // every layout text is justified (the last line of a paragraph stays left)
   return boxes.map((b) => {
     const id = nextId();
     if (b.role === "picture") {
