@@ -48,4 +48,7 @@ State: **decided** unless marked.
 - **Decided (2026-11-25, maintainer):** works **both ways** (apply to the current page, and add as new pages). On the current page it **adds beneath** the existing items (they stay on top, nothing is removed). **First set of layouts:** full text; half text + half picture in four variants (picture on top, picture at bottom, picture left, picture right). Picture slots are **plain light grey** (no label).
 - **Still open:** margins and gap sizes; whether the pieces are grouped or separate (leaning separate); how much lorem ipsum fills the body; whether layout items are locked; where the new-page option lives in the menus.
 
+- **Slot snapping (decided 2026-11-25, maintainer):** when Snap is on, an item snaps to **every rectangle** on the page (not only layout slots), both when **moving** and when **resizing** it (resizing does not snap to anything today). Uses the **same setting** as "Snap items to guides when moving them" (no rename). Works **even with rulers hidden** (today's snap needs rulers on). **Alt** still bypasses. The grey rectangle stays **visible** under the image. A later step ("snap and fit": the image fills and is clipped to the slot) is parked.
+- **Still open:** do other items (text, shapes) also snap to rectangles, or only images? Do ellipses count? Are hidden or locked rectangles targets? (leaning: all item types, rectangles only, visible ones only).
+
 _(Add more ideas below.)_
