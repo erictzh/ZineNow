@@ -1,10 +1,10 @@
 ## Intro
 
-A finger cannot hold Shift or press Delete. The **touch bar** is a small floating bar at the bottom left of the canvas that appears **only while you use a finger or pen**. It gives you sticky **Shift**, **Alt** and **Ctrl** switches and the most useful item buttons. Under it, a "touch bridge" makes every drag in the editor work with a finger.
+A finger cannot hold Shift or press Delete. The **touch bar** is a small floating bar at the bottom left of the canvas that appears **only while you use a finger or pen**. It gives you sticky **Shift**, **Ctrl** and **Alt** switches and the most useful item buttons. Under it, a "touch bridge" makes every drag in the editor work with a finger.
 
 ## How to use
 
-- **Shift**, **Alt** and **Ctrl** are toggles: tap once to switch on (it stays on), tap again to switch off. While on, every press counts as if the key were held: add to the selection, keep proportions, snap turns to 15°, draw at 45° (Shift); move without snapping to guides, pick one item out of a group (Alt); in the page strip and the Layers panel, add or take out one page or layer at a time (Ctrl), while Shift selects a range.
+- **Shift**, **Ctrl** and **Alt** are toggles: tap once to switch on (it stays on), tap again to switch off. While on, every press counts as if the key were held: add to the selection, keep proportions, snap turns to 15°, draw at 45° (Shift); move without snapping to guides, pick one item out of a group (Alt); in the page strip and the Layers panel, add or take out one page or layer at a time (Ctrl), while Shift selects a range.
 - With an item selected, more buttons appear: **Edit text** (text boxes), **Crop** (images, not rotated), **Clipping mask**, **Duplicate** and **Delete**.
 - While you are drawing a Marquee polygon: **Close** and **Undo point**.
 - **One finger** edits; **two fingers** scroll and pinch-zoom the page.
