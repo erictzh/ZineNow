@@ -7,7 +7,8 @@ const { useState, useRef, useEffect, useLayoutEffect } = React;
 // panel that closes on click-outside or Escape, same pattern as
 // FontCombobox. Its contents only mount while open, so any view state
 // inside (like the Page menu's "Customize…" sub-view) resets each time.
-export function TopMenu({ label, solid, children }) {
+// `tile`: the trigger is a tile (an `icon` over the label), used in the page strip's header.
+export function TopMenu({ label, solid, icon, tile, children }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -52,12 +53,13 @@ export function TopMenu({ label, solid, children }) {
     <div className="ze-topbar-control" ref={containerRef}>
       <button
         type="button"
-        className={"ze-menu-trigger" + (solid ? " btn-solid" : "") + (open ? " open" : "")}
+        className={"ze-menu-trigger" + (solid ? " btn-solid" : "") + (tile ? " ze-tile" : "") + (open ? " open" : "")}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {label}
+        {icon}
+        <span className="ze-menu-trigger-label">{label}</span>
         <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M5.5 7.5l4.5 4.5 4.5-4.5" />
         </svg>

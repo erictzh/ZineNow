@@ -7,6 +7,11 @@ import { PageGap } from "./PageGap.jsx";
 import { Thumbnail } from "./Thumbnail.jsx";
 const { useState, useRef, useEffect } = React;
 
+const icon = { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+const InsertPdfIcon = () => (<svg {...icon}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M12 11v6M9 14h6" /></svg>);
+const LayoutIcon = () => (<svg {...icon}><rect x="3.5" y="3.5" width="17" height="17" rx="2" /><path d="M3.5 10h17M10 10v10.5" /></svg>);
+const SelectAllIcon = () => (<svg {...icon}><rect x="3.5" y="3.5" width="17" height="17" rx="2" strokeDasharray="3 2.5" /><path d="M8 12.5l3 3 5-6" /></svg>);
+
 // ---- Sidebar — page thumbnail strip (Organize) ---------------------
 const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
@@ -86,37 +91,37 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
   return (
     <aside className="ze-sidebar">
       <div className="ze-sidebar-head">
-        <span>Pages{pages.length > 0 ? " (" + pages.length + ")" : ""}</span>
-        <div className="ze-sidebar-head-actions">
-          {pages.length === 0 && (
-            <button type="button" onClick={onLoadClick} disabled={loading}>
-              {loading ? "Loading…" : "Load PDF"}
+        <span className="ze-sidebar-title">Pages{pages.length > 0 ? " (" + pages.length + ")" : ""}</span>
+        {pages.length === 0 ? (
+          <div className="ze-sidebar-head-actions">
+            <button type="button" onClick={onLoadClick} disabled={loading}>{loading ? "Loading…" : "Load PDF"}</button>
+            <button type="button" onClick={onNewDocClick} disabled={loading} title="Start a blank document with a paper size you choose">New Document</button>
+          </div>
+        ) : (
+          // Three tiles in one row: an icon over a short name. Big enough for a finger.
+          <div className="ze-sidebar-tiles" role="toolbar" aria-label="Page actions">
+            <button type="button" className="ze-tile" onClick={onInsertPdfClick} disabled={loading} title="Insert another PDF's pages into this document">
+              <InsertPdfIcon />
+              <span>Insert PDF</span>
             </button>
-          )}
-          {pages.length === 0 && (
-            <button type="button" onClick={onNewDocClick} disabled={loading} title="Start a blank document with a paper size you choose">
-              New Document
+            {layouts && (
+              <TopMenu label="Layout" tile icon={<LayoutIcon />}>
+                {() => (
+                  <LayoutSettings
+                    settings={layoutSettings}
+                    onChange={onLayoutSettings}
+                    hasPage={selectedIdx !== null && Boolean(pages[selectedIdx])}
+                    onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
+                  />
+                )}
+              </TopMenu>
+            )}
+            <button type="button" className="ze-tile" onClick={onSelectAll} disabled={loading} title="Select every page">
+              <SelectAllIcon />
+              <span>Select all</span>
             </button>
-          )}
-          <button type="button" className="log-btn" onClick={onInsertPdfClick} disabled={loading || pages.length === 0} title="Insert another PDF's pages into this document">
-            Insert PDF
-          </button>
-          {layouts && (
-            <TopMenu label="Layout">
-              {() => (
-                <LayoutSettings
-                  settings={layoutSettings}
-                  onChange={onLayoutSettings}
-                  hasPage={selectedIdx !== null && Boolean(pages[selectedIdx])}
-                  onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
-                />
-              )}
-            </TopMenu>
-          )}
-          <button type="button" className="log-btn" onClick={onSelectAll} disabled={loading || pages.length === 0} title="Select every page">
-            Select All
-          </button>
-        </div>
+          </div>
+        )}
       </div>
       <div className="ze-sidebar-body" ref={bodyRef} onDragOver={handleContainerDragOver}>
         {pages.length === 0 && !loading ? (
