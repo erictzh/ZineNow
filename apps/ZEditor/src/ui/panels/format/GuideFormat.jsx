@@ -16,15 +16,6 @@ export function GuideFormat({ guide, unit, guides }) {
   };
   return (
     <FormatPanelShell title="Guide" sections={false}>
-      <div className="ze-format-field">
-        <span className="ze-format-label">Colour</span>
-        <div className="ze-guide-swatches">
-          {GUIDE_COLORS.map((c) => (
-            <button key={c.key} type="button" className={"ze-guide-swatch" + (guide.color === c.key ? " active" : "")} style={{ background: c.css }}
-              title={c.label} aria-label={c.label} onClick={() => guides.update(guide.id, { color: c.key })} />
-          ))}
-        </div>
-      </div>
       <label className="ze-format-field">
         <span className="ze-format-label">{guide.axis === "x" ? "Position from the left" : "Position from the top"} ({unit})</span>
         <NumberBox className="ze-format-number" step="0.1" value={text} disabled={Boolean(guide.locked)}
@@ -47,6 +38,18 @@ export function GuideFormat({ guide, unit, guides }) {
       </label>
       <button type="button" className="ze-format-toggle ze-format-toggle-wide" onClick={() => guides.remove(guide.id)}>Delete guide</button>
       <span className="ze-format-hint">Drag a guide to move it, or drag it back onto the ruler to remove it. Items snap to visible guides.</span>
+      <div className="ze-format-field">
+        <span className="ze-format-label">Colour and purpose</span>
+        <div className="ze-guide-cards" role="radiogroup" aria-label="Guide colour and purpose">
+          {GUIDE_COLORS.map((c) => (
+            <button key={c.key} type="button" role="radio" aria-checked={guide.color === c.key}
+              className={"ze-guide-card" + (guide.color === c.key ? " active" : "")} onClick={() => guides.update(guide.id, { color: c.key })}>
+              <span className="ze-guide-card-title"><span className="ze-guide-dot" style={{ background: c.css }} aria-hidden="true" />{c.purpose}</span>
+              <span className="ze-guide-card-desc">{c.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </FormatPanelShell>
   );
 }
