@@ -12,7 +12,16 @@
 6. Delete a frame: the chain closes up. Delete the first frame: the next one becomes the head and takes the story.
 7. Copying a frame makes a plain box with just the words it shows. **Rasterize to Image** is unavailable on threaded frames.
 
+### Stories across pages
+
+A story can also run onto **another page**. When a page's text overflows, its thumbnail in the left strip shows a **T+** button at the bottom-right: click it to add a continuation page that uses the same layout, with the rest of the story in its body frame. On a page whose story goes on to a later page, the button becomes a **link** icon (click it to jump to that page). **Add page** still makes a fresh, unlinked page, so linked and unlinked text can sit side by side. Change a page's layout afterwards and the story moves into the new body slot. Deleting a page in the middle keeps the story running through the remaining pages. A small note, "continues on page N" or "continued from page N", appears beside such frames in the editor only; it is never printed or exported.
+
 ## How it works
+
+### Across pages
+
+`resolvePageText(annotations, pages)` can see the whole document: it builds the chains over every page, lays the story out in order, and gives each frame `storyPrevPage` and `storyNextPage` so the editor can label it. Edits made in a continuation frame are routed to the head frame on its own page (`patchedPages`), and deleting or unlinking works across pages too (`removeFromPages`, `removePagesKeepingStories`). PDF export passes `pages` explicitly so every page agrees with the screen.
+
 
 ### Head and followers
 

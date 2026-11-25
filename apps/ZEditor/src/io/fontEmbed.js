@@ -18,7 +18,7 @@ export function usedFaces(pages) {
   const map = new Map();
   const add = (family, bold, italic) => { if (!family) return; const key = faceKey(family, bold, italic); if (!map.has(key)) map.set(key, { key, family, bold: Boolean(bold), italic: Boolean(italic) }); };
   for (const p of pages || []) {
-    for (const a of resolvePageText(p.annotations || [])) {
+    for (const a of resolvePageText(p.annotations || [], pages)) {
       if (a.type !== "text") continue;
       add(a.fontFamily, a.bold, a.italic);
       for (const r of a.colorRuns || []) {

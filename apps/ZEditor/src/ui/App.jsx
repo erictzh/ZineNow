@@ -2,7 +2,7 @@
 
 import { fetchImageFile, installImageDrop } from "../../../../shared/js/dropImages.js";
 import { pageNumberSpec } from "../model/pageNumbers.js";
-import { resolvePageText } from "../render/pageText.js";
+import { resolvePageText, setTextDocument, storyStateOfPages } from "../render/pageText.js";
 import { useAnnotationEdits } from "../state/useAnnotationEdits.js";
 import { useDialogs } from "../state/useDialogs.js";
 import { useDocumentFiles } from "../state/useDocumentFiles.js";
@@ -49,6 +49,7 @@ export function App() {
   const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
   const bodyRef = React.useRef(null); // the Pages panel, canvas and Format panel in a row (for the draggable lines between them)
   const doc = useDocumentState();
+  setTextDocument(doc.pages); // text that runs on across pages is laid out with the pages around it (render/pageText.js)
   const history = useHistory(doc);
   const view = useViewSettings();
   const toolDefaults = useToolDefaults();
@@ -68,6 +69,7 @@ export function App() {
   const groupFiles = useGroupFiles({ doc, edits, selection, status, view });
   useImageHandoff({ doc, files, edits, selection }); // a picture sent from Ai Tools (Local) opens as a new canvas document
   const zoom = useZoom();
+  const storyStates = React.useMemo(() => storyStateOfPages(doc.pages), [doc.pages]); // page icons: T+ / link
   useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 }); // no-paper pages grow to hold their items
   const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
   // Pictures dragged in from the file manager or another website (shared/js/dropImages.js) go on the
@@ -134,6 +136,8 @@ export function App() {
           selectedPageIndices={selectedPageIndices}
           onSelect={selection.handleSelectPage}
           onSelectAll={selection.handleSelectAllPages}
+          storyStates={storyStates}
+          onContinueStory={layouts.continueStory}
           onRotate={pageOps.handleRotate}
           onDelete={pageOps.handleDeleteThumbnail}
           onReorder={pageOps.handleReorder}

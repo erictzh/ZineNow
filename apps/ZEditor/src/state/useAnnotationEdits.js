@@ -8,29 +8,14 @@ import { clipTargets } from "../model/clipping.js";
 import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { MIN_RECT_SIZE } from "../model/rect.js";
 import { captureTextStyle, relinkPatch, resolvedStyleProps, styleDiff, textStylePatch, withStyleOverrides } from "../model/text/textStyles.js";
-import { isThreaded, removeWithThreads, routeFramePatch, withoutResolvedProps } from "../model/text/threads.js";
+import { isThreaded, removeFromPages } from "../model/text/threads.js";
+import { patchedPages } from "../render/storyEdits.js";
 import { flattenedImagePatch, rasterizedRectPatch, rasterizedTextPatch } from "../render/bake.js";
 import { rotatedAnnotation } from "../render/itemGeometry.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
 import { isSvgFile, svgFileToPng } from "../io/images.js";
 import { resolvePageText } from "../render/pageText.js";
 import { makeTextFrameActions } from "./textFrameActions.js";
-
-// Applies `patch` to box `id`. A follower frame of a threaded story only keeps its frame
-// settings; its text, look and style changes land on the story's head (model/text/threads.js).
-// `merge(box, patch)` makes the patched box.
-function patchedAnnotations(anns, id, patch, merge) {
-  const clean = withoutResolvedProps(patch);
-  const view = resolvePageText(anns).find((a) => a.id === id);
-  if (!view || view.storyHeadId == null || view.storyIndex === 0) return anns.map((a) => (a.id === id ? merge(a, clean) : a));
-  const head = anns.find((a) => a.id === view.storyHeadId);
-  const { framePatch, headPatch } = routeFramePatch(head, view.storyOffset || 0, clean);
-  return anns.map((a) => {
-    if (a.id === id && Object.keys(framePatch).length) return { ...a, ...framePatch };
-    if (a.id === head.id && Object.keys(headPatch).length) return merge(a, headPatch);
-    return a;
-  });
-}
 
 const { useEffect, useRef } = React;
 
@@ -42,6 +27,12 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     selectedAnnotationIds, currentAnnotations, handleSelectAnnotation,
   } = selection;
   const imageInputRef = useRef(null);
+
+  // Like updateAnnotationsFor, but for a change that can reach another page too (a story's head). `updater(pages)` returns the new pages.
+  function updatePagesFor(updater, coalesceKey) {
+    recordUndoCheckpoint(coalesceKey);
+    setPages((prev) => updater(prev));
+  }
 
   function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
     recordUndoCheckpoint(coalesceKey);
@@ -292,7 +283,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     // slider tug, or a burst of keystrokes editing this same
     // annotation all land in one undo step instead of one per event.
     // A look setting changed on a box linked to a text style becomes that box's override.
-    updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
+    updatePagesFor((all) => patchedPages(all, selectedIdx, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
   }
 
   // The Layers panel's Opacity and Blend: `patch` ({ opacity } or { blend }) goes on every selected
@@ -301,12 +292,12 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     if (selectedIdx === null || ids.length === 0) return;
     const merge = (a, p) => ({ ...a, ...withStyleOverrides(a, p) });
     const key = "look:" + Object.keys(patch).join() + ":" + ids.join();
-    updateAnnotationsFor(selectedIdx, (anns) => ids.reduce((list, id) => patchedAnnotations(list, id, patch, merge), anns), key);
+    updatePagesFor((all) => ids.reduce((list, id) => patchedPages(list, selectedIdx, id, patch, merge), all), key);
   }
 
   // ---- Linked text styles (model/text/textStyles.js). Each is its own undo step.
   // (The style list itself isn't part of undo: undoing a redefine puts the boxes back, not the style.)
-  const patchBox = (id, patch) => updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...p })));
+  const patchBox = (id, patch) => updatePagesFor((all) => patchedPages(all, selectedIdx, id, patch, (a, p) => ({ ...a, ...p })));
   // Gives a box a saved style's look and links it to it (a built-in style is applied as a plain copy).
   function handleApplyTextStyle(ann, style) {
     if (selectedIdx === null) return;
@@ -403,7 +394,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     if (selectedIdx === null || selectedAnnId === null) return;
     const idsToDelete = [selectedAnnId, ...selectedAnnIds];
     // Deleting a frame of a threaded story keeps the story: the frames around it link up.
-    updateAnnotationsFor(selectedIdx, (anns) => removeWithThreads(anns, idsToDelete));
+    updatePagesFor((all) => removeFromPages(all, idsToDelete));
     setSelectedAnnId(null);
     setSelectedAnnIds([]);
   }
@@ -429,11 +420,11 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(idx, (anns) => anns.map((a) => (a.id === id ? { ...a, src } : a)));
   }
 
-  const frameActions = makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds });
+  const frameActions = makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, updatePagesFor, setSelectedAnnId, setSelectedAnnIds });
 
   return {
     frameActions,
-    updateAnnotationsFor, updatePageFilter,
+    updateAnnotationsFor, updatePagesFor, updatePageFilter,
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
     handleGroupSelection, handleUngroupSelection, handleSetClip, handleToggleClip, handleClipSelection,
     handleAddText, handleAddRect, handleAddStroke,

@@ -96,7 +96,7 @@ export function useExport({ doc, status, view, project, selection }) {
     const page = pages[doc.selectedIdx];
     if (!page) return [];
     const wanted = new Set(ids || selection.selectedAnnotationIds());
-    return resolvePageText(page.annotations || []).filter((a) => wanted.has(a.id) && !a.hidden);
+    return resolvePageText(page.annotations || [], pages).filter((a) => wanted.has(a.id) && !a.hidden);
   }
   async function handleExportSvg(ids) {
     const items = svgLayersFor(ids);

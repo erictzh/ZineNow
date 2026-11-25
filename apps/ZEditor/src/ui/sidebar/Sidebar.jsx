@@ -9,7 +9,7 @@ const { useState, useRef, useEffect } = React;
 const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
+export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory }) {
   const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null); // page key -> thumbnail with its items on it
   const dragIndexRef = useRef(null);
   const bodyRef = useRef(null);
@@ -124,6 +124,8 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
                     idx={idx}
                     isSelected={idx === selectedIdx || selectedPageIndices.includes(idx)}
                     onSelect={onSelect}
+                    story={storyStates ? storyStates[idx] : null}
+                    onContinueStory={onContinueStory}
                     onRotate={onRotate}
                     onDelete={onDelete}
                     dragHandlers={dragHandlersFor(idx)}

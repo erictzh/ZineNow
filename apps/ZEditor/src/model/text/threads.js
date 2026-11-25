@@ -105,9 +105,29 @@ export function removeWithThreads(annotations, ids) {
   return annotations.filter((a) => !gone.has(a.id)).map((a) => replaced.get(a.id) || a);
 }
 
+// The same across a whole document: removes the items with these ids from whichever pages hold them, keeping every story
+// together even when it runs over several pages (a frame after a deleted one links to the frame before it; if the head
+// is deleted the next frame takes the story). Returns the new pages; pages it didn't touch are returned as they were.
+export function removeFromPages(pages, ids) {
+  const all = pages.flatMap((p) => p.annotations || []);
+  const kept = new Map(removeWithThreads(all, ids).map((a) => [a.id, a]));
+  return pages.map((p) => {
+    const anns = p.annotations || [];
+    if (!anns.some((a) => kept.get(a.id) !== a)) return p;
+    return { ...p, annotations: anns.filter((a) => kept.has(a.id)).map((a) => kept.get(a.id)) };
+  });
+}
+
+// Deleting pages: their items go the same way, so a story that ran through a deleted page carries on across the gap.
+export function removePagesKeepingStories(pages, indices) {
+  const gone = new Set(indices);
+  const ids = pages.flatMap((p, i) => (gone.has(i) ? (p.annotations || []).map((a) => a.id) : []));
+  return removeFromPages(pages, ids).filter((_, i) => !gone.has(i));
+}
+
 // Props render/pageText.js adds to the boxes it lays out. They describe one layout and are
 // never stored on the page.
-export const RESOLVED_TEXT_PROPS = ["storyOffset", "storyContinues", "storyLength", "storyHeadId", "storyIndex", "storyPrevId", "storyNextId", "wrapObstacles"];
+export const RESOLVED_TEXT_PROPS = ["storyOffset", "storyContinues", "storyLength", "storyHeadId", "storyIndex", "storyPrevId", "storyNextId", "storyPrevPage", "storyNextPage", "wrapObstacles"];
 export function withoutResolvedProps(obj) {
   if (!RESOLVED_TEXT_PROPS.some((k) => k in obj)) return obj;
   const out = { ...obj };
