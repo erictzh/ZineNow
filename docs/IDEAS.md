@@ -67,4 +67,10 @@ State: **decided** unless marked.
 
 - **Crop marks (2026-11-25, decided):** an optional "Add crop marks" checkbox in the PDF export, available **only when the page has a bleed** (and exporting with bleed). Marks sit outside the bleed, so the exported page gets a small extra border (a few mm) to hold them; the editor page does not change. Details to settle when building: mark length and line weight, offset from the trim, and writing the marks so they do not extend into the bleed area.
 
+### 4.3 Export for Adobe Illustrator (2026-11-25) — idea, partly possible
+
+- A true native `.ai` file is a closed Adobe format, so it is not a target (and its private data would need reverse engineering). Illustrator can already open **SVG** and **PDF** files.
+- Practical routes: (a) **SVG export of a whole page** (today ZEditor exports only the selected layers as one SVG; pictures and effects go in as pictures, plain text and shapes stay vector); (b) **PDF** with real text (exists) for Illustrator to open; (c) maybe a "for Illustrator" preset that writes one SVG per page. Effects such as halftone and filters stay raster.
+- Open questions: whole-page and multi-page SVG; keeping layers as groups/named layers in the SVG; font handling (text needs the font installed in Illustrator); whether outlines (text turned into shapes) should be an option.
+
 _(Add more ideas below.)_
