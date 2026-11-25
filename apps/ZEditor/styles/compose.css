@@ -535,3 +535,8 @@
 .ze-story-note { position: absolute; right: 0; font: 600 11px var(--ui-font, system-ui, sans-serif); color: var(--ui-accent-text, #ff8547); white-space: nowrap; pointer-events: none; user-select: none; }
 .ze-story-note-next { top: calc(100% + 4px); }
 .ze-story-note-prev { bottom: calc(100% + 4px); }
+
+/* The line an item snaps onto while it is moved or resized (editor only). */
+.ze-snap-line { position: absolute; background: #ff2d95; pointer-events: none; z-index: 60; }
+.ze-snap-line-x { top: 0; bottom: 0; }
+.ze-snap-line-y { left: 0; right: 0; }

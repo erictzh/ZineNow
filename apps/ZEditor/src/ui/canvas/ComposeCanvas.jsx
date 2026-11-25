@@ -7,6 +7,8 @@ import { blendOf } from "../../model/controls.js";
 import { dragBox } from "../../model/geometry.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
+import { snapBox } from "../../model/snapTargets.js";
+import { snapStore } from "./snapStore.js";
 import { strokeHitTest } from "../../model/strokes.js";
 import { hitsItem } from "../../render/itemGeometry.js";
 import { resolvePageText } from "../../render/pageText.js";
@@ -38,7 +40,7 @@ export function ComposeCanvas({
   penColor, penWidth, penTaper, highlighterColor, highlighterWidth, highlighterTaper,
   annotations, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId, priorityAnnId,
   onSelectAnnotation, onSelectAnnotations, onMoveAnnotations, onRotateAnnotations, onAddText, onAddRect, onAddStroke, onUpdateAnnotation, onEraseStroke, onToggleCrop,
-  onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides,
+  onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides, snapItems,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   marquee, marqueeShape, marqueeBrush, marqueeHidden, onMarqueeChange,
   zoom, rulerUnit, viewKey,
@@ -82,6 +84,7 @@ export function ComposeCanvas({
   // An image's wrap shape is read in the background; redraw once it's ready.
   const [, setWrapTick] = useState(0);
   useEffect(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
+  const [snapHits, setSnapHits] = useState(null); // { x, y } lines (page px) an item being moved or resized has snapped onto
   const [dragRect, setDragRect] = useState(null); // the box being dragged out on empty page
   const drawingRef = useRef(null); // in-progress stroke points while the mouse is down
   const [brushPos, setBrushPos] = useState(null); // soft eraser's on-page cursor circle
@@ -117,6 +120,27 @@ export function ComposeCanvas({
       y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE),
     } : null;
   }
+
+  // Everything an item snaps onto (when Snap is on): the page's edges and middle, ruler guides, and the edges and middles of
+  // the other visible items. Taken at the start of a drag; `exclude` are the ids being moved or resized.
+  function snapLinesFor(exclude) {
+    if (!snapItems) return null;
+    const lines = { x: [0, canvasSize.width / 2, canvasSize.width], y: [0, canvasSize.height / 2, canvasSize.height] };
+    const g = guideLinesPx();
+    if (g) { lines.x.push(...g.x); lines.y.push(...g.y); }
+    const layer = layerRef.current.getBoundingClientRect();
+    for (const el of layerRef.current.querySelectorAll("[data-ann-id]")) {
+      if (exclude.includes(Number(el.dataset.annId))) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      const x0 = (r.left - layer.left) / zoom, x1 = (r.right - layer.left) / zoom, y0 = (r.top - layer.top) / zoom, y1 = (r.bottom - layer.top) / zoom;
+      lines.x.push(x0, (x0 + x1) / 2, x1); lines.y.push(y0, (y0 + y1) / 2, y1);
+    }
+    return lines;
+  }
+  snapStore.collect = snapItems && page ? (exclude) => snapLinesFor(exclude) : null;
+  snapStore.threshold = SNAP_PX / zoom;
+  snapStore.report = setSnapHits;
 
   // The point a measurement lands on: under the pointer, pulled onto a close ruler guide (Alt
   // for none), or with Shift onto the nearest 45° line from `from`.
@@ -380,18 +404,20 @@ export function ComposeCanvas({
     const originals = annotations.filter((a) => movingIds.includes(a.id));
     const dragDelta = dragDeltaFrom(e, zoom);
     // Ruler guides (ui/canvas/Rulers.jsx): the moved items' edges and middle snap onto them.
-    const guideLines = guideLinesPx();
-    const startBox = guideLines ? itemsBox(movingIds) : null;
+    const snapLines = snapLinesFor(movingIds);
+    const startBox = snapLines ? itemsBox(movingIds) : null;
     let moved = false;
     trackPointerDrag((ev) => {
       let { dx, dy } = dragDelta(ev);
       if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
       if (moved && startBox && !ev.altKey) { // Alt moves freely
-        const snap = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
+        const snap = snapBox({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, snapLines, SNAP_PX / zoom);
         dx += snap.dx; dy += snap.dy;
-      }
+        setSnapHits(snap.x !== null || snap.y !== null ? { x: snap.x, y: snap.y } : null);
+      } else if (moved) setSnapHits(null);
       if (moved) onMoveAnnotations(originals, dx, dy);
     }, () => {
+      setSnapHits(null);
       if (moved) return;
       if (shiftDeselect) { onSelectAnnotation(ann.id, true); return; } // Shift + tap: out of the selection
       // Clicking one member of a group, without dragging, narrows to it.
@@ -437,6 +463,12 @@ export function ComposeCanvas({
       >
         {/* While the magic eraser has a preview open, that image is drawn from it
             instead of from the document, which stays untouched until Apply. */}
+        {snapHits && (
+          <React.Fragment>
+            {snapHits.x !== null && <div className="ze-snap-line ze-snap-line-x" style={{ left: snapHits.x, width: 1 / zoom }} />}
+            {snapHits.y !== null && <div className="ze-snap-line ze-snap-line-y" style={{ top: snapHits.y, height: 1 / zoom }} />}
+          </React.Fragment>
+        )}
         {/* Text is laid out for the whole page (threaded stories, text wrap: render/pageText.js). */}
         {pageViews.map((a, index) => {
           if (a.hidden) return null;

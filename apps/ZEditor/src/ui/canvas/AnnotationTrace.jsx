@@ -5,6 +5,7 @@ import { MIN_RESIZE_SIZE, resizedBox } from "../../model/geometry.js";
 import { boxGroupStyle, boxOuterStyle } from "./boxStyles.js";
 import { ALL_RESIZE_HANDLES, ResizeHandles } from "./ResizeHandles.jsx";
 import { TraceSvg } from "./TraceSvg.jsx";
+import { endResizeSnap, startResizeSnap } from "./snapStore.js";
 import { dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 
 // Like an image: a corner keeps the proportions, Shift stretches freely.
@@ -12,10 +13,12 @@ export function AnnotationTrace({ ann, tool, isSelected, showHandles, onPress, o
   function startResize(handle, e) {
     const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
     const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+    const snap = startResizeSnap(ann, orig, angleOf(ann));
     trackPointerDrag((ev) => {
-      const { dx, dy } = dragDelta(ev);
+      const raw = dragDelta(ev);
+      const { dx, dy } = snap(handle, raw.dx, raw.dy, ev);
       onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
-    });
+    }, endResizeSnap);
   }
   return (
     <div

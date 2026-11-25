@@ -14,7 +14,7 @@ export function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap
       </div>
       <label className="ze-format-field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={snap} onChange={(e) => onSnapChange(e.target.checked)} />
-        <span className="ze-format-label">Snap items to guides when moving them</span>
+        <span className="ze-format-label">Snap items to guides and to other items (Alt while dragging: no snap)</span>
       </label>
       <label className="ze-format-field" style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={locked} onChange={(e) => onLockedChange(e.target.checked)} />

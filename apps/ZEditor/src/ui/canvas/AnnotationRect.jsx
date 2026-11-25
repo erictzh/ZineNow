@@ -8,6 +8,7 @@ import { rectFillCss } from "../../render/gradients.js";
 import { BoxEffectOverlays } from "./BoxEffectOverlays.jsx";
 import { boxGroupStyle, boxOuterStyle } from "./boxStyles.js";
 import { ALL_RESIZE_HANDLES, ResizeHandles } from "./ResizeHandles.jsx";
+import { endResizeSnap, startResizeSnap } from "./snapStore.js";
 import { dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 
 // ---- One rectangle --------------------------------------------------
@@ -16,10 +17,12 @@ export function AnnotationRect({ ann, tool, isSelected, showHandles, onPress, on
   function startResize(handle, e) {
     const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
     const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+    const snap = startResizeSnap(ann, orig, angleOf(ann));
     trackPointerDrag((ev) => {
-      const { dx, dy } = dragDelta(ev);
+      const raw = dragDelta(ev);
+      const { dx, dy } = snap(handle, raw.dx, raw.dy, ev);
       onUpdate(ann.id, resizedBox(orig, handle, dx, dy, ev.shiftKey, MIN_RECT_SIZE, angleOf(ann)));
-    });
+    }, endResizeSnap);
   }
 
   const edgeOutline = imageEdgeOutline(ann);

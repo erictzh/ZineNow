@@ -13,6 +13,7 @@ import { caretRect, indexAtPoint, lineEndAt, lineStartAt, moveVertical, paragrap
 import { layoutTextBox, measureTextBox, textCanvasMargin } from "../../render/textLayout.js";
 import { rotationCss } from "./boxStyles.js";
 import { ResizeHandles, TEXT_RESIZE_HANDLES } from "./ResizeHandles.jsx";
+import { endResizeSnap, startResizeSnap } from "./snapStore.js";
 import { dragDeltaFrom, textOffsetAtPoint, trackPointerDrag } from "../pointer.js";
 import { textSelectionStore } from "../textSelection.js";
 const { useRef, useState, useMemo, useEffect, useLayoutEffect } = React;
@@ -64,8 +65,10 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
     const hasSetWidth = Boolean(ann.width);
     const angle = angleOf(ann);
     const dragDelta = dragDeltaFrom(e, zoom, angle);
+    const snap = startResizeSnap(ann, orig, angle);
     trackPointerDrag((ev) => {
-      const { dx, dy } = dragDelta(ev);
+      const raw = dragDelta(ev);
+      const { dx, dy } = snap(handle, raw.dx, raw.dy, ev);
       if (handle === "s" || handle === "n") {
         // The top / bottom middle handles make the box a fixed-height frame: the dragged edge sets its
         // height (in pt) and the opposite edge stays put.
@@ -82,7 +85,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
       const box = resizedBox(orig, handle, dx, dy, true, MIN_RESIZE_SIZE, angle);
       const scaled = { x: box.x, y: box.y, fontSize: Math.max(6, Math.round(origFontSize * box.width / orig.width)) };
       onUpdate(ann.id, hasSetWidth ? { ...scaled, width: box.width } : scaled);
-    });
+    }, endResizeSnap);
   }
 
   const look = textLook(ann);

@@ -14722,6 +14722,78 @@
     }), []);
   }
 
+  // apps/ZEditor/src/model/snapTargets.js
+  function snapBox(box, lines, threshold) {
+    const pick = (edges, candidates) => {
+      let best = null, dist = threshold;
+      for (const edge of edges) for (const line of candidates) {
+        const d = Math.abs(line - edge);
+        if (d <= dist) {
+          dist = d;
+          best = { shift: line - edge, line };
+        }
+      }
+      return best;
+    };
+    const hx = pick([box.x0, (box.x0 + box.x1) / 2, box.x1], lines.x || []);
+    const hy = pick([box.y0, (box.y0 + box.y1) / 2, box.y1], lines.y || []);
+    return { dx: hx ? hx.shift : 0, dy: hy ? hy.shift : 0, x: hx ? hx.line : null, y: hy ? hy.line : null };
+  }
+  function snapResize(orig, handle, dx, dy, lines, threshold) {
+    const nearest2 = (edge, candidates) => {
+      let best = null, dist = threshold;
+      for (const line of candidates) {
+        const d = Math.abs(line - edge);
+        if (d <= dist) {
+          dist = d;
+          best = line;
+        }
+      }
+      return best;
+    };
+    let hitX = null, hitY = null;
+    if (handle.includes("e")) {
+      hitX = nearest2(orig.x + orig.width + dx, lines.x || []);
+      if (hitX !== null) dx = hitX - (orig.x + orig.width);
+    } else if (handle.includes("w")) {
+      hitX = nearest2(orig.x + dx, lines.x || []);
+      if (hitX !== null) dx = hitX - orig.x;
+    }
+    if (handle.includes("s")) {
+      hitY = nearest2(orig.y + orig.height + dy, lines.y || []);
+      if (hitY !== null) dy = hitY - (orig.y + orig.height);
+    } else if (handle.includes("n")) {
+      hitY = nearest2(orig.y + dy, lines.y || []);
+      if (hitY !== null) dy = hitY - orig.y;
+    }
+    return { dx, dy, x: hitX, y: hitY };
+  }
+
+  // apps/ZEditor/src/ui/canvas/snapStore.js
+  var snapStore = {
+    collect: null,
+    // (excludeIds) => { x: [...], y: [...] } in page px, or null when snapping is off
+    threshold: 0,
+    // page px
+    report: () => {
+    }
+    // (hits | null) => draws the lines snapped onto
+  };
+  function startResizeSnap(ann, orig, angle) {
+    const lines = !angle && snapStore.collect ? snapStore.collect([ann.id]) : null;
+    const threshold = snapStore.threshold;
+    return (handle, dx, dy, ev) => {
+      if (!lines || ev.altKey) {
+        snapStore.report(null);
+        return { dx, dy };
+      }
+      const s = snapResize(orig, handle, dx, dy, lines, threshold);
+      snapStore.report(s.x !== null || s.y !== null ? { x: s.x, y: s.y } : null);
+      return { dx: s.dx, dy: s.dy };
+    };
+  }
+  var endResizeSnap = () => snapStore.report(null);
+
   // apps/ZEditor/src/ui/pointer.js
   function dragDeltaFrom(startEvent, zoom, angle = 0) {
     const { clientX: startX, clientY: startY } = startEvent;
@@ -14882,10 +14954,12 @@
     function startResize(handle, e) {
       const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
       const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+      const snap2 = startResizeSnap(ann, orig, angleOf(ann));
       trackPointerDrag((ev) => {
-        const { dx, dy } = dragDelta(ev);
+        const raw = dragDelta(ev);
+        const { dx, dy } = snap2(handle, raw.dx, raw.dy, ev);
         onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
-      });
+      }, endResizeSnap);
     }
     function startCropPan(e) {
       e.preventDefault();
@@ -15000,10 +15074,12 @@
     function startResize(handle, e) {
       const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
       const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+      const snap2 = startResizeSnap(ann, orig, angleOf(ann));
       trackPointerDrag((ev) => {
-        const { dx, dy } = dragDelta(ev);
+        const raw = dragDelta(ev);
+        const { dx, dy } = snap2(handle, raw.dx, raw.dy, ev);
         onUpdate(ann.id, resizedBox(orig, handle, dx, dy, ev.shiftKey, MIN_RECT_SIZE, angleOf(ann)));
-      });
+      }, endResizeSnap);
     }
     const edgeOutline = imageEdgeOutline(ann);
     return /* @__PURE__ */ React.createElement(
@@ -15204,8 +15280,10 @@
       const hasSetWidth = Boolean(ann.width);
       const angle = angleOf(ann);
       const dragDelta = dragDeltaFrom(e, zoom, angle);
+      const snap2 = startResizeSnap(ann, orig, angle);
       trackPointerDrag((ev) => {
-        const { dx, dy } = dragDelta(ev);
+        const raw = dragDelta(ev);
+        const { dx, dy } = snap2(handle, raw.dx, raw.dy, ev);
         if (handle === "s" || handle === "n") {
           const box2 = resizedBox(orig, handle, dx, dy, false, MIN_RESIZE_SIZE, angle);
           onUpdate(ann.id, { x: box2.x, y: box2.y, frameHeight: Math.max(1, Math.round(pxToPt(box2.height))) });
@@ -15219,7 +15297,7 @@
         const box = resizedBox(orig, handle, dx, dy, true, MIN_RESIZE_SIZE, angle);
         const scaled = { x: box.x, y: box.y, fontSize: Math.max(6, Math.round(origFontSize * box.width / orig.width)) };
         onUpdate(ann.id, hasSetWidth ? { ...scaled, width: box.width } : scaled);
-      });
+      }, endResizeSnap);
     }
     const look = textLook(ann);
     const hasLetterColors = Boolean(ann.colorRuns && ann.colorRuns.length);
@@ -15566,10 +15644,12 @@
     function startResize(handle, e) {
       const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
       const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+      const snap2 = startResizeSnap(ann, orig, angleOf(ann));
       trackPointerDrag((ev) => {
-        const { dx, dy } = dragDelta(ev);
+        const raw = dragDelta(ev);
+        const { dx, dy } = snap2(handle, raw.dx, raw.dy, ev);
         onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
-      });
+      }, endResizeSnap);
     }
     return /* @__PURE__ */ React.createElement(
       "div",
@@ -16352,6 +16432,7 @@
     onLinkNextFrame,
     onUnlinkNextFrame,
     snapGuides,
+    snapItems,
     eraserMode,
     softEraser,
     onEraseImagePixels,
@@ -16397,6 +16478,7 @@
     }, [page && page.key, canvasSize.width, canvasSize.height, viewKey]);
     const [, setWrapTick] = useState20(0);
     useEffect17(() => onWrapShapesChange(() => setWrapTick((t) => t + 1)), []);
+    const [snapHits, setSnapHits] = useState20(null);
     const [dragRect, setDragRect] = useState20(null);
     const drawingRef = useRef20(null);
     const [brushPos, setBrushPos] = useState20(null);
@@ -16426,6 +16508,28 @@
         y: snapGuides.filter((g) => g.axis === "y").map((g) => g.pos * MAIN_SCALE)
       } : null;
     }
+    function snapLinesFor(exclude) {
+      if (!snapItems) return null;
+      const lines = { x: [0, canvasSize.width / 2, canvasSize.width], y: [0, canvasSize.height / 2, canvasSize.height] };
+      const g = guideLinesPx();
+      if (g) {
+        lines.x.push(...g.x);
+        lines.y.push(...g.y);
+      }
+      const layer = layerRef.current.getBoundingClientRect();
+      for (const el of layerRef.current.querySelectorAll("[data-ann-id]")) {
+        if (exclude.includes(Number(el.dataset.annId))) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        const x0 = (r.left - layer.left) / zoom, x1 = (r.right - layer.left) / zoom, y0 = (r.top - layer.top) / zoom, y1 = (r.bottom - layer.top) / zoom;
+        lines.x.push(x0, (x0 + x1) / 2, x1);
+        lines.y.push(y0, (y0 + y1) / 2, y1);
+      }
+      return lines;
+    }
+    snapStore.collect = snapItems && page ? (exclude) => snapLinesFor(exclude) : null;
+    snapStore.threshold = SNAP_PX / zoom;
+    snapStore.report = setSnapHits;
     function measurePoint(ev, from) {
       let p = overlayPoint(ev);
       const lines = guideLinesPx();
@@ -16657,19 +16761,21 @@
       const movingIds = single ? [ann.id] : wasSelected ? current2 : e.shiftKey ? [...current2, ...mates] : mates;
       const originals = annotations.filter((a) => movingIds.includes(a.id));
       const dragDelta = dragDeltaFrom(e, zoom);
-      const guideLines = guideLinesPx();
-      const startBox = guideLines ? itemsBox(movingIds) : null;
+      const snapLines = snapLinesFor(movingIds);
+      const startBox = snapLines ? itemsBox(movingIds) : null;
       let moved = false;
       trackPointerDrag((ev) => {
         let { dx, dy } = dragDelta(ev);
         if (!moved && Math.hypot(dx, dy) * zoom > DRAG_THRESHOLD) moved = true;
         if (moved && startBox && !ev.altKey) {
-          const snap2 = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
+          const snap2 = snapBox({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, snapLines, SNAP_PX / zoom);
           dx += snap2.dx;
           dy += snap2.dy;
-        }
+          setSnapHits(snap2.x !== null || snap2.y !== null ? { x: snap2.x, y: snap2.y } : null);
+        } else if (moved) setSnapHits(null);
         if (moved) onMoveAnnotations(originals, dx, dy);
       }, () => {
+        setSnapHits(null);
         if (moved) return;
         if (shiftDeselect) {
           onSelectAnnotation(ann.id, true);
@@ -16699,6 +16805,7 @@
         onMouseMove: softErasing ? (e) => setBrushPos(overlayPoint(e)) : brushing ? (e) => setBrushHover(overlayPoint(e)) : drawingPolygon ? (e) => setPolygonHover({ ...overlayPoint(e), shift: e.shiftKey }) : void 0,
         onMouseLeave: softErasing ? () => setBrushPos(null) : brushing ? () => setBrushHover(null) : drawingPolygon ? () => setPolygonHover(null) : void 0
       },
+      snapHits && /* @__PURE__ */ React.createElement(React.Fragment, null, snapHits.x !== null && /* @__PURE__ */ React.createElement("div", { className: "ze-snap-line ze-snap-line-x", style: { left: snapHits.x, width: 1 / zoom } }), snapHits.y !== null && /* @__PURE__ */ React.createElement("div", { className: "ze-snap-line ze-snap-line-y", style: { top: snapHits.y, height: 1 / zoom } })),
       pageViews.map((a, index) => {
         if (a.hidden) return null;
         const itemProps = {
@@ -20074,7 +20181,7 @@
   // apps/ZEditor/src/ui/settings/RulersSettings.jsx
   function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap: snap2, onSnapChange, locked, onLockedChange }) {
     const sorted = [...guides].sort((a, b) => a.axis === b.axis ? a.pos - b.pos : a.axis === "x" ? -1 : 1);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap2, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Snap items to guides when moving them")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: locked, onChange: (e) => onLockedChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Lock guides (freeze them where they are)")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: locked || !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Units"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: unit, onChange: (e) => onUnitChange(e.target.value) }, RULER_UNITS.map((u) => /* @__PURE__ */ React.createElement("option", { key: u.key, value: u.key }, u.label)))), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: snap2, onChange: (e) => onSnapChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Snap items to guides and to other items (Alt while dragging: no snap)")), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8 } }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: locked, onChange: (e) => onLockedChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Lock guides (freeze them where they are)")), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Guides (", guides.length, ")"), sorted.length > 0 && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: "0 0 6px" } }, sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: locked || !guides.length, onClick: onClearGuides }, "Clear all guides")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print."));
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
@@ -20095,7 +20202,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "30477e6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "4f486b1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -20512,7 +20619,8 @@
         marqueeHidden: t.marquee.areaVisible === false,
         marqueeBrush: { size: t.marquee.brushSize, erase: t.marquee.brushErase },
         onMarqueeChange: marquee.setRegion,
-        snapGuides: view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null
+        snapGuides: view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null,
+        snapItems: view.snapToGuidesOn
       }
     ))), /* @__PURE__ */ React.createElement("div", { className: "ze-bottom-left" }, /* @__PURE__ */ React.createElement("div", { className: "ze-display-slot", ref: attachDisplayGear }), selectedPage && /* @__PURE__ */ React.createElement(
       TouchBar,
