@@ -39,4 +39,12 @@ State: **decided** unless marked.
 
 ## 4. New ideas (add below)
 
-_(To be filled in the next discussion.)_
+### 4.1 Ready-made page layouts in ZEditor (2026-11-25) — idea, feasible
+
+- **What:** pick a layout (like slide apps do) and get a page with light-grey rectangles as picture slots and text boxes filled with lorem ipsum (the app already has placeholder text, `model/text/placeholderText.js`).
+- **How (sketch, not built):** layouts are a small data table of slots with positions as fractions of the page (so they fit any page size and respect the Page Guide margins): kind (picture / title / body / caption), x, y, width, height. Applying one creates ordinary items (`rect` and `text`, like `handleAddRect` / `handleAddText` in `state/useAnnotationEdits.js`), sharing a `groupId` so they move together; offered from the Page menu (add to the current page) and when adding a new page, possibly also in the New Document dialog.
+- **Later extension:** drop a picture on a grey slot and clip it to that rectangle (ZEditor already has clipping masks).
+- **Starter set to design:** cover, full-bleed picture, picture + caption, title + body, two columns, quote, 2x2 pictures, contents page, back cover.
+- **Open questions:** apply to the current page only, or also insert new pages? Replace what is on the page or add to it? Which layouts matter most for zines?
+
+_(Add more ideas below.)_
