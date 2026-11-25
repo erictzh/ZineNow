@@ -444,3 +444,9 @@ a:focus-visible, button:focus-visible, .app-card:focus-visible {
 .zn-gear-about { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--ui-border); font-size: 11px; line-height: 1.5; color: var(--ui-fg-muted); }
 .zn-gear-about a { color: inherit; text-decoration: underline; }
 .zn-gear-about a:hover { color: var(--ui-fg); }
+
+/* The short welcome above the app cards. */
+.zn-intro { margin: 0 0 26px; max-width: 760px; }
+.zn-intro-line { margin: 0 0 8px; font-size: 18px; line-height: 1.45; color: var(--ui-fg); }
+.zn-intro-sub { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ui-fg-muted); }
+.zn-intro-sub a { color: var(--ui-accent-text); }

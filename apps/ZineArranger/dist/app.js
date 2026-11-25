@@ -5293,10 +5293,12 @@
     text: "ZineNow is free software (AGPL-3.0-or-later).",
     links: [
       { label: "Source code", href: REPO_URL },
-      { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" }
+      { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" },
+      { label: "Report a problem", href: REPO_URL + "/issues/new/choose" }
     ]
   };
   var POLICY_URL = REPO_URL + "/blob/main/docs/AI-MODELS-POLICY.md";
+  var REPORT_URL = REPO_URL + "/issues/new/choose";
 
   // apps/ZineArranger/src/displaySettings.js
   function installArrangerDisplaySettings() {
@@ -5449,7 +5451,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 4ef0b95";
+    subtitle.textContent += " · build de155d9";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

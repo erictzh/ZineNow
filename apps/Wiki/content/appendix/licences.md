@@ -57,6 +57,7 @@ export const ABOUT = {
   links: [
     { label: "Source code", href: REPO_URL },
     { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" },
+    { label: "Report a problem", href: REPO_URL + "/issues/new/choose" },
   ],
 };
 export const POLICY_URL = REPO_URL + "/blob/main/docs/AI-MODELS-POLICY.md";

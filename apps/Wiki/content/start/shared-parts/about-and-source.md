@@ -23,12 +23,13 @@ export const ABOUT = {
   links: [
     { label: "Source code", href: REPO_URL },
     { label: "Third-party notices", href: REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md" },
+    { label: "Report a problem", href: REPO_URL + "/issues/new/choose" },
   ],
 };
 export const POLICY_URL = REPO_URL + "/blob/main/docs/AI-MODELS-POLICY.md";
 ```
 
-**The Logic:** `export const` makes the values importable by other files. `ABOUT` has the sentence and a list of `{ label, href }` links; `REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md"` joins the repository address and the path of a file on its `main` branch. `POLICY_URL` is separate because only the Models page shows it.
+**The Logic:** `export const` makes the values importable by other files. `ABOUT` has the sentence and a list of `{ label, href }` links; `REPO_URL + "/blob/main/THIRD-PARTY-NOTICES.md"` joins the repository address and the path of a file on its `main` branch. `Report a problem` goes to the repository's issue form. `POLICY_URL` is separate because only the Models page shows it.
 
 ### Building the links in the gear
 
