@@ -53,4 +53,11 @@ State: **decided** unless marked.
 - **Layout details decided (suggestions accepted):** default margin from the Page Guide, else about 8% of the page width; gap between pieces about 4%; split 50/50; pieces separate (not grouped) and not locked; body text filled with enough lorem ipsum to fill its box (fixed height, extra text hidden); text uses the current tool defaults; "Add layout" in the Page menu for the current page and "New page with layout" next to the new-page action; the whole layout is one undo step.
 - **Build order (not started; waiting for the maintainer's go):** (1) layout data + "apply to current page"; (2) "new page with layout"; (3) snap to rectangles when moving; (4) snap to rectangles when resizing; (5) tests, wiki pages, notes.
 
+### 4.2 Coloured ruler guide groups, layout guides, bleed export (2026-11-25) — under discussion
+
+- **Coloured guide groups (idea):** each ruler guide gets a colour (8 defaults: white, yellow, light blue, light green, light red, pink, light grey, orange). Guides of one colour form a group shown in the Layers panel, where the whole group can be locked or hidden; each guide can still be dragged on its own. Today guides are a document-wide list `{ id, axis, pos }` in view settings (`useViewSettings.js`), not shown in the Layers panel, with one global lock.
+- **Layout guides (idea):** creating a layout also adds guide lines (margins, the split line, the gap) in their own colour group. Needs a decision: guides are document-wide today (same on every page), so per-page guides need a data change.
+- **Bleed in PDF export (idea, feasible):** bleed today is only an editor guide (Page Guide: trim centred on the page, bleed outside it); export ignores it. Plan: export option **with bleed / without bleed**; "without" crops to the trim box, "with" keeps trim + bleed; also write the PDF TrimBox/BleedBox so print shops see where to cut. Items must lie inside the page area to be drawn (bleed content has to be within the page). ZineArranger would need to use the trimmed pages for imposition.
+- **Open questions:** see the discussion (default colour, how to choose/recolour, per-page vs document guides, bleed defaults, crop marks, how ZineArranger should treat a bleed PDF).
+
 _(Add more ideas below.)_
