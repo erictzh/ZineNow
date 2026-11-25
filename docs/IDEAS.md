@@ -63,4 +63,6 @@ State: **decided** unless marked.
 - **Interpretation (confirmed):** page size entered = trim size; the editable page area = trim + bleed on every side; changing bleed on an existing page grows/shrinks the page and shifts items so the trim area stays put; export asks with/without bleed (without = crop to trim), TrimBox/BleedBox written.
 - **Open questions:** what "integrate Measure" means exactly; ⋮ menu placement (group header, each guide, or both); bleed for imported PDF pages; replacing the Page Guide's bleed inches with the new mm bleed; crop marks; ZineArranger gets the trimmed version.
 
+- **Guides snap to page edges (2026-11-25, idea):** when the master snap setting ("Snap items to guides when moving them") is on, dragging a ruler guide snaps it to the page edges. To settle: also snap to the page centre, the trim edge (when a bleed is set), the margin lines and other guides? (leaning: page edges, centre and trim edge). Alt bypasses; same 6 px screen threshold as other snapping. Today a guide only snaps to ruler units while Shift is held (`snapToUnit` in `model/rulers.js`).
+
 _(Add more ideas below.)_
