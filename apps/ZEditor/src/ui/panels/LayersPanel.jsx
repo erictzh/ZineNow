@@ -154,7 +154,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, guides, rulerUnit }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, guides, rulerUnit }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -165,6 +165,21 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
   const panelRef = useRef(null);
   const headRef = useRef(null);
   const topFirst = annotations.slice().reverse();
+  // Picking a layer row. Ctrl / Cmd + click adds or takes out one layer; Shift + click on a layer that is not selected takes in every layer
+  // from the last one clicked down or up to it (hidden and locked ones are skipped); Shift on a selected layer takes it out, as before.
+  const anchorRef = useRef(null);
+  function pickLayer(ann, e, single) {
+    const toggle = e.ctrlKey || e.metaKey, shift = withTouchModifier("shift", e);
+    if (shift && !toggle && !selectedIds.includes(ann.id) && anchorRef.current !== null && anchorRef.current !== ann.id && onSelectRange) {
+      const i = topFirst.findIndex((a) => a.id === anchorRef.current), j = topFirst.findIndex((a) => a.id === ann.id);
+      if (i >= 0 && j >= 0) {
+        onSelectRange(topFirst.slice(Math.min(i, j), Math.max(i, j) + 1).filter((a) => !a.hidden && !a.locked).map((a) => a.id), ann.id);
+        return; // the anchor stays where it was, so the range can be stretched
+      }
+    }
+    onSelect(ann.id, shift || toggle, single);
+    anchorRef.current = ann.id;
+  }
   const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
   // Clipping mask for the selection: whether "Clip to below (multiple)" would clip anything, and whether any selected layer is clipped.
   const canClip = clipTargets(annotations, selectedIds).length > 0;
@@ -317,7 +332,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           title={inGroup ? "In a group — Alt + click selects just this layer" : undefined}
           data-layer-id={ann.id}
           draggable={!isRenaming}
-          onClick={(e) => { if (!ann.hidden && !ann.locked) onSelect(ann.id, withTouchModifier("shift", e), withTouchModifier("alt", e)); }}
+          onClick={(e) => { if (!ann.hidden && !ann.locked) pickLayer(ann, e, withTouchModifier("alt", e)); }}
           onDoubleClick={() => setRenamingId(ann.id)}
           {...dragHandlersFor(ann.id, ann.id, row, row + 1)}
         >
@@ -384,7 +399,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           style={{ "--ze-group-color": groupColor(groupId) }}
           title="Group: click to select it, double-click to rename"
           draggable={!isRenaming}
-          onClick={(e) => { const pick = items.find((i) => !i.ann.hidden && !i.ann.locked); if (pick) onSelect(pick.ann.id, withTouchModifier("shift", e), false); }}
+          onClick={(e) => { const pick = items.find((i) => !i.ann.hidden && !i.ann.locked); if (pick) pickLayer(pick.ann, e, false); }}
           onDoubleClick={() => setRenamingId("g:" + groupId)}
           // Below an open group's row is its first layer, so a drop there goes above the group's layers.
           {...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)}

@@ -4,7 +4,7 @@ The **Layers panel** is a floating list of everything on the current page, top l
 
 ## How to use
 
-- **Select:** click a row. **Shift+click** adds or removes rows. A selection made in the panel is highlighted on the page and vice versa.
+- **Select:** click a row. **Shift+click** selects every layer from the last one you clicked to this one (hidden and locked layers are skipped); **Ctrl+click** (Cmd on Mac) adds or removes one row at a time; Shift+click on a selected row also removes it. A selection made in the panel is highlighted on the page and vice versa.
 - **Rename:** double-click a name.
 - **Lock** (padlock): the item cannot be selected or moved on the page. **Hide** (eye): the item is not drawn. A locked item is skipped when you select or erase on the page itself.
 - **Reorder:** drag a row up or down. The top of the list is the front of the page.

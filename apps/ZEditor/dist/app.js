@@ -14057,13 +14057,23 @@ ${parts.join("\n")}</g>`);
       handleSelectAnnotation(id, shiftKey, single);
       panelPickRef.current = id;
     }
+    function handleSelectLayerRange(ids, primaryId) {
+      selectTool("select");
+      panelPickRef.current = null;
+      const existing = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
+      const all = [.../* @__PURE__ */ new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])].filter((x) => x !== primaryId);
+      setSelectedAnnId(primaryId);
+      setSelectedAnnIds(all);
+    }
     function selectedAnnotationIds() {
       return [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
     }
-    function handleSelectPage(idx, shiftKey) {
-      if (!shiftKey || idx === null) {
+    const pageAnchorRef = useRef11(null);
+    function handleSelectPage(idx, mode) {
+      if (!mode || idx === null) {
         setSelectedIdx(idx);
         setSelectedPageIndices([]);
+        pageAnchorRef.current = idx;
         return;
       }
       const currentAll = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : [...selectedPageIndices];
@@ -14071,10 +14081,19 @@ ${parts.join("\n")}</g>`);
         const next = currentAll.filter((x) => x !== idx);
         setSelectedIdx(next.length > 0 ? next[0] : null);
         setSelectedPageIndices(next.slice(1));
-      } else {
-        setSelectedPageIndices(currentAll);
-        setSelectedIdx(idx);
+        pageAnchorRef.current = idx;
+        return;
       }
+      const anchor = pageAnchorRef.current;
+      let added = [idx];
+      if (mode !== "toggle" && anchor !== null && anchor !== idx && anchor >= 0 && anchor < pages.length) {
+        const lo = Math.min(anchor, idx), hi = Math.max(anchor, idx);
+        added = Array.from({ length: hi - lo + 1 }, (_, k) => lo + k);
+      } else {
+        pageAnchorRef.current = idx;
+      }
+      setSelectedPageIndices([.../* @__PURE__ */ new Set([...currentAll, ...added])].filter((x) => x !== idx));
+      setSelectedIdx(idx);
     }
     function handleSelectAllPages() {
       if (pages.length === 0) return;
@@ -14113,6 +14132,7 @@ ${parts.join("\n")}</g>`);
       handleSelectAnnotations,
       handleSelectAnnotation,
       handleSelectLayer,
+      handleSelectLayerRange,
       handleSelectPage,
       handleSelectAllPages,
       pagesActedOn
@@ -19775,7 +19795,7 @@ ${parts.join("\n")}</g>`);
       if (v) onSetLook({ blend: v });
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
-  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, guides, rulerUnit }) {
+  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, guides, rulerUnit }) {
     const [renamingId, setRenamingId] = useState40(null);
     const [menuOpen, setMenuOpen] = useState40(false);
     const menuRef = useRef28(null);
@@ -19786,6 +19806,19 @@ ${parts.join("\n")}</g>`);
     const panelRef = useRef28(null);
     const headRef = useRef28(null);
     const topFirst = annotations.slice().reverse();
+    const anchorRef = useRef28(null);
+    function pickLayer(ann, e, single) {
+      const toggle = e.ctrlKey || e.metaKey, shift = withTouchModifier("shift", e);
+      if (shift && !toggle && !selectedIds.includes(ann.id) && anchorRef.current !== null && anchorRef.current !== ann.id && onSelectRange) {
+        const i = topFirst.findIndex((a) => a.id === anchorRef.current), j = topFirst.findIndex((a) => a.id === ann.id);
+        if (i >= 0 && j >= 0) {
+          onSelectRange(topFirst.slice(Math.min(i, j), Math.max(i, j) + 1).filter((a) => !a.hidden && !a.locked).map((a) => a.id), ann.id);
+          return;
+        }
+      }
+      onSelect(ann.id, shift || toggle, single);
+      anchorRef.current = ann.id;
+    }
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
@@ -19934,7 +19967,7 @@ ${parts.join("\n")}</g>`);
           "data-layer-id": ann.id,
           draggable: !isRenaming,
           onClick: (e) => {
-            if (!ann.hidden && !ann.locked) onSelect(ann.id, withTouchModifier("shift", e), withTouchModifier("alt", e));
+            if (!ann.hidden && !ann.locked) pickLayer(ann, e, withTouchModifier("alt", e));
           },
           onDoubleClick: () => setRenamingId(ann.id),
           ...dragHandlersFor(ann.id, ann.id, row, row + 1)
@@ -20021,7 +20054,7 @@ ${parts.join("\n")}</g>`);
           draggable: !isRenaming,
           onClick: (e) => {
             const pick = items.find((i) => !i.ann.hidden && !i.ann.locked);
-            if (pick) onSelect(pick.ann.id, withTouchModifier("shift", e), false);
+            if (pick) pickLayer(pick.ann, e, false);
           },
           onDoubleClick: () => setRenamingId("g:" + groupId2),
           ...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)
@@ -20471,7 +20504,7 @@ ${parts.join("\n")}</g>`);
       {
         className: "ze-thumb" + (isSelected ? " is-selected" : ""),
         draggable: "true",
-        onClick: (e) => onSelect(idx, withTouchModifier("shift", e)),
+        onClick: (e) => onSelect(idx, e.ctrlKey || e.metaKey ? "toggle" : withTouchModifier("shift", e) ? "range" : false),
         ...dragHandlers
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { srcSet: src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x", draggable: "false", alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber }), story && story.continues != null && /* @__PURE__ */ React.createElement(
@@ -20872,7 +20905,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "6d30614"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "8e2688e"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -21412,6 +21445,7 @@ ${parts.join("\n")}</g>`);
         annotations: selectedPage.annotations || [],
         selectedIds: selection.selectedAnnotationIds(),
         onSelect: selection.handleSelectLayer,
+        onSelectRange: selection.handleSelectLayerRange,
         onGroup: edits.handleGroupSelection,
         onUngroup: edits.handleUngroupSelection,
         onDelete: edits.handleDeleteAnnotation,

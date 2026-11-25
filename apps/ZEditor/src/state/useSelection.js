@@ -83,14 +83,30 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
     panelPickRef.current = id;
   }
 
+  // Shift + click in the Layers panel on a layer that is not selected: every layer between it and the last one clicked (`ids`, already
+  // without hidden or locked ones) joins the selection; `primaryId` (the clicked one) becomes the primary.
+  function handleSelectLayerRange(ids, primaryId) {
+    selectTool("select");
+    panelPickRef.current = null;
+    const existing = selectedAnnId !== null ? [selectedAnnId, ...selectedAnnIds] : [...selectedAnnIds];
+    const all = [...new Set([...existing, ...withGroupMates(currentAnnotations(), ids)])].filter((x) => x !== primaryId);
+    setSelectedAnnId(primaryId);
+    setSelectedAnnIds(all);
+  }
+
   function selectedAnnotationIds() {
     return [selectedAnnId, ...selectedAnnIds].filter((id) => id !== null);
   }
 
-  function handleSelectPage(idx, shiftKey) {
-    if (!shiftKey || idx === null) {
+  // Clicking a page thumbnail. `mode`: falsy = just this page; "toggle" (Ctrl / Cmd) = add it or take it out; "range" (Shift, or `true`) =
+  // every page between the last one clicked and this one joins the selection. Shift on a page that is already selected takes it out, as it
+  // always has. Taking a page out never changes which page is open unless it is that page.
+  const pageAnchorRef = useRef(null);
+  function handleSelectPage(idx, mode) {
+    if (!mode || idx === null) {
       setSelectedIdx(idx);
       setSelectedPageIndices([]);
+      pageAnchorRef.current = idx;
       return;
     }
     const currentAll = selectedIdx !== null ? [selectedIdx, ...selectedPageIndices] : [...selectedPageIndices];
@@ -98,10 +114,19 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
       const next = currentAll.filter((x) => x !== idx);
       setSelectedIdx(next.length > 0 ? next[0] : null);
       setSelectedPageIndices(next.slice(1));
-    } else {
-      setSelectedPageIndices(currentAll);
-      setSelectedIdx(idx);
+      pageAnchorRef.current = idx;
+      return;
     }
+    const anchor = pageAnchorRef.current;
+    let added = [idx];
+    if (mode !== "toggle" && anchor !== null && anchor !== idx && anchor >= 0 && anchor < pages.length) {
+      const lo = Math.min(anchor, idx), hi = Math.max(anchor, idx);
+      added = Array.from({ length: hi - lo + 1 }, (_, k) => lo + k);
+    } else {
+      pageAnchorRef.current = idx;
+    }
+    setSelectedPageIndices([...new Set([...currentAll, ...added])].filter((x) => x !== idx));
+    setSelectedIdx(idx);
   }
 
   // Keeps the page currently open as the primary, so selecting all
@@ -140,7 +165,7 @@ export function useSelection({ pages, selectedIdx, setSelectedIdx, selectedPageI
     tool, setTool, selectTool, panelPickId: panelPickRef.current,
     selectedAnnId, setSelectedAnnId, selectedAnnIds, setSelectedAnnIds, selectedAnnotationIds, currentAnnotations,
     editingAnnId, setEditingAnnId, croppingAnnId, handleToggleCrop,
-    handleSelectAnnotations, handleSelectAnnotation, handleSelectLayer,
+    handleSelectAnnotations, handleSelectAnnotation, handleSelectLayer, handleSelectLayerRange,
     handleSelectPage, handleSelectAllPages, pagesActedOn,
   };
 }
