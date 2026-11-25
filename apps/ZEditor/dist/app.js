@@ -19292,7 +19292,7 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
   var { useState: useState38, useRef: useRef26, useEffect: useEffect26, useLayoutEffect: useLayoutEffect5 } = React;
-  function TopMenu({ label, solid, children }) {
+  function TopMenu({ label, solid, icon: icon2, tile, children }) {
     const [open, setOpen] = useState38(false);
     const containerRef = useRef26(null);
     useEffect26(() => {
@@ -19333,12 +19333,13 @@ ${parts.join("\n")}</g>`);
       "button",
       {
         type: "button",
-        className: "ze-menu-trigger" + (solid ? " btn-solid" : "") + (open ? " open" : ""),
+        className: "ze-menu-trigger" + (solid ? " btn-solid" : "") + (tile ? " ze-tile" : "") + (open ? " open" : ""),
         "aria-haspopup": "menu",
         "aria-expanded": open,
         onClick: () => setOpen((o) => !o)
       },
-      label,
+      icon2,
+      /* @__PURE__ */ React.createElement("span", { className: "ze-menu-trigger-label" }, label),
       /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
     ), open && /* @__PURE__ */ React.createElement("div", { className: "ze-menu", role: "menu", ref: menuRef }, children({ close: () => setOpen(false) })));
   }
@@ -20528,6 +20529,10 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
   var { useState: useState43, useRef: useRef31, useEffect: useEffect30 } = React;
+  var icon = { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+  var InsertPdfIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v5h5" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" }));
+  var LayoutIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 10h17M10 10v10.5" }));
+  var SelectAllIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2", strokeDasharray: "3 2.5" }), /* @__PURE__ */ React.createElement("path", { d: "M8 12.5l3 3 5-6" }));
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
@@ -20601,15 +20606,18 @@ ${parts.join("\n")}</g>`);
         }
       };
     }
-    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), layouts && /* @__PURE__ */ React.createElement(TopMenu, { label: "Layout" }, () => /* @__PURE__ */ React.createElement(
-      LayoutSettings,
-      {
-        settings: layoutSettings,
-        onChange: onLayoutSettings,
-        hasPage: selectedIdx !== null && Boolean(pages[selectedIdx]),
-        onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
-      }
-    )), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sidebar-title" }, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), pages.length === 0 ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document")) : (
+      // Three tiles in one row: an icon over a short name. Big enough for a finger.
+      /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-tiles", role: "toolbar", "aria-label": "Page actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onInsertPdfClick, disabled: loading, title: "Insert another PDF's pages into this document" }, /* @__PURE__ */ React.createElement(InsertPdfIcon, null), /* @__PURE__ */ React.createElement("span", null, "Insert PDF")), layouts && /* @__PURE__ */ React.createElement(TopMenu, { label: "Layout", tile: true, icon: /* @__PURE__ */ React.createElement(LayoutIcon, null) }, () => /* @__PURE__ */ React.createElement(
+        LayoutSettings,
+        {
+          settings: layoutSettings,
+          onChange: onLayoutSettings,
+          hasPage: selectedIdx !== null && Boolean(pages[selectedIdx]),
+          onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
+        }
+      )), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onSelectAll, disabled: loading, title: "Select every page" }, /* @__PURE__ */ React.createElement(SelectAllIcon, null), /* @__PURE__ */ React.createElement("span", null, "Select all")))
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
       Thumbnail,
       {
         p,
@@ -20864,7 +20872,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f6829ff"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "6d30614"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
