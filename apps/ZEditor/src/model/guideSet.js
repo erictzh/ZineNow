@@ -35,14 +35,14 @@ export function guidesOnPage(globalGuides, pageGuides) {
   return [...(pageGuides || []).map((g) => ({ ...g, scope: "page" })), ...(globalGuides || []).map((g) => ({ ...g, scope: "global" }))];
 }
 
-// The groups of the Layers panel: "Page Guides (Yellow)", "Global Guides (Yellow)"…, page groups first, colours in the palette's
+// The groups of the Layers panel: "Page Guides · Alignment", "Global Guides · Alignment"… (the colour ball shows the colour), page groups first, colours in the palette's
 // order, and only groups that have guides. [{ key, scope, color, label, guides }]
 export function guideGroups(visible) {
   const groups = [];
   for (const scope of ["page", "global"]) {
     for (const c of GUIDE_COLORS) {
       const guides = visible.filter((g) => g.scope === scope && g.color === c.key);
-      if (guides.length) groups.push({ key: scope + ":" + c.key, scope, color: c.key, label: `${scope === "page" ? "Page" : "Global"} Guides (${c.label})`, guides });
+      if (guides.length) groups.push({ key: scope + ":" + c.key, scope, color: c.key, label: `${scope === "page" ? "Page" : "Global"} Guides · ${c.purpose}`, guides });
     }
   }
   return groups;
