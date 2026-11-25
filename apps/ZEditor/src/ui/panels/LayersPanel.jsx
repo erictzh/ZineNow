@@ -169,7 +169,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
   // from the last one clicked down or up to it (hidden and locked ones are skipped); Shift on a selected layer takes it out, as before.
   const anchorRef = useRef(null);
   function pickLayer(ann, e, single) {
-    const toggle = e.ctrlKey || e.metaKey, shift = withTouchModifier("shift", e);
+    const toggle = e.metaKey || withTouchModifier("ctrl", e), shift = withTouchModifier("shift", e);
     if (shift && !toggle && !selectedIds.includes(ann.id) && anchorRef.current !== null && anchorRef.current !== ann.id && onSelectRange) {
       const i = topFirst.findIndex((a) => a.id === anchorRef.current), j = topFirst.findIndex((a) => a.id === ann.id);
       if (i >= 0 && j >= 0) {

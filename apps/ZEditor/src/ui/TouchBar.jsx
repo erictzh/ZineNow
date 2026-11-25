@@ -1,6 +1,6 @@
 // The touch bar: a small floating bar over the bottom-left of the canvas, shown only while a finger
 // is being used (styles/touch.css shows it under <html data-ze-input="touch">). It stands in for
-// what a keyboard gives: Shift and Alt (sticky toggles, see ui/touchInput.js) and the Delete,
+// what a keyboard gives: Shift, Alt and Ctrl (sticky toggles, see ui/touchInput.js) and the Delete,
 // Ctrl+C/Ctrl+V, C (crop) keys — those are sent as the very same key presses the keyboard would
 // make (state/useKeyboardShortcuts.js), so each button does exactly what its key does.
 
@@ -24,9 +24,11 @@ const Icon = ({ children }) => (
 export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
   const [shift, setShift] = useState(false);
   const [alt, setAlt] = useState(false);
+  const [ctrl, setCtrl] = useState(false);
   useEffect(() => { setTouchModifier("shift", shift); }, [shift]);
   useEffect(() => { setTouchModifier("alt", alt); }, [alt]);
-  useEffect(() => () => { setTouchModifier("shift", false); setTouchModifier("alt", false); }, []);
+  useEffect(() => { setTouchModifier("ctrl", ctrl); }, [ctrl]);
+  useEffect(() => () => { setTouchModifier("shift", false); setTouchModifier("alt", false); setTouchModifier("ctrl", false); }, []);
 
   const hasSelection = Boolean(selectedAnn) && !isEditing;
   const keep = (e) => e.preventDefault(); // don't take the focus (or a text box's caret) away
@@ -45,6 +47,13 @@ export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqu
         onClick={() => setAlt((v) => !v)}
       >
         Alt
+      </button>
+      <button
+        type="button" className={"ze-touch-btn ze-touch-key" + (ctrl ? " is-on" : "")} aria-pressed={ctrl} onMouseDown={keep}
+        title="Ctrl, held until tapped again: add or take out one page or layer in the lists, pick the top layer on the page"
+        onClick={() => setCtrl((v) => !v)}
+      >
+        Ctrl
       </button>
       {marqueePolygonOpen && <span className="ze-touch-sep" aria-hidden="true" />}
       {marqueePolygonOpen && (
