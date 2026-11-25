@@ -14625,17 +14625,19 @@
         return;
       }
       const made = items(layout, size);
-      if (!linked) {
-        edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns]);
-        status.setNotice(`Added the "${layout.label}" layout under the items on this page. Undo takes it off.`);
+      const oldBody = linked || existing.find((a) => a.layoutKey && a.layoutRole === "body");
+      const body = made.find((a) => a.layoutRole === "body");
+      const generated = (a) => a.layoutKey && a.layoutRole != null;
+      if (!oldBody || !body) {
+        edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns.filter((a) => !generated(a))]);
+        status.setNotice(`Applied the "${layout.label}" layout${existing.some(generated) ? ", replacing the earlier one" : " under the items on this page"}. Undo takes it off.`);
         return;
       }
-      const body = made.find((a) => a.layoutRole === "body");
       edits.updateAnnotationsFor(selectedIdx, (anns) => {
-        const kept = anns.filter((a) => !(a.layoutKey && a.layoutRole !== "body" && a.layoutRole != null));
-        return [...made.filter((a) => a !== body), ...kept.map((a) => a.id === linked.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a)];
+        const kept = anns.filter((a) => !generated(a) || a.id === oldBody.id);
+        return [...made.filter((a) => a !== body), ...kept.map((a) => a.id === oldBody.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a)];
       });
-      status.setNotice(`Moved the story into the "${layout.label}" layout's text area. Undo takes it back.`);
+      status.setNotice(`Applied the "${layout.label}" layout; the text moved into its text area. Undo takes it back.`);
     }
     function addPageWithLayout(key) {
       const layout = layoutByKey(key);
@@ -19516,8 +19518,66 @@
     );
   }
 
+  // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
+  var { useState: useState38 } = React;
+  var PREVIEW_W = 70;
+  var PREVIEW_H = 99;
+  function LayoutPreview({ layout, settings }) {
+    const boxes = place(layout, PREVIEW_W, PREVIEW_H, settings, 4, null);
+    return /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${PREVIEW_W} ${PREVIEW_H}`, width: PREVIEW_W, height: PREVIEW_H, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { width: PREVIEW_W, height: PREVIEW_H, fill: "#fff", stroke: "#8a8078", strokeWidth: "0.6" }), boxes.map((b, i) => {
+      if (b.role === "picture") return /* @__PURE__ */ React.createElement("rect", { key: i, x: b.x, y: b.y, width: b.w, height: b.h, fill: settings.slotGrey });
+      const lineGap = b.role === "title" ? b.h : 4;
+      const lines = Math.max(1, Math.floor(b.h / lineGap));
+      const cols = b.columns > 1 ? b.columns : 1;
+      const colW = (b.w - (cols - 1) * 3) / cols;
+      const thick = b.role === "title" ? Math.max(2.5, b.h * 0.4) : 1.2;
+      return /* @__PURE__ */ React.createElement("g", { key: i, stroke: "#4a4540", strokeWidth: thick, strokeLinecap: "round" }, Array.from({ length: cols }).flatMap((_, c) => Array.from({ length: lines }).map((__, l) => {
+        const y = b.y + (b.role === "title" ? b.h / 2 : lineGap * (l + 0.6));
+        const short = b.role !== "title" && l === lines - 1 ? 0.6 : 1;
+        return /* @__PURE__ */ React.createElement("line", { key: c + "-" + l, x1: b.x + c * (colW + 3), y1: y, x2: b.x + c * (colW + 3) + colW * (b.role === "title" ? 0.7 : short), y2: y });
+      })));
+    }));
+  }
+  function LayoutSettings({ settings, onChange, onApply, hasPage }) {
+    const [where, setWhere] = useState38("new");
+    const target = hasPage ? where : "new";
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "page" ? "active" : "",
+        disabled: !hasPage,
+        onClick: () => setWhere("page"),
+        title: "Applies the layout to this page, replacing an earlier layout on it (your own items stay on top)"
+      },
+      "On this page"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "new" ? "active" : "",
+        onClick: () => setWhere("new"),
+        title: "Adds a new page after this one, holding the layout"
+      },
+      "New page after"
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-layout-grid" }, LAYOUTS.map((l) => /* @__PURE__ */ React.createElement("button", { key: l.key, type: "button", className: "ze-layout-tile", title: l.label, onClick: () => onApply(l.key, target) }, /* @__PURE__ */ React.createElement(LayoutPreview, { layout: l, settings }), /* @__PURE__ */ React.createElement("span", null, l.label)))), /* @__PURE__ */ React.createElement("details", { className: "ze-layout-settings" }, /* @__PURE__ */ React.createElement("summary", null, "Layout settings (this file)"), LAYOUT_SETTING_FIELDS.map((f) => /* @__PURE__ */ React.createElement("label", { key: f.key, className: "ze-layout-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label, " ", /* @__PURE__ */ React.createElement("small", null, "(", f.unit, ")")), /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        min: f.min,
+        max: f.max,
+        step: f.step,
+        value: settings[f.key],
+        onChange: (e) => {
+          const v = Number(e.target.value);
+          if (e.target.value !== "" && Number.isFinite(v)) onChange({ ...settings, [f.key]: Math.min(f.max, Math.max(f.min, v)) });
+        },
+        "aria-label": f.label
+      }
+    ))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layout-reset", onClick: () => onChange(DEFAULT_LAYOUT_SETTINGS) }, "Reset to defaults"), /* @__PURE__ */ React.createElement("p", { className: "ze-layout-note" }, "Only layouts added from now on use these sizes. Layouts already on a page are ordinary items and stay as they are. The margin follows the Page Guide when it is on.")));
+  }
+
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState38, useEffect: useEffect28, useRef: useRef29 } = React;
+  var { useState: useState39, useEffect: useEffect28, useRef: useRef29 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -19525,7 +19585,7 @@
   var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
-    const [urls, setUrls] = useState38({});
+    const [urls, setUrls] = useState39({});
     const urlsRef = useRef29({});
     const madeFrom = useRef29(/* @__PURE__ */ new Map());
     const baseCache = useRef29(null);
@@ -19535,7 +19595,7 @@
     const lastEnd = useRef29(0);
     const lastMs = useRef29(0);
     const alive = useRef29(true);
-    const [on, setOn] = useState38(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const [on, setOn] = useState39(() => !document.documentElement.classList.contains("ze-static-thumbs"));
     const onRef = useRef29(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
@@ -19718,16 +19778,16 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState39, useRef: useRef30, useEffect: useEffect29 } = React;
+  var { useState: useState40, useRef: useRef30, useEffect: useEffect29 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory }) {
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
     const dragIndexRef = useRef30(null);
     const bodyRef = useRef30(null);
     const scrollDirRef = useRef30(0);
     const rafRef = useRef30(null);
-    const [dragOverInfo, setDragOverInfo] = useState39(null);
+    const [dragOverInfo, setDragOverInfo] = useState40(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -19792,7 +19852,15 @@
         }
       };
     }
-    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", null, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), pages.length === 0 && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onInsertPdfClick, disabled: loading || pages.length === 0, title: "Insert another PDF's pages into this document" }, "Insert PDF"), layouts && /* @__PURE__ */ React.createElement(TopMenu, { label: "Layout" }, () => /* @__PURE__ */ React.createElement(
+      LayoutSettings,
+      {
+        settings: layoutSettings,
+        onChange: onLayoutSettings,
+        hasPage: selectedIdx !== null && Boolean(pages[selectedIdx]),
+        onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
+      }
+    )), /* @__PURE__ */ React.createElement("button", { type: "button", className: "log-btn", onClick: onSelectAll, disabled: loading || pages.length === 0, title: "Select every page" }, "Select All"))), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
       Thumbnail,
       {
         p,
@@ -19859,14 +19927,14 @@
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState40, useEffect: useEffect30 } = React;
+  var { useState: useState41, useEffect: useEffect30 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState40(false);
-    const [alt, setAlt] = useState40(false);
+    const [shift, setShift] = useState41(false);
+    const [alt, setAlt] = useState41(false);
     useEffect30(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
@@ -19981,64 +20049,6 @@
     )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Trim is centered on the page; margin sits inside it, bleed extends outside. Pick "Match Page Size" if the page is already trimmed to its final size.'));
   }
 
-  // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
-  var { useState: useState41 } = React;
-  var PREVIEW_W = 70;
-  var PREVIEW_H = 99;
-  function LayoutPreview({ layout, settings }) {
-    const boxes = place(layout, PREVIEW_W, PREVIEW_H, settings, 4, null);
-    return /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${PREVIEW_W} ${PREVIEW_H}`, width: PREVIEW_W, height: PREVIEW_H, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { width: PREVIEW_W, height: PREVIEW_H, fill: "#fff", stroke: "#8a8078", strokeWidth: "0.6" }), boxes.map((b, i) => {
-      if (b.role === "picture") return /* @__PURE__ */ React.createElement("rect", { key: i, x: b.x, y: b.y, width: b.w, height: b.h, fill: settings.slotGrey });
-      const lineGap = b.role === "title" ? b.h : 4;
-      const lines = Math.max(1, Math.floor(b.h / lineGap));
-      const cols = b.columns > 1 ? b.columns : 1;
-      const colW = (b.w - (cols - 1) * 3) / cols;
-      const thick = b.role === "title" ? Math.max(2.5, b.h * 0.4) : 1.2;
-      return /* @__PURE__ */ React.createElement("g", { key: i, stroke: "#4a4540", strokeWidth: thick, strokeLinecap: "round" }, Array.from({ length: cols }).flatMap((_, c) => Array.from({ length: lines }).map((__, l) => {
-        const y = b.y + (b.role === "title" ? b.h / 2 : lineGap * (l + 0.6));
-        const short = b.role !== "title" && l === lines - 1 ? 0.6 : 1;
-        return /* @__PURE__ */ React.createElement("line", { key: c + "-" + l, x1: b.x + c * (colW + 3), y1: y, x2: b.x + c * (colW + 3) + colW * (b.role === "title" ? 0.7 : short), y2: y });
-      })));
-    }));
-  }
-  function LayoutSettings({ settings, onChange, onApply, hasPage }) {
-    const [where, setWhere] = useState41(hasPage ? "page" : "new");
-    const target = hasPage ? where : "new";
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: target === "page" ? "active" : "",
-        disabled: !hasPage,
-        onClick: () => setWhere("page"),
-        title: "Adds the layout under the items already on this page"
-      },
-      "On this page"
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: target === "new" ? "active" : "",
-        onClick: () => setWhere("new"),
-        title: "Adds a new page after this one, holding the layout"
-      },
-      "New page after"
-    )), /* @__PURE__ */ React.createElement("div", { className: "ze-layout-grid" }, LAYOUTS.map((l) => /* @__PURE__ */ React.createElement("button", { key: l.key, type: "button", className: "ze-layout-tile", title: l.label, onClick: () => onApply(l.key, target) }, /* @__PURE__ */ React.createElement(LayoutPreview, { layout: l, settings }), /* @__PURE__ */ React.createElement("span", null, l.label)))), /* @__PURE__ */ React.createElement("details", { className: "ze-layout-settings" }, /* @__PURE__ */ React.createElement("summary", null, "Layout settings (this file)"), LAYOUT_SETTING_FIELDS.map((f) => /* @__PURE__ */ React.createElement("label", { key: f.key, className: "ze-layout-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label, " ", /* @__PURE__ */ React.createElement("small", null, "(", f.unit, ")")), /* @__PURE__ */ React.createElement(
-      NumberBox,
-      {
-        min: f.min,
-        max: f.max,
-        step: f.step,
-        value: settings[f.key],
-        onChange: (e) => {
-          const v = Number(e.target.value);
-          if (e.target.value !== "" && Number.isFinite(v)) onChange({ ...settings, [f.key]: Math.min(f.max, Math.max(f.min, v)) });
-        },
-        "aria-label": f.label
-      }
-    ))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layout-reset", onClick: () => onChange(DEFAULT_LAYOUT_SETTINGS) }, "Reset to defaults"), /* @__PURE__ */ React.createElement("p", { className: "ze-layout-note" }, "Only layouts added from now on use these sizes. Layouts already on a page are ordinary items and stay as they are. The margin follows the Page Guide when it is on.")));
-  }
-
   // apps/ZEditor/src/ui/settings/OnionSkinSettings.jsx
   function OnionSkinSettings({ opacity, onOpacityChange }) {
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity (", Math.round(opacity * 100), "%)"), /* @__PURE__ */ React.createElement(
@@ -20085,7 +20095,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b5c378a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "30477e6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -20425,6 +20435,9 @@
         onSelectAll: selection.handleSelectAllPages,
         storyStates,
         onContinueStory: layouts.continueStory,
+        layouts,
+        layoutSettings: view.layoutSettings,
+        onLayoutSettings: view.setLayoutSettings,
         onRotate: pageOps.handleRotate,
         onDelete: pageOps.handleDeleteThumbnail,
         onReorder: pageOps.handleReorder,

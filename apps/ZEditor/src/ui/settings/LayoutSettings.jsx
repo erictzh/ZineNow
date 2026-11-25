@@ -35,13 +35,13 @@ function LayoutPreview({ layout, settings }) {
 
 // `onApply(key, where)` where is "page" or "new"; `disabled`: no page to add to.
 export function LayoutSettings({ settings, onChange, onApply, hasPage }) {
-  const [where, setWhere] = useState(hasPage ? "page" : "new");
+  const [where, setWhere] = useState("new");
   const target = hasPage ? where : "new";
   return (
     <div className="ze-layout-menu">
       <div className="ze-layout-where" role="group" aria-label="Where to add the layout">
         <button type="button" className={target === "page" ? "active" : ""} disabled={!hasPage} onClick={() => setWhere("page")}
-          title="Adds the layout under the items already on this page">On this page</button>
+          title="Applies the layout to this page, replacing an earlier layout on it (your own items stay on top)">On this page</button>
         <button type="button" className={target === "new" ? "active" : ""} onClick={() => setWhere("new")}
           title="Adds a new page after this one, holding the layout">New page after</button>
       </div>

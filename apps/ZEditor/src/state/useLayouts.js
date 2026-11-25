@@ -48,17 +48,21 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
       return;
     }
     const made = items(layout, size);
-    if (!linked) {
-      edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns]);
-      status.setNotice(`Added the "${layout.label}" layout under the items on this page. Undo takes it off.`);
+    // A layout applied again replaces the one before it (never stacks): the pieces an earlier layout made are removed, and
+    // its text area (or a linked story's frame) is moved and resized into the new layout's text area, keeping its words.
+    const oldBody = linked || existing.find((a) => a.layoutKey && a.layoutRole === "body");
+    const body = made.find((a) => a.layoutRole === "body");
+    const generated = (a) => a.layoutKey && a.layoutRole != null;
+    if (!oldBody || !body) {
+      edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns.filter((a) => !generated(a))]);
+      status.setNotice(`Applied the "${layout.label}" layout${existing.some(generated) ? ", replacing the earlier one" : " under the items on this page"}. Undo takes it off.`);
       return;
     }
-    const body = made.find((a) => a.layoutRole === "body");
     edits.updateAnnotationsFor(selectedIdx, (anns) => {
-      const kept = anns.filter((a) => !(a.layoutKey && a.layoutRole !== "body" && a.layoutRole != null));
-      return [...made.filter((a) => a !== body), ...kept.map((a) => (a.id === linked.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a))];
+      const kept = anns.filter((a) => !generated(a) || a.id === oldBody.id);
+      return [...made.filter((a) => a !== body), ...kept.map((a) => (a.id === oldBody.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a))];
     });
-    status.setNotice(`Moved the story into the "${layout.label}" layout's text area. Undo takes it back.`);
+    status.setNotice(`Applied the "${layout.label}" layout; the text moved into its text area. Undo takes it back.`);
   }
 
   // A new blank page after the selected one (or at the end), holding the layout.

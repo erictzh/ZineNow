@@ -1,5 +1,7 @@
 // The page list: selecting, drag-to-reorder with edge auto-scroll, adding pages.
 
+import { TopMenu } from "../topbar/TopMenu.jsx";
+import { LayoutSettings } from "../settings/LayoutSettings.jsx";
 import { useLiveThumbs } from "../../state/useLiveThumbs.js";
 import { PageGap } from "./PageGap.jsx";
 import { Thumbnail } from "./Thumbnail.jsx";
@@ -9,7 +11,7 @@ const { useState, useRef, useEffect } = React;
 const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory }) {
+export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
   const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null); // page key -> thumbnail with its items on it
   const dragIndexRef = useRef(null);
   const bodyRef = useRef(null);
@@ -99,6 +101,18 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
           <button type="button" className="log-btn" onClick={onInsertPdfClick} disabled={loading || pages.length === 0} title="Insert another PDF's pages into this document">
             Insert PDF
           </button>
+          {layouts && (
+            <TopMenu label="Layout">
+              {() => (
+                <LayoutSettings
+                  settings={layoutSettings}
+                  onChange={onLayoutSettings}
+                  hasPage={selectedIdx !== null && Boolean(pages[selectedIdx])}
+                  onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
+                />
+              )}
+            </TopMenu>
+          )}
           <button type="button" className="log-btn" onClick={onSelectAll} disabled={loading || pages.length === 0} title="Select every page">
             Select All
           </button>

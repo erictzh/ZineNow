@@ -138,6 +138,9 @@ export function App() {
           onSelectAll={selection.handleSelectAllPages}
           storyStates={storyStates}
           onContinueStory={layouts.continueStory}
+          layouts={layouts}
+          layoutSettings={view.layoutSettings}
+          onLayoutSettings={view.setLayoutSettings}
           onRotate={pageOps.handleRotate}
           onDelete={pageOps.handleDeleteThumbnail}
           onReorder={pageOps.handleReorder}
