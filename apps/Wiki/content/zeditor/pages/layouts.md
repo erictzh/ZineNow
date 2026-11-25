@@ -8,6 +8,7 @@
 2. Pick where it goes at the top: **New page after** (the default) adds a new blank page after the current one holding the layout, or **On this page** applies it to the current page, **under** your own items. Picking another layout on the same page **replaces** the earlier one instead of stacking; the text area keeps its words and moves into the new layout's text area. Both are **one undo step**. The same picker is also the **Layout** button at the top of the page strip on the left.
 3. Click a layout's little picture.
 4. **Layout settings (this file)** (fold-out at the bottom): **Margin**, **Gap between pieces**, **Split** of the half-and-half layouts, **Title size**, **Caption size**, **Column gap**. **Reset to defaults** puts them back. These are saved **in the project file**, so a different document keeps the app's defaults.
+- All layout text is **justified** (both edges straight); change it in the Format panel like any text.
 - Layouts already on a page are not re-flowed when you change the settings: only layouts added afterwards use the new sizes.
 - The **margin** is the Page Guide's margin when the Page Guide is on, otherwise 8% of the page width.
 - Text uses the **Text tool's current font, size and colour**; titles are 2.5 times that size and bold; captions 0.85 times.
