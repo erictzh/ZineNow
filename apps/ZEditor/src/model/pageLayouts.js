@@ -6,13 +6,16 @@
 // A layout is a list of slots. Each slot says what it is (`role`: picture, title, body or caption) and where it goes in
 // the page's inner box (the page minus its margin). `place()` turns the slots into boxes in editor px.
 
+import { MAIN_SCALE } from "../constants.js";
 import { GUIDE_FORMAT_PRESETS } from "./guides.js";
 
 export const DEFAULT_LAYOUT_SETTINGS = {
   marginPct: 8,        // page margin, % of the page width (used when the Page Guide is off)
   gapPct: 4,           // space between two pieces, % of the page width
   splitPct: 50,        // the first piece of a half-and-half layout, % of the room
-  titleScale: 2.5,     // a title's size, times the body text size
+  bodyPt: 11,          // the body text's size, pt
+  titlePt: 25,         // a title's size, pt (it gets a line beneath it)
+  lineSpacing: 150,    // the body text's line spacing, % of its size
   captionScale: 0.85,  // a caption's size, times the body text size
   columnGapPt: 12,     // gap between the columns of the two-column layouts
   slotGrey: "#d9d9d9", // the picture slots
@@ -23,7 +26,9 @@ export const LAYOUT_SETTING_FIELDS = [
   { key: "marginPct", label: "Margin", unit: "% of page width", min: 0, max: 30, step: 1 },
   { key: "gapPct", label: "Gap between pieces", unit: "% of page width", min: 0, max: 20, step: 0.5 },
   { key: "splitPct", label: "Split of half-and-half layouts", unit: "% (first piece)", min: 20, max: 80, step: 5 },
-  { key: "titleScale", label: "Title size", unit: "× body text", min: 1, max: 6, step: 0.25 },
+  { key: "bodyPt", label: "Body text size", unit: "pt", min: 6, max: 24, step: 0.5 },
+  { key: "titlePt", label: "Title size", unit: "pt", min: 10, max: 72, step: 1 },
+  { key: "lineSpacing", label: "Body line spacing", unit: "%", min: 100, max: 250, step: 5 },
   { key: "captionScale", label: "Caption size", unit: "× body text", min: 0.5, max: 1.5, step: 0.05 },
   { key: "columnGapPt", label: "Column gap", unit: "pt", min: 0, max: 72, step: 1 },
 ];
@@ -101,11 +106,14 @@ export function place(layout, pageW, pageH, settings, font, guide, bleed = 0) {
   for (const slot of layout.slots) {
     const room = slot.room === "page" || layout.room === "page" ? page : inner;
     if (slot.role === "title") {
-      const h = lineH(settings.titleScale);
+      const h = Math.round(settings.titlePt * MAIN_SCALE * 1.3);
       const y = slot.at != null ? room.y + room.h * slot.at : room.y;
       byRole.title = { ...slot, x: room.x, y, w: room.w, h, fixedHeight: false };
-      cursor = y + h + gap;
       out.push(byRole.title);
+      // The line beneath the title, then the gap before what follows.
+      const ruleH = Math.max(1, Math.round(MAIN_SCALE * 10) / 10);
+      out.push({ role: "rule", x: room.x, y: y + h, w: room.w, h: ruleH, fixedHeight: true });
+      cursor = y + h + ruleH + gap;
     } else if (slot.role === "caption") {
       const h = lineH(settings.captionScale) * 2;
       byRole.caption = { ...slot, x: room.x, y: room.y + room.h - h, w: room.w, h, fixedHeight: true };

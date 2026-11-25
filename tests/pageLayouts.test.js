@@ -25,11 +25,13 @@ const cover = place(layoutByKey("cover"), W, H, S, 14, null);
 ok(cover[0].role === "picture" && cover[0].w === W && cover[1].role === "title" && cover[1].y > cover[0].y + 100, "a cover draws the picture first (beneath) and the title over it");
 
 const tt = place(layoutByKey("title-text"), W, H, S, 14, null);
-ok(tt[0].role === "title" && tt[1].role === "body" && near(tt[1].y, tt[0].y + tt[0].h + 16.79) && near(tt[1].y + tt[1].h, inner.y + inner.h), "the body starts below the title and ends at the margin");
-ok(near(tt[0].h, Math.round(14 * 2.5 * 1.3)), "the title is one line tall: body size x 2.5 x 1.3");
+ok(tt[0].role === "title" && tt[1].role === "rule" && tt[2].role === "body", "title, then the line under it, then the body");
+ok(near(tt[1].y, tt[0].y + tt[0].h) && tt[1].w === tt[0].w && tt[1].h >= 1 && tt[1].h < 3, "the line sits right under the title, as wide as the text area");
+ok(near(tt[2].y, tt[1].y + tt[1].h + 16.79) && near(tt[2].y + tt[2].h, inner.y + inner.h), "the body starts below the line and ends at the margin");
+ok(near(tt[0].h, Math.round(25 * 1.1 * 1.3)), "the title is one line tall: 25 pt x 1.3");
 const cap = place(layoutByKey("picture-caption"), W, H, S, 14, null);
 ok(cap[0].role === "picture" && cap[1].role === "caption" && near(cap[0].y + cap[0].h + 16.79 + cap[1].h, inner.y + inner.h), "the caption sits at the bottom; the picture fills the rest");
-ok(place(layoutByKey("two-columns"), W, H, S, 14, null)[0].columns === 2 && place(layoutByKey("title-two-columns"), W, H, S, 14, null)[1].columns === 2, "the two-column layouts ask for 2 columns");
+ok(place(layoutByKey("two-columns"), W, H, S, 14, null)[0].columns === 2 && place(layoutByKey("title-two-columns"), W, H, S, 14, null)[2].columns === 2, "the two-column layouts ask for 2 columns");
 
 // One set of settings drives every layout.
 const wide = { ...S, marginPct: 12, gapPct: 8 };
@@ -46,8 +48,8 @@ ok(near(g2.w, 105 / 25.4 * 72 - 72) && near(g2.x, (W - 105 / 25.4 * 72) / 2 + 36
 ok(near(innerBox(W, H, S, { ...guide, on: false }).x, 33.58), "the guide off: the percent margin");
 
 // Saved settings are made safe.
-const n = normalizeLayoutSettings({ marginPct: 999, gapPct: "x", titleScale: 3, bogus: 1, slotGrey: "#aabbcc" });
-ok(n.marginPct === 30 && n.gapPct === S.gapPct && n.titleScale === 3 && n.bogus === undefined && n.slotGrey === "#aabbcc", "out-of-range numbers are clamped, junk is ignored, unknown keys dropped");
+const n = normalizeLayoutSettings({ marginPct: 999, gapPct: "x", titlePt: 30, bogus: 1, slotGrey: "#aabbcc" });
+ok(n.marginPct === 30 && n.gapPct === S.gapPct && n.titlePt === 30 && n.bogus === undefined && n.slotGrey === "#aabbcc", "out-of-range numbers are clamped, junk is ignored, unknown keys dropped");
 ok(normalizeLayoutSettings(null).marginPct === 8 && normalizeLayoutSettings({ slotGrey: "red" }).slotGrey === S.slotGrey, "missing or invalid settings fall back to the defaults");
 console.log(fails ? "\n" + fails + " FAILED" : "\nall passed");
 process.exit(fails ? 1 : 0);

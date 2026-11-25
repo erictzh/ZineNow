@@ -14350,8 +14350,12 @@ ${parts.join("\n")}</g>`);
     // space between two pieces, % of the page width
     splitPct: 50,
     // the first piece of a half-and-half layout, % of the room
-    titleScale: 2.5,
-    // a title's size, times the body text size
+    bodyPt: 11,
+    // the body text's size, pt
+    titlePt: 25,
+    // a title's size, pt (it gets a line beneath it)
+    lineSpacing: 150,
+    // the body text's line spacing, % of its size
     captionScale: 0.85,
     // a caption's size, times the body text size
     columnGapPt: 12,
@@ -14363,7 +14367,9 @@ ${parts.join("\n")}</g>`);
     { key: "marginPct", label: "Margin", unit: "% of page width", min: 0, max: 30, step: 1 },
     { key: "gapPct", label: "Gap between pieces", unit: "% of page width", min: 0, max: 20, step: 0.5 },
     { key: "splitPct", label: "Split of half-and-half layouts", unit: "% (first piece)", min: 20, max: 80, step: 5 },
-    { key: "titleScale", label: "Title size", unit: "× body text", min: 1, max: 6, step: 0.25 },
+    { key: "bodyPt", label: "Body text size", unit: "pt", min: 6, max: 24, step: 0.5 },
+    { key: "titlePt", label: "Title size", unit: "pt", min: 10, max: 72, step: 1 },
+    { key: "lineSpacing", label: "Body line spacing", unit: "%", min: 100, max: 250, step: 5 },
     { key: "captionScale", label: "Caption size", unit: "× body text", min: 0.5, max: 1.5, step: 0.05 },
     { key: "columnGapPt", label: "Column gap", unit: "pt", min: 0, max: 72, step: 1 }
   ];
@@ -14425,11 +14431,13 @@ ${parts.join("\n")}</g>`);
     for (const slot of layout.slots) {
       const room = slot.room === "page" || layout.room === "page" ? page : inner;
       if (slot.role === "title") {
-        const h = lineH(settings.titleScale);
+        const h = Math.round(settings.titlePt * MAIN_SCALE * 1.3);
         const y = slot.at != null ? room.y + room.h * slot.at : room.y;
         byRole.title = { ...slot, x: room.x, y, w: room.w, h, fixedHeight: false };
-        cursor = y + h + gap;
         out.push(byRole.title);
+        const ruleH = Math.max(1, Math.round(MAIN_SCALE * 10) / 10);
+        out.push({ role: "rule", x: room.x, y: y + h, w: room.w, h: ruleH, fixedHeight: true });
+        cursor = y + h + ruleH + gap;
       } else if (slot.role === "caption") {
         const h = lineH(settings.captionScale) * 2;
         byRole.caption = { ...slot, x: room.x, y: room.y + room.h - h, w: room.w, h, fixedHeight: true };
@@ -14905,28 +14913,31 @@ ${parts.join("\n")}</g>`);
     return text;
   }
   function layoutBoxes({ layout, page, settings, defaults, guide }) {
-    const bodyPt = Number(defaults.textFontSize) || 12;
+    const bodyPt = settings.bodyPt;
     return place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
   }
   function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
-    const bodyPt = Number(defaults.textFontSize) || 12;
+    const bodyPt = settings.bodyPt;
     const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
     const rect = controlValues({}, RECT_CONTROLS);
     const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: "justify" };
     return boxes.map((b) => {
       const id = nextId();
+      if (b.role === "rule") {
+        return { id, type: "rect", layoutKey: layout.key, layoutRole: "rule", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: defaults.textColor || "#1a1a1a", fillAlpha: 100 };
+      }
       if (b.role === "picture") {
         return { id, type: "rect", layoutKey: layout.key, layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
       }
       const base = { id, type: "text", layoutKey: layout.key, layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
-      if (b.role === "title") return { ...base, fontSize: Math.round(bodyPt * settings.titleScale * 10) / 10, bold: true, text: TITLE_TEXT };
+      if (b.role === "title") return { ...base, fontSize: settings.titlePt, bold: true, text: TITLE_TEXT };
       const framed = { ...base, frameHeight: Math.max(12, Math.round(pxToPt(b.h))) };
       if (b.role === "caption") {
         const sized2 = { ...framed, fontSize: Math.round(bodyPt * settings.captionScale * 10) / 10 };
         return { ...sized2, text: fitTextToFrame({ ...sized2, text: CAPTION_TEXT }) };
       }
       const cols = b.columns > 1 ? { columns: b.columns, columnGap: settings.columnGapPt } : {};
-      const body = { ...framed, ...cols };
+      const body = { ...framed, ...cols, lineSpacing: settings.lineSpacing };
       return { ...body, text: fitTextToFrame({ ...body, text: placeholderText("latin", 40) }) };
     });
   }
@@ -14939,7 +14950,7 @@ ${parts.join("\n")}</g>`);
     const { recordUndoCheckpoint } = history;
     const guide = () => ({ on: view.guidesOn, format: view.guideFormat, marginIn: view.guideMarginIn, pxPerInch: POINTS_PER_INCH * MAIN_SCALE });
     const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
-    const guideLinesFor = (layout, size) => layoutGuideLines(layoutBoxes({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide() }), MAIN_SCALE, size.width, size.height);
+    const guideLinesFor = (layout, size) => layoutGuideLines(layoutBoxes({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide() }).filter((b) => b.role !== "rule"), MAIN_SCALE, size.width, size.height);
     function insertPage(at, like, annotations, guideLines) {
       const pts = like && like.isBlank ? { width: like.width, height: like.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
       const bleedMm = like && like.isBlank ? like.bleedMm : pageSizeRef.current && pageSizeRef.current.bleedMm;
@@ -20852,7 +20863,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2a40f72"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "5f809dc"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

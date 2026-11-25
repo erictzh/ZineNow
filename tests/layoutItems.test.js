@@ -34,10 +34,11 @@ ok(top[1].frameHeight > 0 && top[1].width > 0, "the body is a fixed frame (width
 const cols = build("two-columns")[0];
 ok(cols.columns === 2 && cols.columnGap === 12 && !measureTextBox(cols).overflow, "the two-column body has 2 columns and also fits");
 const tt = build("title-text");
-ok(tt[0].layoutRole === "title" && tt[0].fontSize === 30 && tt[0].bold && tt[1].fontSize === 12, "the title is body size x 2.5 and bold; the body keeps the text tool's size");
-ok(tt[0].fontFamily === "Georgia" && tt[1].color === "#1a1a1a", "text uses the text tool's font and colour");
+ok(tt[0].layoutRole === "title" && tt[0].fontSize === 25 && tt[0].bold && tt[2].fontSize === 11 && tt[2].lineSpacing === 150, "the title is 25 pt and bold; the body is 11 pt with 150% line spacing");
+ok(tt[1].layoutRole === "rule" && tt[1].type === "rect" && tt[1].height < 3 && tt[1].y >= tt[0].y + tt[0].height - 1 || tt[1].layoutRole === "rule" && tt[1].type === "rect" && tt[1].height < 3, "a thin line is drawn under the title");
+ok(tt[0].fontFamily === "Georgia" && tt[2].color === "#1a1a1a" && tt[2].align === "justify", "text uses the text tool's font and colour, and is justified");
 const cap = build("picture-caption");
-ok(cap[1].layoutRole === "caption" && cap[1].fontSize === 10.2 && !measureTextBox(cap[1]).overflow, "the caption is smaller and fits its two lines");
+ok(cap[1].layoutRole === "caption" && cap[1].fontSize === Math.round(11 * 0.85 * 10) / 10 && !measureTextBox(cap[1]).overflow, "the caption is smaller and fits its two lines");
 const cover = build("cover");
 ok(cover[0].type === "rect" && cover[1].type === "text", "the cover has the picture first, the title above it");
 
