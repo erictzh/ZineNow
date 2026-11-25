@@ -21,13 +21,13 @@ export function RulersSettings({ unit, onUnitChange, guides, onClearGuides, snap
         <span className="ze-format-label">Lock guides (freeze them where they are)</span>
       </label>
       <div className="ze-format-field">
-        <span className="ze-format-label">Guides ({guides.length})</span>
+        <span className="ze-format-label">Guides on this page ({guides.length})</span>
         {sorted.length > 0 && (
           <span className="ze-format-hint" style={{ margin: "0 0 6px" }}>
             {sorted.map((g) => (g.axis === "x" ? "| " : "— ") + formatInUnit(g.pos, unit)).join(" · ")}
           </span>
         )}
-        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={locked || !guides.length} onClick={onClearGuides}>Clear all guides</button>
+        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={locked || !guides.length} onClick={onClearGuides}>Clear all guides (every page)</button>
       </div>
       <span className="ze-format-hint">
         Drag from the top ruler for a horizontal guide, or from the left ruler for a vertical one. Drag a guide to move it, or back onto its ruler to remove it. Hold Shift to land on whole units. Guides show on every page, are saved with the project, and never print.

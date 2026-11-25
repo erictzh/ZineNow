@@ -1,5 +1,6 @@
 // The right-hand Format panel: picks the panel for the selected item, or for the current tool when nothing is selected.
 
+import { GuideFormat } from "./format/GuideFormat.jsx";
 import { ImageFormat } from "./format/ImageFormat.jsx";
 import { FormatPanelShell } from "./format/FormatPanelShell.jsx";
 import { ShapeFormat } from "./format/ShapeFormat.jsx";
@@ -12,10 +13,12 @@ import { EraserToolPanel, MarqueeToolPanel, ShapeToolPanel, StrokeToolPanel, Tex
 // each tool's settings for the next item); `magicErase` is the magic eraser's preview session (state/useMagicErase.js);
 // `imageTrace` is Vectorize (state/useImageTrace.js); `marquee` is the Marquee tool's state (state/useMarquee.js) and `targetLayer` the selected layer it can work on.
 export function FormatPanel({
-  tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
+  guide, guides, rulerUnit, tool, selectedAnn, onUpdate, croppingAnnId, onToggleCrop,
   onFlattenImage, onRemoveBackground, onOpenInAiTools, onRasterizeRect, onRasterizeText, toolDefaults, magicErase, marquee, targetLayer, styleActions, imageTrace, onExportSvg,
 }) {
   const ann = selectedAnn;
+  // A ruler guide picked on the rulers or in the Layers panel shows its own settings (nothing else is selected then).
+  if (guide && !ann && tool !== "marquee") return <GuideFormat key={guide.id + guide.scope} guide={guide} unit={rulerUnit} guides={guides} />;
   // The Marquee tool keeps its own panel even with a layer selected (that layer is what it works on).
   if (tool === "marquee") return <MarqueeToolPanel toolDefaults={toolDefaults} marquee={marquee} targetLayer={targetLayer} />;
   if (ann && ann.type === "text") return <TextFormat key={ann.id} ann={ann} onUpdate={onUpdate} onRasterizeText={onRasterizeText} toolDefaults={toolDefaults} styleActions={styleActions} />;

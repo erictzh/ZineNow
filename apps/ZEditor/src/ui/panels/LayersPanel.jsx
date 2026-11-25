@@ -12,6 +12,7 @@ import { SelectInput, SliderNumberInput } from "../controls/inputs.jsx";
 import { trackPointerDrag } from "../pointer.js";
 import { TraceSvg } from "../canvas/TraceSvg.jsx";
 import { MenuItem } from "../topbar/TopMenu.jsx";
+import { GuideGroups } from "./GuideGroups.jsx";
 import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
 
@@ -153,7 +154,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, guides, rulerUnit }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -491,6 +492,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
             if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
             return groupBlock(block, groupNumbers.get(block.groupId));
           })}
+          {guides && <GuideGroups guides={guides} unit={rulerUnit} />}
           <div className="ze-layer-row ze-layer-row--page">
             <span className="ze-layer-thumb"><span className="ze-layer-thumb-fill" style={{ backgroundColor: "#ffffff" }} /></span>
             <span className="ze-layer-name">Page</span>

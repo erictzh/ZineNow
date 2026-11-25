@@ -150,13 +150,32 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 
 The **Snap** setting now covers more than guides, and works with the rulers off. Moving an item snaps its edges and middle onto the page's edges and middle, ruler guides, and the edges and middles of every other visible item; a pink line shows what it landed on. Dragging a resize handle snaps the edge being dragged onto the same lines (`startResizeSnap` in ui/canvas/snapStore.js, used by rectangles, pictures, traces and text). Holding **Alt** turns it off. Items that are turned are not snapped while resizing, because their edges are not straight lines on the page.
 
+### Colours, page guides and global guides
+
+Each guide has one of eight **colours** (white, yellow, light blue, light green, light red, pink, light grey, orange). A new guide takes the colour you last chose (`view.guideColor`). A guide is either a **page guide** (stored on its page, so it moves, deletes and undoes with the page) or a **global guide** (stored in the project's view settings, shown on every page). New guides are page guides; older projects' guides become global guides in the old light-blue colour.
+
+Click a guide (on the page or its row in the Layers panel) and the **Format panel** on the right shows its settings: colour swatches, exact position in the ruler unit, **This page / All pages**, **Lock this guide**, **Hide this guide** and **Delete guide**. The Layers panel lists guides in groups named like **Page Guides (Yellow)** and **Global Guides (Yellow)**, one per scope and colour (only groups that have guides). A group has its own lock, hide and ⋮ menu: the ⋮ moves the whole group to the other scope (merging into the group of that colour there). Each guide row has the same ⋮ for that one guide. Hidden guides are not drawn and nothing snaps to them.
+
+While you drag a guide, with **Snap** on it snaps (within 6 screen pixels) to the page edges and middle, the trim edge when the page has a bleed, the Page Guide margin lines when that is on, and other guides. **Alt** drags freely and **Shift** still lands on whole units.
+
+**Layouts add guides:** applying a layout adds page guides (light green) along the edges of its boxes, except the page's own edges, replacing the ones a layout added before. Changing a page's bleed moves its page guides with the trim.
+
+```js file=apps/ZEditor/src/model/guideSet.js fn=snapGuidePos
+```
+
+```js file=apps/ZEditor/src/model/guideSet.js fn=guideSnapTargets
+```
+
+```js file=apps/ZEditor/src/model/guideSet.js fn=guideGroups
+```
+
 ### The lock and the saved settings
 
 ```js file=apps/ZEditor/src/ui/canvas/Rulers.jsx
-    if (locked) return; // frozen guides: nothing to drag, add or remove
+    if (locked || guide.locked) return; // frozen guides: nothing to drag, add or remove
 ```
 
-The first line of `startDrag`: if the guides are locked, the function ends at once, so nothing can be dragged, added or removed.
+The first line of `startDrag`: if the guides are locked (all of them, or this one), the function ends at once, so nothing can be dragged, added or removed.
 
 ```js file=apps/ZEditor/src/state/useViewSettings.js fn=settingsForSave
 ```

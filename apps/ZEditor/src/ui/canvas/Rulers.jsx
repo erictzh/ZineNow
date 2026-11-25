@@ -7,6 +7,7 @@
 // Editor only: never exported.
 
 import { MAIN_SCALE } from "../../constants.js";
+import { guideColor, snapGuidePos } from "../../model/guideSet.js";
 import { dragGain, formatInUnit, guideGap, rulerTicks, snapToUnit } from "../../model/rulers.js";
 import { trackPointerDrag } from "../pointer.js";
 
@@ -79,7 +80,10 @@ function drawRuler(canvas, horizontal, length, origin, pxPerPt, unit, marks) {
   }
 }
 
-export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey }) {
+// `guides`: the guides to show on this page ({ id, axis, pos, color, scope, hidden?, locked? }, state/useGuides.js); `onAdd`, `onUpdate`, `onRemove`
+// change them; `selectedId`/`onSelect` is the guide whose settings the Format panel shows; `snapTargets(axis, id, pageW, pageH)` gives the pt positions a
+// dragged guide can snap to (null: no snapping).
+export function Rulers({ paneRef, zoom, unit, guides, onAdd, onUpdate, onRemove, selectedId, onSelect, newColor, snapTargets, locked, pageKey }) {
   const topRef = useRef(null);
   const leftRef = useRef(null);
   const [geom, setGeom] = useState(null); // { left, top, width, height, pageW, pageH }: the page's 0 and the pane's size (pane px), the page's size (pt)
@@ -102,7 +106,7 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
   // The gap between the two guides either side of the pointer while it's over a ruler (not mid-drag).
   // The top ruler measures across, so it looks at the vertical (x) guides; the left ruler at the y ones.
   const gap = hover && geom && !drag
-    ? guideGap(guides, hover.axis, (hover.at - geom[hover.axis === "x" ? "left" : "top"]) / pxPerPt)
+    ? guideGap(guides.filter((g) => !g.hidden), hover.axis, (hover.at - geom[hover.axis === "x" ? "left" : "top"]) / pxPerPt)
     : null;
   const hoverOn = (axis) => (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -163,7 +167,7 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
   // Drags a guide (a new one from a ruler, or one already placed). Dropped back on its ruler, or
   // outside the pane, it's removed.
   function startDrag(e, guide) {
-    if (locked) return; // frozen guides: nothing to drag, add or remove
+    if (locked || guide.locked) return; // frozen guides: nothing to drag, add or remove
     e.preventDefault();
     e.stopPropagation();
     const pane = paneRef.current;
@@ -186,7 +190,12 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
       raw += ((c - last.c) * dragGain(speed)) / pxPerPt;
       last = { c, t: ev.timeStamp };
     };
-    const posAt = (ev) => (ev.shiftKey ? snapToUnit(raw, unit) : Math.round(raw * 100) / 100);
+    // Shift: whole units. Otherwise, with Snap on, onto the page's edges and middle, the trim, the margins and other guides (Alt: free).
+    const targets = snapTargets && geom ? snapTargets(guide.axis, guide.id, geom.pageW, geom.pageH) : null;
+    const posAt = (ev) => (ev.shiftKey ? snapToUnit(raw, unit)
+      : targets && !ev.altKey ? Math.round(snapGuidePos(raw, targets, 6 / pxPerPt) * 100) / 100
+      : Math.round(raw * 100) / 100);
+    const startPos = guide.pos;
     const outside = (ev) => {
       const p = pane.getBoundingClientRect();
       return guide.axis === "x" ? ev.clientX < p.left || ev.clientX > p.right : ev.clientY < p.top || ev.clientY > p.bottom;
@@ -200,13 +209,14 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
     trackPointerDrag(update, (ev) => {
       setDrag(null);
       const pos = posAt(ev);
-      if (outside(ev)) { if (!guide.isNew) setGuides((gs) => gs.filter((g) => g.id !== guide.id)); return; }
-      if (guide.isNew) setGuides((gs) => [...gs, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), axis: guide.axis, pos }]);
-      else setGuides((gs) => gs.map((g) => (g.id === guide.id ? { ...g, pos } : g)));
+      if (outside(ev)) { if (!guide.isNew) onRemove(guide.id); return; }
+      if (guide.isNew) { const id = onAdd({ axis: guide.axis, pos }); if (id) onSelect(id); }
+      else if (Math.abs(pos - startPos) < 0.01) onSelect(guide.id); // pressed and let go without moving: pick it
+      else { onUpdate(guide.id, { pos }); onSelect(guide.id); }
     });
   }
 
-  const shown = guides.filter((g) => !drag || g.id !== drag.id);
+  const shown = guides.filter((g) => !g.hidden && (!drag || g.id !== drag.id));
   const lineStyle = (axis, pos) => (axis === "x"
     ? { left: geom.left + pos * pxPerPt }
     : { top: geom.top + pos * pxPerPt });
@@ -216,19 +226,19 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
       <div className="ze-ruler-corner" title="Rulers count from the page's top-left corner. Drag from a ruler to add a guide." />
       <canvas
         ref={topRef} className="ze-ruler ze-ruler-top"
-        onMouseDown={(e) => startDrag(e, { axis: "y", isNew: true, pos: 0 })}
+        onMouseDown={(e) => startDrag(e, { axis: "y", isNew: true, pos: 0, color: newColor })}
         onMouseMove={hoverOn("x")} onMouseLeave={() => setHover(null)}
       />
       <canvas
         ref={leftRef} className="ze-ruler ze-ruler-left"
-        onMouseDown={(e) => startDrag(e, { axis: "x", isNew: true, pos: 0 })}
+        onMouseDown={(e) => startDrag(e, { axis: "x", isNew: true, pos: 0, color: newColor })}
         onMouseMove={hoverOn("y")} onMouseLeave={() => setHover(null)}
       />
       {geom && (
         <div className="ze-ruler-guides">
           {shown.map((g) => (
             <div
-              key={g.id} className={"ze-ruler-guide ze-ruler-guide-" + g.axis + (locked ? " is-locked" : "")} style={lineStyle(g.axis, g.pos)}
+              key={g.id} className={"ze-ruler-guide ze-ruler-guide-" + g.axis + (locked || g.locked ? " is-locked" : "") + (g.id === selectedId ? " is-selected" : "")} style={{ ...lineStyle(g.axis, g.pos), "--guide-color": guideColor(g.color).css }}
               title={locked ? `${formatInUnit(g.pos, unit)} · locked` : `${formatInUnit(g.pos, unit)} · drag to move, drag onto the ruler to remove`}
               onMouseDown={(e) => startDrag(e, g)}
             />
@@ -243,7 +253,7 @@ export function Rulers({ paneRef, zoom, unit, guides, setGuides, locked, pageKey
           )}
           {drag && (
             <React.Fragment>
-              <div className={"ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : "")} style={lineStyle(drag.axis, drag.pos)} />
+              <div className={"ze-ruler-guide ze-ruler-guide-" + drag.axis + " is-dragging" + (drag.removing ? " is-removing" : "")} style={{ ...lineStyle(drag.axis, drag.pos), "--guide-color": guideColor(drag.color || "lightblue").css }} />
               <div className="ze-ruler-readout" style={readoutSpot(drag.x, drag.y)}>
                 {drag.removing ? "Remove guide" : formatInUnit(drag.pos, unit)}
               </div>

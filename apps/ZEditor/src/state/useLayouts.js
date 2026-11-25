@@ -5,7 +5,8 @@
 import { DEFAULT_PAGE_SIZE, MAIN_SCALE, POINTS_PER_INCH } from "../constants.js";
 import { bleedPt } from "../model/bleed.js";
 import { layoutByKey } from "../model/pageLayouts.js";
-import { buildLayoutItems } from "../render/layoutItems.js";
+import { LAYOUT_GUIDE_COLOR, layoutGuideLines } from "../model/guideSet.js";
+import { buildLayoutItems, layoutBoxes } from "../render/layoutItems.js";
 import { getPageDisplaySize, makeBlankThumb } from "../render/pageRender.js";
 import { resolvePageText } from "../render/pageText.js";
 import { measureTextBox } from "../render/textLayout.js";
@@ -13,7 +14,7 @@ import { measureTextBox } from "../render/textLayout.js";
 const FRAME_KEYS = ["x", "y", "width", "frameHeight", "columns", "columnGap", "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth", "angle"];
 const frameLook = (a) => Object.fromEntries(FRAME_KEYS.filter((k) => a[k] !== undefined).map((k) => [k, a[k]]));
 
-export function useLayouts({ doc, history, edits, view, toolDefaults, status }) {
+export function useLayouts({ doc, history, edits, view, toolDefaults, status, guides }) {
   const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, pageSizeRef } = doc;
   const { recordUndoCheckpoint } = history;
 
@@ -21,11 +22,14 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
   const guide = () => ({ on: view.guidesOn, format: view.guideFormat, marginIn: view.guideMarginIn, pxPerInch: POINTS_PER_INCH * MAIN_SCALE });
   const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
 
+  // The guides a layout adds: its boxes' edges (not the page's own), as ruler guides in points.
+  const guideLinesFor = (layout, size) => layoutGuideLines(layoutBoxes({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide() }), MAIN_SCALE, size.width, size.height);
+
   // A new blank page after page `at - 1`, the same size as `like` (a blank page) or the default.
-  function insertPage(at, like, annotations) {
+  function insertPage(at, like, annotations, guideLines) {
     const pts = like && like.isBlank ? { width: like.width, height: like.height } : (pageSizeRef.current || DEFAULT_PAGE_SIZE);
     const bleedMm = like && like.isBlank ? like.bleedMm : (pageSizeRef.current && pageSizeRef.current.bleedMm);
-    const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, ...(bleedMm > 0 ? { bleedMm } : {}), dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
+    const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, ...(bleedMm > 0 ? { bleedMm } : {}), dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations, ...(guideLines && guideLines.length ? { guides: guideLines.map((l) => ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), axis: l.axis, pos: l.pos, color: LAYOUT_GUIDE_COLOR, source: "layout" })) } : {}) };
     recordUndoCheckpoint();
     setPages((prev) => { const next = prev.slice(); next.splice(at, 0, page); return next; });
     setSelectedIdx(at);
@@ -59,6 +63,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
     const generated = (a) => a.layoutKey && a.layoutRole != null;
     if (!oldBody || !body) {
       edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns.filter((a) => !generated(a))]);
+      guides.setLayoutGuides(guideLinesFor(layout, size));
       status.setNotice(`Applied the "${layout.label}" layout${existing.some(generated) ? ", replacing the earlier one" : " under the items on this page"}. Undo takes it off.`);
       return;
     }
@@ -66,6 +71,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
       const kept = anns.filter((a) => !generated(a) || a.id === oldBody.id);
       return [...made.filter((a) => a !== body), ...kept.map((a) => (a.id === oldBody.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a))];
     });
+    guides.setLayoutGuides(guideLinesFor(layout, size));
     status.setNotice(`Applied the "${layout.label}" layout; the text moved into its text area. Undo takes it back.`);
   }
 
@@ -74,7 +80,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
     const layout = layoutByKey(key);
     if (!layout) return;
     const current = selectedIdx !== null ? pages[selectedIdx] : null;
-    insertPage(selectedIdx !== null ? selectedIdx + 1 : pages.length, current, items(layout, sizeOf(current)));
+    insertPage(selectedIdx !== null ? selectedIdx + 1 : pages.length, current, items(layout, sizeOf(current)), guideLinesFor(layout, sizeOf(current)));
     status.setNotice(`Added a new page with the "${layout.label}" layout.`);
   }
 
@@ -95,7 +101,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
       const body = all.find((a) => a.layoutRole === "body");
       made = body ? all.map((a) => (a === body ? { ...follower, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a)) : [follower];
     }
-    insertPage(pageIdx + 1, page, made);
+    insertPage(pageIdx + 1, page, made, layout ? guideLinesFor(layout, sizeOf(page)) : null);
     status.setNotice("Added a new page after this one with the rest of the text. Undo takes it away.");
   }
 

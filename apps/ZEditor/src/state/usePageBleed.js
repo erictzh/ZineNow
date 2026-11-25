@@ -22,6 +22,8 @@ export function usePageBleed({ doc, history, status }) {
         ...p, width: next.width, height: next.height, bleedMm: next.bleedMm,
         dataUrl: makeBlankThumb(next.width, next.height, p.rotation),
         annotations: shift ? (p.annotations || []).map((a) => translatedAnnotation(a, shift, shift)) : p.annotations,
+        // The page's own guides move with the trim too.
+        ...(p.guides && p.guides.length && next.shiftPt ? { guides: p.guides.map((g) => ({ ...g, pos: Math.round((g.pos + next.shiftPt) * 100) / 100 })) } : {}),
       };
     }));
     // Pages added later follow the size of the pages they are added to (the default size is the first document's).
