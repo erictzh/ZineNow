@@ -100,5 +100,5 @@ Each phase ends with build, check, tests, wiki update, HANDOFF note and a pull r
 4. **Bleed and PDF export (M) — DONE 2026-11-25:** mm bleed in New Document and page settings (default 0), page grows, dotted trim rectangle, with/without bleed export, TrimBox/BleedBox, crop marks only with bleed. Then layouts become bleed-aware (Full picture).
 5. **Guides (M-L) — DONE 2026-11-25:** 8 colours, side-panel settings, Page/Global groups with the ⋮ toggles, per-page guides, guides snap to page edges/centre/trim/margins. Then **layouts add their guides** in a colour group.
 6. **Illustrator export (M) — DONE 2026-11-25:** whole-page and multi-page SVG, layers as groups, Text as outlines checkbox, later the "Outline Text to Shape" command.
-7. **CMYK converter (separate track, M-L):** test the prototype on a real export; shared module + small standalone page; staged conversion.
+7. **CMYK converter (separate track, M-L) — first stage DONE 2026-11-25 (no ICC yet):** test the prototype on a real export; shared module + small standalone page; staged conversion.
 8. **Launch:** landing page, demo, tutorial, report-a-problem link, phone/tablet testing, first community.

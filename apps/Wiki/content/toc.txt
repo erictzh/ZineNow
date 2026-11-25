@@ -136,6 +136,8 @@ zinearranger | ZineArranger
   print | Print
   activity-log | Activity log
   credit | Credit | Nash High's Zine Arranger, MIT
+rgb-to-cmyk | RGB to CMYK
+  convert-pdf | Converting a PDF | black as K only, grey and colour pictures, what it cannot do
 ai-tools | Ai Tools (Local)
   hub | The hub
     shell-registry | Shell and tool registry

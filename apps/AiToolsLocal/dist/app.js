@@ -341,7 +341,7 @@
     };
     async function header() {
       const info = {
-        app: "Ai Tools (Local) build " + (true ? "5220a47" : "?"),
+        app: "Ai Tools (Local) build " + (true ? "622377b" : "?"),
         time: (/* @__PURE__ */ new Date()).toISOString(),
         browser: navigator.userAgent,
         screen: screen.width + "x" + screen.height + " @" + (window.devicePixelRatio || 1) + ", window " + innerWidth + "x" + innerHeight,
