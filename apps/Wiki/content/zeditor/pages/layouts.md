@@ -5,7 +5,7 @@
 ## How to use
 
 1. **Page → Layout → Choose…**
-2. Pick where it goes at the top: **On this page** adds the layout **under** whatever is already on the page (your items stay on top, nothing is removed), or **New page after** adds a new blank page after the current one holding the layout. Both are **one undo step**.
+2. Pick where it goes at the top: **New page after** (the default) adds a new blank page after the current one holding the layout, or **On this page** applies it to the current page, **under** your own items. Picking another layout on the same page **replaces** the earlier one instead of stacking; the text area keeps its words and moves into the new layout's text area. Both are **one undo step**. The same picker is also the **Layout** button at the top of the page strip on the left.
 3. Click a layout's little picture.
 4. **Layout settings (this file)** (fold-out at the bottom): **Margin**, **Gap between pieces**, **Split** of the half-and-half layouts, **Title size**, **Caption size**, **Column gap**. **Reset to defaults** puts them back. These are saved **in the project file**, so a different document keeps the app's defaults.
 - Layouts already on a page are not re-flowed when you change the settings: only layouts added afterwards use the new sizes.
