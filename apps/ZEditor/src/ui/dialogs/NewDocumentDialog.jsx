@@ -1,6 +1,7 @@
 // New blank document: paper size (a preset or a custom size in mm), orientation, page count.
 
 import { CANVAS_PAGE_START, MAX_NEW_DOCUMENT_PAGES, NEW_DOCUMENT_PRESETS, POINTS_PER_INCH } from "../../constants.js";
+import { cleanBleedMm, mmToPt as bleedMmToPt } from "../../model/bleed.js";
 import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
 const { useState } = React;
 
@@ -25,6 +26,7 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
   const [presetKey, setPresetKey] = useState("a5");
   const [orientation, setOrientation] = useState("portrait");
   const [pageCountText, setPageCountText] = useState("1");
+  const [bleedText, setBleedText] = useState("0"); // mm of bleed on every side (0: none)
   // Custom size, typed in mm (kept as text while typing; checked when used).
   const [customWText, setCustomWText] = useState("148");
   const [customHText, setCustomHText] = useState("210");
@@ -40,6 +42,7 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
   const width = landscape ? preset.height : preset.width;
   const height = landscape ? preset.width : preset.height;
   const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
+  const bleedMm = noPaper ? 0 : cleanBleedMm(bleedText);
   const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
   return (
     <div className="ze-modal-backdrop" onMouseDown={onCancel}>
@@ -88,14 +91,22 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
               onBlur={() => setPageCountText(String(pageCount))}
             />
           </label>
+          {!noPaper && <label className="ze-format-field">
+            <span className="ze-format-label">Bleed (mm)</span>
+            <NumberBox
+              className="ze-format-number" min="0" max="25" step="0.5"
+              aria-label="Bleed (mm)" title="Extra picture past the trimmed edge, on every side. 0 means no bleed."
+              value={bleedText} onChange={(e) => setBleedText(e.target.value)} onBlur={() => setBleedText(String(bleedMm))}
+            />
+          </label>}
           <span className="ze-format-hint">
-            {noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in).`}{custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : ""} You can add or remove pages later.
+            {noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in)${bleedMm > 0 ? `, trimmed; with ${bleedMm} mm bleed each page is ${formatMm(width + 2 * bleedMmToPt(bleedMm))} × ${formatMm(height + 2 * bleedMmToPt(bleedMm))} mm` : ""}.`}{custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : ""} You can add or remove pages later.
           </span>
         </div>
         <div className="ze-modal-actions">
           {onOpenPdf && <button type="button" onClick={onOpenPdf}>Open a PDF instead</button>}
           <button type="button" onClick={onCancel}>Cancel</button>
-          <button type="button" className="btn-solid" onClick={() => onCreate({ width, height, pageCount, canvas: noPaper })}>Create</button>
+          <button type="button" className="btn-solid" onClick={() => onCreate({ width: width + 2 * bleedMmToPt(bleedMm), height: height + 2 * bleedMmToPt(bleedMm), pageCount, canvas: noPaper, bleedMm })}>Create</button>
         </div>
       </div>
     </div>

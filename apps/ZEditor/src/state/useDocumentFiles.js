@@ -53,15 +53,16 @@ export function useDocumentFiles({ doc, history, status, project, selection, dia
   // whatever was open (the caller has already confirmed that where it
   // matters). Orientation is baked into width/height rather than a
   // rotation, so page 1 isn't "rotated" from the user's point of view.
-  function handleCreateBlankDocument({ width, height, pageCount, canvas }) {
+  function handleCreateBlankDocument({ width, height, pageCount, canvas, bleedMm = 0 }) {
     dialogs.setNewDocOpen(false);
     setErrorMsg(null);
     pdfDocsRef.current = {};
-    pageSizeRef.current = canvas ? A4_FALLBACK : { width, height }; // new blank pages added later match this (paper, even in a canvas document)
+    pageSizeRef.current = canvas ? A4_FALLBACK : { width, height, bleedMm }; // width/height: the whole page, bleed included // new blank pages added later match this (paper, even in a canvas document)
     const thumb = makeBlankThumb(width, height, 0, undefined, canvas);
     const newPages = Array.from({ length: pageCount }, () => ({
       key: nextKeyRef.current++,
       isBlank: true,
+      ...(bleedMm > 0 && !canvas ? { bleedMm } : {}),
       ...(canvas ? { isCanvas: true } : {}), // no paper: the page grows to hold its items (state/useCanvasGrow.js)
       rotation: 0,
       width,

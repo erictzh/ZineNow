@@ -25,6 +25,9 @@ export function useViewSettings() {
   const [guidesLocked, setGuidesLocked] = useState(false); // frozen: guides can't be dragged, removed or added
   // Page > Layout: the sizes every ready-made layout uses (model/pageLayouts.js), for this file only; saved with the project.
   const [layoutSettings, setLayoutSettings] = useState(DEFAULT_LAYOUT_SETTINGS);
+  // Export PDF with the bleed (on) or trimmed to the cut size (off), and crop marks (only with bleed). Saved with the project.
+  const [exportBleed, setExportBleed] = useState(true);
+  const [exportCropMarks, setExportCropMarks] = useState(false);
   const [layersPosition, setLayersPosition] = useState(null);
   const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
   // Project > Embed Fonts…: save the system fonts the text uses inside the file (ON by default: a project saved before this existed gets them on its next save,
@@ -38,7 +41,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks,
     };
   }
 
@@ -56,6 +59,8 @@ export function useViewSettings() {
     if (s.rulerUnit !== undefined) setRulerUnit(s.rulerUnit);
     if (s.snapToGuidesOn !== undefined) setSnapToGuidesOn(s.snapToGuidesOn);
     setGuidesLocked(s.guidesLocked === true);
+    setExportBleed(s.exportBleed !== false);
+    setExportCropMarks(s.exportCropMarks === true);
     setLayoutSettings(normalizeLayoutSettings(s.layoutSettings)); // older files: the app's defaults
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
@@ -64,7 +69,7 @@ export function useViewSettings() {
 
   return {
     guidesOn, setGuidesOn, centerGuideOn, setCenterGuideOn, guideFormat, setGuideFormat,
-    guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn,
+    guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn, exportBleed, setExportBleed, exportCropMarks, setExportCropMarks,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,

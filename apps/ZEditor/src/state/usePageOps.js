@@ -32,6 +32,7 @@ export function usePageOps({ doc, history, selection }) {
       rotation: 0,
       width: size.width,
       height: size.height,
+      ...(size.bleedMm > 0 ? { bleedMm: size.bleedMm } : {}),
       dataUrl: makeBlankThumb(size.width, size.height, 0),
       annotations: [],
     };

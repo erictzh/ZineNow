@@ -71,6 +71,16 @@ export function TopMenu({ label, solid, children }) {
   );
 }
 
+// A tick box row in a TopMenu. Does not close the menu.
+export function MenuCheck({ label, hint, checked, disabled, onChange }) {
+  return (
+    <label className={"ze-menu-item ze-menu-check" + (disabled ? " disabled" : "")} title={hint}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <span className="ze-menu-item-text"><span>{label}</span></span>
+    </label>
+  );
+}
+
 // A plain action row in a TopMenu. Runs the action, then closes the menu.
 // `detail` is a muted second line (e.g. the file Save writes to);
 // `shortcut` sits on the right.
