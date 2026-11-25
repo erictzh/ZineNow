@@ -1,5 +1,6 @@
 // Document-wide view settings: rulers and ruler guides, guides, center guide, page numbers, onion skin, and the Layers panel.
 
+import { DEFAULT_GUIDE_COLOR, GUIDE_COLORS, normalizeGuides } from "../model/guideSet.js";
 import { DEFAULT_GUIDE_BLEED_IN, DEFAULT_GUIDE_MARGIN_IN } from "../model/guides.js";
 import { DEFAULT_LAYOUT_SETTINGS, normalizeLayoutSettings } from "../model/pageLayouts.js";
 import { DEFAULT_PAGE_NUMBERS } from "../model/pageNumbers.js";
@@ -20,7 +21,8 @@ export function useViewSettings() {
   // Rulers along the canvas, and the guides dragged out of them (model/rulers.js).
   const [rulersOn, setRulersOn] = useState(true);
   const [rulerUnit, setRulerUnit] = useState(DEFAULT_RULER_UNIT);
-  const [rulerGuides, setRulerGuides] = useState([]);
+  const [rulerGuides, setRulerGuides] = useState([]); // the global guides (every page); page guides live on their page
+  const [guideColor, setGuideColor] = useState(DEFAULT_GUIDE_COLOR); // the colour of the next guide drawn (the last one chosen)
   const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
   const [guidesLocked, setGuidesLocked] = useState(false); // frozen: guides can't be dragged, removed or added
   // Page > Layout: the sizes every ready-made layout uses (model/pageLayouts.js), for this file only; saved with the project.
@@ -40,7 +42,7 @@ export function useViewSettings() {
     return {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
-      rulersOn, rulerUnit, rulerGuides, snapToGuidesOn, guidesLocked,
+      rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
       embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks,
     };
   }
@@ -64,7 +66,8 @@ export function useViewSettings() {
     setLayoutSettings(normalizeLayoutSettings(s.layoutSettings)); // older files: the app's defaults
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
-    setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
+    setRulerGuides(normalizeGuides(s.rulerGuides)); // older files: guides without a colour get the default
+    setGuideColor(GUIDE_COLORS.some((c) => c.key === s.guideColor) ? s.guideColor : DEFAULT_GUIDE_COLOR);
   }
 
   return {
@@ -72,7 +75,7 @@ export function useViewSettings() {
     guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn, exportBleed, setExportBleed, exportCropMarks, setExportCropMarks,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
-    rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
+    rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
     settingsForSave, applySavedSettings,
   };

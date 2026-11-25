@@ -29,6 +29,12 @@ export function fitTextToFrame(ann) {
 // layout: from LAYOUTS. page: { width, height, bleed? } in editor px (bleed: the page's bleed). defaults: the text tool's settings (state/useToolDefaults.js).
 // guide: { on, format, marginIn, pxPerInch } for the Page Guide margin. nextId(): a new item id each call.
 // Returns the items in drawing order (bottom first).
+// The boxes of a layout on a page, as buildLayoutItems places them (for the guides a layout adds).
+export function layoutBoxes({ layout, page, settings, defaults, guide }) {
+  const bodyPt = Number(defaults.textFontSize) || 12;
+  return place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
+}
+
 export function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
   const bodyPt = Number(defaults.textFontSize) || 12;
   const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);

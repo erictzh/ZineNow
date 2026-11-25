@@ -12,7 +12,7 @@ import { RulersSettings } from "../settings/RulersSettings.jsx";
 import { PageMenuBody } from "./PageMenu.jsx";
 import { MenuCheck, MenuItem, TopMenu } from "./TopMenu.jsx";
 
-export function Topbar({ doc, history, view, edits, layouts, pageBleed, project, dialogs, exporter, status }) {
+export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet, project, dialogs, exporter, status }) {
   const { pages, selectedPage, pageFilter } = doc;
   const { updatePageFilter } = edits;
   const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
@@ -145,15 +145,15 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, project,
                 {
                   key: "rulers",
                   label: "Ruler Guide",
-                  detail: view.rulerGuides.length ? String(view.rulerGuides.length) : null,
+                  detail: guideSet.visible.length ? String(guideSet.visible.length) : null,
                   checked: view.rulersOn,
                   onToggle: view.setRulersOn,
                   settings: (
                     <RulersSettings
                       unit={view.rulerUnit}
                       onUnitChange={view.setRulerUnit}
-                      guides={view.rulerGuides}
-                      onClearGuides={() => view.setRulerGuides([])}
+                      guides={guideSet.visible}
+                      onClearGuides={guideSet.clearAll}
                       snap={view.snapToGuidesOn}
                       onSnapChange={view.setSnapToGuidesOn}
                       locked={view.guidesLocked}

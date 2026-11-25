@@ -32,7 +32,9 @@
 /* Guides sit over the pane (not scrolled with it: their place is worked out from the page's). */
 .ze-ruler-guides { position: absolute; left: 18px; top: 18px; right: 0; bottom: 0; overflow: hidden; pointer-events: none; z-index: 5; }
 .ze-ruler-guide { position: absolute; pointer-events: auto; }
-.ze-ruler-guide::after { content: ""; position: absolute; background: #22c3ee; }
+.ze-ruler-guide { --guide-color: #22c3ee; }
+.ze-ruler-guide::after { content: ""; position: absolute; background: var(--guide-color); }
+.ze-ruler-guide.is-selected::after { box-shadow: 0 0 0 1px var(--guide-color), 0 0 6px 1px var(--guide-color); }
 .ze-ruler-guide-x { top: 0; bottom: 0; width: 7px; margin-left: -3px; cursor: ew-resize; }
 .ze-ruler-guide-x::after { top: 0; bottom: 0; left: 3px; width: 1px; }
 .ze-ruler-guide-y { left: 0; right: 0; height: 7px; margin-top: -3px; cursor: ns-resize; }
@@ -540,3 +542,9 @@
 .ze-snap-line { position: absolute; background: #ff2d95; pointer-events: none; z-index: 60; }
 .ze-snap-line-x { top: 0; bottom: 0; }
 .ze-snap-line-y { left: 0; right: 0; }
+
+/* Guide colour swatches in the Format panel. */
+.ze-guide-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ze-guide-swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(0,0,0,.5); cursor: pointer; }
+.ze-guide-swatch.active { border-color: var(--ui-bg, #111); box-shadow: 0 0 0 2px var(--ui-accent-text, #ff8547); }
+.ze-guide-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.5); }

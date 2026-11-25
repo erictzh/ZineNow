@@ -24,6 +24,9 @@ import { useZoom } from "../state/useZoom.js";
 import { useCanvasGrow } from "../state/useCanvasGrow.js";
 import { useGroupFiles } from "../state/useGroupFiles.js";
 import { useLayouts } from "../state/useLayouts.js";
+import { useGuides } from "../state/useGuides.js";
+import { bleedPt } from "../model/bleed.js";
+import { guideSnapTargets } from "../model/guideSet.js";
 import { usePageBleed } from "../state/usePageBleed.js";
 import { useImageHandoff } from "../state/useImageHandoff.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
@@ -62,8 +65,11 @@ export function App() {
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
-  const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status });
   const pageBleed = usePageBleed({ doc, history, status });
+  const guides = useGuides({ doc, view, history });
+  const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status, guides });
+  // Picking a guide leaves the item selection (the Format panel shows one thing); picking an item puts the guide down.
+  const pickGuide = (id) => { guides.select(id); if (id) { selection.setSelectedAnnId(null); selection.setSelectedAnnIds([]); } };
   const project = useProject({ doc, history, status, view, toolDefaults });
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
@@ -108,10 +114,11 @@ export function App() {
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
   const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
   const t = toolDefaults;
+  React.useEffect(() => { if (selectedAnnId !== null || selectedAnnIds.length) guides.select(null); }, [selectedAnnId, selectedAnnIds.length]);
 
   return (
     <div className="ze-shell">
-      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} pageBleed={pageBleed} project={project} dialogs={dialogs} exporter={exporter} status={status} />
+      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} pageBleed={pageBleed} guideSet={guides} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
       {status.errorMsg && <div className="ze-error-bar">{status.errorMsg}</div>}
       {status.notice && (
@@ -158,7 +165,10 @@ export function App() {
           {selectedPage && view.rulersOn && (
             <Rulers
               paneRef={zoom.previewPaneRef} zoom={zoom.zoomPercent / 100} unit={view.rulerUnit}
-              guides={view.rulerGuides} setGuides={view.setRulerGuides} locked={view.guidesLocked} pageKey={selectedPage.key}
+              guides={guides.visible} onAdd={guides.add} onUpdate={guides.update} onRemove={guides.remove}
+              selectedId={guides.selected ? guides.selected.id : null} onSelect={pickGuide} newColor={guides.color}
+              snapTargets={view.snapToGuidesOn ? (axis, id, w, h) => guideSnapTargets(axis, { width: w, height: h }, bleedPt(selectedPage), view.guidesOn && view.guideMarginIn > 0 ? view.guideMarginIn * 72 : 0, guides.visible.filter((g) => g.id !== id && !g.hidden)) : null}
+              locked={view.guidesLocked} pageKey={selectedPage.key}
             />
           )}
           <div className="preview-pane" ref={zoom.previewPaneRef}>
@@ -215,7 +225,7 @@ export function App() {
                 marqueeHidden={t.marquee.areaVisible === false}
                 marqueeBrush={{ size: t.marquee.brushSize, erase: t.marquee.brushErase }}
                 onMarqueeChange={marquee.setRegion}
-                snapGuides={view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null}
+                snapGuides={view.rulersOn && view.snapToGuidesOn ? guides.visible.filter((g) => !g.hidden) : null}
                 snapItems={view.snapToGuidesOn}
               />
             </div>
@@ -238,6 +248,7 @@ export function App() {
         </div>
         {selectedPage && (
           <FormatPanel
+            guide={guides.selected} guides={guides} rulerUnit={view.rulerUnit}
             key={selectedAnnId} // so a half-typed field never carries over to the next item
             tool={tool}
             selectedAnn={resolvePageText(selectedPage.annotations || []).find((a) => a.id === selectedAnnId) || null}
@@ -284,6 +295,8 @@ export function App() {
           onReorder={edits.handleReorderLayers}
           onExportGroup={groupFiles.handleExportGroup}
           onImportGroup={groupFiles.openImportPicker}
+          guides={guides}
+          rulerUnit={view.rulerUnit}
         />
       )}
 
