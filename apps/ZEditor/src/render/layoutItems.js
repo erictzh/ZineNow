@@ -37,9 +37,9 @@ export function buildLayoutItems({ layout, page, settings, defaults, guide, next
   return boxes.map((b) => {
     const id = nextId();
     if (b.role === "picture") {
-      return { id, type: "rect", layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
+      return { id, type: "rect", layoutKey: layout.key, layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
     }
-    const base = { id, type: "text", layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
+    const base = { id, type: "text", layoutKey: layout.key, layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
     if (b.role === "title") return { ...base, fontSize: Math.round(bodyPt * settings.titleScale * 10) / 10, bold: true, text: TITLE_TEXT };
     const framed = { ...base, frameHeight: Math.max(12, Math.round(pxToPt(b.h))) };
     if (b.role === "caption") {

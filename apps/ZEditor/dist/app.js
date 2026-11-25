@@ -5525,7 +5525,21 @@
     }
     return annotations.filter((a) => !gone.has(a.id)).map((a) => replaced.get(a.id) || a);
   }
-  var RESOLVED_TEXT_PROPS = ["storyOffset", "storyContinues", "storyLength", "storyHeadId", "storyIndex", "storyPrevId", "storyNextId", "wrapObstacles"];
+  function removeFromPages(pages, ids) {
+    const all = pages.flatMap((p) => p.annotations || []);
+    const kept = new Map(removeWithThreads(all, ids).map((a) => [a.id, a]));
+    return pages.map((p) => {
+      const anns = p.annotations || [];
+      if (!anns.some((a) => kept.get(a.id) !== a)) return p;
+      return { ...p, annotations: anns.filter((a) => kept.has(a.id)).map((a) => kept.get(a.id)) };
+    });
+  }
+  function removePagesKeepingStories(pages, indices) {
+    const gone = new Set(indices);
+    const ids = pages.flatMap((p, i) => gone.has(i) ? (p.annotations || []).map((a) => a.id) : []);
+    return removeFromPages(pages, ids).filter((_, i) => !gone.has(i));
+  }
+  var RESOLVED_TEXT_PROPS = ["storyOffset", "storyContinues", "storyLength", "storyHeadId", "storyIndex", "storyPrevId", "storyNextId", "storyPrevPage", "storyNextPage", "wrapObstacles"];
   function withoutResolvedProps(obj) {
     if (!RESOLVED_TEXT_PROPS.some((k) => k in obj)) return obj;
     const out = { ...obj };
@@ -6372,40 +6386,125 @@
     const firstHidden = (layout.typesetLines || []).find((l) => l.hidden);
     return firstHidden ? firstHidden.start : (view.text || "").length;
   }
-  function resolvePageText(annotations) {
-    if (!annotations || !annotations.length) return annotations || [];
+  var currentDocument = null;
+  function setTextDocument(pages) {
+    currentDocument = pages;
+  }
+  var docCache = /* @__PURE__ */ new WeakMap();
+  function documentChains(pages) {
+    const texts = /* @__PURE__ */ new Map();
+    pages.forEach((p, pageIdx) => (p.annotations || []).forEach((a) => {
+      if (a.type === "text") texts.set(a.id, { ann: a, pageIdx });
+    }));
+    const nextOf = /* @__PURE__ */ new Map();
+    for (const e of texts.values()) {
+      const from = e.ann.threadFrom;
+      if (from == null || !texts.has(from) || nextOf.has(from)) continue;
+      nextOf.set(from, e);
+    }
+    const chains = [];
+    for (const head of texts.values()) {
+      if (!nextOf.has(head.ann.id)) continue;
+      const from = head.ann.threadFrom;
+      if (from != null && texts.has(from) && nextOf.get(from) === head) continue;
+      const chain = [head];
+      const seen = /* @__PURE__ */ new Set([head.ann.id]);
+      for (let f = nextOf.get(head.ann.id); f && !seen.has(f.ann.id); f = nextOf.get(f.ann.id)) {
+        chain.push(f);
+        seen.add(f.ann.id);
+      }
+      chains.push(chain);
+    }
+    return chains;
+  }
+  function makeResolver(pages) {
     const version2 = wrapShapesVersion();
-    const hit = cache2.get(annotations);
-    if (hit && hit.version === version2) return hit.result;
-    const replaced = /* @__PURE__ */ new Map();
-    for (const chain of storyChains(annotations)) {
-      const head = chain[0];
-      if (!canThread(head)) continue;
+    const chainOfFrame = /* @__PURE__ */ new Map();
+    const chainViews = /* @__PURE__ */ new Map();
+    for (const chain of documentChains(pages)) {
+      if (!canThread(chain[0].ann)) continue;
+      for (const e of chain) chainOfFrame.set(e.ann.id, chain);
+    }
+    const resolveChain = (chain) => {
+      if (chainViews.has(chain)) return chainViews.get(chain);
+      const head = chain[0].ann;
       const story = head.text || "";
       let offset = 0;
-      const views = [];
-      chain.forEach((frame, i) => {
-        const base = i === 0 ? { ...head, storyLength: void 0 } : followerView(head, frame, Math.min(offset, story.length));
-        let view = withWrap({ ...base, storyHeadId: head.id, storyIndex: i, storyPrevId: i > 0 ? chain[i - 1].id : void 0, storyNextId: chain[i + 1] ? chain[i + 1].id : void 0 }, annotations);
-        if (i < chain.length - 1) {
+      const views = /* @__PURE__ */ new Map();
+      chain.forEach((e, i) => {
+        const base = i === 0 ? { ...head, storyLength: void 0 } : followerView(head, e.ann, Math.min(offset, story.length));
+        const next = chain[i + 1], prev = chain[i - 1];
+        const where = {
+          storyHeadId: head.id,
+          storyIndex: i,
+          storyPrevId: prev ? prev.ann.id : void 0,
+          storyNextId: next ? next.ann.id : void 0,
+          storyPrevPage: prev && prev.pageIdx !== e.pageIdx ? prev.pageIdx : void 0,
+          storyNextPage: next && next.pageIdx !== e.pageIdx ? next.pageIdx : void 0
+        };
+        let view = withWrap({ ...base, ...where }, pages[e.pageIdx].annotations || []);
+        if (next) {
           const fits = fittedLength(view);
           if (fits < (view.text || "").length) view = { ...view, storyLength: fits };
           offset = (view.storyOffset || 0) + fits;
         }
-        views.push(view);
+        views.set(e.ann.id, view);
       });
-      views.forEach((v) => replaced.set(v.id, v));
+      chainViews.set(chain, views);
+      return views;
+    };
+    const pageResults = /* @__PURE__ */ new Map();
+    return {
+      version: version2,
+      page(pageIdx) {
+        if (pageResults.has(pageIdx)) return pageResults.get(pageIdx);
+        const annotations = pages[pageIdx].annotations || [];
+        let changed = false;
+        const result = annotations.map((a) => {
+          const chain = chainOfFrame.get(a.id);
+          const r = chain ? resolveChain(chain).get(a.id) : withWrap(a, annotations);
+          if (r !== a) changed = true;
+          return r;
+        });
+        const out = changed ? result : annotations;
+        pageResults.set(pageIdx, out);
+        return out;
+      }
+    };
+  }
+  function resolverFor(pages) {
+    const version2 = wrapShapesVersion();
+    const hit = docCache.get(pages);
+    if (hit && hit.version === version2) return hit.resolver;
+    const resolver = makeResolver(pages);
+    docCache.set(pages, { version: version2, resolver });
+    return resolver;
+  }
+  function resolvePageText(annotations, pages) {
+    if (!annotations || !annotations.length) return annotations || [];
+    const doc = pages || currentDocument;
+    if (doc) {
+      const idx = doc.findIndex((p) => p.annotations === annotations);
+      if (idx >= 0) return resolverFor(doc).page(idx);
     }
-    let changed = replaced.size > 0;
-    const result = annotations.map((a) => {
-      if (replaced.has(a.id)) return replaced.get(a.id);
-      const w = withWrap(a, annotations);
-      if (w !== a) changed = true;
-      return w;
+    const alone = cache2.get(annotations);
+    const version2 = wrapShapesVersion();
+    if (alone && alone.version === version2) return alone.result;
+    const result = resolverFor([{ annotations }]).page(0);
+    cache2.set(annotations, { version: version2, result });
+    return result;
+  }
+  function storyStateOfPages(pages) {
+    return pages.map((p, i) => {
+      const views = resolvePageText(p.annotations || [], pages);
+      let continues = null, overflows = false;
+      for (const v of views) {
+        if (v.type !== "text" || v.hidden) continue;
+        if (v.storyNextPage != null) continues = v.storyNextPage;
+        if (v.storyNextId == null && v.text && measureTextBox(v).overflow) overflows = true;
+      }
+      return { continues, overflows };
     });
-    const out = changed ? result : annotations;
-    cache2.set(annotations, { version: version2, result: out });
-    return out;
   }
 
   // shared/js/ai/bgModel.js
@@ -7171,6 +7270,30 @@
     const patch = {};
     for (const key of Object.keys(full)) if (!keep.has(key)) patch[key] = full[key];
     return patch;
+  }
+
+  // apps/ZEditor/src/render/storyEdits.js
+  function patchedPages(pages, pageIdx, id, patch, merge) {
+    const clean = withoutResolvedProps(patch);
+    const anns = pages[pageIdx].annotations || [];
+    const only = () => pages.map((p, i) => i === pageIdx ? { ...p, annotations: anns.map((a) => a.id === id ? merge(a, clean) : a) } : p);
+    const view = resolvePageText(anns, pages).find((a) => a.id === id);
+    if (!view || view.storyHeadId == null || view.storyIndex === 0) return only();
+    const headPage = pages.findIndex((p) => (p.annotations || []).some((a) => a.id === view.storyHeadId));
+    if (headPage < 0) return only();
+    const head = pages[headPage].annotations.find((a) => a.id === view.storyHeadId);
+    const { framePatch, headPatch } = routeFramePatch(head, view.storyOffset || 0, clean);
+    return pages.map((p, i) => {
+      if (i !== pageIdx && i !== headPage) return p;
+      return {
+        ...p,
+        annotations: (p.annotations || []).map((a) => {
+          if (i === pageIdx && a.id === id && Object.keys(framePatch).length) return { ...a, ...framePatch };
+          if (i === headPage && a.id === head.id && Object.keys(headPatch).length) return merge(a, headPatch);
+          return a;
+        })
+      };
+    });
   }
 
   // apps/ZEditor/src/model/photoAdjust.js
@@ -8906,7 +9029,7 @@
 
   // apps/ZEditor/src/state/textFrameActions.js
   var FRAME_GAP = 12;
-  function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds }) {
+  function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, updatePagesFor, setSelectedAnnId, setSelectedAnnIds }) {
     async function linkNextFrame(view) {
       const pageIdx = selectedIdx;
       if (pageIdx === null) return;
@@ -8936,29 +9059,24 @@
     }
     function unlinkNextFrame(view) {
       if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => {
-        const next = anns.find((a) => a.type === "text" && a.threadFrom === view.id);
-        if (!next) return anns;
-        const head = anns.find((a) => a.id === (view.storyHeadId != null ? view.storyHeadId : view.id)) || view;
-        return anns.map((a) => a.id === next.id ? { ...a, ...storyProps(head), text: "", colorRuns: void 0, styleOverrides: head.styleOverrides, threadFrom: void 0 } : a);
+      updatePagesFor((all) => {
+        const holds = (id) => (p) => (p.annotations || []).some((a) => a.id === id);
+        const nextPage = all.findIndex((p) => (p.annotations || []).some((a) => a.type === "text" && a.threadFrom === view.id));
+        if (nextPage < 0) return all;
+        const next = all[nextPage].annotations.find((a) => a.type === "text" && a.threadFrom === view.id);
+        const headId = view.storyHeadId != null ? view.storyHeadId : view.id;
+        const headPage = all.findIndex(holds(headId));
+        const head = headPage >= 0 ? all[headPage].annotations.find((a) => a.id === headId) : view;
+        return all.map((p, i) => i !== nextPage ? p : {
+          ...p,
+          annotations: p.annotations.map((a) => a.id === next.id ? { ...a, ...storyProps(head), text: "", colorRuns: void 0, styleOverrides: head.styleOverrides, threadFrom: void 0 } : a)
+        });
       });
     }
     return { linkNextFrame, unlinkNextFrame };
   }
 
   // apps/ZEditor/src/state/useAnnotationEdits.js
-  function patchedAnnotations(anns, id, patch, merge) {
-    const clean = withoutResolvedProps(patch);
-    const view = resolvePageText(anns).find((a) => a.id === id);
-    if (!view || view.storyHeadId == null || view.storyIndex === 0) return anns.map((a) => a.id === id ? merge(a, clean) : a);
-    const head = anns.find((a) => a.id === view.storyHeadId);
-    const { framePatch, headPatch } = routeFramePatch(head, view.storyOffset || 0, clean);
-    return anns.map((a) => {
-      if (a.id === id && Object.keys(framePatch).length) return { ...a, ...framePatch };
-      if (a.id === head.id && Object.keys(headPatch).length) return merge(a, headPatch);
-      return a;
-    });
-  }
   var { useEffect, useRef } = React;
   function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
@@ -8977,6 +9095,10 @@
       handleSelectAnnotation
     } = selection;
     const imageInputRef = useRef(null);
+    function updatePagesFor(updater, coalesceKey) {
+      recordUndoCheckpoint(coalesceKey);
+      setPages((prev) => updater(prev));
+    }
     function updateAnnotationsFor(pageIdx, updater, coalesceKey) {
       recordUndoCheckpoint(coalesceKey);
       setPages((prev) => prev.map((p, i) => i === pageIdx ? { ...p, annotations: updater(p.annotations || []) } : p));
@@ -9182,15 +9304,15 @@
     }
     function handleUpdateAnnotation(id, patch) {
       if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
+      updatePagesFor((all) => patchedPages(all, selectedIdx, id, patch, (a, p) => ({ ...a, ...withStyleOverrides(a, p) })), "ann:" + id);
     }
     function handleSetLayerLook(ids, patch) {
       if (selectedIdx === null || ids.length === 0) return;
       const merge = (a, p) => ({ ...a, ...withStyleOverrides(a, p) });
       const key = "look:" + Object.keys(patch).join() + ":" + ids.join();
-      updateAnnotationsFor(selectedIdx, (anns) => ids.reduce((list, id) => patchedAnnotations(list, id, patch, merge), anns), key);
+      updatePagesFor((all) => ids.reduce((list, id) => patchedPages(list, selectedIdx, id, patch, merge), all), key);
     }
-    const patchBox = (id, patch) => updateAnnotationsFor(selectedIdx, (anns) => patchedAnnotations(anns, id, patch, (a, p) => ({ ...a, ...p })));
+    const patchBox = (id, patch) => updatePagesFor((all) => patchedPages(all, selectedIdx, id, patch, (a, p) => ({ ...a, ...p })));
     function handleApplyTextStyle(ann, style) {
       if (selectedIdx === null) return;
       const builtIn = Boolean(style.builtIn);
@@ -9272,7 +9394,7 @@
     function handleDeleteAnnotation() {
       if (selectedIdx === null || selectedAnnId === null) return;
       const idsToDelete = [selectedAnnId, ...selectedAnnIds];
-      updateAnnotationsFor(selectedIdx, (anns) => removeWithThreads(anns, idsToDelete));
+      updatePagesFor((all) => removeFromPages(all, idsToDelete));
       setSelectedAnnId(null);
       setSelectedAnnIds([]);
     }
@@ -9286,10 +9408,11 @@
       if (idx === null) return;
       updateAnnotationsFor(idx, (anns) => anns.map((a) => a.id === id ? { ...a, src } : a));
     }
-    const frameActions = makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds });
+    const frameActions = makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, updatePagesFor, setSelectedAnnId, setSelectedAnnIds });
     return {
       frameActions,
       updateAnnotationsFor,
+      updatePagesFor,
       updatePageFilter,
       handleRotateAnnotations,
       handleMoveAnnotations,
@@ -10168,7 +10291,7 @@
     await prepareWrapShapes(pages);
     const overflowPages = [];
     for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
-      const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || []) };
+      const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || [], pages) };
       const annotations = page.annotations;
       if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(pageIdx + 1);
       const vectorIds = await vectorText.plan(annotations);
@@ -10451,7 +10574,7 @@
       const page = pages[doc.selectedIdx];
       if (!page) return [];
       const wanted = new Set(ids || selection.selectedAnnotationIds());
-      return resolvePageText(page.annotations || []).filter((a) => wanted.has(a.id) && !a.hidden);
+      return resolvePageText(page.annotations || [], pages).filter((a) => wanted.has(a.id) && !a.hidden);
     }
     async function handleExportSvg(ids) {
       const items = svgLayersFor(ids);
@@ -13202,10 +13325,7 @@
     }
     function handleDelete(idx) {
       recordUndoCheckpoint();
-      setPages((prev) => {
-        const next = prev.filter((_, i) => i !== idx);
-        return next;
-      });
+      setPages((prev) => removePagesKeepingStories(prev, [idx]));
       setSelectedIdx((prevSel) => {
         if (prevSel === null) return null;
         if (idx === prevSel) return null;
@@ -13217,7 +13337,7 @@
       if (selectedIdx === null) return;
       const idxToDelete = /* @__PURE__ */ new Set([selectedIdx, ...selectedPageIndices]);
       recordUndoCheckpoint();
-      setPages((prev) => prev.filter((_, i) => !idxToDelete.has(i)));
+      setPages((prev) => removePagesKeepingStories(prev, [...idxToDelete]));
       setSelectedIdx(null);
       setSelectedPageIndices([]);
     }
@@ -13255,7 +13375,7 @@
       if (!map.has(key)) map.set(key, { key, family, bold: Boolean(bold), italic: Boolean(italic) });
     };
     for (const p of pages || []) {
-      for (const a of resolvePageText(p.annotations || [])) {
+      for (const a of resolvePageText(p.annotations || [], pages)) {
         if (a.type !== "text") continue;
         add(a.fontFamily, a.bold, a.italic);
         for (const r of a.colorRuns || []) {
@@ -14455,9 +14575,9 @@
     return boxes.map((b) => {
       const id = nextId();
       if (b.role === "picture") {
-        return { id, type: "rect", layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
+        return { id, type: "rect", layoutKey: layout.key, layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
       }
-      const base = { id, type: "text", layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
+      const base = { id, type: "text", layoutKey: layout.key, layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
       if (b.role === "title") return { ...base, fontSize: Math.round(bodyPt * settings.titleScale * 10) / 10, bold: true, text: TITLE_TEXT };
       const framed = { ...base, frameHeight: Math.max(12, Math.round(pxToPt(b.h))) };
       if (b.role === "caption") {
@@ -14471,46 +14591,78 @@
   }
 
   // apps/ZEditor/src/state/useLayouts.js
+  var FRAME_KEYS = ["x", "y", "width", "frameHeight", "columns", "columnGap", "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth", "angle"];
+  var frameLook = (a) => Object.fromEntries(FRAME_KEYS.filter((k) => a[k] !== void 0).map((k) => [k, a[k]]));
   function useLayouts({ doc, history, edits, view, toolDefaults, status }) {
     const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, pageSizeRef } = doc;
     const { recordUndoCheckpoint } = history;
     const guide = () => ({ on: view.guidesOn, format: view.guideFormat, marginIn: view.guideMarginIn, pxPerInch: POINTS_PER_INCH * MAIN_SCALE });
     const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
+    function insertPage(at, like, annotations) {
+      const pts = like && like.isBlank ? { width: like.width, height: like.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
+      const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
+      recordUndoCheckpoint();
+      setPages((prev) => {
+        const next = prev.slice();
+        next.splice(at, 0, page);
+        return next;
+      });
+      setSelectedIdx(at);
+      setSelectedPageIndices([]);
+    }
+    const sizeOf = (like) => {
+      const pts = like && like.isBlank ? { width: like.width, height: like.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
+      return { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE };
+    };
     async function addLayoutToPage(key) {
       const layout = layoutByKey(key);
       if (!layout || selectedIdx === null || !pages[selectedIdx]) return;
       const size = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+      const existing = pages[selectedIdx].annotations || [];
+      const linked = existing.find((a) => a.type === "text" && !a.hidden && (a.threadFrom != null || existing.some((b) => b.threadFrom === a.id) || pages.some((p) => (p.annotations || []).some((b) => b.threadFrom === a.id))));
+      if (linked && !layout.split && !layout.slots.some((s) => s.role === "body")) {
+        status.setNotice(`The "${layout.label}" layout has no text area, and this page holds part of a linked story. The story stays here: pick a layout with text.`);
+        return;
+      }
       const made = items(layout, size);
-      edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns]);
-      status.setNotice(`Added the "${layout.label}" layout under the items on this page. Undo takes it off.`);
+      if (!linked) {
+        edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns]);
+        status.setNotice(`Added the "${layout.label}" layout under the items on this page. Undo takes it off.`);
+        return;
+      }
+      const body = made.find((a) => a.layoutRole === "body");
+      edits.updateAnnotationsFor(selectedIdx, (anns) => {
+        const kept = anns.filter((a) => !(a.layoutKey && a.layoutRole !== "body" && a.layoutRole != null));
+        return [...made.filter((a) => a !== body), ...kept.map((a) => a.id === linked.id ? { ...a, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a)];
+      });
+      status.setNotice(`Moved the story into the "${layout.label}" layout's text area. Undo takes it back.`);
     }
     function addPageWithLayout(key) {
       const layout = layoutByKey(key);
       if (!layout) return;
       const current2 = selectedIdx !== null ? pages[selectedIdx] : null;
-      const pts = current2 && current2.isBlank ? { width: current2.width, height: current2.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
-      const made = items(layout, { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE });
-      const newPage = {
-        key: nextKeyRef.current++,
-        isBlank: true,
-        rotation: 0,
-        width: pts.width,
-        height: pts.height,
-        dataUrl: makeBlankThumb(pts.width, pts.height, 0),
-        annotations: made
-      };
-      const at = selectedIdx !== null ? selectedIdx + 1 : pages.length;
-      recordUndoCheckpoint();
-      setPages((prev) => {
-        const next = prev.slice();
-        next.splice(at, 0, newPage);
-        return next;
-      });
-      setSelectedIdx(at);
-      setSelectedPageIndices([]);
+      insertPage(selectedIdx !== null ? selectedIdx + 1 : pages.length, current2, items(layout, sizeOf(current2)));
       status.setNotice(`Added a new page with the "${layout.label}" layout.`);
     }
-    return { addLayoutToPage, addPageWithLayout };
+    function continueStory(pageIdx) {
+      const page = pages[pageIdx];
+      if (!page) return;
+      const views = resolvePageText(page.annotations || [], pages);
+      const last = [...views].reverse().find((v) => v.type === "text" && !v.hidden && v.storyNextId == null && v.text && measureTextBox(v).overflow);
+      if (!last) return;
+      const id = nextAnnIdRef.current++;
+      const follower = { id, type: "text", text: "", threadFrom: last.id, ...frameLook(last) };
+      const layout = layoutByKey(((page.annotations || []).find((a) => a.layoutKey && a.layoutRole === "body") || {}).layoutKey);
+      let made = [follower];
+      if (layout) {
+        const all = items(layout, sizeOf(page));
+        const body = all.find((a) => a.layoutRole === "body");
+        made = body ? all.map((a) => a === body ? { ...follower, ...frameLook(body), layoutKey: layout.key, layoutRole: "body" } : a) : [follower];
+      }
+      insertPage(pageIdx + 1, page, made);
+      status.setNotice("Added a new page after this one with the rest of the text. Undo takes it away.");
+    }
+    return { addLayoutToPage, addPageWithLayout, continueStory };
   }
 
   // apps/ZEditor/src/state/useImageHandoff.js
@@ -15367,7 +15519,7 @@
           e.stopPropagation();
         };
         if (ann.storyNextId != null) {
-          return isSelected ? /* @__PURE__ */ React.createElement("span", { className: "ze-text-port ze-text-port-out is-linked", title: "The text continues in the next frame" }, "▸") : null;
+          return /* @__PURE__ */ React.createElement(React.Fragment, null, canvasMode && ann.storyNextPage != null && /* @__PURE__ */ React.createElement("span", { className: "ze-story-note ze-story-note-next" }, "continues on page ", ann.storyNextPage + 1), isSelected ? /* @__PURE__ */ React.createElement("span", { className: "ze-text-port ze-text-port-out is-linked", title: "The text continues in the next frame" }, "▸") : null);
         }
         if (overflow) {
           return canLink ? /* @__PURE__ */ React.createElement("span", { className: "ze-text-port ze-text-port-out is-overflow", title: "This text doesn't fit. Click to continue it in a new frame (or make the frame taller, add columns, or shorten the text).", onMouseDown: stop2, onClick: linkNext }, "+") : /* @__PURE__ */ React.createElement("span", { className: "ze-text-overflow", title: "This text doesn't fit: the rest is hidden. Make the frame taller, add columns, or shorten the text." }, "+");
@@ -15377,6 +15529,7 @@
         }
         return null;
       })(),
+      canvasMode && ann.storyPrevPage != null && /* @__PURE__ */ React.createElement("span", { className: "ze-story-note ze-story-note-prev" }, "continued from page ", ann.storyPrevPage + 1),
       storyFrame && ann.storyPrevId != null && isSelected && /* @__PURE__ */ React.createElement("span", { className: "ze-text-port ze-text-port-in is-linked", title: "Continued from the previous frame" }, "▸"),
       isEditing && !ann.locked && // While typing, the box's edges move it (the text inside keeps the caret and selection).
       ["n", "e", "s", "w"].map((side) => /* @__PURE__ */ React.createElement("div", { key: side, className: "ze-text-move-edge ze-text-move-edge-" + side, title: "Drag to move", onMouseDown: (e) => onPress(e, ann) })),
@@ -19502,7 +19655,7 @@
   }
 
   // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
-  function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, dragHandlers }) {
+  function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, story, onContinueStory, dragHandlers }) {
     return /* @__PURE__ */ React.createElement(
       "div",
       {
@@ -19511,7 +19664,31 @@
         onClick: (e) => onSelect(idx, withTouchModifier("shift", e)),
         ...dragHandlers
       },
-      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { srcSet: src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x", draggable: "false", alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber })),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-img-wrap" }, /* @__PURE__ */ React.createElement("img", { srcSet: src + " " + THUMB_SCALE / THUMB_SHOWN_SCALE + "x", draggable: "false", alt: p.isBlank ? "Blank page" : "Page " + p.pageNumber }), story && story.continues != null && /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "ze-thumb-story is-link",
+          title: "This page's text goes on to page " + (story.continues + 1) + ". Click to go there.",
+          onClick: (e) => {
+            e.stopPropagation();
+            onSelect(story.continues, false);
+          }
+        },
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "14", height: "14", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" }), /* @__PURE__ */ React.createElement("path", { d: "M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" }))
+      ), story && story.continues == null && story.overflows && /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "ze-thumb-story is-add",
+          title: "This page's text doesn't all fit. Add a page after it with the rest of the text.",
+          onClick: (e) => {
+            e.stopPropagation();
+            onContinueStory(idx);
+          }
+        },
+        "T+"
+      )),
       /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
         "button",
         {
@@ -19544,7 +19721,7 @@
   var { useState: useState39, useRef: useRef30, useEffect: useEffect29 } = React;
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading }) {
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
     const dragIndexRef = useRef30(null);
     const bodyRef = useRef30(null);
@@ -19623,6 +19800,8 @@
         idx,
         isSelected: idx === selectedIdx || selectedPageIndices.includes(idx),
         onSelect,
+        story: storyStates ? storyStates[idx] : null,
+        onContinueStory,
         onRotate,
         onDelete,
         dragHandlers: dragHandlersFor(idx)
@@ -19906,7 +20085,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "a54d0dd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b5c378a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -20153,6 +20332,7 @@
     const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
     const bodyRef = React.useRef(null);
     const doc = useDocumentState();
+    setTextDocument(doc.pages);
     const history = useHistory(doc);
     const view = useViewSettings();
     const toolDefaults = useToolDefaults();
@@ -20175,6 +20355,7 @@
     const groupFiles = useGroupFiles({ doc, edits, selection, status, view });
     useImageHandoff({ doc, files, edits, selection });
     const zoom = useZoom();
+    const storyStates = React.useMemo(() => storyStateOfPages(doc.pages), [doc.pages]);
     useCanvasGrow({ doc, zoom: zoom.zoomPercent / 100 });
     const onionGhostSrc = useOnionGhost({ onionSkinOn: view.onionSkinOn, pages: doc.pages, selectedIdx: doc.selectedIdx, pdfDocsRef: doc.pdfDocsRef });
     const dropCtx = React.useRef(null);
@@ -20242,6 +20423,8 @@
         selectedPageIndices,
         onSelect: selection.handleSelectPage,
         onSelectAll: selection.handleSelectAllPages,
+        storyStates,
+        onContinueStory: layouts.continueStory,
         onRotate: pageOps.handleRotate,
         onDelete: pageOps.handleDeleteThumbnail,
         onReorder: pageOps.handleReorder,

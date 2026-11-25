@@ -415,7 +415,12 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
         const linkNext = (e) => { e.preventDefault(); e.stopPropagation(); onLinkNext(ann); };
         const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
         if (ann.storyNextId != null) {
-          return isSelected ? <span className="ze-text-port ze-text-port-out is-linked" title="The text continues in the next frame">▸</span> : null;
+          return (
+            <React.Fragment>
+              {canvasMode && ann.storyNextPage != null && <span className="ze-story-note ze-story-note-next">continues on page {ann.storyNextPage + 1}</span>}
+              {isSelected ? <span className="ze-text-port ze-text-port-out is-linked" title="The text continues in the next frame">▸</span> : null}
+            </React.Fragment>
+          );
         }
         if (overflow) {
           return canLink
@@ -427,6 +432,7 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
         }
         return null;
       })()}
+      {canvasMode && ann.storyPrevPage != null && <span className="ze-story-note ze-story-note-prev">continued from page {ann.storyPrevPage + 1}</span>}
       {storyFrame && ann.storyPrevId != null && isSelected && (
         <span className="ze-text-port ze-text-port-in is-linked" title="Continued from the previous frame">▸</span>
       )}

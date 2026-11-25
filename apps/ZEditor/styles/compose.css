@@ -530,3 +530,8 @@
 
 /* The Brush marquee's tint over the page (an SVG mask of the painted strokes): it never takes a press. */
 .ze-brush-mask { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 40; }
+
+/* "continues on page N" / "continued from page N": editor-only notes beside a frame whose story runs onto another page. */
+.ze-story-note { position: absolute; right: 0; font: 600 11px var(--ui-font, system-ui, sans-serif); color: var(--ui-accent-text, #ff8547); white-space: nowrap; pointer-events: none; user-select: none; }
+.ze-story-note-next { top: calc(100% + 4px); }
+.ze-story-note-prev { bottom: calc(100% + 4px); }

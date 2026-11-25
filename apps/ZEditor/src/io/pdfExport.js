@@ -20,7 +20,7 @@ export async function buildExportPdfBytes(pages, pdfDocsRef, pageNumbers, onRepo
   const overflowPages = []; // preflight: pages with a text frame whose text doesn't all fit
   for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
     // Threaded stories and text wrap are worked out for the whole page first (render/pageText.js).
-    const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || []) };
+    const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || [], pages) };
     const annotations = page.annotations;
     if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(pageIdx + 1);
     // Text boxes that can be real text are left out of the page picture and written on top of it.

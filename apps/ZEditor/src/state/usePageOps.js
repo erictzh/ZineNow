@@ -2,6 +2,7 @@
 
 import { DEFAULT_PAGE_SIZE } from "../constants.js";
 import { orderAfterMove } from "../model/annotations.js";
+import { removePagesKeepingStories } from "../model/text/threads.js";
 import { docFor, makeBlankThumb, renderPdfThumb } from "../render/pageRender.js";
 
 export function usePageOps({ doc, history, selection }) {
@@ -46,10 +47,7 @@ export function usePageOps({ doc, history, selection }) {
 
   function handleDelete(idx) {
     recordUndoCheckpoint();
-    setPages((prev) => {
-      const next = prev.filter((_, i) => i !== idx);
-      return next;
-    });
+    setPages((prev) => removePagesKeepingStories(prev, [idx])); // a story that ran through this page carries on across the gap
     setSelectedIdx((prevSel) => {
       if (prevSel === null) return null;
       if (idx === prevSel) return null;
@@ -65,7 +63,7 @@ export function usePageOps({ doc, history, selection }) {
     if (selectedIdx === null) return;
     const idxToDelete = new Set([selectedIdx, ...selectedPageIndices]);
     recordUndoCheckpoint();
-    setPages((prev) => prev.filter((_, i) => !idxToDelete.has(i)));
+    setPages((prev) => removePagesKeepingStories(prev, [...idxToDelete]));
     setSelectedIdx(null);
     setSelectedPageIndices([]);
   }

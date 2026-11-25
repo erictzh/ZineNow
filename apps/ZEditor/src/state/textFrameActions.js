@@ -9,7 +9,7 @@ import { measureTextBox } from "../render/textLayout.js";
 const FRAME_GAP = 12; // editor px between a frame and the one made after it
 
 // `view` is the frame as laid out (render/pageText.js), so its size is the size you see.
-export function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, setSelectedAnnId, setSelectedAnnIds }) {
+export function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, updatePagesFor, setSelectedAnnId, setSelectedAnnIds }) {
   // Makes a new frame beside the box (or below it when there's no room) and threads the box into it.
   // The box becomes a fixed frame if it wasn't one: it keeps its current width and height.
   async function linkNextFrame(view) {
@@ -37,17 +37,24 @@ export function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnId
     setSelectedAnnIds([]);
   }
 
-  // Cuts the thread after this frame: the next frame becomes an empty box of its own (keeping the
-  // story's look), and the text that no longer fits shows the red + overflow marker.
+  // Cuts the thread after this frame (the next frame can be on another page): it becomes an empty box of its own
+  // (keeping the story's look), and the text that no longer fits shows the red + overflow marker.
   function unlinkNextFrame(view) {
     if (selectedIdx === null) return;
-    updateAnnotationsFor(selectedIdx, (anns) => {
-      const next = anns.find((a) => a.type === "text" && a.threadFrom === view.id);
-      if (!next) return anns;
-      const head = anns.find((a) => a.id === (view.storyHeadId != null ? view.storyHeadId : view.id)) || view;
-      return anns.map((a) => (a.id === next.id
-        ? { ...a, ...storyProps(head), text: "", colorRuns: undefined, styleOverrides: head.styleOverrides, threadFrom: undefined }
-        : a));
+    updatePagesFor((all) => {
+      const holds = (id) => (p) => (p.annotations || []).some((a) => a.id === id);
+      const nextPage = all.findIndex((p) => (p.annotations || []).some((a) => a.type === "text" && a.threadFrom === view.id));
+      if (nextPage < 0) return all;
+      const next = all[nextPage].annotations.find((a) => a.type === "text" && a.threadFrom === view.id);
+      const headId = view.storyHeadId != null ? view.storyHeadId : view.id;
+      const headPage = all.findIndex(holds(headId));
+      const head = headPage >= 0 ? all[headPage].annotations.find((a) => a.id === headId) : view;
+      return all.map((p, i) => (i !== nextPage ? p : {
+        ...p,
+        annotations: p.annotations.map((a) => (a.id === next.id
+          ? { ...a, ...storyProps(head), text: "", colorRuns: undefined, styleOverrides: head.styleOverrides, threadFrom: undefined }
+          : a)),
+      }));
     });
   }
 
