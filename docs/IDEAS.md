@@ -77,4 +77,11 @@ State: **decided** unless marked.
 - **Decided (2026-11-25):** add text outlining; the editor command is called "Outline Text to Shape"; in the SVG export it is a checkbox, on by default for a "for Illustrator" preset. Build the export option first, then the editor command.
 - Open questions: whole-page and multi-page SVG; keeping layers as groups/named layers in the SVG; font handling (text needs the font installed in Illustrator); whether outlines (text turned into shapes) should be an option.
 
+### 4.4 Text frames linked across pages (2026-11-25) — idea, feasible but a real change
+
+- **Today:** ZEditor already has threaded text frames ("Link to next frame" / "Unlink next frame", `state/textFrameActions.js`, `model/text/threads.js`, `render/pageText.js`), and unlinked boxes work as normal. But a thread only works **within one page**: the chain is laid out one page at a time (`resolvePageText`), and "Link to next frame" creates the new frame on the same page.
+- **Wanted:** link a frame to a frame on the **next page** (long essays), with both linked and unlinked text still possible.
+- **Sketch (not built):** (a) a command "Link to next page" that adds a page after the current one with a frame in the same place and threads into it (also "Link to a frame on another page" by clicking it); (b) resolve the story **across pages** (lay out frame 1, continue in frame 2 on the next page, and so on), so editing page 1 reflows later pages; (c) keep the overset marker (red +) and add "Add page and continue" when the last frame overflows; (d) handle deleting/moving/duplicating pages that hold a linked frame (the thread skips or ends, never breaks); (e) PDF export and thumbnails must use the cross-page result; (f) the "Full text" layout could create a frame ready to link.
+- **Open questions:** link automatically when a new page is added after an overflowing frame, or only on request? What should deleting a middle page do? Show the link between pages (a small "continues on page N" marker)?
+
 _(Add more ideas below.)_
