@@ -124,7 +124,7 @@
 
     const title = document.createElement("div");
     title.className = "app-card-title";
-    title.textContent = folder;
+    title.textContent = entry.name || folder; // `name` (optional in config/apps-config.js) is what the card shows
     row.appendChild(title);
 
     const desc = document.createElement("div");
@@ -230,7 +230,7 @@
   const sidebarBody = $("sidebar-body");
 
   function openReadme(entry) {
-    sidebarTitle.textContent = entry.folder;
+    sidebarTitle.textContent = entry.name || entry.folder;
     if (entry.readme && entry.readme.trim()) {
       sidebarBody.innerHTML = markdownToHtml(entry.readme);
     } else {

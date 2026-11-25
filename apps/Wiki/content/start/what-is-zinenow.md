@@ -65,6 +65,7 @@ window.ZINENOW_APPS = [
   },
   {
     folder: "RgbToCmyk",
+    name: "RGB to CMYK",
     desc: "Make a PDF print-friendly (CMYK)"
   },
   {

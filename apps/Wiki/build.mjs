@@ -55,7 +55,9 @@ let written = 0, total = 0;
 })(tree);
 const data = { toc: tree, pages };
 const body = JSON.stringify(data);
-const build = createHash("sha1").update(body).digest("hex").slice(0, 7);
+// The build number covers the pages AND the wiki's own look and behaviour (styles, script, page shell), so it changes when either does.
+const shell = ["wiki.css", "wiki.js", "index.html"].map((f) => (existsSync(join(here, f)) ? lf(readFileSync(join(here, f), "utf8")) : "")).join("\0");
+const build = createHash("sha1").update(body).update("\0").update(shell).digest("hex").slice(0, 7);
 const out = `// Built by apps/Wiki/build.mjs from content/. Do not edit; edit the .md files and run \`npm run build\`.\nwindow.WIKI = ${JSON.stringify({ build, ...data })};\n`;
 
 for (const w of warnings) console.warn("⚠", w);

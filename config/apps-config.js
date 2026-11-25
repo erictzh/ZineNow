@@ -5,6 +5,7 @@
    `folder` has to match the real folder name under apps/ exactly, including
    capitalization.
 
+   `name` (optional) is the title the card shows instead of the folder name.
    `desc` and `readme` are optional. Leaving out `desc` repeats the folder
    name as the subheader. Leaving out `readme` shows "No readme provided"
    in the About panel. The app's logo (apps/<folder>/app-logo.png) isn't
@@ -31,6 +32,7 @@ window.ZINENOW_APPS = [
   },
   {
     folder: "RgbToCmyk",
+    name: "RGB to CMYK",
     desc: "Make a PDF print-friendly (CMYK)"
   },
   {
