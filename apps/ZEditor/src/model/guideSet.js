@@ -15,7 +15,7 @@ export const GUIDE_COLORS = [
   { key: "orange", label: "Orange", css: "#fb923c" },
 ];
 export const DEFAULT_GUIDE_COLOR = "lightblue"; // what guides drawn before colours existed look like
-export const LAYOUT_GUIDE_COLOR = "lightgreen";  // the guides a layout adds
+export const LAYOUT_GUIDE_COLOR = "lightgrey";   // the guides a layout adds
 export const guideColor = (key) => GUIDE_COLORS.find((c) => c.key === key) || GUIDE_COLORS.find((c) => c.key === DEFAULT_GUIDE_COLOR);
 
 // A saved or hand-edited list made safe: every guide gets a valid axis, position and colour.

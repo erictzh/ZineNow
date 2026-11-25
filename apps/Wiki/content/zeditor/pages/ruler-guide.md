@@ -158,7 +158,7 @@ Click a guide (on the page or its row in the Layers panel) and the **Format pane
 
 While you drag a guide, with **Snap** on it snaps (within 6 screen pixels) to the page edges and middle, the trim edge when the page has a bleed, the Page Guide margin lines when that is on, and other guides. **Alt** drags freely and **Shift** still lands on whole units.
 
-**Layouts add guides:** applying a layout adds page guides (light green) along the edges of its boxes, except the page's own edges, replacing the ones a layout added before. Changing a page's bleed moves its page guides with the trim.
+**Layouts add guides:** applying a layout adds page guides (light grey) along the edges of its boxes, except the page's own edges, replacing the ones a layout added before. Changing a page's bleed moves its page guides with the trim.
 
 ```js file=apps/ZEditor/src/model/guideSet.js fn=snapGuidePos
 ```
