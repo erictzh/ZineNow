@@ -23,6 +23,7 @@ import { useViewSettings } from "../state/useViewSettings.js";
 import { useZoom } from "../state/useZoom.js";
 import { useCanvasGrow } from "../state/useCanvasGrow.js";
 import { useGroupFiles } from "../state/useGroupFiles.js";
+import { useLayouts } from "../state/useLayouts.js";
 import { useImageHandoff } from "../state/useImageHandoff.js";
 import { ComposeCanvas } from "./canvas/ComposeCanvas.jsx";
 import { Rulers } from "./canvas/Rulers.jsx";
@@ -59,6 +60,7 @@ export function App() {
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
+  const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status });
   const project = useProject({ doc, history, status, view, toolDefaults });
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
@@ -105,7 +107,7 @@ export function App() {
 
   return (
     <div className="ze-shell">
-      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} project={project} dialogs={dialogs} exporter={exporter} status={status} />
+      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
       {status.errorMsg && <div className="ze-error-bar">{status.errorMsg}</div>}
       {status.notice && (

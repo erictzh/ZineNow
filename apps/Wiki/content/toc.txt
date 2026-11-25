@@ -32,6 +32,7 @@ zeditor | ZEditor
     page-operations | Page operations
     ruler-guide | Ruler Guide | rulers, guides, lock and snap (the Page menu's "Ruler Guide")
     page-guide | Page Guide | trim, margin and bleed lines
+    layouts | Page layouts | ready-made pages: picture slots and text, the Page menu's "Layout"
     page-numbers | Page Numbers
     onion-skin | Onion Skin
     page-filter | Page Filter

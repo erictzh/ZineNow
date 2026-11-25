@@ -32,12 +32,14 @@ export function PageMenuBody({ rows }) {
         {row.detail && <span className="ze-menu-toggle-detail">{row.detail}</span>}
       </div>
       <button type="button" className="ze-menu-customize" disabled={row.disabled} onClick={() => setCustomizing(row.key)}>
-        Customize…
+        {row.openLabel || "Customize…"}
       </button>
-      <label className="toggle-switch" title={(row.checked ? "Turn off " : "Turn on ") + row.label}>
-        <input type="checkbox" checked={row.checked} disabled={row.disabled} onChange={(e) => row.onToggle(e.target.checked)} />
-        <span className="toggle-slider"></span>
-      </label>
+      {!row.noToggle && (
+        <label className="toggle-switch" title={(row.checked ? "Turn off " : "Turn on ") + row.label}>
+          <input type="checkbox" checked={row.checked} disabled={row.disabled} onChange={(e) => row.onToggle(e.target.checked)} />
+          <span className="toggle-slider"></span>
+        </label>
+      )}
     </div>
   ));
 }
