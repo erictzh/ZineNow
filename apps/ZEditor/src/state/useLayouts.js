@@ -3,6 +3,7 @@
 // Also the "T+" button of a page whose story overflows: a new page after it, with the same layout, holding the rest of the text.
 
 import { DEFAULT_PAGE_SIZE, MAIN_SCALE, POINTS_PER_INCH } from "../constants.js";
+import { bleedPt } from "../model/bleed.js";
 import { layoutByKey } from "../model/pageLayouts.js";
 import { buildLayoutItems } from "../render/layoutItems.js";
 import { getPageDisplaySize, makeBlankThumb } from "../render/pageRender.js";
@@ -23,7 +24,8 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
   // A new blank page after page `at - 1`, the same size as `like` (a blank page) or the default.
   function insertPage(at, like, annotations) {
     const pts = like && like.isBlank ? { width: like.width, height: like.height } : (pageSizeRef.current || DEFAULT_PAGE_SIZE);
-    const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
+    const bleedMm = like && like.isBlank ? like.bleedMm : (pageSizeRef.current && pageSizeRef.current.bleedMm);
+    const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, ...(bleedMm > 0 ? { bleedMm } : {}), dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
     recordUndoCheckpoint();
     setPages((prev) => { const next = prev.slice(); next.splice(at, 0, page); return next; });
     setSelectedIdx(at);
@@ -31,7 +33,9 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
   }
   const sizeOf = (like) => {
     const pts = like && like.isBlank ? { width: like.width, height: like.height } : (pageSizeRef.current || DEFAULT_PAGE_SIZE);
-    return { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE };
+    const bleedMm = like && like.isBlank ? like.bleedMm : (pageSizeRef.current && pageSizeRef.current.bleedMm);
+    const b = like && like.isBlank ? bleedPt(like) : bleedPt({ isBlank: true, bleedMm });
+    return { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE, bleed: b * MAIN_SCALE };
   };
 
   // Adds the layout to the selected page, under the items already there (so they stay on top). One undo step.
@@ -40,7 +44,7 @@ export function useLayouts({ doc, history, edits, view, toolDefaults, status }) 
   async function addLayoutToPage(key) {
     const layout = layoutByKey(key);
     if (!layout || selectedIdx === null || !pages[selectedIdx]) return;
-    const size = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+    const size = { ...(await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE)), bleed: bleedPt(pages[selectedIdx]) * MAIN_SCALE };
     const existing = pages[selectedIdx].annotations || [];
     const linked = existing.find((a) => a.type === "text" && !a.hidden && (a.threadFrom != null || existing.some((b) => b.threadFrom === a.id) || pages.some((p) => (p.annotations || []).some((b) => b.threadFrom === a.id))));
     if (linked && !layout.split && !layout.slots.some((s) => s.role === "body")) {

@@ -26,12 +26,12 @@ export function fitTextToFrame(ann) {
   return text;
 }
 
-// layout: from LAYOUTS. page: { width, height } in editor px. defaults: the text tool's settings (state/useToolDefaults.js).
+// layout: from LAYOUTS. page: { width, height, bleed? } in editor px (bleed: the page's bleed). defaults: the text tool's settings (state/useToolDefaults.js).
 // guide: { on, format, marginIn, pxPerInch } for the Page Guide margin. nextId(): a new item id each call.
 // Returns the items in drawing order (bottom first).
 export function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
   const bodyPt = Number(defaults.textFontSize) || 12;
-  const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide);
+  const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
   const rect = controlValues({}, RECT_CONTROLS);
   const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: defaults.textAlign };
   return boxes.map((b) => {

@@ -7,6 +7,7 @@ import { blendOf } from "../../model/controls.js";
 import { dragBox } from "../../model/geometry.js";
 import { DEFAULT_RECT_SIZE } from "../../model/rect.js";
 import { constrainTo45, snapToGuides } from "../../model/rulers.js";
+import { bleedPt } from "../../model/bleed.js";
 import { snapBox } from "../../model/snapTargets.js";
 import { snapStore } from "./snapStore.js";
 import { strokeHitTest } from "../../model/strokes.js";
@@ -518,6 +519,7 @@ export function ComposeCanvas({
       </div>
       <PageOverlays
         pageSize={canvasSize}
+        bleedPx={bleedPt(page) * MAIN_SCALE}
         numberSpec={page.isCanvas ? null : numberSpec}
         guidesOn={guidesOn && !page.isCanvas}
         guideFormat={guideFormat}

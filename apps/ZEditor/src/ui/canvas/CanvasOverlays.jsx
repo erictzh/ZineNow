@@ -44,7 +44,7 @@ export function BrushCursor({ pos, softEraser }) {
 // Page number preview, trim guides and the center guide. Editor-only:
 // the page number shows where it will print (the real one is drawn at
 // Export); guides are never drawn into Export.
-export function PageOverlays({ pageSize, numberSpec, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn }) {
+export function PageOverlays({ pageSize, bleedPx, numberSpec, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn }) {
   if (pageSize.width <= 0) return null;
   return (
     <React.Fragment>
@@ -60,6 +60,13 @@ export function PageOverlays({ pageSize, numberSpec, guidesOn, guideFormat, guid
               : { [numberSpec.horizontal]: numberSpec.marginIn * 72 * MAIN_SCALE }),
           }}
         >{numberSpec.text}</div>
+      )}
+      {bleedPx > 0 && (
+        // Where the page will be cut: everything outside this dotted line is bleed.
+        <svg className="ze-guides-overlay" width={pageSize.width} height={pageSize.height} aria-hidden="true">
+          <rect x={bleedPx} y={bleedPx} width={pageSize.width - 2 * bleedPx} height={pageSize.height - 2 * bleedPx} fill="none" stroke="#ffffff" strokeWidth="1.5" opacity="0.9" />
+          <rect x={bleedPx} y={bleedPx} width={pageSize.width - 2 * bleedPx} height={pageSize.height - 2 * bleedPx} fill="none" stroke="#e5322d" strokeDasharray="4 4" strokeWidth="1.5" />
+        </svg>
       )}
       {guidesOn && (
         <GuidesOverlay

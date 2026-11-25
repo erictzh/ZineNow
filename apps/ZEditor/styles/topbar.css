@@ -172,3 +172,8 @@ button.ze-menu-trigger.btn-solid { min-width: unset; padding: 6px 10px 6px 14px;
 .ze-layout-field small { color: var(--ui-fg-muted); }
 .ze-layout-reset { margin-top: 4px; }
 .ze-layout-note { margin: 8px 0 0; font-size: 11px; line-height: 1.4; color: var(--ui-fg-muted); }
+
+/* A tick box row in a menu (Export > Include bleed, Crop marks). */
+.ze-menu-check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.ze-menu-check.disabled { opacity: 0.5; cursor: default; }
+.ze-menu-check input { margin: 0; }

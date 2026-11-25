@@ -9775,15 +9775,16 @@
       e.target.value = "";
       if (file) handleFile(file);
     }
-    function handleCreateBlankDocument({ width, height, pageCount, canvas }) {
+    function handleCreateBlankDocument({ width, height, pageCount, canvas, bleedMm = 0 }) {
       dialogs.setNewDocOpen(false);
       setErrorMsg(null);
       pdfDocsRef.current = {};
-      pageSizeRef.current = canvas ? A4_FALLBACK : { width, height };
+      pageSizeRef.current = canvas ? A4_FALLBACK : { width, height, bleedMm };
       const thumb = makeBlankThumb(width, height, 0, void 0, canvas);
       const newPages = Array.from({ length: pageCount }, () => ({
         key: nextKeyRef.current++,
         isBlank: true,
+        ...bleedMm > 0 && !canvas ? { bleedMm } : {},
         ...canvas ? { isCanvas: true } : {},
         // no paper: the page grows to hold its items (state/useCanvasGrow.js)
         rotation: 0,
@@ -9969,6 +9970,33 @@
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Couldn't encode the page image.")), fmt.mime, fmt.quality);
     });
+  }
+
+  // apps/ZEditor/src/model/bleed.js
+  var MAX_BLEED_MM = 25;
+  var mmToPt = (mm) => mm * 72 / 25.4;
+  function cleanBleedMm(value) {
+    const v = Number(value);
+    return Number.isFinite(v) ? Math.round(Math.min(MAX_BLEED_MM, Math.max(0, v)) * 10) / 10 : 0;
+  }
+  var bleedPt = (page) => page && page.isBlank && page.bleedMm > 0 ? mmToPt(page.bleedMm) : 0;
+  function withBleed(page, mm) {
+    const next = cleanBleedMm(mm);
+    const before = bleedPt(page), after = mmToPt(next);
+    const grow = after - before;
+    return { width: page.width + 2 * grow, height: page.height + 2 * grow, bleedMm: next, shiftPt: grow };
+  }
+  function cropMarkLines(trimW, trimH, b, pad, gap = 2, len = 14) {
+    const x0 = pad + b, x1 = pad + b + trimW, y0 = pad + b, y1 = pad + b + trimH;
+    const near = b + gap, far = b + gap + len;
+    const lines = [];
+    for (const x of [x0, x1]) {
+      lines.push([x, y0 - near, x, y0 - far], [x, y1 + near, x, y1 + far]);
+    }
+    for (const y of [y0, y1]) {
+      lines.push([x0 - near, y, x0 - far, y], [x1 + near, y, x1 + far, y]);
+    }
+    return lines;
   }
 
   // apps/ZEditor/src/io/base64.js
@@ -10285,7 +10313,9 @@
   }
 
   // apps/ZEditor/src/io/pdfExport.js
-  async function buildExportPdfBytes(pages, pdfDocsRef, pageNumbers, onReport) {
+  var CROP_PAD = 18;
+  async function buildExportPdfBytes(pages, pdfDocsRef, pageNumbers, onReport, options = {}) {
+    const keepBleed = options.bleed !== false;
     const outDoc = await PDFLib.PDFDocument.create();
     const vectorText = createVectorTextExporter(outDoc);
     await prepareWrapShapes(pages);
@@ -10301,8 +10331,18 @@
       const pngImage = await outDoc.embedPng(pngBytes);
       const pageWidthPts = canvas.width / EXPORT_SCALE;
       const pageHeightPts = canvas.height / EXPORT_SCALE;
-      const outPage = outDoc.addPage([pageWidthPts, pageHeightPts]);
+      const b = bleedPt(pages[pageIdx]);
+      const trimW = pageWidthPts - 2 * b, trimH = pageHeightPts - 2 * b;
+      const pad = b > 0 && keepBleed && options.cropMarks ? CROP_PAD : 0;
+      const outPage = outDoc.addPage(b > 0 && !keepBleed ? [trimW, trimH] : [pageWidthPts + 2 * pad, pageHeightPts + 2 * pad]);
+      if (b > 0 && !keepBleed) outPage.translateContent(-b, -b);
+      else if (pad) outPage.translateContent(pad, pad);
       outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
+      if (b > 0 && keepBleed) {
+        outPage.setBleedBox(pad, pad, pageWidthPts, pageHeightPts);
+        outPage.setTrimBox(pad + b, pad + b, trimW, trimH);
+        if (pad) for (const [x1, y1, x2, y2] of cropMarkLines(trimW, trimH, b, 0)) outPage.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: 0.35, color: PDFLib.rgb(0, 0, 0) });
+      }
       for (const ann of annotations) {
         if (vectorIds.has(ann.id)) await vectorText.draw(outPage, ann, pageHeightPts);
       }
@@ -10505,7 +10545,7 @@
     const { setErrorMsg, setNotice } = status;
     const [exporting, setExporting] = useState5(false);
     const [sendingToArranger, setSendingToArranger] = useState5(false);
-    const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice);
+    const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice, { bleed: view.exportBleed, cropMarks: view.exportCropMarks });
     async function handleExportPdf() {
       if (pages.length === 0 || exporting) return;
       setErrorMsg(null);
@@ -13311,6 +13351,7 @@
         rotation: 0,
         width: size.width,
         height: size.height,
+        ...size.bleedMm > 0 ? { bleedMm: size.bleedMm } : {},
         dataUrl: makeBlankThumb(size.width, size.height, 0),
         annotations: []
       };
@@ -14087,9 +14128,10 @@
     const m = pageW * settings.marginPct / 100;
     return { x: m, y: m, w: Math.max(1, pageW - 2 * m), h: Math.max(1, pageH - 2 * m) };
   }
-  function place(layout, pageW, pageH, settings, font, guide) {
-    const inner = innerBox(pageW, pageH, settings, guide);
-    const gap = pageW * settings.gapPct / 100;
+  function place(layout, pageW, pageH, settings, font, guide, bleed = 0) {
+    const t = innerBox(pageW - 2 * bleed, pageH - 2 * bleed, settings, guide);
+    const inner = { x: t.x + bleed, y: t.y + bleed, w: t.w, h: t.h };
+    const gap = (pageW - 2 * bleed) * settings.gapPct / 100;
     const lineH = (scale) => Math.round(font * scale * 1.3);
     const page = { x: 0, y: 0, w: pageW, h: pageH };
     const out = [];
@@ -14230,6 +14272,8 @@
     const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
     const [guidesLocked, setGuidesLocked] = useState15(false);
     const [layoutSettings, setLayoutSettings] = useState15(DEFAULT_LAYOUT_SETTINGS);
+    const [exportBleed, setExportBleed] = useState15(true);
+    const [exportCropMarks, setExportCropMarks] = useState15(false);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
     const [embedFonts, setEmbedFonts] = useState15(true);
@@ -14251,7 +14295,9 @@
         guidesLocked,
         embedFonts,
         embedFontsSkip,
-        layoutSettings
+        layoutSettings,
+        exportBleed,
+        exportCropMarks
       };
     }
     function applySavedSettings(s) {
@@ -14267,6 +14313,8 @@
       if (s.rulerUnit !== void 0) setRulerUnit(s.rulerUnit);
       if (s.snapToGuidesOn !== void 0) setSnapToGuidesOn(s.snapToGuidesOn);
       setGuidesLocked(s.guidesLocked === true);
+      setExportBleed(s.exportBleed !== false);
+      setExportCropMarks(s.exportCropMarks === true);
       setLayoutSettings(normalizeLayoutSettings(s.layoutSettings));
       setEmbedFonts(s.embedFonts !== false);
       setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
@@ -14283,6 +14331,10 @@
       setGuideMarginIn,
       guideBleedIn,
       setGuideBleedIn,
+      exportBleed,
+      setExportBleed,
+      exportCropMarks,
+      setExportCropMarks,
       pageNumbers,
       setPageNumbers,
       onionSkinOn,
@@ -14569,7 +14621,7 @@
   }
   function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
     const bodyPt = Number(defaults.textFontSize) || 12;
-    const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide);
+    const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide, page.bleed || 0);
     const rect = controlValues({}, RECT_CONTROLS);
     const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: defaults.textAlign };
     return boxes.map((b) => {
@@ -14600,7 +14652,8 @@
     const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
     function insertPage(at, like, annotations) {
       const pts = like && like.isBlank ? { width: like.width, height: like.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
-      const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
+      const bleedMm = like && like.isBlank ? like.bleedMm : pageSizeRef.current && pageSizeRef.current.bleedMm;
+      const page = { key: nextKeyRef.current++, isBlank: true, rotation: 0, width: pts.width, height: pts.height, ...bleedMm > 0 ? { bleedMm } : {}, dataUrl: makeBlankThumb(pts.width, pts.height, 0), annotations };
       recordUndoCheckpoint();
       setPages((prev) => {
         const next = prev.slice();
@@ -14612,12 +14665,14 @@
     }
     const sizeOf = (like) => {
       const pts = like && like.isBlank ? { width: like.width, height: like.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
-      return { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE };
+      const bleedMm = like && like.isBlank ? like.bleedMm : pageSizeRef.current && pageSizeRef.current.bleedMm;
+      const b = like && like.isBlank ? bleedPt(like) : bleedPt({ isBlank: true, bleedMm });
+      return { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE, bleed: b * MAIN_SCALE };
     };
     async function addLayoutToPage(key) {
       const layout = layoutByKey(key);
       if (!layout || selectedIdx === null || !pages[selectedIdx]) return;
-      const size = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+      const size = { ...await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE), bleed: bleedPt(pages[selectedIdx]) * MAIN_SCALE };
       const existing = pages[selectedIdx].annotations || [];
       const linked = existing.find((a) => a.type === "text" && !a.hidden && (a.threadFrom != null || existing.some((b) => b.threadFrom === a.id) || pages.some((p) => (p.annotations || []).some((b) => b.threadFrom === a.id))));
       if (linked && !layout.split && !layout.slots.some((s) => s.role === "body")) {
@@ -14665,6 +14720,34 @@
       status.setNotice("Added a new page after this one with the rest of the text. Undo takes it away.");
     }
     return { addLayoutToPage, addPageWithLayout, continueStory };
+  }
+
+  // apps/ZEditor/src/state/usePageBleed.js
+  function usePageBleed({ doc, history, status }) {
+    const { pages, setPages, selectedIdx, pageSizeRef } = doc;
+    function setPageBleed(mm, allPages) {
+      const targets = new Set(pages.map((p, i) => (allPages || i === selectedIdx) && p.isBlank && !p.isCanvas ? p.key : null).filter((k) => k !== null));
+      if (!targets.size) return;
+      history.recordUndoCheckpoint();
+      setPages((prev) => prev.map((p) => {
+        if (!targets.has(p.key)) return p;
+        const next = withBleed(p, mm);
+        if (next.shiftPt === 0 && (p.bleedMm || 0) === next.bleedMm) return p;
+        const shift = next.shiftPt * MAIN_SCALE;
+        return {
+          ...p,
+          width: next.width,
+          height: next.height,
+          bleedMm: next.bleedMm,
+          dataUrl: makeBlankThumb(next.width, next.height, p.rotation),
+          annotations: shift ? (p.annotations || []).map((a) => translatedAnnotation(a, shift, shift)) : p.annotations
+        };
+      }));
+      const sel = pages[selectedIdx];
+      if (allPages && sel && sel.isBlank) pageSizeRef.current = { ...pageSizeRef.current || {}, width: withBleed(sel, mm).width, height: withBleed(sel, mm).height, bleedMm: withBleed(sel, mm).bleedMm };
+      status.setNotice(Number(mm) > 0 ? `Bleed set to ${withBleed({ width: 0, height: 0 }, mm).bleedMm} mm on ${targets.size === 1 ? "this page" : targets.size + " pages"}. The page grew; the dotted line marks the trim. Undo takes it back.` : `Bleed removed from ${targets.size === 1 ? "this page" : targets.size + " pages"}.`);
+    }
+    return { setPageBleed };
   }
 
   // apps/ZEditor/src/state/useImageHandoff.js
@@ -15992,7 +16075,7 @@
   function BrushCursor({ pos, softEraser }) {
     return /* @__PURE__ */ React.createElement("div", { className: "ze-brush-cursor", style: { left: pos.x, top: pos.y, width: softEraser.size, height: softEraser.size } }, softEraser.softness > 0 && softEraser.softness < 100 && /* @__PURE__ */ React.createElement("div", { className: "ze-brush-cursor-core", style: { width: `${100 - softEraser.softness}%`, height: `${100 - softEraser.softness}%` } }));
   }
-  function PageOverlays({ pageSize, numberSpec, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn }) {
+  function PageOverlays({ pageSize, bleedPx, numberSpec, guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn }) {
     if (pageSize.width <= 0) return null;
     return /* @__PURE__ */ React.createElement(React.Fragment, null, numberSpec && /* @__PURE__ */ React.createElement(
       "div",
@@ -16006,7 +16089,8 @@
         }
       },
       numberSpec.text
-    ), guidesOn && /* @__PURE__ */ React.createElement(
+    ), bleedPx > 0 && // Where the page will be cut: everything outside this dotted line is bleed.
+    /* @__PURE__ */ React.createElement("svg", { className: "ze-guides-overlay", width: pageSize.width, height: pageSize.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: bleedPx, y: bleedPx, width: pageSize.width - 2 * bleedPx, height: pageSize.height - 2 * bleedPx, fill: "none", stroke: "#ffffff", strokeWidth: "1.5", opacity: "0.9" }), /* @__PURE__ */ React.createElement("rect", { x: bleedPx, y: bleedPx, width: pageSize.width - 2 * bleedPx, height: pageSize.height - 2 * bleedPx, fill: "none", stroke: "#e5322d", strokeDasharray: "4 4", strokeWidth: "1.5" })), guidesOn && /* @__PURE__ */ React.createElement(
       GuidesOverlay,
       {
         width: pageSize.width,
@@ -16843,6 +16927,7 @@
       PageOverlays,
       {
         pageSize: canvasSize,
+        bleedPx: bleedPt(page) * MAIN_SCALE,
         numberSpec: page.isCanvas ? null : numberSpec,
         guidesOn: guidesOn && !page.isCanvas,
         guideFormat,
@@ -17126,7 +17211,7 @@
   var { useState: useState22 } = React;
   var MM_PER_INCH = 25.4;
   var ptToMm = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
-  var mmToPt = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
+  var mmToPt2 = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
   var formatMm = (pts) => String(Math.round(ptToMm(pts) * 10) / 10);
   var presetLabel = (p) => `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`;
   var CUSTOM_MIN_MM = 20;
@@ -17139,17 +17224,19 @@
     const [presetKey, setPresetKey] = useState22("a5");
     const [orientation, setOrientation] = useState22("portrait");
     const [pageCountText, setPageCountText] = useState22("1");
+    const [bleedText, setBleedText] = useState22("0");
     const [customWText, setCustomWText] = useState22("148");
     const [customHText, setCustomHText] = useState22("210");
     if (!open) return null;
     const noPaper = presetKey === "canvas";
     const custom = presetKey === "custom";
     const customW = clampMm(customWText, 148), customH = clampMm(customHText, 210);
-    const preset = custom ? { width: mmToPt(customW), height: mmToPt(customH) } : noPaper ? CANVAS_PAGE_START : NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
+    const preset = custom ? { width: mmToPt2(customW), height: mmToPt2(customH) } : noPaper ? CANVAS_PAGE_START : NEW_DOCUMENT_PRESETS.find((p) => p.key === presetKey) || NEW_DOCUMENT_PRESETS[0];
     const landscape = orientation === "landscape";
     const width = landscape ? preset.height : preset.width;
     const height = landscape ? preset.width : preset.height;
     const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
+    const bleedMm = noPaper ? 0 : cleanBleedMm(bleedText);
     const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => setPresetKey(e.target.value) }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, presetLabel(p))), /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)…"), /* @__PURE__ */ React.createElement("option", { value: "canvas" }, "No paper: auto-expanding canvas"))), custom && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Custom size (mm)"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
       NumberBox,
@@ -17187,7 +17274,20 @@
         onChange: (e) => setPageCountText(e.target.value),
         onBlur: () => setPageCountText(String(pageCount))
       }
-    )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in).`, custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : "", " You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width, height, pageCount, canvas: noPaper }) }, "Create"))));
+    )), !noPaper && /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (mm)"), /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        className: "ze-format-number",
+        min: "0",
+        max: "25",
+        step: "0.5",
+        "aria-label": "Bleed (mm)",
+        title: "Extra picture past the trimmed edge, on every side. 0 means no bleed.",
+        value: bleedText,
+        onChange: (e) => setBleedText(e.target.value),
+        onBlur: () => setBleedText(String(bleedMm))
+      }
+    )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in)${bleedMm > 0 ? `, trimmed; with ${bleedMm} mm bleed each page is ${formatMm(width + 2 * mmToPt(bleedMm))} × ${formatMm(height + 2 * mmToPt(bleedMm))} mm` : ""}.`, custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : "", " You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width: width + 2 * mmToPt(bleedMm), height: height + 2 * mmToPt(bleedMm), pageCount, canvas: noPaper, bleedMm }) }, "Create"))));
   }
 
   // apps/ZEditor/src/ui/dialogs/EmbedFontsDialog.jsx
@@ -18819,6 +18919,9 @@
       /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5.5 7.5l4.5 4.5 4.5-4.5" }))
     ), open && /* @__PURE__ */ React.createElement("div", { className: "ze-menu", role: "menu", ref: menuRef }, children({ close: () => setOpen(false) })));
   }
+  function MenuCheck({ label, hint, checked, disabled, onChange }) {
+    return /* @__PURE__ */ React.createElement("label", { className: "ze-menu-item ze-menu-check" + (disabled ? " disabled" : ""), title: hint }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked, disabled, onChange: (e) => onChange(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "ze-menu-item-text" }, /* @__PURE__ */ React.createElement("span", null, label)));
+  }
   function MenuItem({ label, detail, shortcut, hint, disabled, onClick, close }) {
     return /* @__PURE__ */ React.createElement(
       "button",
@@ -20117,6 +20220,26 @@
     ), hasSelection && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-danger", title: "Delete", "aria-label": "Delete", onMouseDown: keep, onClick: () => pressKey("Delete") }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))));
   }
 
+  // apps/ZEditor/src/ui/settings/BleedSettings.jsx
+  var { useState: useState42 } = React;
+  function BleedSettings({ currentMm, onApply }) {
+    const [text, setText] = useState42(String(currentMm || 0));
+    const value = cleanBleedMm(text);
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (mm)"), /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        className: "ze-format-number",
+        min: "0",
+        max: MAX_BLEED_MM,
+        step: "0.5",
+        "aria-label": "Bleed (mm)",
+        value: text,
+        onChange: (e) => setText(e.target.value),
+        onBlur: () => setText(String(value))
+      }
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => onApply(value, false) }, "Apply to this page"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => onApply(value, true) }, "Apply to all pages")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Bleed is extra picture past the trimmed edge, so no white shows after cutting. The page grows by the bleed on every side; the dotted line marks where it will be cut, and your items stay where they are relative to it. 0 means no bleed. Blank pages only."));
+  }
+
   // apps/ZEditor/src/ui/settings/FilterSettings.jsx
   function FilterSettings({
     filterType,
@@ -20185,9 +20308,9 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState42 } = React;
+  var { useState: useState43 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState42(null);
+    const [customizing, setCustomizing] = useState43(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -20196,13 +20319,13 @@
   }
 
   // apps/ZEditor/src/ui/topbar/Topbar.jsx
-  function Topbar({ doc, history, view, edits, layouts, project, dialogs, exporter, status }) {
+  function Topbar({ doc, history, view, edits, layouts, pageBleed, project, dialogs, exporter, status }) {
     const { pages, selectedPage, pageFilter } = doc;
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "4f486b1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "d4d84fa"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -20248,6 +20371,15 @@
                 onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
               }
             )
+          },
+          {
+            key: "bleed",
+            label: "Bleed",
+            detail: selectedPage && selectedPage.isBlank && !selectedPage.isCanvas ? selectedPage.bleedMm > 0 ? selectedPage.bleedMm + " mm on this page" : "none on this page" : "blank pages only",
+            noToggle: true,
+            openLabel: "Set…",
+            disabled: !selectedPage || !selectedPage.isBlank || selectedPage.isCanvas,
+            settings: /* @__PURE__ */ React.createElement(BleedSettings, { key: selectedPage ? selectedPage.key + ":" + selectedPage.bleedMm : "none", currentMm: selectedPage ? selectedPage.bleedMm : 0, onApply: pageBleed.setPageBleed })
           },
           {
             key: "filter",
@@ -20404,7 +20536,24 @@
         disabled: pages.length === 0 || exporting,
         onClick: exporter.handleExportPdf
       }
+    ), pages.some((p) => p.isBlank && p.bleedMm > 0) && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(
+      MenuCheck,
+      {
+        label: "Include bleed",
+        checked: view.exportBleed,
+        onChange: view.setExportBleed,
+        hint: "On: pages with bleed are exported whole, with the trim and bleed boxes set. Off: they are trimmed to the cut size"
+      }
     ), /* @__PURE__ */ React.createElement(
+      MenuCheck,
+      {
+        label: "Crop marks",
+        checked: view.exportBleed && view.exportCropMarks,
+        disabled: !view.exportBleed,
+        onChange: view.setExportCropMarks,
+        hint: "Cut lines in the corners outside the bleed. Only with bleed"
+      }
+    )), /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         close,
@@ -20465,6 +20614,7 @@
     } };
     const pageOps = usePageOps({ doc, history, selection });
     const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status });
+    const pageBleed = usePageBleed({ doc, history, status });
     const project = useProject({ doc, history, status, view, toolDefaults });
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
@@ -20508,7 +20658,7 @@
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
     const t = toolDefaults;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, layouts, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, layouts, pageBleed, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
       PanelResizer,
       {
         bodyRef,

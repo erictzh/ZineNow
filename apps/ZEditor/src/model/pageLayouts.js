@@ -75,10 +75,12 @@ export function innerBox(pageW, pageH, settings, guide) {
 }
 
 // The boxes of a layout, in drawing order: [{ role, x, y, w, h, columns?, fixedHeight }] in editor px.
-// `font` is the body text's size in px: titles, captions and the title's one-line height come from it.
-export function place(layout, pageW, pageH, settings, font, guide) {
-  const inner = innerBox(pageW, pageH, settings, guide);
-  const gap = pageW * settings.gapPct / 100;
+// `bleed` (px) is the page's bleed. `font` is the body text's size in px: titles, captions and the title's one-line height come from it.
+export function place(layout, pageW, pageH, settings, font, guide, bleed = 0) {
+  // Margins and gaps work from the trim rectangle (the page minus its bleed); full-page pieces fill the whole page, bleed included.
+  const t = innerBox(pageW - 2 * bleed, pageH - 2 * bleed, settings, guide);
+  const inner = { x: t.x + bleed, y: t.y + bleed, w: t.w, h: t.h };
+  const gap = (pageW - 2 * bleed) * settings.gapPct / 100;
   const lineH = (scale) => Math.round(font * scale * 1.3);
   const page = { x: 0, y: 0, w: pageW, h: pageH };
   const out = [];

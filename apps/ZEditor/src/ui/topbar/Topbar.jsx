@@ -2,6 +2,7 @@
 
 import { canReadSystemFonts, fontLicenceSeen } from "../../io/fontEmbed.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, PAGE_FILTER_OPTIONS } from "../../model/pageFilters.js";
+import { BleedSettings } from "../settings/BleedSettings.jsx";
 import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
 import { LayoutSettings } from "../settings/LayoutSettings.jsx";
@@ -9,9 +10,9 @@ import { OnionSkinSettings } from "../settings/OnionSkinSettings.jsx";
 import { PageNumbersSettings } from "../settings/PageNumbersSettings.jsx";
 import { RulersSettings } from "../settings/RulersSettings.jsx";
 import { PageMenuBody } from "./PageMenu.jsx";
-import { MenuItem, TopMenu } from "./TopMenu.jsx";
+import { MenuCheck, MenuItem, TopMenu } from "./TopMenu.jsx";
 
-export function Topbar({ doc, history, view, edits, layouts, project, dialogs, exporter, status }) {
+export function Topbar({ doc, history, view, edits, layouts, pageBleed, project, dialogs, exporter, status }) {
   const { pages, selectedPage, pageFilter } = doc;
   const { updatePageFilter } = edits;
   const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
@@ -84,6 +85,15 @@ export function Topbar({ doc, history, view, edits, layouts, project, dialogs, e
                       onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
                     />
                   ),
+                },
+                {
+                  key: "bleed",
+                  label: "Bleed",
+                  detail: selectedPage && selectedPage.isBlank && !selectedPage.isCanvas ? (selectedPage.bleedMm > 0 ? selectedPage.bleedMm + " mm on this page" : "none on this page") : "blank pages only",
+                  noToggle: true,
+                  openLabel: "Set…",
+                  disabled: !selectedPage || !selectedPage.isBlank || selectedPage.isCanvas,
+                  settings: <BleedSettings key={selectedPage ? selectedPage.key + ":" + selectedPage.bleedMm : "none"} currentMm={selectedPage ? selectedPage.bleedMm : 0} onApply={pageBleed.setPageBleed} />,
                 },
                 {
                   key: "filter",
@@ -241,6 +251,14 @@ export function Topbar({ doc, history, view, edits, layouts, project, dialogs, e
                 disabled={pages.length === 0 || exporting}
                 onClick={exporter.handleExportPdf}
               />
+              {pages.some((p) => p.isBlank && p.bleedMm > 0) && (
+                <React.Fragment>
+                  <MenuCheck label="Include bleed" checked={view.exportBleed} onChange={view.setExportBleed}
+                    hint="On: pages with bleed are exported whole, with the trim and bleed boxes set. Off: they are trimmed to the cut size" />
+                  <MenuCheck label="Crop marks" checked={view.exportBleed && view.exportCropMarks} disabled={!view.exportBleed} onChange={view.setExportCropMarks}
+                    hint="Cut lines in the corners outside the bleed. Only with bleed" />
+                </React.Fragment>
+              )}
               <MenuItem
                 close={close}
                 label="Export page as PNG (transparent)"

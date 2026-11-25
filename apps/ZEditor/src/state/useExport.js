@@ -19,7 +19,7 @@ export function useExport({ doc, status, view, project, selection }) {
   const [sendingToArranger, setSendingToArranger] = useState(false);
 
   // Export tells the user how much of the text went into the PDF as real text.
-  const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice);
+  const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice, { bleed: view.exportBleed, cropMarks: view.exportCropMarks });
 
   async function handleExportPdf() {
     if (pages.length === 0 || exporting) return;
