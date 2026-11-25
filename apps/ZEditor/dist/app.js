@@ -4759,9 +4759,9 @@
     if (position < settings.from || position > last) return null;
     const number = settings.first + (position - settings.from);
     const text = settings.format === "dash" ? `– ${number} –` : settings.format === "page" ? `Page ${number}` : String(number);
-    let place = settings.position;
-    if (place.endsWith("-outside")) place = place.replace("outside", position % 2 === 1 ? "right" : "left");
-    const [vertical, horizontal] = place.split("-");
+    let place2 = settings.position;
+    if (place2.endsWith("-outside")) place2 = place2.replace("outside", position % 2 === 1 ? "right" : "left");
+    const [vertical, horizontal] = place2.split("-");
     return { text, vertical, horizontal, size: settings.size, color: settings.color, marginIn: settings.marginIn };
   }
 
@@ -4897,10 +4897,10 @@
       (t, inset) => [inset, h * (1 - t)]
     ];
     const points = [];
-    onSide.forEach((place) => {
+    onSide.forEach((place2) => {
       for (let cut = 0; cut < scissorCuts; cut++) {
         const t = cut === 0 ? 0 : (cut + (noise() - 0.5) * 0.6) / scissorCuts;
-        points.push(place(t, noise() * jitter));
+        points.push(place2(t, noise() * jitter));
       }
     });
     return pointsToOutline(points);
@@ -5911,7 +5911,7 @@
     const step = Math.max(1, lineHeight / 4);
     const pos = [];
     let after = { col: 0, y: 0, started: false };
-    const place = (p, k) => {
+    const place2 = (p, k) => {
       const arr = pos[p] || (pos[p] = []);
       while (arr.length <= k) {
         let col, top;
@@ -5946,9 +5946,9 @@
     };
     const lines = composeText(text, measure, {
       ...composeOpts,
-      slotFor: place,
+      slotFor: place2,
       onParagraph: (p, n) => {
-        const last = place(p, n - 1);
+        const last = place2(p, n - 1);
         after = { col: last.col, y: last.top + lineHeight, started: true };
       }
     });
@@ -6195,7 +6195,7 @@
         });
         textHeight = typesetLines.length ? y2 + lh[lh.length - 1] : lineHeight;
       } else {
-        const place = (H2) => {
+        const place2 = (H2) => {
           const colOf2 = [];
           const starts2 = [0];
           typesetLines.forEach((l, i) => {
@@ -6210,12 +6210,12 @@
           let lo = lineHeight, hi = Math.max(lineHeight, y2 + (lh.length ? lh[lh.length - 1] : lineHeight));
           for (let k = 0; k < 24 && hi - lo > 0.5; k++) {
             const mid = (lo + hi) / 2;
-            if (place(mid).starts.length <= columns) hi = mid;
+            if (place2(mid).starts.length <= columns) hi = mid;
             else lo = mid;
           }
           H = hi;
         }
-        const { colOf, starts } = place(H);
+        const { colOf, starts } = place2(H);
         let tallest = 0;
         typesetLines.forEach((l, i) => {
           const c = colOf[i];
@@ -8407,9 +8407,9 @@
         });
         lctx.globalCompositeOperation = "source-in";
         if (photoImg) {
-          const place = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
+          const place2 = photoPlacement(look.photo, innerWidth / scaleFactor, textHeight / scaleFactor);
           lctx.globalAlpha = look.photo.fillPhotoAlpha / 100;
-          lctx.drawImage(photoImg, x + padX + place.left * scaleFactor, y + padY + place.top * scaleFactor, place.width * scaleFactor, place.height * scaleFactor);
+          lctx.drawImage(photoImg, x + padX + place2.left * scaleFactor, y + padY + place2.top * scaleFactor, place2.width * scaleFactor, place2.height * scaleFactor);
           if (look.photo.fillPhotoAlpha < 100) {
             lctx.globalAlpha = 1;
             lctx.globalCompositeOperation = "destination-over";
@@ -13906,6 +13906,109 @@
   var DEFAULT_GUIDE_MARGIN_IN = 0.25;
   var DEFAULT_GUIDE_BLEED_IN = 0.125;
 
+  // apps/ZEditor/src/model/pageLayouts.js
+  var DEFAULT_LAYOUT_SETTINGS = {
+    marginPct: 8,
+    // page margin, % of the page width (used when the Page Guide is off)
+    gapPct: 4,
+    // space between two pieces, % of the page width
+    splitPct: 50,
+    // the first piece of a half-and-half layout, % of the room
+    titleScale: 2.5,
+    // a title's size, times the body text size
+    captionScale: 0.85,
+    // a caption's size, times the body text size
+    columnGapPt: 12,
+    // gap between the columns of the two-column layouts
+    slotGrey: "#d9d9d9"
+    // the picture slots
+  };
+  var LAYOUT_SETTING_FIELDS = [
+    { key: "marginPct", label: "Margin", unit: "% of page width", min: 0, max: 30, step: 1 },
+    { key: "gapPct", label: "Gap between pieces", unit: "% of page width", min: 0, max: 20, step: 0.5 },
+    { key: "splitPct", label: "Split of half-and-half layouts", unit: "% (first piece)", min: 20, max: 80, step: 5 },
+    { key: "titleScale", label: "Title size", unit: "× body text", min: 1, max: 6, step: 0.25 },
+    { key: "captionScale", label: "Caption size", unit: "× body text", min: 0.5, max: 1.5, step: 0.05 },
+    { key: "columnGapPt", label: "Column gap", unit: "pt", min: 0, max: 72, step: 1 }
+  ];
+  function normalizeLayoutSettings(raw) {
+    const out = { ...DEFAULT_LAYOUT_SETTINGS };
+    const src = raw && typeof raw === "object" ? raw : {};
+    for (const f of LAYOUT_SETTING_FIELDS) {
+      const v = Number(src[f.key]);
+      if (src[f.key] != null && Number.isFinite(v)) out[f.key] = Math.min(f.max, Math.max(f.min, v));
+    }
+    if (typeof src.slotGrey === "string" && /^#[0-9a-f]{6}$/i.test(src.slotGrey)) out.slotGrey = src.slotGrey;
+    return out;
+  }
+  var LAYOUTS = [
+    { key: "full-text", label: "Full text", slots: [{ role: "body" }] },
+    { key: "picture-top", label: "Picture top, text below", split: { axis: "y", first: { role: "picture" }, second: { role: "body" } } },
+    { key: "text-top", label: "Text top, picture below", split: { axis: "y", first: { role: "body" }, second: { role: "picture" } } },
+    { key: "picture-left", label: "Picture left, text right", split: { axis: "x", first: { role: "picture" }, second: { role: "body" } } },
+    { key: "text-left", label: "Text left, picture right", split: { axis: "x", first: { role: "body" }, second: { role: "picture" } } },
+    { key: "title-text", label: "Title and text", slots: [{ role: "title" }, { role: "body", below: "title" }] },
+    { key: "full-picture", label: "Full picture", room: "page", slots: [{ role: "picture" }] },
+    { key: "two-columns", label: "Two columns", slots: [{ role: "body", columns: 2 }] },
+    { key: "cover", label: "Cover", slots: [{ role: "picture", room: "page" }, { role: "title", at: 0.62 }] },
+    { key: "picture-caption", label: "Picture and caption", slots: [{ role: "picture", above: "caption" }, { role: "caption" }] },
+    { key: "title-two-columns", label: "Title and two columns", slots: [{ role: "title" }, { role: "body", below: "title", columns: 2 }] }
+  ];
+  var layoutByKey = (key) => LAYOUTS.find((l) => l.key === key) || null;
+  function innerBox(pageW, pageH, settings, guide) {
+    if (guide && guide.on && guide.marginIn > 0) {
+      const preset = GUIDE_FORMAT_PRESETS.find((p) => p.key === guide.format) || GUIDE_FORMAT_PRESETS[0];
+      const toPx = (inches) => inches * guide.pxPerInch;
+      const trimW = preset.widthIn ? Math.min(pageW, toPx(preset.widthIn)) : pageW;
+      const trimH = preset.heightIn ? Math.min(pageH, toPx(preset.heightIn)) : pageH;
+      const m2 = toPx(guide.marginIn);
+      if (trimW - 2 * m2 > 0 && trimH - 2 * m2 > 0) return { x: (pageW - trimW) / 2 + m2, y: (pageH - trimH) / 2 + m2, w: trimW - 2 * m2, h: trimH - 2 * m2 };
+    }
+    const m = pageW * settings.marginPct / 100;
+    return { x: m, y: m, w: Math.max(1, pageW - 2 * m), h: Math.max(1, pageH - 2 * m) };
+  }
+  function place(layout, pageW, pageH, settings, font, guide) {
+    const inner = innerBox(pageW, pageH, settings, guide);
+    const gap = pageW * settings.gapPct / 100;
+    const lineH = (scale) => Math.round(font * scale * 1.3);
+    const page = { x: 0, y: 0, w: pageW, h: pageH };
+    const out = [];
+    if (layout.split) {
+      const { axis, first, second } = layout.split;
+      const total = axis === "y" ? inner.h : inner.w;
+      const usable = Math.max(1, total - gap);
+      const a = usable * settings.splitPct / 100, b = usable - a;
+      const boxA = axis === "y" ? { x: inner.x, y: inner.y, w: inner.w, h: a } : { x: inner.x, y: inner.y, w: a, h: inner.h };
+      const boxB = axis === "y" ? { x: inner.x, y: inner.y + a + gap, w: inner.w, h: b } : { x: inner.x + a + gap, y: inner.y, w: b, h: inner.h };
+      out.push({ ...first, ...boxA, fixedHeight: true }, { ...second, ...boxB, fixedHeight: true });
+      return out;
+    }
+    const byRole = {};
+    let cursor = inner.y;
+    for (const slot of layout.slots) {
+      const room = slot.room === "page" || layout.room === "page" ? page : inner;
+      if (slot.role === "title") {
+        const h = lineH(settings.titleScale);
+        const y = slot.at != null ? room.y + room.h * slot.at : room.y;
+        byRole.title = { ...slot, x: room.x, y, w: room.w, h, fixedHeight: false };
+        cursor = y + h + gap;
+        out.push(byRole.title);
+      } else if (slot.role === "caption") {
+        const h = lineH(settings.captionScale) * 2;
+        byRole.caption = { ...slot, x: room.x, y: room.y + room.h - h, w: room.w, h, fixedHeight: true };
+      } else if (slot.role === "body") {
+        const top = slot.below === "title" ? cursor : room.y;
+        out.push({ ...slot, x: room.x, y: top, w: room.w, h: Math.max(1, room.y + room.h - top), fixedHeight: true });
+      } else if (slot.role === "picture") {
+        let h = room.h;
+        if (slot.above === "caption") h = room.h - lineH(settings.captionScale) * 2 - gap;
+        out.push({ ...slot, x: room.x, y: room.y, w: room.w, h: Math.max(1, h), fixedHeight: true });
+      }
+    }
+    if (byRole.caption) out.push(byRole.caption);
+    return out;
+  }
+
   // apps/ZEditor/src/model/rulers.js
   var RULER_UNITS = [
     { key: "mm", label: "Millimetres (mm)", perPt: 25.4 / 72 },
@@ -14006,6 +14109,7 @@
     const [rulerGuides, setRulerGuides] = useState15([]);
     const [snapToGuidesOn, setSnapToGuidesOn] = useState15(true);
     const [guidesLocked, setGuidesLocked] = useState15(false);
+    const [layoutSettings, setLayoutSettings] = useState15(DEFAULT_LAYOUT_SETTINGS);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
     const [embedFonts, setEmbedFonts] = useState15(true);
@@ -14026,7 +14130,8 @@
         snapToGuidesOn,
         guidesLocked,
         embedFonts,
-        embedFontsSkip
+        embedFontsSkip,
+        layoutSettings
       };
     }
     function applySavedSettings(s) {
@@ -14042,6 +14147,7 @@
       if (s.rulerUnit !== void 0) setRulerUnit(s.rulerUnit);
       if (s.snapToGuidesOn !== void 0) setSnapToGuidesOn(s.snapToGuidesOn);
       setGuidesLocked(s.guidesLocked === true);
+      setLayoutSettings(normalizeLayoutSettings(s.layoutSettings));
       setEmbedFonts(s.embedFonts !== false);
       setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
       setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
@@ -14083,6 +14189,8 @@
       setEmbedFonts,
       embedFontsSkip,
       setEmbedFontsSkip,
+      layoutSettings,
+      setLayoutSettings,
       settingsForSave,
       applySavedSettings
     };
@@ -14266,6 +14374,143 @@
       }
     }
     return { inputRef, handleExportGroup, openImportPicker, handleImportInput };
+  }
+
+  // apps/ZEditor/src/model/text/placeholderText.js
+  var PLACEHOLDER_KINDS = [
+    { key: "latin", label: "Lorem ipsum" },
+    { key: "chinese", label: "中文假文" }
+  ];
+  var MAX_PLACEHOLDER_PARAGRAPHS = 50;
+  var LATIN_OPENING = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
+  var LATIN_WORDS = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum curabitur pretium tincidunt lacus nunc viverra imperdiet fusce placerat mauris integer vitae justo eget magna fermentum iaculis porta nibh venenatis cras semper auctor neque donec ultrices tortor pellentesque habitant morbi tristique senectus netus".split(" ");
+  var CHINESE_CHARS = Array.from(
+    "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处府"
+  );
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = a + 1831565813 >>> 0;
+      let t = a;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var between = (rand, lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+  function latinParagraph(rand, first) {
+    const sentences = first ? [LATIN_OPENING] : [];
+    const count = between(rand, 4, 6) - sentences.length;
+    for (let s = 0; s < count; s++) {
+      const words = [];
+      const len = between(rand, 6, 14);
+      for (let w = 0; w < len; w++) {
+        words.push(LATIN_WORDS[Math.floor(rand() * LATIN_WORDS.length)]);
+        if (w > 2 && w < len - 2 && rand() < 0.12) words[words.length - 1] += ",";
+      }
+      const sentence = words.join(" ");
+      sentences.push(sentence[0].toUpperCase() + sentence.slice(1) + ".");
+    }
+    return sentences.join(" ");
+  }
+  function chineseParagraph(rand) {
+    let out = "";
+    const sentences = between(rand, 3, 5);
+    for (let s = 0; s < sentences; s++) {
+      const clauses = between(rand, 1, 3);
+      for (let c = 0; c < clauses; c++) {
+        const len = between(rand, 5, 12);
+        for (let i = 0; i < len; i++) out += CHINESE_CHARS[Math.floor(rand() * CHINESE_CHARS.length)];
+        out += c < clauses - 1 ? "，" : rand() < 0.15 ? "？" : "。";
+      }
+    }
+    return out;
+  }
+  function placeholderText(kind, count) {
+    const n = Math.max(1, Math.min(MAX_PLACEHOLDER_PARAGRAPHS, Math.round(Number(count)) || 1));
+    const rand = rng(kind === "chinese" ? 23070 : 4323);
+    const paragraphs = [];
+    for (let i = 0; i < n; i++) paragraphs.push(kind === "chinese" ? chineseParagraph(rand) : latinParagraph(rand, i === 0));
+    return paragraphs.join("\n");
+  }
+
+  // apps/ZEditor/src/render/layoutItems.js
+  var TITLE_TEXT = "Lorem ipsum dolor sit";
+  var CAPTION_TEXT = "Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.";
+  function fitTextToFrame(ann) {
+    const lines = layoutTextBox(ann).typesetLines || [];
+    const firstHidden = lines.find((l) => l.hidden);
+    let text = firstHidden ? ann.text.slice(0, firstHidden.start) : ann.text;
+    text = text.replace(/\s+$/, "");
+    for (let guard = 0; guard < 40 && text && measureTextBox({ ...ann, text }).overflow; guard++) {
+      text = text.slice(0, Math.max(0, text.lastIndexOf(" "))).replace(/\s+$/, "");
+    }
+    return text;
+  }
+  function buildLayoutItems({ layout, page, settings, defaults, guide, nextId }) {
+    const bodyPt = Number(defaults.textFontSize) || 12;
+    const boxes = place(layout, page.width, page.height, settings, ptToPx(bodyPt), guide);
+    const rect = controlValues({}, RECT_CONTROLS);
+    const font = { fontFamily: defaults.textFontFamily, bold: defaults.textBold, italic: defaults.textItalic, underline: defaults.textUnderline, color: defaults.textColor, align: defaults.textAlign };
+    return boxes.map((b) => {
+      const id = nextId();
+      if (b.role === "picture") {
+        return { id, type: "rect", layoutRole: "picture", x: b.x, y: b.y, width: b.w, height: b.h, ...rect, fillType: "solid", fillColor: settings.slotGrey, fillAlpha: 100 };
+      }
+      const base = { id, type: "text", layoutRole: b.role, x: b.x, y: b.y, width: Math.round(b.w), ...font, fontSize: bodyPt };
+      if (b.role === "title") return { ...base, fontSize: Math.round(bodyPt * settings.titleScale * 10) / 10, bold: true, text: TITLE_TEXT };
+      const framed = { ...base, frameHeight: Math.max(12, Math.round(pxToPt(b.h))) };
+      if (b.role === "caption") {
+        const sized2 = { ...framed, fontSize: Math.round(bodyPt * settings.captionScale * 10) / 10 };
+        return { ...sized2, text: fitTextToFrame({ ...sized2, text: CAPTION_TEXT }) };
+      }
+      const cols = b.columns > 1 ? { columns: b.columns, columnGap: settings.columnGapPt } : {};
+      const body = { ...framed, ...cols };
+      return { ...body, text: fitTextToFrame({ ...body, text: placeholderText("latin", 40) }) };
+    });
+  }
+
+  // apps/ZEditor/src/state/useLayouts.js
+  function useLayouts({ doc, history, edits, view, toolDefaults, status }) {
+    const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, pdfDocsRef, nextKeyRef, nextAnnIdRef, pageSizeRef } = doc;
+    const { recordUndoCheckpoint } = history;
+    const guide = () => ({ on: view.guidesOn, format: view.guideFormat, marginIn: view.guideMarginIn, pxPerInch: POINTS_PER_INCH * MAIN_SCALE });
+    const items = (layout, size) => buildLayoutItems({ layout, page: size, settings: view.layoutSettings, defaults: toolDefaults, guide: guide(), nextId: () => nextAnnIdRef.current++ });
+    async function addLayoutToPage(key) {
+      const layout = layoutByKey(key);
+      if (!layout || selectedIdx === null || !pages[selectedIdx]) return;
+      const size = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+      const made = items(layout, size);
+      edits.updateAnnotationsFor(selectedIdx, (anns) => [...made, ...anns]);
+      status.setNotice(`Added the "${layout.label}" layout under the items on this page. Undo takes it off.`);
+    }
+    function addPageWithLayout(key) {
+      const layout = layoutByKey(key);
+      if (!layout) return;
+      const current2 = selectedIdx !== null ? pages[selectedIdx] : null;
+      const pts = current2 && current2.isBlank ? { width: current2.width, height: current2.height } : pageSizeRef.current || DEFAULT_PAGE_SIZE;
+      const made = items(layout, { width: pts.width * MAIN_SCALE, height: pts.height * MAIN_SCALE });
+      const newPage = {
+        key: nextKeyRef.current++,
+        isBlank: true,
+        rotation: 0,
+        width: pts.width,
+        height: pts.height,
+        dataUrl: makeBlankThumb(pts.width, pts.height, 0),
+        annotations: made
+      };
+      const at = selectedIdx !== null ? selectedIdx + 1 : pages.length;
+      recordUndoCheckpoint();
+      setPages((prev) => {
+        const next = prev.slice();
+        next.splice(at, 0, newPage);
+        return next;
+      });
+      setSelectedIdx(at);
+      setSelectedPageIndices([]);
+      status.setNotice(`Added a new page with the "${layout.label}" layout.`);
+    }
+    return { addLayoutToPage, addPageWithLayout };
   }
 
   // apps/ZEditor/src/state/useImageHandoff.js
@@ -14969,11 +15214,11 @@
     const fillStyle = {};
     if (look.photo) {
       const area = measureTextBox(ann);
-      const place = photoPlacement(look.photo, area.contentWidth, area.contentHeight);
+      const place2 = photoPlacement(look.photo, area.contentWidth, area.contentHeight);
       Object.assign(fillStyle, {
         backgroundImage: `url("${look.photo.src}")`,
-        backgroundSize: `${place.width}px ${place.height}px`,
-        backgroundPosition: `${place.left}px ${place.top}px`,
+        backgroundSize: `${place2.width}px ${place2.height}px`,
+        backgroundPosition: `${place2.left}px ${place2.top}px`,
         backgroundRepeat: "no-repeat",
         WebkitBackgroundClip: "text",
         backgroundClip: "text",
@@ -17770,64 +18015,6 @@
     ), /* @__PURE__ */ React.createElement("input", { ref: inputRef, type: "file", accept: "image/*", style: { display: "none" }, onChange: handleChosen }), error && /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint is-error", style: { padding: "8px 16px", margin: 0 } }, error));
   }
 
-  // apps/ZEditor/src/model/text/placeholderText.js
-  var PLACEHOLDER_KINDS = [
-    { key: "latin", label: "Lorem ipsum" },
-    { key: "chinese", label: "中文假文" }
-  ];
-  var MAX_PLACEHOLDER_PARAGRAPHS = 50;
-  var LATIN_OPENING = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.";
-  var LATIN_WORDS = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum curabitur pretium tincidunt lacus nunc viverra imperdiet fusce placerat mauris integer vitae justo eget magna fermentum iaculis porta nibh venenatis cras semper auctor neque donec ultrices tortor pellentesque habitant morbi tristique senectus netus".split(" ");
-  var CHINESE_CHARS = Array.from(
-    "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处府"
-  );
-  function rng(seed) {
-    let a = seed >>> 0;
-    return () => {
-      a = a + 1831565813 >>> 0;
-      let t = a;
-      t = Math.imul(t ^ t >>> 15, t | 1);
-      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  var between = (rand, lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
-  function latinParagraph(rand, first) {
-    const sentences = first ? [LATIN_OPENING] : [];
-    const count = between(rand, 4, 6) - sentences.length;
-    for (let s = 0; s < count; s++) {
-      const words = [];
-      const len = between(rand, 6, 14);
-      for (let w = 0; w < len; w++) {
-        words.push(LATIN_WORDS[Math.floor(rand() * LATIN_WORDS.length)]);
-        if (w > 2 && w < len - 2 && rand() < 0.12) words[words.length - 1] += ",";
-      }
-      const sentence = words.join(" ");
-      sentences.push(sentence[0].toUpperCase() + sentence.slice(1) + ".");
-    }
-    return sentences.join(" ");
-  }
-  function chineseParagraph(rand) {
-    let out = "";
-    const sentences = between(rand, 3, 5);
-    for (let s = 0; s < sentences; s++) {
-      const clauses = between(rand, 1, 3);
-      for (let c = 0; c < clauses; c++) {
-        const len = between(rand, 5, 12);
-        for (let i = 0; i < len; i++) out += CHINESE_CHARS[Math.floor(rand() * CHINESE_CHARS.length)];
-        out += c < clauses - 1 ? "，" : rand() < 0.15 ? "？" : "。";
-      }
-    }
-    return out;
-  }
-  function placeholderText(kind, count) {
-    const n = Math.max(1, Math.min(MAX_PLACEHOLDER_PARAGRAPHS, Math.round(Number(count)) || 1));
-    const rand = rng(kind === "chinese" ? 23070 : 4323);
-    const paragraphs = [];
-    for (let i = 0; i < n; i++) paragraphs.push(kind === "chinese" ? chineseParagraph(rand) : latinParagraph(rand, i === 0));
-    return paragraphs.join("\n");
-  }
-
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
   var { useState: useState33 } = React;
   function TextPlaceholder({ ann, patch }) {
@@ -19615,6 +19802,64 @@
     )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Trim is centered on the page; margin sits inside it, bleed extends outside. Pick "Match Page Size" if the page is already trimmed to its final size.'));
   }
 
+  // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
+  var { useState: useState41 } = React;
+  var PREVIEW_W = 70;
+  var PREVIEW_H = 99;
+  function LayoutPreview({ layout, settings }) {
+    const boxes = place(layout, PREVIEW_W, PREVIEW_H, settings, 4, null);
+    return /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${PREVIEW_W} ${PREVIEW_H}`, width: PREVIEW_W, height: PREVIEW_H, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { width: PREVIEW_W, height: PREVIEW_H, fill: "#fff", stroke: "#8a8078", strokeWidth: "0.6" }), boxes.map((b, i) => {
+      if (b.role === "picture") return /* @__PURE__ */ React.createElement("rect", { key: i, x: b.x, y: b.y, width: b.w, height: b.h, fill: settings.slotGrey });
+      const lineGap = b.role === "title" ? b.h : 4;
+      const lines = Math.max(1, Math.floor(b.h / lineGap));
+      const cols = b.columns > 1 ? b.columns : 1;
+      const colW = (b.w - (cols - 1) * 3) / cols;
+      const thick = b.role === "title" ? Math.max(2.5, b.h * 0.4) : 1.2;
+      return /* @__PURE__ */ React.createElement("g", { key: i, stroke: "#4a4540", strokeWidth: thick, strokeLinecap: "round" }, Array.from({ length: cols }).flatMap((_, c) => Array.from({ length: lines }).map((__, l) => {
+        const y = b.y + (b.role === "title" ? b.h / 2 : lineGap * (l + 0.6));
+        const short = b.role !== "title" && l === lines - 1 ? 0.6 : 1;
+        return /* @__PURE__ */ React.createElement("line", { key: c + "-" + l, x1: b.x + c * (colW + 3), y1: y, x2: b.x + c * (colW + 3) + colW * (b.role === "title" ? 0.7 : short), y2: y });
+      })));
+    }));
+  }
+  function LayoutSettings({ settings, onChange, onApply, hasPage }) {
+    const [where, setWhere] = useState41(hasPage ? "page" : "new");
+    const target = hasPage ? where : "new";
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "page" ? "active" : "",
+        disabled: !hasPage,
+        onClick: () => setWhere("page"),
+        title: "Adds the layout under the items already on this page"
+      },
+      "On this page"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "new" ? "active" : "",
+        onClick: () => setWhere("new"),
+        title: "Adds a new page after this one, holding the layout"
+      },
+      "New page after"
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-layout-grid" }, LAYOUTS.map((l) => /* @__PURE__ */ React.createElement("button", { key: l.key, type: "button", className: "ze-layout-tile", title: l.label, onClick: () => onApply(l.key, target) }, /* @__PURE__ */ React.createElement(LayoutPreview, { layout: l, settings }), /* @__PURE__ */ React.createElement("span", null, l.label)))), /* @__PURE__ */ React.createElement("details", { className: "ze-layout-settings" }, /* @__PURE__ */ React.createElement("summary", null, "Layout settings (this file)"), LAYOUT_SETTING_FIELDS.map((f) => /* @__PURE__ */ React.createElement("label", { key: f.key, className: "ze-layout-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label, " ", /* @__PURE__ */ React.createElement("small", null, "(", f.unit, ")")), /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        min: f.min,
+        max: f.max,
+        step: f.step,
+        value: settings[f.key],
+        onChange: (e) => {
+          const v = Number(e.target.value);
+          if (e.target.value !== "" && Number.isFinite(v)) onChange({ ...settings, [f.key]: Math.min(f.max, Math.max(f.min, v)) });
+        },
+        "aria-label": f.label
+      }
+    ))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layout-reset", onClick: () => onChange(DEFAULT_LAYOUT_SETTINGS) }, "Reset to defaults"), /* @__PURE__ */ React.createElement("p", { className: "ze-layout-note" }, "Only layouts added from now on use these sizes. Layouts already on a page are ordinary items and stay as they are. The margin follows the Page Guide when it is on.")));
+  }
+
   // apps/ZEditor/src/ui/settings/OnionSkinSettings.jsx
   function OnionSkinSettings({ opacity, onOpacityChange }) {
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity (", Math.round(opacity * 100), "%)"), /* @__PURE__ */ React.createElement(
@@ -19644,24 +19889,24 @@
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState41 } = React;
+  var { useState: useState42 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState41(null);
+    const [customizing, setCustomizing] = useState42(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
     }
-    return rows.map((row) => /* @__PURE__ */ React.createElement("div", { key: row.key, className: "ze-menu-toggle-row" + (row.disabled ? " disabled" : "") }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, row.label), row.detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, row.detail)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-customize", disabled: row.disabled, onClick: () => setCustomizing(row.key) }, "Customize…"), /* @__PURE__ */ React.createElement("label", { className: "toggle-switch", title: (row.checked ? "Turn off " : "Turn on ") + row.label }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: row.checked, disabled: row.disabled, onChange: (e) => row.onToggle(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))));
+    return rows.map((row) => /* @__PURE__ */ React.createElement("div", { key: row.key, className: "ze-menu-toggle-row" + (row.disabled ? " disabled" : "") }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, row.label), row.detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, row.detail)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-customize", disabled: row.disabled, onClick: () => setCustomizing(row.key) }, row.openLabel || "Customize…"), !row.noToggle && /* @__PURE__ */ React.createElement("label", { className: "toggle-switch", title: (row.checked ? "Turn off " : "Turn on ") + row.label }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: row.checked, disabled: row.disabled, onChange: (e) => row.onToggle(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))));
   }
 
   // apps/ZEditor/src/ui/topbar/Topbar.jsx
-  function Topbar({ doc, history, view, edits, project, dialogs, exporter, status }) {
+  function Topbar({ doc, history, view, edits, layouts, project, dialogs, exporter, status }) {
     const { pages, selectedPage, pageFilter } = doc;
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "dfb27ae"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "a54d0dd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -19691,6 +19936,23 @@
       PageMenuBody,
       {
         rows: [
+          {
+            key: "layout",
+            label: "Layout",
+            detail: "ready-made pages",
+            noToggle: true,
+            openLabel: "Choose…",
+            disabled: doc.pages.length === 0,
+            settings: /* @__PURE__ */ React.createElement(
+              LayoutSettings,
+              {
+                settings: view.layoutSettings,
+                onChange: view.setLayoutSettings,
+                hasPage: Boolean(selectedPage),
+                onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
+              }
+            )
+          },
           {
             key: "filter",
             label: "Filter",
@@ -19905,6 +20167,7 @@
       if (!magic.cancel()) history.handleRedo();
     } };
     const pageOps = usePageOps({ doc, history, selection });
+    const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status });
     const project = useProject({ doc, history, status, view, toolDefaults });
     const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
     const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
@@ -19947,7 +20210,7 @@
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
     const t = toolDefaults;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, layouts, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
       PanelResizer,
       {
         bodyRef,

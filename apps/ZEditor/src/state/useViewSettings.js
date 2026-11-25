@@ -1,6 +1,7 @@
 // Document-wide view settings: rulers and ruler guides, guides, center guide, page numbers, onion skin, and the Layers panel.
 
 import { DEFAULT_GUIDE_BLEED_IN, DEFAULT_GUIDE_MARGIN_IN } from "../model/guides.js";
+import { DEFAULT_LAYOUT_SETTINGS, normalizeLayoutSettings } from "../model/pageLayouts.js";
 import { DEFAULT_PAGE_NUMBERS } from "../model/pageNumbers.js";
 import { DEFAULT_RULER_UNIT } from "../model/rulers.js";
 
@@ -22,6 +23,8 @@ export function useViewSettings() {
   const [rulerGuides, setRulerGuides] = useState([]);
   const [snapToGuidesOn, setSnapToGuidesOn] = useState(true);
   const [guidesLocked, setGuidesLocked] = useState(false); // frozen: guides can't be dragged, removed or added
+  // Page > Layout: the sizes every ready-made layout uses (model/pageLayouts.js), for this file only; saved with the project.
+  const [layoutSettings, setLayoutSettings] = useState(DEFAULT_LAYOUT_SETTINGS);
   const [layersPosition, setLayersPosition] = useState(null);
   const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
   // Project > Embed Fonts…: save the system fonts the text uses inside the file (ON by default: a project saved before this existed gets them on its next save,
@@ -35,7 +38,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip,
+      embedFonts, embedFontsSkip, layoutSettings,
     };
   }
 
@@ -53,6 +56,7 @@ export function useViewSettings() {
     if (s.rulerUnit !== undefined) setRulerUnit(s.rulerUnit);
     if (s.snapToGuidesOn !== undefined) setSnapToGuidesOn(s.snapToGuidesOn);
     setGuidesLocked(s.guidesLocked === true);
+    setLayoutSettings(normalizeLayoutSettings(s.layoutSettings)); // older files: the app's defaults
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
     setRulerGuides(Array.isArray(s.rulerGuides) ? s.rulerGuides.filter((g) => g && (g.axis === "x" || g.axis === "y") && Number.isFinite(g.pos)) : []);
@@ -64,7 +68,7 @@ export function useViewSettings() {
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
-    embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip,
+    embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
     settingsForSave, applySavedSettings,
   };
 }

@@ -4,13 +4,14 @@ import { canReadSystemFonts, fontLicenceSeen } from "../../io/fontEmbed.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, PAGE_FILTER_OPTIONS } from "../../model/pageFilters.js";
 import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
+import { LayoutSettings } from "../settings/LayoutSettings.jsx";
 import { OnionSkinSettings } from "../settings/OnionSkinSettings.jsx";
 import { PageNumbersSettings } from "../settings/PageNumbersSettings.jsx";
 import { RulersSettings } from "../settings/RulersSettings.jsx";
 import { PageMenuBody } from "./PageMenu.jsx";
 import { MenuItem, TopMenu } from "./TopMenu.jsx";
 
-export function Topbar({ doc, history, view, edits, project, dialogs, exporter, status }) {
+export function Topbar({ doc, history, view, edits, layouts, project, dialogs, exporter, status }) {
   const { pages, selectedPage, pageFilter } = doc;
   const { updatePageFilter } = edits;
   const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
@@ -68,6 +69,22 @@ export function Topbar({ doc, history, view, edits, project, dialogs, exporter, 
           {() => (
             <PageMenuBody
               rows={[
+                {
+                  key: "layout",
+                  label: "Layout",
+                  detail: "ready-made pages",
+                  noToggle: true,
+                  openLabel: "Choose…",
+                  disabled: doc.pages.length === 0,
+                  settings: (
+                    <LayoutSettings
+                      settings={view.layoutSettings}
+                      onChange={view.setLayoutSettings}
+                      hasPage={Boolean(selectedPage)}
+                      onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
+                    />
+                  ),
+                },
                 {
                   key: "filter",
                   label: "Filter",
