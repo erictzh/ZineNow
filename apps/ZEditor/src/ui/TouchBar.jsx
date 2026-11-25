@@ -42,18 +42,18 @@ export function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqu
         Shift
       </button>
       <button
-        type="button" className={"ze-touch-btn ze-touch-key" + (alt ? " is-on" : "")} aria-pressed={alt} onMouseDown={keep}
-        title="Alt, held until tapped again: move without snapping to guides, pick one item out of a group"
-        onClick={() => setAlt((v) => !v)}
-      >
-        Alt
-      </button>
-      <button
         type="button" className={"ze-touch-btn ze-touch-key" + (ctrl ? " is-on" : "")} aria-pressed={ctrl} onMouseDown={keep}
         title="Ctrl, held until tapped again: add or take out one page or layer in the lists, pick the top layer on the page"
         onClick={() => setCtrl((v) => !v)}
       >
         Ctrl
+      </button>
+      <button
+        type="button" className={"ze-touch-btn ze-touch-key" + (alt ? " is-on" : "")} aria-pressed={alt} onMouseDown={keep}
+        title="Alt, held until tapped again: move without snapping to guides, pick one item out of a group"
+        onClick={() => setAlt((v) => !v)}
+      >
+        Alt
       </button>
       {marqueePolygonOpen && <span className="ze-touch-sep" aria-hidden="true" />}
       {marqueePolygonOpen && (

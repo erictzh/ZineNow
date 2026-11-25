@@ -20757,17 +20757,6 @@ ${parts.join("\n")}</g>`);
       "button",
       {
         type: "button",
-        className: "ze-touch-btn ze-touch-key" + (alt ? " is-on" : ""),
-        "aria-pressed": alt,
-        onMouseDown: keep,
-        title: "Alt, held until tapped again: move without snapping to guides, pick one item out of a group",
-        onClick: () => setAlt((v) => !v)
-      },
-      "Alt"
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
         className: "ze-touch-btn ze-touch-key" + (ctrl ? " is-on" : ""),
         "aria-pressed": ctrl,
         onMouseDown: keep,
@@ -20775,6 +20764,17 @@ ${parts.join("\n")}</g>`);
         onClick: () => setCtrl((v) => !v)
       },
       "Ctrl"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: "ze-touch-btn ze-touch-key" + (alt ? " is-on" : ""),
+        "aria-pressed": alt,
+        onMouseDown: keep,
+        title: "Alt, held until tapped again: move without snapping to guides, pick one item out of a group",
+        onClick: () => setAlt((v) => !v)
+      },
+      "Alt"
     ), marqueePolygonOpen && /* @__PURE__ */ React.createElement("span", { className: "ze-touch-sep", "aria-hidden": "true" }), marqueePolygonOpen && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-key", title: "Close the polygon (Enter)", "aria-label": "Close the polygon", onMouseDown: keep, onClick: () => pressKey("Enter") }, "Close"), marqueePolygonOpen && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-key", title: "Take the last point back (Backspace)", "aria-label": "Undo the last point", onMouseDown: keep, onClick: () => pressKey("Backspace") }, "Undo point"), hasSelection && /* @__PURE__ */ React.createElement("span", { className: "ze-touch-sep", "aria-hidden": "true" }), hasSelection && selectedAnn && selectedAnn.type === "text" && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn", title: "Edit text", "aria-label": "Edit text", onMouseDown: keep, onClick: () => onEditText(selectedAnn.id) }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 20h4L19 9l-4-4L4 16v4Z" }), /* @__PURE__ */ React.createElement("path", { d: "M13.5 6.5l4 4" }))), hasSelection && selectedAnn && selectedAnn.type === "image" && /* @__PURE__ */ React.createElement(
       "button",
       {
@@ -20921,7 +20921,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "1c447e4"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f0f2fe1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
