@@ -811,3 +811,5 @@ The wiki build number now also covers `wiki.css`, `wiki.js` and `index.html` (ap
 Layout typography (2026-11-25): layout settings now hold `bodyPt` (11), `titlePt` (25) and `lineSpacing` (150) instead of `titleScale`/the Text tool's size; titles get a thin rectangle beneath them (layoutRole "rule", not turned into a guide); body text carries `lineSpacing`. Older saved projects lose their `titleScale` (ignored) and get the new defaults.
 
 Guide purposes (2026-11-25): each guide colour has a fixed `purpose` and `description` in `GUIDE_COLORS` (white Free, yellow Alignment, light blue Margins and columns, light green Baseline and grid, light red Bleed and cut, pink Safe area, light grey Layout, orange Notes). The guide's Format panel shows them as selectable cards (colour ball, purpose, description) at the bottom, replacing the swatches. Names are fixed (not editable per project); group tooltips include the purpose.
+
+Launcher welcome removed (2026-11-25, maintainer's request): the short welcome text above the app cards (and its `.zn-intro` styles) is gone. The minizine tutorial and status page are still in the wiki (home gear → Tutorial / Wiki).
