@@ -8,7 +8,7 @@ Page operations are what you can do to whole pages: **rotate**, **delete**, **re
 - **Delete:** the bin button on a thumbnail, or **Delete** while no item is selected.
 - **Reorder:** drag a thumbnail up or down. See [Page sidebar](zeditor/workspace/page-sidebar).
 - **Add a blank page:** hover the gap between thumbnails and click the **+**. The new page takes the size of the first loaded PDF page (or a default of 420 × 594 pt).
-- **Several pages at once:** select them with Shift+click first. Rotate, delete and drag then act on the whole selection. Dragging a page that is not in the selection moves just that page.
+- **Several pages at once:** select them first: **Shift+click** takes in every page from the last one you clicked to this one (a range); **Ctrl+click** (Cmd on Mac) adds or takes out one page at a time; Shift+click on a page that is already selected also takes it out. On a touchscreen use the Shift key on the touch bar. Rotate, delete and drag then act on the whole selection. Dragging a page that is not in the selection moves just that page.
 - **Insert PDF:** brings another PDF's pages into the zine (see [Insert PDF](zeditor/images/insert-pdf)).
 
 ## How it works
