@@ -88,3 +88,17 @@ State: **decided** unless marked.
 - **Superseded open questions:** does "same layout" also copy picture slots? What if the page already has a following page (insert after it)? Show a small "continues on page N" label (editor only)?
 
 _(Add more ideas below.)_
+
+## 5. Phase plan (agreed order, 2026-11-25)
+
+Each phase ends with build, check, tests, wiki update, HANDOFF note and a pull request; the maintainer tries it on a device before the next phase.
+
+0. **Housekeeping (S):** try the middle-button pan; check per-selection Tracking; optional wiki build number includes styles.
+1. **Page layouts (M-L), moved up by the maintainer:** the shared default variables and per-file Layout settings (with Reset); the 11 layouts with previews; "Add layout" to the current page (beneath, one undo step) and "New page with layout". Built **first without** the parts that need later phases: layout guides (Phase 2), snapping to rectangles (Phase 3) and bleed-aware sizing (Phase 4). The margin uses the Page Guide margin if set, else 8% of the page width.
+2. **Bleed and PDF export (M):** mm bleed in New Document and page settings (default 0), page grows, dotted trim rectangle, with/without bleed export, TrimBox/BleedBox, crop marks only with bleed. Then layouts become bleed-aware (Full picture).
+3. **Guides (M-L):** 8 colours, side-panel settings, Page/Global groups with the ⋮ toggles, per-page guides, snap to page edges/centre/trim/margins. Then **layouts add their guides** in a colour group.
+4. **Snapping to rectangles (S-M):** all item types, all visible rectangles, move and resize.
+5. **Text across pages (L):** cross-page threads, T+ and link icon, continuation page with the same layout, layout change moves the story into the body slot.
+6. **Illustrator export (M):** whole-page and multi-page SVG, layers as groups, Text as outlines checkbox, later the "Outline Text to Shape" command.
+7. **CMYK converter (separate track, M-L):** test the prototype on a real export; shared module + small standalone page; staged conversion.
+8. **Launch:** landing page, demo, tutorial, report-a-problem link, phone/tablet testing, first community.
