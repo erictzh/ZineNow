@@ -15,7 +15,7 @@ import { FormatPanelShell } from "./FormatPanelShell.jsx";
 const SPACING_CONTROLS = [LINE_SPACING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, KERNING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
 const ALL_PARAGRAPH_CONTROLS = [COMPOSER_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, ...PARAGRAPH_CONTROLS];
 
-export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, styleActions }) {
+export function TextFormat({ ann, onUpdate, onRasterizeText, onOutlineText, toolDefaults, styleActions }) {
   const patch = (p) => onUpdate(ann.id, p);
   const { fontOptions, setFontOptions, textStyles, handleSaveTextStyle, handleDeleteTextStyle } = toolDefaults;
   return (
@@ -61,9 +61,12 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, style
       <PanelSection id="text.transform" title="Rotation" hint="Opacity and blend are in the Layers panel." onReset={() => patch(resetPatch([ANGLE_CONTROL]))}>
         <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
-      <PanelSection id="text.rasterize" title="Rasterize" hint="Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back.">
+      <PanelSection id="text.rasterize" title="Rasterize or outline" hint="Rasterize turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. Outline Text to Shape turns the letters into a vector shape (it needs the font file). Either way the words can't be edited afterwards; Undo brings the text back.">
         <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text || ann.storyHeadId != null} title={ann.storyHeadId != null ? "Unlink the threaded frames first" : undefined} onClick={() => onRasterizeText(ann)}>
           Rasterize to Image
+        </button>
+        <button type="button" className="ze-format-toggle ze-format-toggle-wide" disabled={!ann.text || ann.storyHeadId != null} title={ann.storyHeadId != null ? "Unlink the threaded frames first" : "Turns the letters into a vector shape layer (needs the font file). The words can't be edited afterwards; Undo brings the text back."} onClick={() => onOutlineText(ann)}>
+          Outline Text to Shape
         </button>
       </PanelSection>
     </FormatPanelShell>

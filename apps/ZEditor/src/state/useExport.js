@@ -4,7 +4,7 @@ import { pageImageFileName, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, savePdfBytes, writeFileHandle } from "../io/fileSave.js";
 import { IMAGE_FORMATS, renderPageImageBlob } from "../io/imageExport.js";
 import { buildExportPdfBytes } from "../io/pdfExport.js";
-import { layersToSvg } from "../io/svgExport.js";
+import { layersToSvg, pagesToSvg } from "../io/svgExport.js";
 import { layerName } from "../model/layerNames.js";
 import { resolvePageText } from "../render/pageText.js";
 import { downloadBlob } from "../../../../shared/js/download.js";
@@ -98,6 +98,39 @@ export function useExport({ doc, status, view, project, selection }) {
     const wanted = new Set(ids || selection.selectedAnnotationIds());
     return resolvePageText(page.annotations || [], pages).filter((a) => wanted.has(a.id) && !a.hidden);
   }
+  // What an SVG file did not carry as live vectors, for the notice after saving.
+  function svgNotes(result) {
+    const notes = [];
+    if (result.pictures) notes.push(`${result.pictures} layer${result.pictures === 1 ? " went" : "s went"} in as a picture (photos, imported pages, and text or shapes with effects SVG can't hold)`);
+    if (result.outlined) notes.push(`${result.outlined} text box${result.outlined === 1 ? " was" : "es were"} turned into outlines`);
+    if (result.fonts.length) {
+      notes.push(view.svgOutlineText
+        ? `${result.fonts.join(", ")} could not be outlined (the font file isn't available: upload it in the font menu or allow Load Local System Fonts), so that text stays live text and needs the font installed`
+        : `text uses ${result.fonts.join(", ")}: it looks right where ${result.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
+    }
+    if (result.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+    return notes;
+  }
+  // The page being edited, or every page side by side, as an SVG for Illustrator: each page a group, each layer a named group inside it.
+  async function handleExportPagesSvg(allPages) {
+    const indices = allPages ? pages.map((_, i) => i) : doc.selectedIdx !== null ? [doc.selectedIdx] : [];
+    if (!indices.length || exporting) return;
+    setErrorMsg(null);
+    setNotice(null);
+    setExporting(true);
+    try {
+      const result = await pagesToSvg(pages, indices, pdfDocsRef, { outlineText: view.svgOutlineText });
+      const name = allPages || pages.length === 1 ? titleToFileName(project.docTitle, ".svg") : pageImageFileName(project.docTitle, indices[0], pages.length, ".svg");
+      const saved = await saveFile(result.svg, name, "image/svg+xml", "SVG image", [".svg"]);
+      if (saved === "cancelled") return;
+      const notes = svgNotes(result);
+      setNotice((allPages ? `Saved ${indices.length} page${indices.length === 1 ? "" : "s"} as one SVG.` : "Saved the page as SVG.") + (notes.length ? " Note: " + notes.join("; ") + "." : ""));
+    } catch (err) {
+      setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  }
   async function handleExportSvg(ids) {
     const items = svgLayersFor(ids);
     if (!items.length || exporting) return;
@@ -105,15 +138,12 @@ export function useExport({ doc, status, view, project, selection }) {
     setNotice(null);
     setExporting(true);
     try {
-      const result = await layersToSvg(items, doc.pageFilter);
+      const result = await layersToSvg(items, doc.pageFilter, { outlineText: view.svgOutlineText });
       if (!result) { setNotice("Nothing visible to save as SVG."); return; }
       const name = items.length === 1 ? layerName(items[0]) : project.docTitle;
       const saved = await saveFile(result.svg, titleToFileName(name, ".svg"), "image/svg+xml", "SVG image", [".svg"]);
       if (saved === "cancelled") return;
-      const notes = [];
-      if (result.pictures) notes.push(`${result.pictures} layer${result.pictures === 1 ? " went" : "s went"} in as a picture (photos, and text or shapes with effects SVG can't hold)`);
-      if (result.fonts.length) notes.push(`text uses ${result.fonts.join(", ")}: it looks right where ${result.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
-      if (result.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+      const notes = svgNotes(result);
       setNotice(notes.length ? "Saved SVG. Note: " + notes.join("; ") + "." : `Saved SVG (${items.length} layer${items.length === 1 ? "" : "s"}, all vector).`);
     } catch (err) {
       setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
@@ -137,6 +167,6 @@ export function useExport({ doc, status, view, project, selection }) {
 
   return {
     exporting, sendingToArranger, handleExportPdf, handleExportImage, handleExportAllImages, handleSendToZineArranger,
-    handleExportSvg, canExportSvg: () => svgLayersFor().length > 0,
+    handleExportSvg, handleExportPagesSvg, canExportSvg: () => svgLayersFor().length > 0,
   };
 }

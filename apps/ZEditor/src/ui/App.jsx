@@ -260,6 +260,7 @@ export function App() {
             onOpenInAiTools={edits.handleOpenInAiTools}
             onRasterizeRect={edits.handleRasterizeRect}
             onRasterizeText={edits.handleRasterizeText}
+            onOutlineText={async (ann) => { const message = await edits.handleOutlineText(ann); if (message) status.setNotice(message); }}
             toolDefaults={toolDefaults}
             styleActions={edits.styleActions}
             imageTrace={imageTrace}

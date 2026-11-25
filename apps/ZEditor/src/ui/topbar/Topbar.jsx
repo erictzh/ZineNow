@@ -275,6 +275,22 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
               />
               <MenuItem
                 close={close}
+                label="Export page as SVG (Illustrator)"
+                disabled={doc.selectedIdx === null || exporting}
+                onClick={() => exporter.handleExportPagesSvg(false)}
+                hint="The whole page as an SVG: its layers are named groups, shapes and drawings stay vectors, text can become outlines"
+              />
+              <MenuItem
+                close={close}
+                label="Export all pages as one SVG"
+                disabled={pages.length === 0 || exporting}
+                onClick={() => exporter.handleExportPagesSvg(true)}
+                hint="Every page side by side in one SVG, each page a group (Page 1, Page 2…)"
+              />
+              <MenuCheck label="SVG: text as outlines" checked={view.svgOutlineText} onChange={view.setSvgOutlineText}
+                hint="On: letters become shapes, so the file opens without the fonts (needs the font file: upload it or allow Load Local System Fonts). Off: live text" />
+              <MenuItem
+                close={close}
                 label="Export selection as SVG"
                 disabled={exporting || !exporter.canExportSvg()}
                 onClick={() => exporter.handleExportSvg()}

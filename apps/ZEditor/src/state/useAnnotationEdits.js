@@ -14,6 +14,9 @@ import { flattenedImagePatch, rasterizedRectPatch, rasterizedTextPatch } from ".
 import { rotatedAnnotation } from "../render/itemGeometry.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
 import { isSvgFile, svgFileToPng } from "../io/images.js";
+import { layerName } from "../model/layerNames.js";
+import { plainTextLook } from "../io/svgExport.js";
+import { outlinedTextPatch } from "../io/textOutline.js";
 import { resolvePageText } from "../render/pageText.js";
 import { makeTextFrameActions } from "./textFrameActions.js";
 
@@ -381,6 +384,16 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch } : a)));
   }
 
+  // "Outline Text to Shape": the text becomes a vectorized shape layer of its letters. Returns a sentence when it could not
+  // (the caller shows it), nothing when it worked.
+  async function handleOutlineText(ann) {
+    const pageIdx = selectedIdx;
+    const { patch, error } = await outlinedTextPatch(ann, plainTextLook);
+    if (error) return error;
+    updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => (a.id === ann.id ? { ...a, ...patch, name: ann.name || layerName(ann) } : a)));
+    return null;
+  }
+
   async function handleRasterizeRect(ann) {
     const pageIdx = selectedIdx;
     const patch = await rasterizedRectPatch(ann);
@@ -430,7 +443,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     handleAddText, handleAddRect, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
-    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRemoveBackground, handleOpenInAiTools, handleRasterizeText, handleRasterizeRect,
+    handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRemoveBackground, handleOpenInAiTools, handleRasterizeText, handleOutlineText, handleRasterizeRect,
     handleDeleteAnnotation, handleEraseStroke, handleEraseImagePixels,
     styleActions: { apply: handleApplyTextStyle, redefine: handleRedefineTextStyle, resetOverrides: handleResetStyleOverrides, unlink: handleUnlinkTextStyle },
   };
