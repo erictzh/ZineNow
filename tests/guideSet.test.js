@@ -11,7 +11,7 @@ ok(normalizeGuides(null).length === 0, "nothing saved, no guides");
 const vis = guidesOnPage([{ id: "g1", axis: "x", pos: 1, color: "yellow" }, { id: "g2", axis: "y", pos: 2, color: "pink" }], [{ id: "p1", axis: "x", pos: 3, color: "yellow" }]);
 ok(vis.length === 3 && vis[0].scope === "page" && vis[1].scope === "global", "page guides and global guides together, tagged");
 const groups = guideGroups(vis);
-ok(groups.map((g) => g.label).join("|") === "Page Guides (Yellow)|Global Guides (Yellow)|Global Guides (Pink)", "groups per scope and colour, only those with guides");
+ok(groups.map((g) => g.label).join("|") === "Page Guides · Alignment|Global Guides · Alignment|Global Guides · Safe area", "groups per scope and colour, only those with guides");
 
 ok(snapGuidePos(9.5, [0, 10, 20], 1) === 10 && snapGuidePos(5, [0, 10], 1) === 5, "a dragged guide snaps within reach only");
 const t = guideSnapTargets("x", { width: 400, height: 600 }, 10, 20, [{ axis: "x", pos: 77 }, { axis: "y", pos: 5 }]);
