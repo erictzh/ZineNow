@@ -16,6 +16,7 @@ import { applyPhotoAdjust } from "../../render/photoAdjust.js";
 import { BoxEffectOverlays } from "./BoxEffectOverlays.jsx";
 import { boxGroupStyle, boxOuterStyle } from "./boxStyles.js";
 import { ALL_RESIZE_HANDLES, ResizeHandles } from "./ResizeHandles.jsx";
+import { endResizeSnap, startResizeSnap } from "./snapStore.js";
 import { dragDeltaFrom, trackPointerDrag } from "../pointer.js";
 const { useRef, useEffect } = React;
 
@@ -42,10 +43,12 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
   function startResize(handle, e) {
     const orig = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
     const dragDelta = dragDeltaFrom(e, zoom, angleOf(ann));
+    const snap = startResizeSnap(ann, orig, angleOf(ann));
     trackPointerDrag((ev) => {
-      const { dx, dy } = dragDelta(ev);
+      const raw = dragDelta(ev);
+      const { dx, dy } = snap(handle, raw.dx, raw.dy, ev);
       onUpdate(ann.id, resizedBox(orig, handle, dx, dy, !ev.shiftKey, MIN_RESIZE_SIZE, angleOf(ann)));
-    });
+    }, endResizeSnap);
   }
 
   // Both crop gestures work in a fixed "px on screen per natural px"

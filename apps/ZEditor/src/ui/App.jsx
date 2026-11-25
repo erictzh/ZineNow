@@ -214,6 +214,7 @@ export function App() {
                 marqueeBrush={{ size: t.marquee.brushSize, erase: t.marquee.brushErase }}
                 onMarqueeChange={marquee.setRegion}
                 snapGuides={view.rulersOn && view.snapToGuidesOn ? view.rulerGuides : null}
+                snapItems={view.snapToGuidesOn}
               />
             </div>
           </div>

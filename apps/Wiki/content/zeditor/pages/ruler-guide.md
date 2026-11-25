@@ -138,12 +138,17 @@ It lives inside `startDrag` (a function inside a function), so it can use that f
 
 ```js file=apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
       if (moved && startBox && !ev.altKey) { // Alt moves freely
-        const snap = snapToGuides({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, guideLines, SNAP_PX / zoom);
+        const snap = snapBox({ x0: startBox.x0 + dx, y0: startBox.y0 + dy, x1: startBox.x1 + dx, y1: startBox.y1 + dy }, snapLines, SNAP_PX / zoom);
         dx += snap.dx; dy += snap.dy;
-      }
+        setSnapHits(snap.x !== null || snap.y !== null ? { x: snap.x, y: snap.y } : null);
+      } else if (moved) setSnapHits(null);
 ```
 
-**The Logic:** this sits inside the drag handler. `dx`, `dy` is how far the pointer has moved. The box is moved by that much, handed to `snapToGuides`, and the nudge it answers with is added on. `!ev.altKey` means "unless Alt is held". `SNAP_PX / zoom` converts the 6 *screen* pixels into page pixels.
+**The Logic:** this sits inside the drag handler. `dx`, `dy` is how far the pointer has moved. The box is moved by that much, handed to `snapBox` (model/snapTargets.js, the same idea as `snapToGuides` but the lines also include the page's edges and middle and the other items' edges and middles), and the nudge it answers with is added on. `!ev.altKey` means "unless Alt is held". `SNAP_PX / zoom` converts the 6 *screen* pixels into page pixels.
+
+### Snapping to other items, and on resize
+
+The **Snap** setting now covers more than guides, and works with the rulers off. Moving an item snaps its edges and middle onto the page's edges and middle, ruler guides, and the edges and middles of every other visible item; a pink line shows what it landed on. Dragging a resize handle snaps the edge being dragged onto the same lines (`startResizeSnap` in ui/canvas/snapStore.js, used by rectangles, pictures, traces and text). Holding **Alt** turns it off. Items that are turned are not snapped while resizing, because their edges are not straight lines on the page.
 
 ### The lock and the saved settings
 
