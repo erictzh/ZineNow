@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RGB to CMYK</title>
+  <meta name="theme-color" content="#171312">
+  <link rel="stylesheet" href="../../shared/styles/tokens.css">
+  <link rel="stylesheet" href="../../shared/styles/buttons.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="../../shared/vendor/pdf-lib/pdf-lib.min.js"></script>
+</head>
+<body>
+  <main class="cm-app">
+    <header class="cm-head">
+      <div class="cm-logo">CMYK</div>
+      <div>
+        <h1>RGB to CMYK</h1>
+        <p>Make a PDF friendlier to a printer. Everything happens in your browser: the file never leaves your computer.</p>
+      </div>
+    </header>
+
+    <label class="cm-drop" id="drop" tabindex="0">
+      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <strong id="drop-title">Drop a PDF here, or click to choose one</strong>
+      <span id="drop-sub">Works best on PDFs exported from ZEditor or Markdown to PDF.</span>
+    </label>
+
+    <section class="cm-options" id="options" hidden>
+      <h2>What to convert</h2>
+      <label><input type="checkbox" id="opt-black" checked> <span><b>Black and grey colours → black ink only.</b> Black text and lines print from one plate (no colour fringes).</span></label>
+      <label><input type="checkbox" id="opt-grey" checked> <span><b>Grey pictures → one channel.</b> Black-and-white pages become much smaller and print from black ink only.</span></label>
+      <label><input type="checkbox" id="opt-colour" checked> <span><b>Colour pictures → CMYK.</b> A plain formula with no colour profile: colours come out a little duller than on screen.</span></label>
+      <div class="cm-actions">
+        <button type="button" class="btn-solid" id="convert">Convert</button>
+        <span id="status" role="status"></span>
+      </div>
+    </section>
+
+    <section class="cm-result" id="result" hidden>
+      <h2>Done</h2>
+      <p id="report"></p>
+      <p id="sizes"></p>
+      <button type="button" class="btn-solid" id="download">Download the CMYK PDF</button>
+    </section>
+
+    <section class="cm-honest">
+      <h2>What this is, and what it is not</h2>
+      <ul>
+        <li>This is a <b>plain conversion</b>: it moves the colours into CMYK with a simple formula. It does <b>not</b> use a printer's colour profile (ICC), so it cannot promise the colours a print shop's proof would show.</li>
+        <li>For <b>black-and-white zines</b> it does exactly what you want: everything ends up on the black plate only.</li>
+        <li>For <b>colour</b>, bright screen colours (neon, saturated blues and greens) cannot be printed in CMYK at all; they come out duller. Check a proof with your printer.</li>
+        <li>Left alone: pictures that are already CMYK or grey, use a colour profile or JPEG, patterns and gradients. The report above says how many were kept.</li>
+      </ul>
+    </section>
+    <footer class="cm-foot">ZineNow is free software (AGPL-3.0-or-later). <a href="https://github.com/erictzh/ZineNow" target="_blank" rel="noopener">Source code</a></footer>
+  </main>
+  <script src="dist/app.js"></script>
+</body>
+</html>

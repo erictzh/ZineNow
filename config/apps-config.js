@@ -30,6 +30,10 @@ window.ZINENOW_APPS = [
     desc: "Compose and edit zine pages"
   },
   {
+    folder: "RgbToCmyk",
+    desc: "Make a PDF print-friendly (CMYK)"
+  },
+  {
     folder: "AiToolsLocal",
     desc: "Under development, still in experimental phase.",
     experimental: true
