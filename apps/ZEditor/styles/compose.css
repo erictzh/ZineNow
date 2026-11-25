@@ -34,7 +34,7 @@
 .ze-ruler-guide { position: absolute; pointer-events: auto; }
 .ze-ruler-guide { --guide-color: #22c3ee; }
 .ze-ruler-guide::after { content: ""; position: absolute; background: var(--guide-color); }
-.ze-ruler-guide.is-selected::after { box-shadow: 0 0 0 1px var(--guide-color), 0 0 6px 1px var(--guide-color); }
+.ze-ruler-guide.is-selected::after { filter: brightness(0.7); } /* a selected guide is just a little darker */
 .ze-ruler-guide-x { top: 0; bottom: 0; width: 7px; margin-left: -3px; cursor: ew-resize; }
 .ze-ruler-guide-x::after { top: 0; bottom: 0; left: 3px; width: 1px; }
 .ze-ruler-guide-y { left: 0; right: 0; height: 7px; margin-top: -3px; cursor: ns-resize; }
