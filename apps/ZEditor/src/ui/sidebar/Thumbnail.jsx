@@ -13,7 +13,7 @@ export function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelet
       className={"ze-thumb" + (isSelected ? " is-selected" : "")}
       draggable="true"
       // Ctrl / Cmd + click: add or take out one page. Shift + click: every page from the last one clicked to this one.
-      onClick={(e) => onSelect(idx, e.ctrlKey || e.metaKey ? "toggle" : withTouchModifier("shift", e) ? "range" : false)}
+      onClick={(e) => onSelect(idx, e.metaKey || withTouchModifier("ctrl", e) ? "toggle" : withTouchModifier("shift", e) ? "range" : false)}
       {...dragHandlers}
     >
       <div className="ze-thumb-img-wrap">

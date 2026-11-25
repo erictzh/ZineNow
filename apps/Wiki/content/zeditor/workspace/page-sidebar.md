@@ -4,7 +4,7 @@ The left sidebar lists every page of the zine as a thumbnail. You use it to pick
 
 ## How to use
 
-- **Click** a thumbnail to open that page. **Shift+click** (on a touch screen: switch on the touch bar's Shift, then tap) adds pages to the selection; **Select All** selects every page.
+- **Click** a thumbnail to open that page. **Shift+click** selects every page from the last one clicked to this one, **Ctrl+click** adds or removes one page (on a touch screen: switch on the touch bar's Shift or Ctrl, then tap); **Select All** selects every page.
 - **Drag** a thumbnail up or down to move it. A line shows where it will land. Dragging near the top or bottom edge scrolls the list. If several pages are selected, they all move together.
 - **⟳** on a thumbnail rotates that page; the bin deletes it.
 - **Add a blank page:** hover the gap between two thumbnails (or above the first, or below the last) until a line and a **+** appear, then click it.

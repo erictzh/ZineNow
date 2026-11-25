@@ -1,10 +1,10 @@
 ## Intro
 
-A finger cannot hold Shift or press Delete. The **touch bar** is a small floating bar at the bottom left of the canvas that appears **only while you use a finger or pen**. It gives you sticky **Shift** and **Alt** switches and the most useful item buttons. Under it, a "touch bridge" makes every drag in the editor work with a finger.
+A finger cannot hold Shift or press Delete. The **touch bar** is a small floating bar at the bottom left of the canvas that appears **only while you use a finger or pen**. It gives you sticky **Shift**, **Alt** and **Ctrl** switches and the most useful item buttons. Under it, a "touch bridge" makes every drag in the editor work with a finger.
 
 ## How to use
 
-- **Shift** and **Alt** are toggles: tap once to switch on (it stays on), tap again to switch off. While on, every press counts as if the key were held: add to the selection, keep proportions, snap turns to 15°, draw at 45° (Shift); move without snapping to guides, pick one item out of a group (Alt).
+- **Shift**, **Alt** and **Ctrl** are toggles: tap once to switch on (it stays on), tap again to switch off. While on, every press counts as if the key were held: add to the selection, keep proportions, snap turns to 15°, draw at 45° (Shift); move without snapping to guides, pick one item out of a group (Alt); in the page strip and the Layers panel, add or take out one page or layer at a time (Ctrl), while Shift selects a range.
 - With an item selected, more buttons appear: **Edit text** (text boxes), **Crop** (images, not rotated), **Clipping mask**, **Duplicate** and **Delete**.
 - While you are drawing a Marquee polygon: **Close** and **Undo point**.
 - **One finger** edits; **two fingers** scroll and pinch-zoom the page.
@@ -44,13 +44,13 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:** `new KeyboardEvent("keydown", {...})` makes a pretend key press, and `window.dispatchEvent` sends it, so the one real keyboard handler picks it up. `...mods` spreads extra flags (like `ctrlKey: true`) into the event. `bubbles: true` lets the event travel up through the page like a real one.
 
-### Sticky Shift and Alt
+### Sticky Shift, Alt and Ctrl
 
 ```js file=apps/ZEditor/src/ui/touchInput.js fn=setTouchModifier,withTouchModifier
 ```
 
 **The Logic:**
-- `heldKeys` is a plain object living at the top of the file: shared by every function in it. `setTouchModifier("shift", true)` writes into it (`heldKeys[name]` uses the name as a key; `Boolean(on)` forces a true/false value).
+- `heldKeys` is a plain object living at the top of the file: shared by every function in it. `setTouchModifier("shift", true)` writes into it (`heldKeys[name]` uses the name as a key (`shift`, `alt` or `ctrl`); `Boolean(on)` forces a true/false value).
 - `withTouchModifier` answers "should this click count as Shift/Alt-held?": `real` is the actual key (`e[name + "Key"]` builds `shiftKey` or `altKey` from the name). The toggle only counts while `<html data-ze-input="touch">`, so a toggle left on never affects the mouse.
 
 ### Pretending to be a mouse
@@ -60,7 +60,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **The Logic:**
 - `mouseEventFrom` builds a fake `MouseEvent` from a finger's **pointer event**: same position (`clientX`, `clientY`), always the left button (`button: 0`), and `buttons: 1` (a button is held) except on release. `...extra` lets the caller add or override fields.
-- `shiftKey: Boolean(e.shiftKey) || heldKeys.shift`: Shift counts if the real key *or* the touch toggle is on (`||` means "or").
+- `shiftKey: Boolean(e.shiftKey) || heldKeys.shift`: Shift counts if the real key *or* the touch toggle is on (`||` means "or"). Alt and Ctrl work the same way.
 - `send` delivers the event to the element that was pressed; `el.isConnected` is false if a redraw has since removed that element, and then it goes to the `document` instead so nothing is lost.
 
 **Worked example.** The Shift switch on the touch bar is on (`heldKeys.shift = true`). Your finger presses at (300, 200) on the page. `mouseEventFrom("mousedown", e, …)` builds a fake `MouseEvent` with `clientX = 300`, `clientY = 200`, `button = 0`, `buttons = 1` and `shiftKey = Boolean(false) || true = true`. The Move tool sees a normal Shift+click and adds the item to the selection. On release, the `mouseup` event has `buttons = 0`.

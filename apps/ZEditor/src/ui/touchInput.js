@@ -46,10 +46,10 @@ const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 24;
 const TAP_SLOP_PX = 10; // more movement than this and it was a drag, not a tap
 
-// Shift and Alt for a finger, from the touch bar's toggles (ui/TouchBar.jsx): while one is on,
+// Shift, Alt and Ctrl for a finger, from the touch bar's toggles (ui/TouchBar.jsx): while one is on,
 // every press passed on from here counts as having that key held — keep proportions, snap to 15°,
 // add to the selection, move freely, pick one out of a group… A real key still works as well.
-const heldKeys = { shift: false, alt: false };
+const heldKeys = { shift: false, alt: false, ctrl: false };
 export function setTouchModifier(name, on) {
   heldKeys[name] = Boolean(on);
 }
@@ -76,7 +76,7 @@ function mouseEventFrom(type, e, extra) {
     detail: type === "dblclick" ? 2 : 1,
     shiftKey: Boolean(e.shiftKey) || heldKeys.shift,
     altKey: Boolean(e.altKey) || heldKeys.alt,
-    ctrlKey: e.ctrlKey,
+    ctrlKey: Boolean(e.ctrlKey) || heldKeys.ctrl,
     metaKey: e.metaKey,
     ...extra,
   });
