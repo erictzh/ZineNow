@@ -45,6 +45,7 @@ State: **decided** unless marked.
 - **How (sketch, not built):** layouts are a small data table of slots with positions as fractions of the page (so they fit any page size and respect the Page Guide margins): kind (picture / title / body / caption), x, y, width, height. Applying one creates ordinary items (`rect` and `text`, like `handleAddRect` / `handleAddText` in `state/useAnnotationEdits.js`), sharing a `groupId` so they move together; offered from the Page menu (add to the current page) and when adding a new page, possibly also in the New Document dialog.
 - **Later extension:** drop a picture on a grey slot and clip it to that rectangle (ZEditor already has clipping masks).
 - **Starter set to design:** cover, full-bleed picture, picture + caption, title + body, two columns, quote, 2x2 pictures, contents page, back cover.
-- **Open questions:** apply to the current page only, or also insert new pages? Replace what is on the page or add to it? Which layouts matter most for zines?
+- **Decided (2026-11-25, maintainer):** works **both ways** (apply to the current page, and add as new pages). On the current page it **adds beneath** the existing items (they stay on top, nothing is removed). **First set of layouts:** full text; half text + half picture in four variants (picture on top, picture at bottom, picture left, picture right). Picture slots are **plain light grey** (no label).
+- **Still open:** margins and gap sizes; whether the pieces are grouped or separate (leaning separate); how much lorem ipsum fills the body; whether layout items are locked; where the new-page option lives in the menus.
 
 _(Add more ideas below.)_
