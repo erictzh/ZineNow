@@ -30,6 +30,7 @@ export function useViewSettings() {
   // Export PDF with the bleed (on) or trimmed to the cut size (off), and crop marks (only with bleed). Saved with the project.
   const [exportBleed, setExportBleed] = useState(true);
   const [exportCropMarks, setExportCropMarks] = useState(false);
+  const [svgOutlineText, setSvgOutlineText] = useState(true); // SVG export: letters as outlines (no fonts needed to open it in Illustrator)
   const [layersPosition, setLayersPosition] = useState(null);
   const [layersSize, setLayersSize] = useState(null); // { width, height } once its edges are dragged
   // Project > Embed Fonts…: save the system fonts the text uses inside the file (ON by default: a project saved before this existed gets them on its next save,
@@ -43,7 +44,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText,
     };
   }
 
@@ -63,6 +64,7 @@ export function useViewSettings() {
     setGuidesLocked(s.guidesLocked === true);
     setExportBleed(s.exportBleed !== false);
     setExportCropMarks(s.exportCropMarks === true);
+    setSvgOutlineText(s.svgOutlineText !== false);
     setLayoutSettings(normalizeLayoutSettings(s.layoutSettings)); // older files: the app's defaults
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
@@ -72,7 +74,7 @@ export function useViewSettings() {
 
   return {
     guidesOn, setGuidesOn, centerGuideOn, setCenterGuideOn, guideFormat, setGuideFormat,
-    guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn, exportBleed, setExportBleed, exportCropMarks, setExportCropMarks,
+    guideMarginIn, setGuideMarginIn, guideBleedIn, setGuideBleedIn, exportBleed, setExportBleed, exportCropMarks, setExportCropMarks, svgOutlineText, setSvgOutlineText,
     pageNumbers, setPageNumbers, onionSkinOn, setOnionSkinOn, onionSkinOpacity, setOnionSkinOpacity,
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,

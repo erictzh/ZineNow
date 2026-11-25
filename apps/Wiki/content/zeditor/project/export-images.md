@@ -7,6 +7,9 @@
 **Export menu:**
 - **Export page as PNG (transparent):** the current page as a picture with a **see-through paper**, so only your items show. Good for stickers, overlays or putting a page on a coloured background.
 - **Export page as JPG:** the current page on **white**, in a small file (quality 95%). Good for sharing or posting.
+- **Export page as SVG (Illustrator):** the whole current page (bleed included) as one SVG. The page is a group named *Page 1*, its paper is a group *Page background*, and **every layer is its own group named after the layer**, so Illustrator (and Inkscape) list them as layers. Shapes, pen strokes and vectorized layers stay vectors; photos and imported-PDF pages go in as pictures.
+- **Export all pages as one SVG:** every page side by side in one file (*Page 1*, *Page 2*…), each its own group.
+- **SVG: text as outlines** (on by default): letters become shapes, so the file opens anywhere without the font installed. It needs the **font file**: a font you uploaded (font menu → Upload Font File) or a system font after you allow "Load Local System Fonts". Text whose font file can't be reached stays live text, and the notice names the font. Off: text stays live text. It applies to all three SVG exports.
 - **Export selection as SVG:** select layers first, then choose it. The file is **cropped** to those layers, has a see-through background, and contains nothing else from the page. Vectorized images, shapes, pen strokes and plain text stay editable vectors. Photos and items with effects (shadow, texture, text with stroke or gradient) go in as pictures of themselves. After saving, a notice says what went in as a picture, which fonts the text uses (it looks right where that font is installed), and that clipping masks are not applied.
 - File names come from the zine title. A zine of several pages adds the page number, padded so the files sort in order: `Issue 3-page-02.png`; a one-page zine adds nothing.
 
@@ -19,6 +22,14 @@ The page is drawn on a canvas at **200 dpi**, exactly like the PDF export ([Expo
 ### SVG
 
 An **SVG** is a text file of drawing instructions (`<rect>`, `<path>`, `<text>`), so it has no pixels and never gets blurry. Each selected layer is turned into such instructions: vector layers directly; anything SVG cannot hold (a photo, a drop shadow, a texture) is first **baked** into a PNG picture and placed as an `<image>`. Rotation, opacity and blend mode wrap each layer in a `<g>` (group). The file's size is the layers' bounding box plus 1 px, and the `viewBox` is the window onto the drawing's own coordinates.
+
+### Pages, layers and outlines
+
+For the page exports each layer's drawing is wrapped in `<g id="Layer_name" data-name="Layer name">`; Illustrator shows these groups as layers (it does not accept spaces in an `id`, so they become `_`, and the real name rides along in `data-name`). A page's own picture (an imported PDF page) is drawn first as an `<image>`.
+
+**Text as outlines** reads the font file with *fontkit* (the same reader the PDF export uses to embed fonts), asks it for the shape of every letter and writes those shapes as `<path>` data. Where the letters go comes from the same text layout the editor uses (`layoutPlainRuns`), so lines break exactly as on screen. Kerning comes from the font; the app's letter spacing is added after each letter.
+
+**Outline Text to Shape** (Format panel → *Rasterize or outline*) does the same thing inside the editor: the selected text box is replaced by a **vectorized shape layer** of its letters, in the same place, one path per colour. It can be recoloured or exported like any vectorized layer. The words can't be edited afterwards; Undo brings the text back. It refuses text with effects, a label or mixed fonts, or a font whose file isn't available, and says why.
 
 ### Colours
 
@@ -53,13 +64,27 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **Worked example.** `svgColor("rgba(255,128,0,0.5)")` → colour `rgb(255,128,0)`, opacity **0.5**. A layer at x = 20, y = 30, 100 × 50, rotated 30° and 80% opaque: the centre is `(20 + 50, 30 + 25) = (70, 55)`, so it becomes `<g transform="rotate(30 70 55)" opacity="0.8">…</g>`.
 
+### `textPathData`: letters as path data
+
+```js file=apps/ZEditor/src/model/glyphPath.js fn=textPathData
+```
+
+**The Logic:** `font.layout(text)` returns the glyphs (letter shapes) and how far to move after each. `scale` turns the font's own units (often 1000 or 2048 per em) into pixels. Each glyph's outline is a list of commands (`moveTo`, `lineTo`, curves, `closePath`); the code writes them as SVG path commands, flipping `y` because fonts count upward and screens count downward. A letter the font does not have makes it return `null` so the caller can keep live text.
+
+### `pagesToSvg`
+
+```js file=apps/ZEditor/src/io/svgExport.js fn=pagesToSvg
+```
+
+**The Logic:** each page gets its size, its resolved layers (hidden ones left out) and a background, then its layers go into a group translated to the right by the widths of the pages before it plus a 40 px gap. The file's `viewBox` is the whole row.
+
 ### `layersToSvg`
 
 ```js file=apps/ZEditor/src/io/svgExport.js fn=layersToSvg
 ```
 
 **The Logic:**
-- It loops over the chosen layers and decides each one's route. A vectorized `trace`, a `rect` shape (without a shadow or texture), a pen `stroke`, and a text box with a plain look (`plainTextLook`) are written as vector instructions. Everything else goes into the `else` branch: it is **baked** into a patch image (`flattenedImagePatch` for photos, `rasterizedTextPatch`, `rasterizedRectPatch`) and counted in `pictures`. Rotation was baked in, so the wrapper gets `angle: undefined`.
+- `layerParts` loops over the chosen layers (bottom first) and decides each one's route; every result goes into a group named after the layer. A vectorized `trace`, a `rect` shape (without a shadow or texture), a pen `stroke`, and a text box with a plain look (`plainTextLook`) are written as vector instructions. Everything else goes into the `else` branch: it is **baked** into a patch image (`flattenedImagePatch` for photos, `rasterizedTextPatch`, `rasterizedRectPatch`) and counted in `pictures`. Rotation was baked in, so the wrapper gets `angle: undefined`.
 - The picture's **bounds** are the union of every layer's box: the smallest `x`, `y` and largest right and bottom edges (`reduce` walks the list keeping a running box). A vectorized layer uses its *visible* shapes' box so hidden colours leave no margin.
 - `vb` is the `viewBox`: the box plus `pad` (1 px) on each side. The file's `width` and `height` are the box divided by `MAIN_SCALE` (1.1), turning the editor's pixels back into **points** (1/72 inch), so the SVG has the size the layers have on the page.
 - It returns the text of the file with counts used by the notice.

@@ -6460,13 +6460,13 @@
         if (pageResults.has(pageIdx)) return pageResults.get(pageIdx);
         const annotations = pages[pageIdx].annotations || [];
         let changed = false;
-        const result = annotations.map((a) => {
+        const result2 = annotations.map((a) => {
           const chain = chainOfFrame.get(a.id);
           const r = chain ? resolveChain(chain).get(a.id) : withWrap(a, annotations);
           if (r !== a) changed = true;
           return r;
         });
-        const out = changed ? result : annotations;
+        const out = changed ? result2 : annotations;
         pageResults.set(pageIdx, out);
         return out;
       }
@@ -6490,9 +6490,9 @@
     const alone = cache2.get(annotations);
     const version2 = wrapShapesVersion();
     if (alone && alone.version === version2) return alone.result;
-    const result = resolverFor([{ annotations }]).page(0);
-    cache2.set(annotations, { version: version2, result });
-    return result;
+    const result2 = resolverFor([{ annotations }]).page(0);
+    cache2.set(annotations, { version: version2, result: result2 });
+    return result2;
   }
   function storyStateOfPages(pages) {
     return pages.map((p, i) => {
@@ -7040,9 +7040,9 @@
     const mates = annotations.filter((a) => groups.has(a.groupId) && !a.hidden && !a.locked).map((a) => a.id);
     return [.../* @__PURE__ */ new Set([...ids, ...mates])];
   }
-  function groupColor(groupId) {
+  function groupColor(groupId2) {
     let hash2 = 0;
-    for (const ch of String(groupId)) hash2 = (hash2 * 31 + ch.charCodeAt(0)) % 360;
+    for (const ch of String(groupId2)) hash2 = (hash2 * 31 + ch.charCodeAt(0)) % 360;
     return `hsl(${hash2 * 47 % 360} 70% 60%)`;
   }
   function translatedAnnotation(ann, dx, dy) {
@@ -7440,7 +7440,7 @@
     }
     return list;
   }
-  function newTraceLayer(id, image, traceSource, settings, result) {
+  function newTraceLayer(id, image, traceSource, settings, result2) {
     return {
       id,
       type: "trace",
@@ -7451,7 +7451,7 @@
       angle: image.angle,
       trace: normalizeTraceSettings(settings),
       traceSource,
-      ...result
+      ...result2
     };
   }
   function patchedTraceSettings(current2, patch, presetSettings2) {
@@ -7858,9 +7858,9 @@
       }
       drawHalftoneScreen(ctx, imageData, width, height, Math.max(MIN_HALFTONE_CELL_SIZE, cellSize * scaleFactor), filter);
       if (hasTransparency) {
-        const result = ctx.getImageData(0, 0, width, height);
-        for (let p = 0; p < sourceAlpha.length; p++) result.data[p * 4 + 3] = sourceAlpha[p];
-        ctx.putImageData(result, 0, 0);
+        const result2 = ctx.getImageData(0, 0, width, height);
+        for (let p = 0; p < sourceAlpha.length; p++) result2.data[p * 4 + 3] = sourceAlpha[p];
+        ctx.putImageData(result2, 0, 0);
       }
     } else if (filter.type === "xerox") {
       applyXerox(ctx, canvas, filter, scaleFactor);
@@ -9027,6 +9027,420 @@
     });
   }
 
+  // apps/ZEditor/src/model/layerNames.js
+  function layerName(ann) {
+    if (ann.name) return ann.name;
+    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
+    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
+    if (ann.type === "trace") return "Vectorized";
+    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
+    return "Image";
+  }
+
+  // apps/ZEditor/src/model/glyphPath.js
+  var n2 = (v) => String(Math.round(v * 100) / 100);
+  function textPathData(font, text, x, baselineY, fontSize, spacing = 0) {
+    for (const ch of Array.from(text)) if (ch.trim() && !font.hasGlyphForCodePoint(ch.codePointAt(0))) return null;
+    const scale = fontSize / font.unitsPerEm;
+    const run2 = font.layout(text);
+    let pen = x, d = "";
+    run2.glyphs.forEach((glyph, i) => {
+      const pos = run2.positions[i];
+      const ox = pen + (pos.xOffset || 0) * scale, oy = baselineY - (pos.yOffset || 0) * scale;
+      for (const c of glyph.path.commands) {
+        const a = c.args;
+        if (c.command === "moveTo") d += `M${n2(ox + a[0] * scale)} ${n2(oy - a[1] * scale)}`;
+        else if (c.command === "lineTo") d += `L${n2(ox + a[0] * scale)} ${n2(oy - a[1] * scale)}`;
+        else if (c.command === "quadraticCurveTo") d += `Q${n2(ox + a[0] * scale)} ${n2(oy - a[1] * scale)} ${n2(ox + a[2] * scale)} ${n2(oy - a[3] * scale)}`;
+        else if (c.command === "bezierCurveTo") d += `C${n2(ox + a[0] * scale)} ${n2(oy - a[1] * scale)} ${n2(ox + a[2] * scale)} ${n2(oy - a[3] * scale)} ${n2(ox + a[4] * scale)} ${n2(oy - a[5] * scale)}`;
+        else if (c.command === "closePath") d += "Z";
+      }
+      pen += (pos.xAdvance || 0) * scale + spacing;
+    });
+    return d;
+  }
+
+  // apps/ZEditor/src/io/base64.js
+  function arrayBufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 32768;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+  function base64ToArrayBuffer(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  // apps/ZEditor/src/io/customFonts.js
+  var customFontStore = [];
+  async function registerCustomFont(family, bytes, style = {}) {
+    const face = new FontFace(family, bytes.slice(0), { weight: style.bold ? "700" : "400", style: style.italic ? "italic" : "normal" });
+    await face.load();
+    document.fonts.add(face);
+  }
+  async function addCustomFontFile(file, takenNames) {
+    if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) throw new Error("Choose a .ttf, .otf, .woff or .woff2 font file.");
+    const bytes = await file.arrayBuffer();
+    const base = file.name.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/['"\\]/g, "").trim() || "Custom font";
+    let family = base, n = 2;
+    while (takenNames.includes(family)) family = `${base} ${n++}`;
+    try {
+      await registerCustomFont(family, bytes);
+    } catch (err) {
+      throw new Error("That file isn't a font the browser can read.");
+    }
+    customFontStore.push({ family, data: arrayBufferToBase64(bytes) });
+    return family;
+  }
+
+  // apps/ZEditor/src/io/fontFiles.js
+  function parseStyle(style) {
+    const words = (style || "regular").toLowerCase().replace(/[-_]/g, " ").split(/\s+/).filter(Boolean);
+    const italic = words.some((w) => w === "italic" || w === "oblique");
+    const rest = words.filter((w) => w !== "italic" && w !== "oblique");
+    const weight = rest.length === 0 || rest.length === 1 && ["regular", "normal", "roman", "book"].includes(rest[0]) ? "regular" : rest.join(" ");
+    return { italic, weight };
+  }
+  function createFontResolver() {
+    let localFontsPromise = null;
+    const bytesCache = /* @__PURE__ */ new Map();
+    function localFonts() {
+      if (!localFontsPromise) {
+        localFontsPromise = (async () => {
+          try {
+            if (!("queryLocalFonts" in window) || !navigator.permissions || !navigator.permissions.query) return [];
+            const state = await navigator.permissions.query({ name: "local-fonts" });
+            return state.state === "granted" ? await window.queryLocalFonts() : [];
+          } catch (err) {
+            return [];
+          }
+        })();
+      }
+      return localFontsPromise;
+    }
+    async function find(family, bold, italic) {
+      if (!family) return null;
+      const key = `${family}|${bold ? "b" : ""}${italic ? "i" : ""}`;
+      if (bytesCache.has(key)) return bytesCache.get(key);
+      let found = null;
+      const exact = customFontStore.find((f) => f.family === family && Boolean(f.bold) === Boolean(bold) && Boolean(f.italic) === Boolean(italic));
+      const keptUploaded = customFontStore.some((f) => f.family === family && f.source !== "system");
+      if (exact) {
+        found = { key, bytes: base64ToArrayBuffer(exact.data) };
+      } else if (!keptUploaded) {
+        const wantWeight = bold ? "bold" : "regular";
+        const faces = (await localFonts()).filter((f) => f.family.toLowerCase() === family.toLowerCase());
+        const face = faces.find((f) => {
+          const s = parseStyle(f.style);
+          return s.italic === Boolean(italic) && s.weight === wantWeight;
+        });
+        if (face) {
+          try {
+            found = { key, bytes: await (await face.blob()).arrayBuffer() };
+          } catch (err) {
+            found = null;
+          }
+        }
+      }
+      bytesCache.set(key, found);
+      return found;
+    }
+    return { find };
+  }
+
+  // apps/ZEditor/src/io/textOutline.js
+  var n22 = (v) => String(Math.round(v * 100) / 100);
+  function createTextOutliner() {
+    const fk = typeof window !== "undefined" ? window.fontkit : null;
+    const resolver = createFontResolver();
+    const faces = /* @__PURE__ */ new Map();
+    async function face(ann) {
+      if (!fk) return null;
+      const file = await resolver.find(ann.fontFamily, ann.bold, ann.italic);
+      if (!file) return null;
+      if (!faces.has(file.key)) {
+        let font = null;
+        try {
+          const f = fk.create(new Uint8Array(file.bytes));
+          font = f && !f.fonts ? f : null;
+        } catch (err) {
+          font = null;
+        }
+        faces.set(file.key, font);
+      }
+      return faces.get(file.key);
+    }
+    return { face };
+  }
+  async function outlinedTextPatch(ann, plainLook, outliner = createTextOutliner()) {
+    if (!ann.text || !ann.text.trim()) return { error: "There is no text to outline." };
+    if (!plainLook(ann)) return { error: "This text has an effect (stroke, shadow, gradient, photo fill, ransom, curve, distress or stacked letters). Turn the effect off first, or use Rasterize to Image." };
+    const layout = layoutText(document.createElement("canvas").getContext("2d"), ann, 1);
+    const { runs, lineExtents } = layoutPlainRuns(layout, ann);
+    const { look, fontSize, x, y, boxWidth, boxHeight } = layout;
+    if (look.label) return { error: "A text label can't be outlined. Turn the label off first." };
+    if (runs.some((r) => r.font)) return { error: "This text mixes fonts or sizes in one box, which can't be outlined yet. Make it one font and size first." };
+    const font = await outliner.face(ann);
+    if (!font) return { error: `The font file for ${ann.fontFamily || "this font"} isn't available. Upload it in the font menu (Upload Font File) or allow “Load Local System Fonts”, then try again.` };
+    const byColor = /* @__PURE__ */ new Map();
+    const add = (color, d) => byColor.set(color, (byColor.get(color) || "") + d);
+    for (const r of runs) {
+      if (!r.text.trim()) continue;
+      const d = textPathData(font, r.text, r.x - x, r.baselineY - y, fontSize, look.letterSpacingPx || 0);
+      if (d === null) return { error: "The font doesn't have every character of this text, so it can't be outlined." };
+      add(r.color || look.color, d);
+    }
+    const thick = Math.max(1, fontSize / 15);
+    for (const ext of lineExtents) {
+      for (const seg of ext.segments) {
+        const underlined = seg.underline != null ? seg.underline : ann.underline;
+        const struck = seg.strike != null ? seg.strike : look.strike !== "none";
+        for (const ly of [underlined ? ext.baselineY + fontSize * 0.12 : null, struck ? ext.baselineY - fontSize * 0.3 : null]) {
+          if (ly === null) continue;
+          const a = seg.x0 - x, b = seg.x1 - x, t = ly - y - thick / 2;
+          add(seg.color || look.color, `M${n22(a)} ${n22(t)}H${n22(b)}V${n22(t + thick)}H${n22(a)}Z`);
+        }
+      }
+    }
+    if (!byColor.size) return { error: "Nothing visible to outline." };
+    const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", "columns", "columnGap", "frameHeight", "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth", ...TEXT_PHOTO_PROPS];
+    const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+    const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, void 0]));
+    return {
+      patch: {
+        ...cleared,
+        type: "trace",
+        x,
+        y,
+        width: boxWidth,
+        height: boxHeight,
+        traceW: boxWidth,
+        traceH: boxHeight,
+        paths: [...byColor].map(([color, d]) => ({ color, d })),
+        trace: normalizeTraceSettings({ fills: "on", strokes: "off", view: "result" })
+      }
+    };
+  }
+
+  // apps/ZEditor/src/io/svgExport.js
+  var num = (v) => String(Math.round(v * 100) / 100);
+  var escapeXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  function svgColor(css) {
+    const m = /^rgba?\(([^)]+)\)$/.exec(css || "");
+    if (!m) return { color: css || "#000000", opacity: 1 };
+    const [r, g, b, a = 1] = m[1].split(",").map(Number);
+    return { color: `rgb(${r},${g},${b})`, opacity: a };
+  }
+  function wrapItem(ann, inner, box) {
+    const attrs = [];
+    const angle = angleOf(ann);
+    if (angle && box) attrs.push(`transform="rotate(${num(angle)} ${num(box.x + box.width / 2)} ${num(box.y + box.height / 2)})"`);
+    if (opacityOf(ann) < 1) attrs.push(`opacity="${num(opacityOf(ann))}"`);
+    if (blendOf(ann) !== "normal") attrs.push(`style="mix-blend-mode:${blendOf(ann)}"`);
+    return attrs.length ? `<g ${attrs.join(" ")}>${inner}</g>` : inner;
+  }
+  function traceSvg(ann) {
+    if (!ann.traceW || !ann.traceH) return "";
+    const paths = traceDrawList(ann).map((p) => {
+      const fill = p.fill ? `fill="${p.fill}"` : `fill="none"`;
+      const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${num(p.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"` : "";
+      return `<path d="${p.d}" ${fill}${stroke}/>`;
+    }).join("");
+    const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
+    return `<g transform="translate(${num(ann.x)} ${num(ann.y)}) scale(${+sx.toFixed(6)} ${+sy.toFixed(6)})">${paths}</g>`;
+  }
+  function rectSvg(ann, defs, nextId) {
+    const v = controlValues(ann, RECT_CONTROLS);
+    const w = ann.width, h = ann.height;
+    let fill;
+    if (v.fillType === "solid") {
+      const { r, g, b } = hexToRgb(v.fillColor);
+      fill = `fill="rgb(${r},${g},${b})"${v.fillAlpha < 100 ? ` fill-opacity="${num(v.fillAlpha / 100)}"` : ""}`;
+    } else {
+      const id = nextId("grad");
+      const stops = rectGradientStops(ann).map((s) => {
+        const c = svgColor(s.color);
+        return `<stop offset="${num(s.percent)}%" stop-color="${c.color}"${c.opacity < 1 ? ` stop-opacity="${num(c.opacity)}"` : ""}/>`;
+      }).join("");
+      if (v.fillType === "linear") {
+        const rad = v.gradientAngle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
+        const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(w / 2 - dx * half)}" y1="${num(h / 2 - dy * half)}" x2="${num(w / 2 + dx * half)}" y2="${num(h / 2 + dy * half)}">${stops}</linearGradient>`);
+      } else {
+        defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${num(w / 2)} ${num(h / 2)}) scale(${num(w / 2 * Math.SQRT2)} ${num(h / 2 * Math.SQRT2)})">${stops}</radialGradient>`);
+      }
+      fill = `fill="url(#${id})"`;
+    }
+    const outline = imageEdgeOutline(ann);
+    const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num(w)}" height="${num(h)}" ${fill}/>`;
+    let stroke = "";
+    if (ann.stroke) {
+      const s = effectSettings(ann, STROKE_EFFECT);
+      stroke = `<path d="${outline || rectOutline(ann)}" fill="none" stroke="${s.strokeColor}" stroke-width="${num(s.strokeThickness)}" stroke-miterlimit="4"/>`;
+    }
+    return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
+  }
+  function strokeSvg(ann) {
+    const isHi = ann.tool === "highlighter";
+    const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
+    const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
+    const alpha = isHi ? ` opacity="0.45"` : "";
+    if (ann.taper > 0) return `<path d="${taperedPathD(ann.points, width, ann.taper)}" fill="${color}"${alpha}/>`;
+    return `<path d="${smoothPathD(ann.points)}" fill="none" stroke="${color}" stroke-width="${num(width)}" stroke-linecap="round" stroke-linejoin="round"${alpha}/>`;
+  }
+  function plainTextLook(ann) {
+    const look = textLook(ann);
+    return !(look.stroke || look.shadow || look.gradient || look.photo || look.ransom || look.curve || look.distress || look.stacked);
+  }
+  async function textSvg(ann, fonts, outliner) {
+    const ctx = document.createElement("canvas").getContext("2d");
+    const layout = layoutText(ctx, ann, 1);
+    const { runs, lineExtents } = layoutPlainRuns(layout, ann);
+    const { look, fontSize, x, y, boxWidth, boxHeight } = layout;
+    const family = ann.fontFamily || "sans-serif";
+    let out = "";
+    let outlined = null;
+    if (outliner && !runs.some((r) => r.font)) {
+      const font = await outliner.face(ann);
+      if (font) {
+        const paths = runs.filter((r) => r.text.trim()).map((r) => ({ r, d: textPathData(font, r.text, r.x, r.baselineY, fontSize, look.letterSpacingPx || 0) }));
+        if (paths.every((p) => p.d !== null)) outlined = paths;
+      }
+    }
+    if (!outlined) fonts.add(family);
+    if (look.label) {
+      const c = hexToRgb(look.label.labelColor);
+      out += `<rect x="${num(x)}" y="${num(y)}" width="${num(boxWidth)}" height="${num(boxHeight)}" rx="${num(look.label.labelRadius || 0)}" fill="rgb(${c.r},${c.g},${c.b})"${look.label.labelAlpha < 100 ? ` fill-opacity="${num(look.label.labelAlpha / 100)}"` : ""}/>`;
+    }
+    for (const rule of columnRules(layout, ann)) {
+      out += `<line x1="${num(rule.x)}" y1="${num(rule.y0)}" x2="${num(rule.x)}" y2="${num(rule.y1)}" stroke="${rule.color}" stroke-width="${num(rule.width)}"/>`;
+    }
+    const base = `font-family="${escapeXml(family)}, sans-serif" font-size="${num(fontSize)}"${ann.bold ? ` font-weight="bold"` : ""}${ann.italic ? ` font-style="italic"` : ""}` + (look.letterSpacingPx ? ` letter-spacing="${num(look.letterSpacingPx)}"` : "") + (look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "");
+    const tspans = runs.filter((r) => r.text.trim()).map((r) => {
+      const font = r.font ? ` style="font:${escapeXml(r.font)}"` : "";
+      return `<tspan x="${num(r.x)}" y="${num(r.baselineY)}" fill="${r.color || look.color}"${font}>${escapeXml(r.text)}</tspan>`;
+    }).join("");
+    if (outlined) {
+      const fillOpacity = look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "";
+      out += outlined.map((p) => `<path d="${p.d}" fill="${p.r.color || look.color}"${fillOpacity}/>`).join("");
+    } else out += `<text ${base} xml:space="preserve">${tspans}</text>`;
+    for (const ext of lineExtents) {
+      for (const seg of ext.segments) {
+        const lines = [];
+        const underlined = seg.underline != null ? seg.underline : ann.underline;
+        const struck = seg.strike != null ? seg.strike : look.strike !== "none";
+        if (underlined) lines.push(ext.baselineY + fontSize * 0.12);
+        if (struck) lines.push(ext.baselineY - fontSize * 0.3);
+        for (const ly of lines) out += `<line x1="${num(seg.x0)}" y1="${num(ly)}" x2="${num(seg.x1)}" y2="${num(ly)}" stroke="${seg.color || look.color}" stroke-width="${num(Math.max(1, fontSize / 15))}"/>`;
+      }
+    }
+    return { svg: out, box: { x, y, width: boxWidth, height: boxHeight }, outlined: Boolean(outlined) };
+  }
+  function imageTag(patch) {
+    return `<image href="${patch.src}" x="${num(patch.x)}" y="${num(patch.y)}" width="${num(patch.width)}" height="${num(patch.height)}" preserveAspectRatio="none"/>`;
+  }
+  var groupId = (name, taken) => {
+    const base = String(name).trim().slice(0, 40).replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "") || "Layer";
+    let id = /^[\p{L}_]/u.test(base) ? base : "_" + base, k = 1;
+    while (taken.has(id)) id = `${base}_${++k}`;
+    taken.add(id);
+    return id;
+  };
+  async function layerParts(items, pageFilter, ctx) {
+    const parts = [];
+    const named = (ann, svg) => `<g id="${escapeXml(groupId(layerName(ann), ctx.ids))}" data-name="${escapeXml(layerName(ann))}">${svg}</g>`;
+    for (const ann of items) {
+      if (isClipped(ann)) ctx.counts.clipped++;
+      const box = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
+      const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture);
+      if (ann.type === "trace" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, traceSvg(ann), box)));
+      else if (ann.type === "rect" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, rectSvg(ann, ctx.defs, ctx.nextId), box)));
+      else if (ann.type === "stroke") parts.push(named(ann, wrapItem(ann, strokeSvg(ann), null)));
+      else if (ann.type === "text" && plainTextLook(ann)) {
+        if (!ann.text || !ann.text.trim()) continue;
+        const t = await textSvg(ann, ctx.fonts, ctx.outliner);
+        if (t.outlined) ctx.counts.outlined++;
+        parts.push(named(ann, wrapItem(ann, t.svg, t.box)));
+      } else {
+        const patch = ann.type === "image" ? await flattenedImagePatch(ann, pageFilter) : ann.type === "text" ? await rasterizedTextPatch(ann) : ann.type === "rect" ? await rasterizedRectPatch(ann) : null;
+        if (!patch) continue;
+        ctx.counts.pictures++;
+        parts.push(named(ann, wrapItem({ ...ann, angle: void 0 }, imageTag(patch), null)));
+      }
+    }
+    return parts;
+  }
+  var newContext = (options) => ({
+    defs: [],
+    ids: /* @__PURE__ */ new Set(),
+    fonts: /* @__PURE__ */ new Set(),
+    counts: { pictures: 0, clipped: 0, outlined: 0 },
+    nextId: /* @__PURE__ */ (() => {
+      let n = 0;
+      return (prefix) => `${prefix}${++n}`;
+    })(),
+    outliner: options && options.outlineText ? createTextOutliner() : null
+  });
+  var result = (svg, ctx) => ({ svg, pictures: ctx.counts.pictures, clipped: ctx.counts.clipped, outlined: ctx.counts.outlined, fonts: [...ctx.fonts] });
+  async function layersToSvg(items, pageFilter, options) {
+    if (!items.length) return null;
+    const ctx = newContext(options);
+    const parts = await layerParts(items, pageFilter, ctx);
+    if (!parts.length) return null;
+    const boundsOf = (ann) => ann.type === "trace" && traceContentBounds(ann) || annotationBounds(ann);
+    const bounds = items.map(boundsOf).reduce((u, b) => ({
+      x0: Math.min(u.x0, b.x),
+      y0: Math.min(u.y0, b.y),
+      x1: Math.max(u.x1, b.x + b.width),
+      y1: Math.max(u.y1, b.y + b.height)
+    }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+    const pad = 1;
+    const vb = { x: bounds.x0 - pad, y: bounds.y0 - pad, w: bounds.x1 - bounds.x0 + pad * 2, h: bounds.y1 - bounds.y0 + pad * 2 };
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(vb.w / MAIN_SCALE)}pt" height="${num(vb.h / MAIN_SCALE)}pt" viewBox="${num(vb.x)} ${num(vb.y)} ${num(vb.w)} ${num(vb.h)}">
+` + (ctx.defs.length ? `<defs>${ctx.defs.join("")}</defs>
+` : "") + parts.join("\n") + "\n</svg>\n";
+    return result(svg, ctx);
+  }
+  async function pagesToSvg(pages, indices, pdfDocsRef, options) {
+    const ctx = newContext(options);
+    const GAP = 40;
+    let offset = 0, maxH = 0;
+    const groups = [];
+    for (const idx of indices) {
+      const page = pages[idx];
+      const size = await getPageDisplaySize(page, pdfDocsRef, MAIN_SCALE);
+      const filter = page.filter || DEFAULT_PAGE_FILTER;
+      const items = resolvePageText(page.annotations || [], pages).filter((a) => !a.hidden);
+      let background = "";
+      if (!page.isBlank) {
+        const canvas = await renderPageToCanvas({ ...page, annotations: [] }, pdfDocsRef, 2, filter, null);
+        background = `<g id="Page_background" data-name="Page background"><image href="${canvas.toDataURL("image/png")}" x="0" y="0" width="${num(size.width)}" height="${num(size.height)}" preserveAspectRatio="none"/></g>`;
+        ctx.counts.pictures++;
+      } else if (!page.isCanvas) {
+        background = `<g id="Page_background" data-name="Page background"><rect width="${num(size.width)}" height="${num(size.height)}" fill="#ffffff"/></g>`;
+      }
+      const parts = await layerParts(items, filter, ctx);
+      const name = `Page ${groups.length + 1}`;
+      groups.push(`<g id="${name.replace(" ", "_")}" data-name="${name}" transform="translate(${num(offset)} 0)">${background}
+${parts.join("\n")}</g>`);
+      offset += size.width + GAP;
+      maxH = Math.max(maxH, size.height);
+    }
+    const totalW = offset - GAP;
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(totalW / MAIN_SCALE)}pt" height="${num(maxH / MAIN_SCALE)}pt" viewBox="0 0 ${num(totalW)} ${num(maxH)}">
+` + (ctx.defs.length ? `<defs>${ctx.defs.join("")}</defs>
+` : "") + groups.join("\n") + "\n</svg>\n";
+    return result(svg, ctx);
+  }
+
   // apps/ZEditor/src/state/textFrameActions.js
   var FRAME_GAP = 12;
   function makeTextFrameActions({ pages, selectedIdx, pdfDocsRef, nextAnnIdRef, updateAnnotationsFor, updatePagesFor, setSelectedAnnId, setSelectedAnnIds }) {
@@ -9144,10 +9558,10 @@
       const ids = selectedAnnotationIds();
       if (selectedIdx === null || ids.length < 2) return;
       const used = new Set(pages.flatMap((p) => (p.annotations || []).map((a) => a.groupId).filter(Boolean)));
-      let groupId = "g" + nextAnnIdRef.current++;
-      while (used.has(groupId)) groupId = "g" + nextAnnIdRef.current++;
+      let groupId2 = "g" + nextAnnIdRef.current++;
+      while (used.has(groupId2)) groupId2 = "g" + nextAnnIdRef.current++;
       updateAnnotationsFor(selectedIdx, (anns) => {
-        const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId }));
+        const members = anns.filter((a) => ids.includes(a.id)).map((a) => ({ ...a, groupId: groupId2 }));
         const topIndex = Math.max(...anns.map((a, i) => ids.includes(a.id) ? i : -1));
         const rest = anns.filter((a) => !ids.includes(a.id));
         rest.splice(topIndex + 1 - members.length, 0, ...members);
@@ -9176,14 +9590,14 @@
       const ids = selectedAnnotationIds();
       handleSetClip(ids, clipTargets(currentAnnotations(), ids).length > 0);
     }
-    function handleRenameGroup(groupId, name) {
+    function handleRenameGroup(groupId2, name) {
       if (selectedIdx === null) return;
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId ? { ...a, groupName: name || void 0 } : a));
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId2 ? { ...a, groupName: name || void 0 } : a));
     }
-    function handleSetGroupFlag(groupId, flag, on) {
+    function handleSetGroupFlag(groupId2, flag, on) {
       if (selectedIdx === null) return;
-      const members = currentAnnotations().filter((a) => a.groupId === groupId).map((a) => a.id);
-      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId ? { ...a, [flag]: on || void 0 } : a));
+      const members = currentAnnotations().filter((a) => a.groupId === groupId2).map((a) => a.id);
+      updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId2 ? { ...a, [flag]: on || void 0 } : a));
       if (on && [selectedAnnId, ...selectedAnnIds].some((id) => members.includes(id))) {
         setSelectedAnnId(null);
         setSelectedAnnIds([]);
@@ -9385,6 +9799,13 @@
       if (!patch) return;
       updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch } : a));
     }
+    async function handleOutlineText(ann) {
+      const pageIdx = selectedIdx;
+      const { patch, error } = await outlinedTextPatch(ann, plainTextLook);
+      if (error) return error;
+      updateAnnotationsFor(pageIdx, (anns) => anns.map((a) => a.id === ann.id ? { ...a, ...patch, name: ann.name || layerName(ann) } : a));
+      return null;
+    }
     async function handleRasterizeRect(ann) {
       const pageIdx = selectedIdx;
       const patch = await rasterizedRectPatch(ann);
@@ -9439,6 +9860,7 @@
       handleRemoveBackground,
       handleOpenInAiTools,
       handleRasterizeText,
+      handleOutlineText,
       handleRasterizeRect,
       handleDeleteAnnotation,
       handleEraseStroke,
@@ -9999,100 +10421,6 @@
     return lines;
   }
 
-  // apps/ZEditor/src/io/base64.js
-  function arrayBufferToBase64(buf) {
-    const bytes = new Uint8Array(buf);
-    const chunkSize = 32768;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-    }
-    return btoa(binary);
-  }
-  function base64ToArrayBuffer(b64) {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.buffer;
-  }
-
-  // apps/ZEditor/src/io/customFonts.js
-  var customFontStore = [];
-  async function registerCustomFont(family, bytes, style = {}) {
-    const face = new FontFace(family, bytes.slice(0), { weight: style.bold ? "700" : "400", style: style.italic ? "italic" : "normal" });
-    await face.load();
-    document.fonts.add(face);
-  }
-  async function addCustomFontFile(file, takenNames) {
-    if (!/\.(ttf|otf|woff2?)$/i.test(file.name)) throw new Error("Choose a .ttf, .otf, .woff or .woff2 font file.");
-    const bytes = await file.arrayBuffer();
-    const base = file.name.replace(/\.[^.]+$/, "").replace(/_+/g, " ").replace(/['"\\]/g, "").trim() || "Custom font";
-    let family = base, n = 2;
-    while (takenNames.includes(family)) family = `${base} ${n++}`;
-    try {
-      await registerCustomFont(family, bytes);
-    } catch (err) {
-      throw new Error("That file isn't a font the browser can read.");
-    }
-    customFontStore.push({ family, data: arrayBufferToBase64(bytes) });
-    return family;
-  }
-
-  // apps/ZEditor/src/io/fontFiles.js
-  function parseStyle(style) {
-    const words = (style || "regular").toLowerCase().replace(/[-_]/g, " ").split(/\s+/).filter(Boolean);
-    const italic = words.some((w) => w === "italic" || w === "oblique");
-    const rest = words.filter((w) => w !== "italic" && w !== "oblique");
-    const weight = rest.length === 0 || rest.length === 1 && ["regular", "normal", "roman", "book"].includes(rest[0]) ? "regular" : rest.join(" ");
-    return { italic, weight };
-  }
-  function createFontResolver() {
-    let localFontsPromise = null;
-    const bytesCache = /* @__PURE__ */ new Map();
-    function localFonts() {
-      if (!localFontsPromise) {
-        localFontsPromise = (async () => {
-          try {
-            if (!("queryLocalFonts" in window) || !navigator.permissions || !navigator.permissions.query) return [];
-            const state = await navigator.permissions.query({ name: "local-fonts" });
-            return state.state === "granted" ? await window.queryLocalFonts() : [];
-          } catch (err) {
-            return [];
-          }
-        })();
-      }
-      return localFontsPromise;
-    }
-    async function find(family, bold, italic) {
-      if (!family) return null;
-      const key = `${family}|${bold ? "b" : ""}${italic ? "i" : ""}`;
-      if (bytesCache.has(key)) return bytesCache.get(key);
-      let found = null;
-      const exact = customFontStore.find((f) => f.family === family && Boolean(f.bold) === Boolean(bold) && Boolean(f.italic) === Boolean(italic));
-      const keptUploaded = customFontStore.some((f) => f.family === family && f.source !== "system");
-      if (exact) {
-        found = { key, bytes: base64ToArrayBuffer(exact.data) };
-      } else if (!keptUploaded) {
-        const wantWeight = bold ? "bold" : "regular";
-        const faces = (await localFonts()).filter((f) => f.family.toLowerCase() === family.toLowerCase());
-        const face = faces.find((f) => {
-          const s = parseStyle(f.style);
-          return s.italic === Boolean(italic) && s.weight === wantWeight;
-        });
-        if (face) {
-          try {
-            found = { key, bytes: await (await face.blob()).arrayBuffer() };
-          } catch (err) {
-            found = null;
-          }
-        }
-      }
-      bytesCache.set(key, found);
-      return found;
-    }
-    return { find };
-  }
-
   // apps/ZEditor/src/io/vectorText.js
   var COMPLEX_SCRIPT = /[֐-ࣿऀ-෿฀-໿က-႟ក-៿]/;
   function blockerFor(ann) {
@@ -10354,165 +10682,6 @@
     return outDoc.save();
   }
 
-  // apps/ZEditor/src/io/svgExport.js
-  var num = (v) => String(Math.round(v * 100) / 100);
-  var escapeXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  function svgColor(css) {
-    const m = /^rgba?\(([^)]+)\)$/.exec(css || "");
-    if (!m) return { color: css || "#000000", opacity: 1 };
-    const [r, g, b, a = 1] = m[1].split(",").map(Number);
-    return { color: `rgb(${r},${g},${b})`, opacity: a };
-  }
-  function wrapItem(ann, inner, box) {
-    const attrs = [];
-    const angle = angleOf(ann);
-    if (angle && box) attrs.push(`transform="rotate(${num(angle)} ${num(box.x + box.width / 2)} ${num(box.y + box.height / 2)})"`);
-    if (opacityOf(ann) < 1) attrs.push(`opacity="${num(opacityOf(ann))}"`);
-    if (blendOf(ann) !== "normal") attrs.push(`style="mix-blend-mode:${blendOf(ann)}"`);
-    return attrs.length ? `<g ${attrs.join(" ")}>${inner}</g>` : inner;
-  }
-  function traceSvg(ann) {
-    if (!ann.traceW || !ann.traceH) return "";
-    const paths = traceDrawList(ann).map((p) => {
-      const fill = p.fill ? `fill="${p.fill}"` : `fill="none"`;
-      const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${num(p.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"` : "";
-      return `<path d="${p.d}" ${fill}${stroke}/>`;
-    }).join("");
-    const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
-    return `<g transform="translate(${num(ann.x)} ${num(ann.y)}) scale(${+sx.toFixed(6)} ${+sy.toFixed(6)})">${paths}</g>`;
-  }
-  function rectSvg(ann, defs, nextId) {
-    const v = controlValues(ann, RECT_CONTROLS);
-    const w = ann.width, h = ann.height;
-    let fill;
-    if (v.fillType === "solid") {
-      const { r, g, b } = hexToRgb(v.fillColor);
-      fill = `fill="rgb(${r},${g},${b})"${v.fillAlpha < 100 ? ` fill-opacity="${num(v.fillAlpha / 100)}"` : ""}`;
-    } else {
-      const id = nextId("grad");
-      const stops = rectGradientStops(ann).map((s) => {
-        const c = svgColor(s.color);
-        return `<stop offset="${num(s.percent)}%" stop-color="${c.color}"${c.opacity < 1 ? ` stop-opacity="${num(c.opacity)}"` : ""}/>`;
-      }).join("");
-      if (v.fillType === "linear") {
-        const rad = v.gradientAngle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
-        const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
-        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(w / 2 - dx * half)}" y1="${num(h / 2 - dy * half)}" x2="${num(w / 2 + dx * half)}" y2="${num(h / 2 + dy * half)}">${stops}</linearGradient>`);
-      } else {
-        defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${num(w / 2)} ${num(h / 2)}) scale(${num(w / 2 * Math.SQRT2)} ${num(h / 2 * Math.SQRT2)})">${stops}</radialGradient>`);
-      }
-      fill = `fill="url(#${id})"`;
-    }
-    const outline = imageEdgeOutline(ann);
-    const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num(w)}" height="${num(h)}" ${fill}/>`;
-    let stroke = "";
-    if (ann.stroke) {
-      const s = effectSettings(ann, STROKE_EFFECT);
-      stroke = `<path d="${outline || rectOutline(ann)}" fill="none" stroke="${s.strokeColor}" stroke-width="${num(s.strokeThickness)}" stroke-miterlimit="4"/>`;
-    }
-    return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
-  }
-  function strokeSvg(ann) {
-    const isHi = ann.tool === "highlighter";
-    const color = ann.color || (isHi ? HIGHLIGHTER_DEFAULTS.color : PEN_DEFAULTS.color);
-    const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
-    const alpha = isHi ? ` opacity="0.45"` : "";
-    if (ann.taper > 0) return `<path d="${taperedPathD(ann.points, width, ann.taper)}" fill="${color}"${alpha}/>`;
-    return `<path d="${smoothPathD(ann.points)}" fill="none" stroke="${color}" stroke-width="${num(width)}" stroke-linecap="round" stroke-linejoin="round"${alpha}/>`;
-  }
-  function plainTextLook(ann) {
-    const look = textLook(ann);
-    return !(look.stroke || look.shadow || look.gradient || look.photo || look.ransom || look.curve || look.distress || look.stacked);
-  }
-  function textSvg(ann, fonts) {
-    const ctx = document.createElement("canvas").getContext("2d");
-    const layout = layoutText(ctx, ann, 1);
-    const { runs, lineExtents } = layoutPlainRuns(layout, ann);
-    const { look, fontSize, x, y, boxWidth, boxHeight } = layout;
-    const family = ann.fontFamily || "sans-serif";
-    fonts.add(family);
-    let out = "";
-    if (look.label) {
-      const c = hexToRgb(look.label.labelColor);
-      out += `<rect x="${num(x)}" y="${num(y)}" width="${num(boxWidth)}" height="${num(boxHeight)}" rx="${num(look.label.labelRadius || 0)}" fill="rgb(${c.r},${c.g},${c.b})"${look.label.labelAlpha < 100 ? ` fill-opacity="${num(look.label.labelAlpha / 100)}"` : ""}/>`;
-    }
-    for (const rule of columnRules(layout, ann)) {
-      out += `<line x1="${num(rule.x)}" y1="${num(rule.y0)}" x2="${num(rule.x)}" y2="${num(rule.y1)}" stroke="${rule.color}" stroke-width="${num(rule.width)}"/>`;
-    }
-    const base = `font-family="${escapeXml(family)}, sans-serif" font-size="${num(fontSize)}"${ann.bold ? ` font-weight="bold"` : ""}${ann.italic ? ` font-style="italic"` : ""}` + (look.letterSpacingPx ? ` letter-spacing="${num(look.letterSpacingPx)}"` : "") + (look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "");
-    const tspans = runs.filter((r) => r.text.trim()).map((r) => {
-      const font = r.font ? ` style="font:${escapeXml(r.font)}"` : "";
-      return `<tspan x="${num(r.x)}" y="${num(r.baselineY)}" fill="${r.color || look.color}"${font}>${escapeXml(r.text)}</tspan>`;
-    }).join("");
-    out += `<text ${base} xml:space="preserve">${tspans}</text>`;
-    for (const ext of lineExtents) {
-      for (const seg of ext.segments) {
-        const lines = [];
-        const underlined = seg.underline != null ? seg.underline : ann.underline;
-        const struck = seg.strike != null ? seg.strike : look.strike !== "none";
-        if (underlined) lines.push(ext.baselineY + fontSize * 0.12);
-        if (struck) lines.push(ext.baselineY - fontSize * 0.3);
-        for (const ly of lines) out += `<line x1="${num(seg.x0)}" y1="${num(ly)}" x2="${num(seg.x1)}" y2="${num(ly)}" stroke="${seg.color || look.color}" stroke-width="${num(Math.max(1, fontSize / 15))}"/>`;
-      }
-    }
-    return { svg: out, box: { x, y, width: boxWidth, height: boxHeight } };
-  }
-  function imageTag(patch) {
-    return `<image href="${patch.src}" x="${num(patch.x)}" y="${num(patch.y)}" width="${num(patch.width)}" height="${num(patch.height)}" preserveAspectRatio="none"/>`;
-  }
-  async function layersToSvg(items, pageFilter) {
-    if (!items.length) return null;
-    const defs = [];
-    let counter = 0;
-    const nextId = (prefix) => `${prefix}${++counter}`;
-    const fonts = /* @__PURE__ */ new Set();
-    let pictures = 0, clipped = 0;
-    const parts = [];
-    for (const ann of items) {
-      if (isClipped(ann)) clipped++;
-      const box = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-      const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture);
-      if (ann.type === "trace" && !hasLookOnly) parts.push(wrapItem(ann, traceSvg(ann), box));
-      else if (ann.type === "rect" && !hasLookOnly) parts.push(wrapItem(ann, rectSvg(ann, defs, nextId), box));
-      else if (ann.type === "stroke") parts.push(wrapItem(ann, strokeSvg(ann), null));
-      else if (ann.type === "text" && plainTextLook(ann)) {
-        if (!ann.text || !ann.text.trim()) continue;
-        const t = textSvg(ann, fonts);
-        parts.push(wrapItem(ann, t.svg, t.box));
-      } else {
-        const patch = ann.type === "image" ? await flattenedImagePatch(ann, pageFilter) : ann.type === "text" ? await rasterizedTextPatch(ann) : ann.type === "rect" ? await rasterizedRectPatch(ann) : null;
-        if (!patch) continue;
-        pictures++;
-        parts.push(wrapItem({ ...ann, angle: void 0 }, imageTag(patch), null));
-      }
-    }
-    if (!parts.length) return null;
-    const boundsOf = (ann) => ann.type === "trace" && traceContentBounds(ann) || annotationBounds(ann);
-    const bounds = items.map(boundsOf).reduce((u, b) => ({
-      x0: Math.min(u.x0, b.x),
-      y0: Math.min(u.y0, b.y),
-      x1: Math.max(u.x1, b.x + b.width),
-      y1: Math.max(u.y1, b.y + b.height)
-    }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
-    const pad = 1;
-    const vb = { x: bounds.x0 - pad, y: bounds.y0 - pad, w: bounds.x1 - bounds.x0 + pad * 2, h: bounds.y1 - bounds.y0 + pad * 2 };
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(vb.w / MAIN_SCALE)}pt" height="${num(vb.h / MAIN_SCALE)}pt" viewBox="${num(vb.x)} ${num(vb.y)} ${num(vb.w)} ${num(vb.h)}">
-` + (defs.length ? `<defs>${defs.join("")}</defs>
-` : "") + parts.join("\n") + "\n</svg>\n";
-    return { svg, pictures, clipped, fonts: [...fonts] };
-  }
-
-  // apps/ZEditor/src/model/layerNames.js
-  function layerName(ann) {
-    if (ann.name) return ann.name;
-    if (ann.type === "text") return ann.text.trim().split("\n")[0] || "Text";
-    if (ann.type === "stroke") return ann.tool === "highlighter" ? "Highlight" : "Drawing";
-    if (ann.type === "trace") return "Vectorized";
-    if (ann.type === "rect") return isEllipse(ann) ? "Ellipse" : "Rectangle";
-    return "Image";
-  }
-
   // shared/js/zineArrangerHandoff.js
   var ARRANGER_READY_MESSAGE = "zinearranger-ready";
   var HANDOFF_PDF_MESSAGE = "zeditor-handoff-pdf";
@@ -10616,6 +10785,35 @@
       const wanted = new Set(ids || selection.selectedAnnotationIds());
       return resolvePageText(page.annotations || [], pages).filter((a) => wanted.has(a.id) && !a.hidden);
     }
+    function svgNotes(result2) {
+      const notes = [];
+      if (result2.pictures) notes.push(`${result2.pictures} layer${result2.pictures === 1 ? " went" : "s went"} in as a picture (photos, imported pages, and text or shapes with effects SVG can't hold)`);
+      if (result2.outlined) notes.push(`${result2.outlined} text box${result2.outlined === 1 ? " was" : "es were"} turned into outlines`);
+      if (result2.fonts.length) {
+        notes.push(view.svgOutlineText ? `${result2.fonts.join(", ")} could not be outlined (the font file isn't available: upload it in the font menu or allow Load Local System Fonts), so that text stays live text and needs the font installed` : `text uses ${result2.fonts.join(", ")}: it looks right where ${result2.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
+      }
+      if (result2.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+      return notes;
+    }
+    async function handleExportPagesSvg(allPages) {
+      const indices = allPages ? pages.map((_, i) => i) : doc.selectedIdx !== null ? [doc.selectedIdx] : [];
+      if (!indices.length || exporting) return;
+      setErrorMsg(null);
+      setNotice(null);
+      setExporting(true);
+      try {
+        const result2 = await pagesToSvg(pages, indices, pdfDocsRef, { outlineText: view.svgOutlineText });
+        const name = allPages || pages.length === 1 ? titleToFileName(project.docTitle, ".svg") : pageImageFileName(project.docTitle, indices[0], pages.length, ".svg");
+        const saved = await saveFile(result2.svg, name, "image/svg+xml", "SVG image", [".svg"]);
+        if (saved === "cancelled") return;
+        const notes = svgNotes(result2);
+        setNotice((allPages ? `Saved ${indices.length} page${indices.length === 1 ? "" : "s"} as one SVG.` : "Saved the page as SVG.") + (notes.length ? " Note: " + notes.join("; ") + "." : ""));
+      } catch (err) {
+        setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setExporting(false);
+      }
+    }
     async function handleExportSvg(ids) {
       const items = svgLayersFor(ids);
       if (!items.length || exporting) return;
@@ -10623,18 +10821,15 @@
       setNotice(null);
       setExporting(true);
       try {
-        const result = await layersToSvg(items, doc.pageFilter);
-        if (!result) {
+        const result2 = await layersToSvg(items, doc.pageFilter, { outlineText: view.svgOutlineText });
+        if (!result2) {
           setNotice("Nothing visible to save as SVG.");
           return;
         }
         const name = items.length === 1 ? layerName(items[0]) : project.docTitle;
-        const saved = await saveFile(result.svg, titleToFileName(name, ".svg"), "image/svg+xml", "SVG image", [".svg"]);
+        const saved = await saveFile(result2.svg, titleToFileName(name, ".svg"), "image/svg+xml", "SVG image", [".svg"]);
         if (saved === "cancelled") return;
-        const notes = [];
-        if (result.pictures) notes.push(`${result.pictures} layer${result.pictures === 1 ? " went" : "s went"} in as a picture (photos, and text or shapes with effects SVG can't hold)`);
-        if (result.fonts.length) notes.push(`text uses ${result.fonts.join(", ")}: it looks right where ${result.fonts.length === 1 ? "that font is" : "those fonts are"} installed`);
-        if (result.clipped) notes.push("clipping masks aren't applied (clipped layers go in whole)");
+        const notes = svgNotes(result2);
         setNotice(notes.length ? "Saved SVG. Note: " + notes.join("; ") + "." : `Saved SVG (${items.length} layer${items.length === 1 ? "" : "s"}, all vector).`);
       } catch (err) {
         setErrorMsg("Couldn't save SVG — " + (err && err.message ? err.message : "unknown error"));
@@ -10662,6 +10857,7 @@
       handleExportAllImages,
       handleSendToZineArranger,
       handleExportSvg,
+      handleExportPagesSvg,
       canExportSvg: () => svgLayersFor().length > 0
     };
   }
@@ -11203,8 +11399,8 @@
     return pixels;
   }
   async function runTrace(src, settings) {
-    const result = traceImage(await pixelsOf(src), settings);
-    return { traceW: result.width, traceH: result.height, paths: result.paths };
+    const result2 = traceImage(await pixelsOf(src), settings);
+    return { traceW: result2.width, traceH: result2.height, paths: result2.paths };
   }
 
   // apps/ZEditor/src/state/useImageTrace.js
@@ -11224,8 +11420,8 @@
       try {
         const settings = presetSettings(preset);
         const source = await traceSourceFromImage(image, doc.pageFilter);
-        const result = await runTrace(source, settings);
-        const layer = newTraceLayer(id, image, source, settings, result);
+        const result2 = await runTrace(source, settings);
+        const layer = newTraceLayer(id, image, source, settings, result2);
         edits.updateAnnotationsFor(pageIdx, (anns) => anns.flatMap((a) => a.id === image.id ? [{ ...a, hidden: true }, { ...layer, groupId: a.groupId }] : [a]));
         selection.setSelectedAnnIds([]);
         selection.setSelectedAnnId(id);
@@ -11245,8 +11441,8 @@
       timerRef.current = setTimeout(async () => {
         setBusyId(ann.id);
         try {
-          const result = await runTrace(ann.traceSource, settings);
-          if (token === tokenRef.current) edits.handleUpdateAnnotation(ann.id, result);
+          const result2 = await runTrace(ann.traceSource, settings);
+          if (token === tokenRef.current) edits.handleUpdateAnnotation(ann.id, result2);
         } catch (err) {
           setError("Couldn't vectorize this image: " + (err && err.message ? err.message : err));
         } finally {
@@ -12139,13 +12335,13 @@
     }
     return { x: m.x + m.width / 2, y: m.y + m.height / 2 };
   }
-  function applyMarqueeResult(annotations, result, newId2, coverId) {
-    const hasSource = result.sourceId !== null && result.sourceId !== void 0;
-    const list = annotations.map((a) => hasSource && result.sourcePatch && a.id === result.sourceId ? { ...a, ...result.sourcePatch } : a);
-    const at = hasSource ? list.findIndex((a) => a.id === result.sourceId) + 1 || list.length : list.length;
+  function applyMarqueeResult(annotations, result2, newId2, coverId) {
+    const hasSource = result2.sourceId !== null && result2.sourceId !== void 0;
+    const list = annotations.map((a) => hasSource && result2.sourcePatch && a.id === result2.sourceId ? { ...a, ...result2.sourcePatch } : a);
+    const at = hasSource ? list.findIndex((a) => a.id === result2.sourceId) + 1 || list.length : list.length;
     const added = [];
-    if (result.cover) added.push({ ...result.cover, id: coverId });
-    if (result.layer) added.push({ ...result.layer, id: newId2 });
+    if (result2.cover) added.push({ ...result2.cover, id: coverId });
+    if (result2.layer) added.push({ ...result2.layer, id: newId2 });
     list.splice(at, 0, ...added);
     return list;
   }
@@ -12897,8 +13093,8 @@
     const fillOnly = mode === "fill";
     const layer = fillOnly ? null : layerFromRegion(picture, marquee, scale, LAYER_NAMES[mode]);
     if (!fillOnly && !layer) return { notice: "Nothing is visible inside the marquee." };
-    const result = { layer, fillOnly, cover: null, sourceId: target ? target.id : null, sourcePatch: null, notice: null };
-    if (mode === "copy") return result;
+    const result2 = { layer, fillOnly, cover: null, sourceId: target ? target.id : null, sourcePatch: null, notice: null };
+    if (mode === "copy") return result2;
     const surround = fillOnly || settings.cutLeaves === "surround";
     const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : settings.fillStyle === "ai" ? "ai" : "smooth";
     const fillInfo = { fellBack: false };
@@ -12922,15 +13118,15 @@
         if (!rasterized) return { notice: "Nothing is visible on that layer to cut." };
         base = { ...target, ...rasterized };
       }
-      result.sourcePatch = { ...rasterized || {}, src: await cutFromImage(base, marquee, settings, surround ? fillOpts : null, fillInfo) };
-      if (rasterized) result.notice = "The layer was turned into an image so part of it could be cut.";
+      result2.sourcePatch = { ...rasterized || {}, src: await cutFromImage(base, marquee, settings, surround ? fillOpts : null, fillInfo) };
+      if (rasterized) result2.notice = "The layer was turned into an image so part of it could be cut.";
     } else {
-      result.cover = surround ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, fillOpts, fillInfo) : await coverForRegion(marquee, settings.fillColor, scale);
-      if (surround && !result.cover) return { notice: "There is nothing around the marquee to fill it from." };
-      if (surround && fillOnly) result.sourceId = null;
+      result2.cover = surround ? await filledCoverFromPage(page, pdfDocsRef, pageFilter, marquee, scale, fillOpts, fillInfo) : await coverForRegion(marquee, settings.fillColor, scale);
+      if (surround && !result2.cover) return { notice: "There is nothing around the marquee to fill it from." };
+      if (surround && fillOnly) result2.sourceId = null;
     }
-    if (fillInfo.fellBack) result.notice = (result.notice ? result.notice + " " : "") + "Pattern fill could not be used here (the area is bigger than " + MAX_HOLE_SIDE + " px, or there is nothing clear of it to copy from), so Smooth was used.";
-    return result;
+    if (fillInfo.fellBack) result2.notice = (result2.notice ? result2.notice + " " : "") + "Pattern fill could not be used here (the area is bigger than " + MAX_HOLE_SIDE + " px, or there is nothing clear of it to copy from), so Smooth was used.";
+    return result2;
   }
   async function drawLayerAlone(page, pdfDocsRef, pageFilter, target) {
     const size = await getPageDisplaySize(page, pdfDocsRef, EXPORT_SCALE);
@@ -13223,7 +13419,7 @@
       setBusy(true);
       st.setNotice(null);
       try {
-        const result = await buildMarqueeLayer({
+        const result2 = await buildMarqueeLayer({
           page,
           pdfDocsRef: d.pdfDocsRef,
           pageFilter: d.pageFilter,
@@ -13232,16 +13428,16 @@
           mode: mode || settings.action,
           targetId: sel.selectedAnnId
         });
-        if (result.notice) st.setNotice(result.notice);
-        if (!result.layer && !result.fillOnly) return;
+        if (result2.notice) st.setNotice(result2.notice);
+        if (!result2.layer && !result2.fillOnly) return;
         const now = latest.current.doc.selectedPage;
         if (!now || now.key !== page.key) return;
-        if (result.fillOnly && !result.cover && !result.sourcePatch) return;
-        const newId2 = result.layer ? d.nextAnnIdRef.current++ : null;
-        const coverId = result.cover ? d.nextAnnIdRef.current++ : null;
-        ed.updateAnnotationsFor(pageIdx, (anns) => applyMarqueeResult(anns, result, newId2, coverId));
+        if (result2.fillOnly && !result2.cover && !result2.sourcePatch) return;
+        const newId2 = result2.layer ? d.nextAnnIdRef.current++ : null;
+        const coverId = result2.cover ? d.nextAnnIdRef.current++ : null;
+        ed.updateAnnotationsFor(pageIdx, (anns) => applyMarqueeResult(anns, result2, newId2, coverId));
         lastFill.current = mode === "fill" ? { depth: null, pageKey: page.key } : null;
-        if (result.layer) {
+        if (result2.layer) {
           sel.selectTool("select");
           sel.setSelectedAnnId(newId2);
           sel.setSelectedAnnIds([]);
@@ -14352,6 +14548,7 @@
     const [layoutSettings, setLayoutSettings] = useState15(DEFAULT_LAYOUT_SETTINGS);
     const [exportBleed, setExportBleed] = useState15(true);
     const [exportCropMarks, setExportCropMarks] = useState15(false);
+    const [svgOutlineText, setSvgOutlineText] = useState15(true);
     const [layersPosition, setLayersPosition] = useState15(null);
     const [layersSize, setLayersSize] = useState15(null);
     const [embedFonts, setEmbedFonts] = useState15(true);
@@ -14376,7 +14573,8 @@
         embedFontsSkip,
         layoutSettings,
         exportBleed,
-        exportCropMarks
+        exportCropMarks,
+        svgOutlineText
       };
     }
     function applySavedSettings(s) {
@@ -14394,6 +14592,7 @@
       setGuidesLocked(s.guidesLocked === true);
       setExportBleed(s.exportBleed !== false);
       setExportCropMarks(s.exportCropMarks === true);
+      setSvgOutlineText(s.svgOutlineText !== false);
       setLayoutSettings(normalizeLayoutSettings(s.layoutSettings));
       setEmbedFonts(s.embedFonts !== false);
       setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
@@ -14415,6 +14614,8 @@
       setExportBleed,
       exportCropMarks,
       setExportCropMarks,
+      svgOutlineText,
+      setSvgOutlineText,
       pageNumbers,
       setPageNumbers,
       onionSkinOn,
@@ -14566,10 +14767,10 @@
   function useGroupFiles({ doc, edits, selection, status, view }) {
     const { pages, selectedIdx, pdfDocsRef, nextAnnIdRef, ids } = doc;
     const inputRef = useRef13(null);
-    async function handleExportGroup(groupId) {
+    async function handleExportGroup(groupId2) {
       const page = selectedIdx !== null ? pages[selectedIdx] : null;
       if (!page) return;
-      const items = (page.annotations || []).filter((a) => a.groupId === groupId);
+      const items = (page.annotations || []).filter((a) => a.groupId === groupId2);
       if (!items.length) return;
       status.setErrorMsg(null);
       try {
@@ -14607,15 +14808,15 @@
         const dx = b ? Math.round(size.width / 2 - (b.x + b.width / 2)) : 0;
         const dy = b ? Math.round(size.height / 2 - (b.y + b.height / 2)) : 0;
         const used = new Set(pages.flatMap((p) => (p.annotations || []).map((a) => a.groupId).filter(Boolean)));
-        let groupId = "g" + nextAnnIdRef.current++;
-        while (used.has(groupId)) groupId = "g" + nextAnnIdRef.current++;
+        let groupId2 = "g" + nextAnnIdRef.current++;
+        while (used.has(groupId2)) groupId2 = "g" + nextAnnIdRef.current++;
         const newId2 = new Map(items.map((a) => [a.id, ids.annId()]));
         const added = items.map((a) => {
           const m = translatedAnnotation(a, dx, dy);
           return {
             ...m,
             id: newId2.get(a.id),
-            groupId: items.length > 1 ? groupId : void 0,
+            groupId: items.length > 1 ? groupId2 : void 0,
             groupName: items.length > 1 ? name : void 0,
             threadFrom: a.threadFrom != null && newId2.has(a.threadFrom) ? newId2.get(a.threadFrom) : void 0
           };
@@ -18738,7 +18939,7 @@
   // apps/ZEditor/src/ui/panels/format/TextFormat.jsx
   var SPACING_CONTROLS = [LINE_SPACING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, KERNING_CONTROL, CASE_CONTROL, VERTICAL_CONTROL, FIT_HEIGHT_CONTROL, STRIKE_CONTROL];
   var ALL_PARAGRAPH_CONTROLS = [COMPOSER_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, ...PARAGRAPH_CONTROLS];
-  function TextFormat({ ann, onUpdate, onRasterizeText, toolDefaults, styleActions }) {
+  function TextFormat({ ann, onUpdate, onRasterizeText, onOutlineText, toolDefaults, styleActions }) {
     const patch = (p) => onUpdate(ann.id, p);
     const { fontOptions, setFontOptions, textStyles, handleSaveTextStyle, handleDeleteTextStyle } = toolDefaults;
     return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — Text" }, /* @__PURE__ */ React.createElement(TextPlaceholder, { ann, patch }), /* @__PURE__ */ React.createElement(
@@ -18792,7 +18993,7 @@
         hint: "Changes only the letters you select (font, size, bold, italic, underline, strike-through, color), or the alignment of the paragraphs they're in. Custom fonts, sizes, bold, italic or alignment set the box with the paragraph layout, as Justify does."
       },
       /* @__PURE__ */ React.createElement(TextSpans, { ann, patch, fontOptions, setFontOptions })
-    ), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch, effects: TEXT_EFFECTS, before: /* @__PURE__ */ React.createElement(TextPhotoFill, { ann, patch }), beforeLabel: ann.fillSrc ? "Photo fill" : void 0 }), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.transform", title: "Rotation", hint: "Opacity and blend are in the Layers panel.", onReset: () => patch(resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.rasterize", title: "Rasterize", hint: "Turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. The words can't be edited afterwards; Undo brings the text back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : void 0, onClick: () => onRasterizeText(ann) }, "Rasterize to Image")));
+    ), /* @__PURE__ */ React.createElement(EffectControls, { ann, onPatch: patch, effects: TEXT_EFFECTS, before: /* @__PURE__ */ React.createElement(TextPhotoFill, { ann, patch }), beforeLabel: ann.fillSrc ? "Photo fill" : void 0 }), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.transform", title: "Rotation", hint: "Opacity and blend are in the Layers panel.", onReset: () => patch(resetPatch([ANGLE_CONTROL])) }, /* @__PURE__ */ React.createElement(ControlList, { controls: [ANGLE_CONTROL], source: ann, onPatch: patch })), /* @__PURE__ */ React.createElement(PanelSection, { id: "text.rasterize", title: "Rasterize or outline", hint: "Rasterize turns this text into an image of what it looks like now, so you can apply Halftone, Xerox or Threshold to it. Outline Text to Shape turns the letters into a vector shape (it needs the font file). Either way the words can't be edited afterwards; Undo brings the text back." }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : void 0, onClick: () => onRasterizeText(ann) }, "Rasterize to Image"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: !ann.text || ann.storyHeadId != null, title: ann.storyHeadId != null ? "Unlink the threaded frames first" : "Turns the letters into a vector shape layer (needs the font file). The words can't be edited afterwards; Undo brings the text back.", onClick: () => onOutlineText(ann) }, "Outline Text to Shape")));
   }
 
   // apps/ZEditor/src/ui/panels/format/TraceFormat.jsx
@@ -19048,6 +19249,7 @@
     onOpenInAiTools,
     onRasterizeRect,
     onRasterizeText,
+    onOutlineText,
     toolDefaults,
     magicErase,
     marquee,
@@ -19059,7 +19261,7 @@
     const ann = selectedAnn;
     if (guide && !ann && tool !== "marquee") return /* @__PURE__ */ React.createElement(GuideFormat, { key: guide.id + guide.scope, guide, unit: rulerUnit, guides });
     if (tool === "marquee") return /* @__PURE__ */ React.createElement(MarqueeToolPanel, { toolDefaults, marquee, targetLayer });
-    if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, toolDefaults, styleActions });
+    if (ann && ann.type === "text") return /* @__PURE__ */ React.createElement(TextFormat, { key: ann.id, ann, onUpdate, onRasterizeText, onOutlineText, toolDefaults, styleActions });
     if (ann && ann.type === "stroke") return /* @__PURE__ */ React.createElement(StrokeFormat, { key: ann.id, ann, onUpdate });
     if (ann && ann.type === "image") return /* @__PURE__ */ React.createElement(ImageFormat, { key: ann.id, ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace });
     if (ann && ann.type === "trace") return /* @__PURE__ */ React.createElement(TraceFormat, { key: ann.id, ann, imageTrace, onUpdate, onRasterize: imageTrace.rasterize, onExportSvg });
@@ -19613,9 +19815,9 @@
     const groupMenuId = rowMenu && typeof rowMenu.id === "string" && rowMenu.id.startsWith("g:") ? rowMenu.id.slice(2) : null;
     const rowMenuAnn = rowMenu && !groupMenuId ? annotations.find((a) => a.id === rowMenu.id) : null;
     const rowMenuIndex = rowMenuAnn ? annotations.indexOf(rowMenuAnn) : -1;
-    function toggleCollapsed(groupId) {
-      if (collapsedGroups.has(groupId)) collapsedGroups.delete(groupId);
-      else collapsedGroups.add(groupId);
+    function toggleCollapsed(groupId2) {
+      if (collapsedGroups.has(groupId2)) collapsedGroups.delete(groupId2);
+      else collapsedGroups.add(groupId2);
       setCollapseTick((n) => n + 1);
     }
     function inView(x, y) {
@@ -19786,27 +19988,27 @@
       ), dropLine(ann.id, false));
     }
     function groupBlock(block, number) {
-      const { groupId, items } = block;
+      const { groupId: groupId2, items } = block;
       const first = items[0].ann;
       const name = first.groupName || "Group " + number;
-      const collapsed = collapsedGroups.has(groupId);
+      const collapsed = collapsedGroups.has(groupId2);
       const allLocked = items.every((i) => i.ann.locked), allHidden = items.every((i) => i.ann.hidden);
       const allSelected = items.every((i) => selectedIds.includes(i.ann.id));
-      const key = "g:" + groupId + ":" + first.id;
+      const key = "g:" + groupId2 + ":" + first.id;
       const firstRow = items[0].row, lastRow = items[items.length - 1].row;
-      const isRenaming = renamingId === "g:" + groupId;
+      const isRenaming = renamingId === "g:" + groupId2;
       return /* @__PURE__ */ React.createElement(React.Fragment, { key }, dropLine(key, true), /* @__PURE__ */ React.createElement(
         "div",
         {
           className: "ze-layer-row ze-layer-group-row is-grouped" + (allSelected ? " is-selected" : "") + (allHidden ? " is-hidden" : ""),
-          style: { "--ze-group-color": groupColor(groupId) },
+          style: { "--ze-group-color": groupColor(groupId2) },
           title: "Group: click to select it, double-click to rename",
           draggable: !isRenaming,
           onClick: (e) => {
             const pick = items.find((i) => !i.ann.hidden && !i.ann.locked);
             if (pick) onSelect(pick.ann.id, withTouchModifier("shift", e), false);
           },
-          onDoubleClick: () => setRenamingId("g:" + groupId),
+          onDoubleClick: () => setRenamingId("g:" + groupId2),
           ...dragHandlersFor(key, first.id, firstRow, collapsed ? lastRow + 1 : firstRow)
         },
         /* @__PURE__ */ React.createElement(
@@ -19818,7 +20020,7 @@
             title: collapsed ? "Show the group's layers" : "Fold the group away",
             onClick: (e) => {
               e.stopPropagation();
-              toggleCollapsed(groupId);
+              toggleCollapsed(groupId2);
             },
             onDoubleClick: (e) => e.stopPropagation()
           },
@@ -19828,7 +20030,7 @@
         isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: name, onDone: (text) => {
           setRenamingId(null);
           const n = text.trim();
-          if (n && n !== name) onRenameGroup(groupId, n);
+          if (n && n !== name) onRenameGroup(groupId2, n);
         } }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, name, " ", /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count" }, items.length)),
         /* @__PURE__ */ React.createElement(
           "button",
@@ -19839,7 +20041,7 @@
             "aria-pressed": allLocked,
             onClick: (e) => {
               e.stopPropagation();
-              onSetGroupFlag(groupId, "locked", !allLocked);
+              onSetGroupFlag(groupId2, "locked", !allLocked);
             },
             onDoubleClick: (e) => e.stopPropagation()
           },
@@ -19854,7 +20056,7 @@
             "aria-pressed": allHidden,
             onClick: (e) => {
               e.stopPropagation();
-              onSetGroupFlag(groupId, "hidden", !allHidden);
+              onSetGroupFlag(groupId2, "hidden", !allHidden);
             },
             onDoubleClick: (e) => e.stopPropagation()
           },
@@ -19864,12 +20066,12 @@
           "button",
           {
             type: "button",
-            className: "ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId ? " is-open" : ""),
+            className: "ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId2 ? " is-open" : ""),
             title: "Group actions: save as .znow",
             "aria-label": "Actions for group " + name,
             "aria-haspopup": "menu",
-            "aria-expanded": Boolean(rowMenu && rowMenu.id === "g:" + groupId),
-            onClick: (e) => toggleRowMenu(e, "g:" + groupId),
+            "aria-expanded": Boolean(rowMenu && rowMenu.id === "g:" + groupId2),
+            onClick: (e) => toggleRowMenu(e, "g:" + groupId2),
             onDoubleClick: (e) => e.stopPropagation()
           },
           /* @__PURE__ */ React.createElement(MoreIcon, null)
@@ -20648,7 +20850,7 @@
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "419b889"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "cace5b0"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -20898,6 +21100,32 @@
       MenuItem,
       {
         close,
+        label: "Export page as SVG (Illustrator)",
+        disabled: doc.selectedIdx === null || exporting,
+        onClick: () => exporter.handleExportPagesSvg(false),
+        hint: "The whole page as an SVG: its layers are named groups, shapes and drawings stay vectors, text can become outlines"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
+        label: "Export all pages as one SVG",
+        disabled: pages.length === 0 || exporting,
+        onClick: () => exporter.handleExportPagesSvg(true),
+        hint: "Every page side by side in one SVG, each page a group (Page 1, Page 2…)"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuCheck,
+      {
+        label: "SVG: text as outlines",
+        checked: view.svgOutlineText,
+        onChange: view.setSvgOutlineText,
+        hint: "On: letters become shapes, so the file opens without the fonts (needs the font file: upload it or allow Load Local System Fonts). Off: live text"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
         label: "Export selection as SVG",
         disabled: exporting || !exporter.canExportSvg(),
         onClick: () => exporter.handleExportSvg(),
@@ -21138,6 +21366,10 @@
         onOpenInAiTools: edits.handleOpenInAiTools,
         onRasterizeRect: edits.handleRasterizeRect,
         onRasterizeText: edits.handleRasterizeText,
+        onOutlineText: async (ann) => {
+          const message = await edits.handleOutlineText(ann);
+          if (message) status.setNotice(message);
+        },
         toolDefaults,
         styleActions: edits.styleActions,
         imageTrace,
