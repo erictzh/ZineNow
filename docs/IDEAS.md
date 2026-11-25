@@ -65,4 +65,6 @@ State: **decided** unless marked.
 
 - **Guides snap to page edges (2026-11-25, idea):** when the master snap setting ("Snap items to guides when moving them") is on, dragging a ruler guide snaps it to the page edges. To settle: also snap to the page centre, the trim edge (when a bleed is set), the margin lines and other guides? (leaning: page edges, centre and trim edge). Alt bypasses; same 6 px screen threshold as other snapping. Today a guide only snaps to ruler units while Shift is held (`snapToUnit` in `model/rulers.js`).
 
+- **Crop marks (2026-11-25, decided):** an optional "Add crop marks" checkbox in the PDF export, available **only when the page has a bleed** (and exporting with bleed). Marks sit outside the bleed, so the exported page gets a small extra border (a few mm) to hold them; the editor page does not change. Details to settle when building: mark length and line weight, offset from the trim, and writing the marks so they do not extend into the bleed area.
+
 _(Add more ideas below.)_
