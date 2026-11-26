@@ -19,7 +19,7 @@ import { usedFaces } from "./fontEmbed.js";
 // so a saved project doesn't get mistaken for a generic .json
 // file (or opened by something else that happens to claim it).
 // `embeddedFonts`: system fonts to carry in the file ([{ family, data, bold?, italic?, source: "system" }], from io/fontEmbed.js buildEmbeddedFonts).
-export function serializeProject({ title, pdfDocs, pages, textStyles, settings, embeddedFonts = [] }) {
+export function serializeProject({ title, pdfDocs, pages, textStyles, settings, embeddedFonts = [], dataTemplate = null }) {
   const docs = {};
   for (const docId of Object.keys(pdfDocs)) {
     docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
@@ -39,6 +39,8 @@ export function serializeProject({ title, pdfDocs, pages, textStyles, settings, 
     textStyles,
     pages: pages.map(({ dataUrl, ...rest }) => rest),
     settings,
+    // A data template (model/dataMerge/template.js): marks the file as one and lists the columns it needs.
+    ...(dataTemplate ? { dataTemplate } : {}),
   };
   return JSON.stringify(project);
 }
@@ -111,5 +113,6 @@ export async function readProjectFile(file, nextPageKey) {
     // Projects saved before titles existed take their file's name (see the caller).
     title: typeof project.title === "string" && project.title ? project.title : null,
     settings: project.settings || {},
+    dataTemplate: project.dataTemplate && Array.isArray(project.dataTemplate.columns) ? { columns: project.dataTemplate.columns.filter((c) => typeof c === "string") } : null,
   };
 }

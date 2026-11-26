@@ -1,5 +1,6 @@
 // The project as a file: its title, Save / Save As, opening a .znow, and remembering which file it lives in.
 
+import { templateFileName, templateNeeds, templatePages, templateSettings, stripTemplatePrefix } from "../model/dataMerge/template.js";
 import { stripExtension, titleToFileName } from "../model/documentTitle.js";
 import { saveFile, writeFileHandle } from "../io/fileSave.js";
 import { buildEmbeddedFonts, canReadSystemFonts, ensureFontAccess } from "../io/fontEmbed.js";
@@ -26,6 +27,10 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   // Briefly true after a save lands, so the Project menu button can say
   // "Saved" — a quick Save (or Ctrl+S) opens no dialog to show it worked.
   const [justSaved, setJustSaved] = useState(false);
+  // Data templates (model/dataMerge/template.js). `editingTemplate`: the open file is a data template being edited, so Save keeps it one (no data,
+  // no photos, only the designed pages). `templatePrompt`: a template was just opened and the person is choosing "Use this template" or "Edit it".
+  const [editingTemplate, setEditingTemplate] = useState(false);
+  const [templatePrompt, setTemplatePrompt] = useState(null); // { file, handle, pageIdx, columns, name } | null
   const justSavedTimerRef = useRef(null);
   function flashSaved() {
     setJustSaved(true);
@@ -37,8 +42,37 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   // previous project's file, and it gets a fresh default title.
   function startNewDocument(title) {
     setProjectFile(null);
+    setEditingTemplate(false);
     setDocTitle(title);
     view.setEmbedFonts(true); view.setEmbedFontsSkip([]); // a new document starts with the default: embed the system fonts it uses
+  }
+
+  // The project as the text of a file; as a data template (no data or photos, designed pages only, marked) when `asTemplate`.
+  function projectText(embeddedFonts, asTemplate) {
+    const settings = view.settingsForSave();
+    if (!asTemplate) return serializeProject({ title: docTitle, pdfDocs: pdfDocsRef.current, pages, textStyles: toolDefaults.textStyles, settings, embeddedFonts });
+    const designed = templatePages(pages);
+    return serializeProject({
+      title: stripTemplatePrefix(docTitle), pdfDocs: pdfDocsRef.current, pages: designed, textStyles: toolDefaults.textStyles,
+      settings: templateSettings(settings), embeddedFonts, dataTemplate: { version: 1, columns: templateNeeds(designed, view.dataGroupBy) },
+    });
+  }
+
+  // Project > Save as data template…: a shareable copy named "ZDATA = <title>.znow" with the designs and settings but not the data or photos.
+  // The project being edited stays as it is (and where it is saved).
+  async function handleSaveDataTemplate() {
+    if (pages.length === 0 || savingProject) return;
+    setErrorMsg(null);
+    setSavingProject(true);
+    try {
+      const json = projectText([], true);
+      const handle = await saveFile(json, templateFileName(docTitle), "application/json", "ZEditor data template", [".znow"], "application/octet-stream");
+      if (handle !== "cancelled") status.setNotice("Data template saved. It has your designs and settings, not the spreadsheet or photos. System fonts are not inside it, so the other person needs them (or sees a stand-in).");
+    } catch (err) {
+      setErrorMsg("Couldn't save the data template — " + (err && err.message ? err.message : "unknown error"));
+    } finally {
+      setSavingProject(false);
+    }
   }
 
   // `saveAs` always asks where to save; otherwise it overwrites the
@@ -58,14 +92,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
           ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ")
           : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file. Only share it if those fonts' licences allow it (Project > Embed Fonts… to change)." : null);
       }
-      const json = serializeProject({
-        title: docTitle,
-        pdfDocs: pdfDocsRef.current,
-        pages,
-        textStyles: toolDefaults.textStyles,
-        settings: view.settingsForSave(),
-        embeddedFonts,
-      });
+      const json = projectText(embeddedFonts, editingTemplate);
       if (!saveAs && projectFile) {
         try {
           await writeFileHandle(projectFile.handle, json);
@@ -81,7 +108,7 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
       // The download fallback (Android, Firefox, Safari: no Save dialog) labels the file as plain
       // bytes, not JSON: Android's download manager adds ".json" to a JSON file whose name doesn't
       // end in .json, which made "Zine.znow.json".
-      const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
+      const handle = await saveFile(json, editingTemplate ? templateFileName(docTitle) : titleToFileName(docTitle, ".znow"), "application/json", editingTemplate ? "ZEditor data template" : "ZEditor project file", [".znow"], "application/octet-stream");
       if (handle !== "cancelled") flashSaved();
       if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
     } catch (err) {
@@ -159,11 +186,13 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
     return () => { cancelled = true; };
   }, []);
 
-  async function handleLoadProjectFile(file, handle = null, pageIdx = 0) {
+  // `mode`: undefined (a template asks first), "use" (open a data template as a new untitled project to fill with your own data), or "edit".
+  async function handleLoadProjectFile(file, handle = null, pageIdx = 0, mode) {
     setErrorMsg(null);
     setLoading(true);
     try {
       const loaded = await readProjectFile(file, () => nextKeyRef.current++);
+      if (loaded.dataTemplate && !mode) { setTemplatePrompt({ file, handle, pageIdx, columns: loaded.dataTemplate.columns, name: stripTemplatePrefix(loaded.title || stripExtension(file.name)) }); return; }
       pdfDocsRef.current = loaded.docs;
       toolDefaults.mergeTextStyles(loaded.textStyles);
       toolDefaults.addFontFamilies(loaded.loadedFamilies);
@@ -175,9 +204,12 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
       setSelectedIdx(loaded.pages.length > 0 ? Math.min(Math.max(0, pageIdx || 0), loaded.pages.length - 1) : null);
       setSelectedPageIndices([]);
       history.clearHistory();
-      setProjectFile(handle ? { handle, name: handle.name } : null);
-      setDocTitle(loaded.title || stripExtension(file.name));
+      const useTemplate = mode === "use";
+      setProjectFile(handle && !useTemplate ? { handle, name: handle.name } : null); // using a template never saves over it
+      setEditingTemplate(Boolean(loaded.dataTemplate) && mode === "edit");
+      setDocTitle(useTemplate ? stripTemplatePrefix(loaded.title || stripExtension(file.name)) : loaded.title || stripExtension(file.name));
       view.applySavedSettings(loaded.settings);
+      if (useTemplate) { view.setDataTemplateColumns(loaded.dataTemplate.columns); view.setDataPanelOpen(true); view.setDataMinimized(false); }
       announceDocumentOpened(); // the page in the middle of the view at 100%
     } catch (err) {
       setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
@@ -189,6 +221,8 @@ export function useProject({ doc, history, status, view, toolDefaults }) {
   return {
     docTitle, setDocTitle, projectFile, justSaved, savingProject, projectInputRef,
     reloading, reloadKeepingWork, startupChecked,
+    editingTemplate, templatePrompt, handleSaveDataTemplate,
+    chooseTemplate: (mode) => { const p = templatePrompt; setTemplatePrompt(null); if (p && mode) handleLoadProjectFile(p.file, p.handle, p.pageIdx, mode); },
     startNewDocument, handleSaveProject, openProjectPicker, handleProjectInputChange, handleLoadProjectFile,
   };
 }

@@ -46,6 +46,7 @@ export function useViewSettings() {
   // Advanced data merge (data blocks, Group by): off until switched on; the choice is remembered in this browser, not in the project.
   const [dataAdvanced, setDataAdvancedState] = useState(() => { try { return localStorage.getItem("zeditor.dataAdvanced") === "1"; } catch { return false; } });
   const setDataAdvanced = (on) => { setDataAdvancedState(on); try { localStorage.setItem("zeditor.dataAdvanced", on ? "1" : "0"); } catch { /* not remembered */ } };
+  const [dataTemplateColumns, setDataTemplateColumns] = useState([]); // columns the opened data template expects (shown in the Data panel until data is connected; not saved)
   const [dataPhotos, setDataPhotos] = useState([]); // the photo folder for picture fields: [{ name, src, width, height }]; saved with the project
   const [dataGroupBy, setDataGroupBy] = useState(""); // the column the records are grouped by ("" = none); saved with the project
   const [dataRepeatOthers, setDataRepeatOthers] = useState(true); // non-data items repeat on every page of a group; saved with the project
@@ -100,7 +101,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
-    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataTemplateColumns, setDataTemplateColumns, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
     settingsForSave, applySavedSettings,
   };
 }
