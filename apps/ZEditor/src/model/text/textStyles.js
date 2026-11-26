@@ -1,5 +1,6 @@
 // Saved text styles: built-ins, capturing and applying a style, browser storage.
 
+import { effectPropNames } from "../imageEffects.js";
 import { TEXT_EFFECTS } from "./textControls.js";
 
 // ---- Saved text styles: a name plus the look of a text box (font, size,
@@ -10,7 +11,7 @@ const TEXT_STYLE_BASICS = ["fontFamily", "fontSize", "bold", "italic", "underlin
 const TEXT_STYLE_PARAGRAPH = ["leadingPt", "kerning", "composer", "hyphenate", "justifyLast", "indentFirst", "indentLeft", "indentRight", "spaceBefore", "spaceAfter"];
 export const TEXT_STYLE_PROPS = [
   ...TEXT_STYLE_BASICS, "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fillAlpha", ...TEXT_STYLE_PARAGRAPH,
-  ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+  ...TEXT_EFFECTS.flatMap(effectPropNames),
 ];
 // Built-in presets for an A5 zine, scaled from P (body text, 11 pt): H1 x2, H2 x1.5, H3 x1.2,
 // Quote the body size, Remark x0.8. Sizes are editor px (the page shows 1.1 px per pt).

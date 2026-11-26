@@ -12,9 +12,13 @@ ok(oldShadow.length === 1 && oldShadow[0].thickness === 9 && oldShadow[0].direct
 ok(shadowLayers({ shadow: true })[0].thickness === DEFAULT_SHADOW.thickness, "shadow defaults");
 
 const stacked = strokeLayers({ strokes: [{ color: "#fff", thickness: 99, position: "outside" }, { color: "#00ff00", thickness: -4, position: "nope" }], stroke: true });
-ok(stacked.length === 2 && stacked[0].color === DEFAULT_STROKE.color && stacked[0].thickness === 40 && stacked[0].position === "outside" && stacked[1].thickness === 1 && stacked[1].position === "center", "a stored list is used, and bad values are made safe");
+ok(stacked.length === 2 && stacked[0].color === DEFAULT_STROKE.color && stacked[0].thickness === 40 && stacked[0].position === "outside" && stacked[1].thickness === 0.5 && stacked[1].position === "center", "a stored list is used, and bad values are made safe");
 ok(strokeLayers({ strokes: [{}] }).length === 0 && shadowLayers({ shadows: [{}] }).length === 0, "with the flag off the list is ignored");
 ok(strokeLayers({ stroke: true, strokes: Array.from({ length: 20 }, () => ({})) }).length === 8, "at most 8 layers");
+
+const textOld = strokeLayers({ type: "text", stroke: true, strokeColor: "#112233", strokeThickness: 6 });
+ok(textOld.length === 1 && textOld[0].position === "outside" && textOld[0].thickness === 3 && textOld[0].color === "#112233", "an old text stroke (drawn under the letters) reads as an outside stroke half as thick: it looks the same");
+ok(strokeLayers({ type: "text", stroke: true, strokeThickness: 1 })[0].thickness === 0.5, "down to half a pixel");
 
 const p = strokesPatch([{ color: "#000000", thickness: 5, position: "inside" }]);
 ok(p.stroke === true && p.strokes.length === 1 && "strokeColor" in p && p.strokeColor === undefined && p.feather === false, "storing a stroke list sets the flag, clears the old props and turns Feather off");

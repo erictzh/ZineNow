@@ -6,6 +6,7 @@
 
 import { TEXT_EFFECTS, TEXT_PHOTO_PROPS } from "../model/text/textControls.js";
 import { normalizeTraceSettings } from "../model/trace/traceSettings.js";
+import { effectPropNames } from "../model/imageEffects.js";
 import { layoutText } from "../render/textLayout.js";
 import { layoutPlainRuns } from "../render/textRuns.js";
 import { textPathData } from "../model/glyphPath.js";
@@ -72,7 +73,7 @@ export async function outlinedTextPatch(ann, plainLook, outliner = createTextOut
   }
   if (!byColor.size) return { error: "Nothing visible to outline." };
   const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", "columns", "columnGap", "frameHeight", "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth", ...TEXT_PHOTO_PROPS];
-  const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+  const effectProps = TEXT_EFFECTS.flatMap(effectPropNames);
   const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
   return {
     patch: {

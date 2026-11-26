@@ -4835,7 +4835,7 @@
   var hexOr = (v, fallback) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback;
   var cleanStroke = (s) => ({
     color: hexOr(s && s.color, DEFAULT_STROKE.color),
-    thickness: num(s && s.thickness, 1, 40, DEFAULT_STROKE.thickness),
+    thickness: num(s && s.thickness, 0.5, 40, DEFAULT_STROKE.thickness),
     position: STROKE_POSITIONS.some((p) => p.key === (s && s.position)) ? s.position : DEFAULT_STROKE.position
   });
   var cleanShadow = (s) => ({
@@ -4844,10 +4844,14 @@
     direction: num(s && s.direction, 0, 360, DEFAULT_SHADOW.direction),
     blur: num(s && s.blur, 0, 40, DEFAULT_SHADOW.blur)
   });
+  function legacyStroke(ann) {
+    const t = Number.isFinite(Number(ann.strokeThickness)) && ann.strokeThickness != null ? Number(ann.strokeThickness) : DEFAULT_STROKE.thickness;
+    return ann.type === "text" ? { color: hexOr(ann.strokeColor, DEFAULT_STROKE.color), thickness: Math.min(40, Math.max(0.5, t / 2)), position: "outside" } : cleanStroke({ color: ann.strokeColor, thickness: ann.strokeThickness, position: "center" });
+  }
   function strokeLayers(ann) {
     if (!ann.stroke) return [];
     if (Array.isArray(ann.strokes)) return ann.strokes.slice(0, MAX_LAYERS).map(cleanStroke);
-    return [cleanStroke({ color: ann.strokeColor, thickness: ann.strokeThickness, position: "center" })];
+    return [legacyStroke(ann)];
   }
   function shadowLayers(ann) {
     if (!ann.shadow) return [];
@@ -5334,7 +5338,8 @@
     return Array.from(text).map((ch) => ch === "\n" ? "" : ch).join("\n");
   }
   var usesTypeset = (ann) => !(ann.ransom || ann.curve || ann.vertical === "stacked") && Boolean(ann.wrapObstacles && ann.wrapObstacles.length || ann.storyHeadId != null || ann.align === "justify" || ann.hyphenate === "english" || ann.columns > 1 || ann.frameHeight > 0 || ann.indentFirst || ann.indentLeft || ann.indentRight || ann.spaceBefore || ann.spaceAfter || ann.composer === "paragraph" || hasLayoutSpans(ann.colorRuns));
-  var usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || ann.colorRuns && ann.colorRuns.length || usesTypeset(ann));
+  var hasTextStack = (ann) => Boolean(Array.isArray(ann.strokes) && ann.stroke || Array.isArray(ann.shadows) && ann.shadow);
+  var usesCanvasText = (ann) => Boolean(hasTextStack(ann) || ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || ann.colorRuns && ann.colorRuns.length || usesTypeset(ann));
   var ptToPx = (pt) => (pt || 0) * MAIN_SCALE;
   var pxToPt = (px) => px / MAIN_SCALE;
   function textLook(ann) {
@@ -5345,6 +5350,7 @@
     const photo = ann.fillSrc ? { src: ann.fillSrc, natW: ann.fillNatW, natH: ann.fillNatH, ...controlValues(ann, TEXT_PHOTO_CONTROLS) } : null;
     const gradient = ann.textGradient ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
     const label = ann.labelBox ? effectSettings(ann, TEXT_LABEL_EFFECT) : null;
+    const stack = hasTextStack(ann);
     return {
       photo,
       ransom: ann.ransom ? effectSettings(ann, RANSOM_EFFECT) : null,
@@ -5373,8 +5379,14 @@
       stacked: controlValues(ann, [VERTICAL_CONTROL]).vertical === "stacked",
       color,
       fillAlpha,
-      stroke: ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null,
-      shadow: imageShadowOffset(ann),
+      // Text keeps one stroke and one shadow in the old props, or any number in lists (`strokes`, `shadows`, model/effectStacks.js). `stack` says
+      // the lists are in use: such a box is drawn on the canvas (live and export, one renderer) with every layer. `stroke` and `shadow` stay set
+      // when there is at least one layer, for the code that only asks whether the text has one.
+      stack,
+      strokes: stack ? strokeLayers(ann) : [],
+      shadows: stack ? shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0).map(shadowOffsetOf) : [],
+      stroke: stack ? strokeLayers(ann).length ? { strokeColor: strokeLayers(ann)[0].color, strokeThickness: Math.max(...strokeLayers(ann).map((s) => s.thickness)) * 2 } : null : ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null,
+      shadow: stack ? shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0).map(shadowOffsetOf)[0] || null : imageShadowOffset(ann),
       gradient,
       label,
       // The box's inner padding grows by the label's padding so the bar sits around the text.
@@ -6353,7 +6365,8 @@
     const fontSize = ann.fontSize || 16;
     let margin = 2;
     if (look.stroke) margin += look.stroke.strokeThickness * 2;
-    if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
+    if (look.stack) margin += look.shadows.reduce((m, s) => Math.max(m, Math.hypot(s.x, s.y) + s.blur * 2), 0);
+    else if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
     if (look.ransom) margin += fontSize * (look.ransom.ransomShift / 100 + 0.35 + look.ransom.ransomSize / 100);
     if (look.curve) margin += fontSize * 0.6;
     return Math.ceil(margin);
@@ -7265,7 +7278,7 @@
     "vertical",
     "fillAlpha",
     ...TEXT_STYLE_PARAGRAPH,
-    ...TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
+    ...TEXT_EFFECTS.flatMap(effectPropNames)
   ];
   var BUILT_IN_TEXT_STYLES = [
     { name: "H1", builtIn: true, props: { fontSize: 24.2, bold: true, lineSpacing: 110 } },
@@ -8769,6 +8782,12 @@
     };
     const fillsThroughLayer = Boolean(photoImg || look.gradient && (look.ransom || curve2));
     const tilePad = fontSize * 0.06;
+    const strokeRuns = (c, layer) => runs.forEach((run2) => withRun(c, run2, () => {
+      c.strokeStyle = layer.color;
+      c.lineWidth = (layer.position === "center" ? layer.thickness : layer.thickness * 2) * scaleFactor;
+      c.lineJoin = "round";
+      c.strokeText(run2.text, run2.x, run2.baselineY);
+    }));
     const paintText = (c) => {
       setFont(c);
       runs.forEach((run2) => {
@@ -8778,7 +8797,10 @@
           c.fillRect(run2.x - tilePad, run2.baselineY - ascent - tilePad, run2.advance + tilePad * 2, ascent + descent + tilePad * 2);
         });
       });
-      if (look.stroke) {
+      if (look.stack) look.strokes.slice().reverse().forEach((layer) => {
+        if (layer.position === "outside") strokeRuns(c, layer);
+      });
+      if (look.stroke && !look.stack) {
         runs.forEach((run2) => withRun(c, run2, () => {
           c.strokeStyle = look.stroke.strokeColor;
           c.lineWidth = look.stroke.strokeThickness * scaleFactor;
@@ -8833,6 +8855,27 @@
         c.restore();
         paintOwnColors();
       }
+      if (look.stack) {
+        look.strokes.slice().reverse().forEach((layer) => {
+          if (layer.position === "center") strokeRuns(c, layer);
+          else if (layer.position === "inside") {
+            const scratch = document.createElement("canvas");
+            scratch.width = c.canvas.width;
+            scratch.height = c.canvas.height;
+            const sctx = scratch.getContext("2d");
+            sctx.setTransform(c.getTransform());
+            setFont(sctx);
+            strokeRuns(sctx, layer);
+            sctx.globalCompositeOperation = "destination-in";
+            sctx.fillStyle = "#000";
+            runs.forEach((run2) => withRun(sctx, run2, () => sctx.fillText(run2.text, run2.x, run2.baselineY)));
+            c.save();
+            c.setTransform(1, 0, 0, 1, 0, 0);
+            c.drawImage(scratch, 0, 0);
+            c.restore();
+          }
+        });
+      }
       lineExtents.forEach(({ line, baselineY, segments }) => {
         if (!line || curve2) return;
         segments.forEach(({ x0, x1, color, underline, strike }) => {
@@ -8858,7 +8901,20 @@
         layerCtx.restore();
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (look.shadow) {
+      const manyShadows = look.stack && look.shadows.length > 1;
+      if (manyShadows) {
+        const far = ctx.canvas.width + ctx.canvas.height + 4e3;
+        for (let i = look.shadows.length - 1; i >= 0; i--) {
+          const sh = look.shadows[i];
+          ctx.save();
+          ctx.shadowColor = sh.color;
+          ctx.shadowOffsetX = sh.x * scaleFactor + far;
+          ctx.shadowOffsetY = sh.y * scaleFactor;
+          ctx.shadowBlur = sh.blur * scaleFactor;
+          ctx.drawImage(layer, -far, 0);
+          ctx.restore();
+        }
+      } else if (look.shadow) {
         ctx.shadowColor = look.shadow.color;
         ctx.shadowOffsetX = look.shadow.x * scaleFactor;
         ctx.shadowOffsetY = look.shadow.y * scaleFactor;
@@ -9447,7 +9503,7 @@
     }
     if (!byColor.size) return { error: "Nothing visible to outline." };
     const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", "columns", "columnGap", "frameHeight", "verticalAlign", "columnRule", "columnRuleColor", "columnRuleWidth", ...TEXT_PHOTO_PROPS];
-    const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+    const effectProps = TEXT_EFFECTS.flatMap(effectPropNames);
     const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, void 0]));
     return {
       patch: {
@@ -16494,11 +16550,11 @@ ${parts.join("\n")}</g>`);
       fillStyle.color = rgbaCss(look.color, look.fillAlpha);
     }
     const outlineStyle = {};
-    if (look.stroke) {
+    if (look.stroke && !look.stack) {
       outlineStyle.WebkitTextStroke = `${look.stroke.strokeThickness}px ${look.stroke.strokeColor}`;
       outlineStyle.paintOrder = "stroke fill";
     }
-    if (look.shadow) {
+    if (look.shadow && !look.stack) {
       const [shadowX, shadowY] = rotatePoint(look.shadow.x, look.shadow.y, -angleOf(ann));
       outlineStyle.textShadow = `${shadowX}px ${shadowY}px ${look.shadow.blur}px ${rgbaCss(look.shadow.color, look.fillAlpha)}`;
     }
@@ -18600,7 +18656,7 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/ui/panels/EffectControls.jsx
   function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
-    const stacked = (effect) => ann.type !== "text" && (effect.key === "stroke" || effect.key === "shadow");
+    const stacked = (effect) => effect.key === "stroke" || effect.key === "shadow";
     const toggleStack = (effect, on) => {
       const make = effect.key === "stroke" ? strokesPatch : shadowsPatch;
       const layers = effect.key === "stroke" ? storedStrokes(ann) : storedShadows(ann);
@@ -21514,7 +21570,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "02f11f8"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "33d6c3a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

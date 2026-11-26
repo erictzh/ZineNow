@@ -145,6 +145,14 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
   const fillsThroughLayer = Boolean(photoImg || (look.gradient && (look.ransom || curve)));
   const tilePad = fontSize * 0.06;
 
+  // One stroke layer round every run: an outside or inside stroke is drawn twice as wide (the other half is hidden by the fill or cut away).
+  const strokeRuns = (c, layer) => runs.forEach((run) => withRun(c, run, () => {
+    c.strokeStyle = layer.color;
+    c.lineWidth = (layer.position === "center" ? layer.thickness : layer.thickness * 2) * scaleFactor;
+    c.lineJoin = "round"; // stacked strokes round the corners, so thick outlines do not grow sharp spikes
+    c.strokeText(run.text, run.x, run.baselineY);
+  }));
+
   const paintText = (c) => {
     setFont(c);
     runs.forEach((run) => {
@@ -154,9 +162,11 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
         c.fillRect(run.x - tilePad, run.baselineY - ascent - tilePad, run.advance + tilePad * 2, ascent + descent + tilePad * 2);
       });
     });
+    // Stacked strokes (look.stack): the outside ones go under the fill, the last of the list first so the first ends up on top.
+    if (look.stack) look.strokes.slice().reverse().forEach((layer) => { if (layer.position === "outside") strokeRuns(c, layer); });
     // Stroke goes under the fill, like the live box's paint-order, so only
     // the outer half of the line shows.
-    if (look.stroke) {
+    if (look.stroke && !look.stack) {
       runs.forEach((run) => withRun(c, run, () => {
         c.strokeStyle = look.stroke.strokeColor;
         c.lineWidth = look.stroke.strokeThickness * scaleFactor;
@@ -213,6 +223,28 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
       c.restore();
       paintOwnColors();
     }
+    // Stacked strokes over the letters: a centred one straddles the edge, an inside one is drawn twice as wide and cut to the letters.
+    if (look.stack) {
+      look.strokes.slice().reverse().forEach((layer) => {
+        if (layer.position === "center") strokeRuns(c, layer);
+        else if (layer.position === "inside") {
+          const scratch = document.createElement("canvas");
+          scratch.width = c.canvas.width;
+          scratch.height = c.canvas.height;
+          const sctx = scratch.getContext("2d");
+          sctx.setTransform(c.getTransform());
+          setFont(sctx);
+          strokeRuns(sctx, layer);
+          sctx.globalCompositeOperation = "destination-in";
+          sctx.fillStyle = "#000";
+          runs.forEach((run) => withRun(sctx, run, () => sctx.fillText(run.text, run.x, run.baselineY)));
+          c.save();
+          c.setTransform(1, 0, 0, 1, 0, 0);
+          c.drawImage(scratch, 0, 0);
+          c.restore();
+        }
+      });
+    }
     // Underline and strike-through take the colour of the letters they cross.
     lineExtents.forEach(({ line, baselineY, segments }) => {
       if (!line || curve) return; // straight lines would cut across an arc
@@ -246,7 +278,22 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
       layerCtx.restore();
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (look.shadow) {
+    // Several shadows: each is cast alone (the finished text is drawn far off the page with the shadow offset cancelling the distance), the
+    // bottom one first, then the text over them all.
+    const manyShadows = look.stack && look.shadows.length > 1;
+    if (manyShadows) {
+      const far = ctx.canvas.width + ctx.canvas.height + 4000;
+      for (let i = look.shadows.length - 1; i >= 0; i--) {
+        const sh = look.shadows[i];
+        ctx.save();
+        ctx.shadowColor = sh.color;
+        ctx.shadowOffsetX = sh.x * scaleFactor + far;
+        ctx.shadowOffsetY = sh.y * scaleFactor;
+        ctx.shadowBlur = sh.blur * scaleFactor;
+        ctx.drawImage(layer, -far, 0);
+        ctx.restore();
+      }
+    } else if (look.shadow) {
       ctx.shadowColor = look.shadow.color; // the layer's own opacity already fades it, as in the live box
       ctx.shadowOffsetX = look.shadow.x * scaleFactor;
       ctx.shadowOffsetY = look.shadow.y * scaleFactor;

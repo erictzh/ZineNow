@@ -275,11 +275,11 @@ export function AnnotationText({ ann, tool, isSelected, isEditing, showHandles, 
     fillStyle.color = rgbaCss(look.color, look.fillAlpha);
   }
   const outlineStyle = {};
-  if (look.stroke) {
+  if (look.stroke && !look.stack) { // stacked strokes and shadows are drawn on the canvas, not with CSS
     outlineStyle.WebkitTextStroke = `${look.stroke.strokeThickness}px ${look.stroke.strokeColor}`;
     outlineStyle.paintOrder = "stroke fill";
   }
-  if (look.shadow) {
+  if (look.shadow && !look.stack) {
     // Drawn inside the rotated box, so the offset is turned back: the
     // light stays fixed on the page, as in Export. Faded with the fill, as Export's is.
     const [shadowX, shadowY] = rotatePoint(look.shadow.x, look.shadow.y, -angleOf(ann));
