@@ -5063,7 +5063,22 @@
       lomoPreset("faded", "Faded", { lomoContrast: 10, lomoSaturation: -10, lomoTint: 30, lomoShadowTint: "#3a4a6b", lomoHighlightTint: "#f2d8b0", lomoVignette: 35, lomoGrain: 35 })
     ]
   };
-  var IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+  var BEVEL_EFFECT = {
+    key: "bevel",
+    label: "Bevel & Emboss",
+    controls: [
+      { kind: "select", prop: "bevelStyle", label: "Style", fallback: "inner", options: [{ key: "inner", label: "Inner bevel" }, { key: "emboss", label: "Emboss (spills past the edge)" }] },
+      { kind: "select", prop: "bevelRaised", label: "Surface", fallback: "up", options: [{ key: "up", label: "Raised" }, { key: "down", label: "Pressed in" }] },
+      { kind: "slider", prop: "bevelDepth", label: "Depth (%)", min: 1, max: 100, fallback: 60 },
+      { kind: "slider", prop: "bevelSize", label: "Size (px)", min: 1, max: 40, fallback: 8 },
+      { kind: "slider", prop: "bevelLight", label: "Light from (°)", min: 0, max: 360, fallback: 315, hint: "0° is the top, 90° the right, 180° the bottom, 270° the left; 315° is the top left." },
+      { kind: "color", prop: "bevelHighlightColor", label: "Highlight", fallback: "#ffffff" },
+      { kind: "slider", prop: "bevelHighlightOpacity", label: "Highlight strength (%)", min: 0, max: 100, fallback: 75 },
+      { kind: "color", prop: "bevelShadowColor", label: "Shadow", fallback: "#000000" },
+      { kind: "slider", prop: "bevelShadowOpacity", label: "Shadow strength (%)", min: 0, max: 100, fallback: 60 }
+    ]
+  };
+  var IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, BEVEL_EFFECT, TEXTURE_EFFECT];
   function imageEdgeOutline(ann) {
     if (isEllipse(ann)) return ellipseOutline(ann);
     const edge = IMAGE_EFFECTS.find((effect) => effect.outline && ann[effect.key]);
@@ -7602,6 +7617,143 @@
     return { x: centerX - width / 2, y: centerY - height / 2, width, height };
   }
 
+  // apps/ZEditor/src/model/color.js
+  function rgbaCss(hex3, alphaPercent) {
+    const { r, g, b } = hexToRgb(hex3);
+    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
+  }
+  function hexToRgb(hex3) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
+  }
+
+  // apps/ZEditor/src/render/gaussianBlur.js
+  function boxSizes(sigma, n = 3) {
+    const ideal = Math.sqrt(12 * sigma * sigma / n + 1);
+    let low = Math.floor(ideal);
+    if (low % 2 === 0) low--;
+    const high = low + 2;
+    const m = Math.round((12 * sigma * sigma - n * low * low - 4 * n * low - 3 * n) / (-4 * low - 4));
+    return Array.from({ length: n }, (_, i) => i < m ? low : high);
+  }
+  function boxLine(src, dst, start, count, step, r) {
+    const div = 2 * r + 1, lastIdx = count - 1;
+    for (let ch = 0; ch < 4; ch++) {
+      const at = (i) => src[start + Math.min(lastIdx, Math.max(0, i)) * step + ch];
+      let sum = 0;
+      for (let k = -r; k <= r; k++) sum += at(k);
+      for (let i = 0; i < count; i++) {
+        dst[start + i * step + ch] = Math.round(sum / div);
+        sum += at(i + r + 1) - at(i - r);
+      }
+    }
+  }
+  function gaussianBlur(data, w, h, sigma) {
+    if (!(sigma > 0.3) || w < 2 || h < 2) return;
+    for (let i = 0; i < data.length; i += 4) {
+      const a2 = data[i + 3];
+      if (a2 < 255) {
+        data[i] = data[i] * a2 / 255;
+        data[i + 1] = data[i + 1] * a2 / 255;
+        data[i + 2] = data[i + 2] * a2 / 255;
+      }
+    }
+    const tmp = new Uint8ClampedArray(data.length);
+    let a = data, b = tmp;
+    for (const size of boxSizes(sigma)) {
+      const r = (size - 1) / 2;
+      for (let y = 0; y < h; y++) boxLine(a, b, y * w * 4, w, 4, r);
+      [a, b] = [b, a];
+      for (let x = 0; x < w; x++) boxLine(a, b, x * 4, h, w * 4, r);
+      [a, b] = [b, a];
+    }
+    if (a !== data) data.set(a);
+    for (let i = 0; i < data.length; i += 4) {
+      const al = data[i + 3];
+      if (al > 0 && al < 255) {
+        const k = 255 / al;
+        data[i] = data[i] * k;
+        data[i + 1] = data[i + 1] * k;
+        data[i + 2] = data[i + 2] * k;
+      }
+    }
+  }
+
+  // apps/ZEditor/src/render/bevel.js
+  function bevelPixels(alpha, width, height, o) {
+    const n = width * height;
+    const px = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      const a = alpha[i];
+      px[i * 4] = a;
+      px[i * 4 + 1] = a;
+      px[i * 4 + 2] = a;
+      px[i * 4 + 3] = 255;
+    }
+    gaussianBlur(px, width, height, Math.max(0.5, o.sigma));
+    const out = new Uint8ClampedArray(n * 4);
+    const rad = o.lightDeg * Math.PI / 180;
+    const lx = Math.sin(rad), ly = -Math.cos(rad);
+    const sign = o.raised ? 1 : -1;
+    const slopeMax = 0.4 / Math.max(0.5, o.sigma);
+    const strength = o.depth / 100 * 1.4;
+    const h = (x, y) => px[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        if (o.insideOnly && alpha[i] === 0) continue;
+        const gx = (h(x + 1, y) - h(x - 1, y)) / 2, gy = (h(x, y + 1) - h(x, y - 1)) / 2;
+        const facing = -(gx * lx + gy * ly) / slopeMax * strength * sign;
+        const c = facing >= 0 ? o.highlight : o.shadow;
+        let a = Math.min(1, Math.abs(facing)) * c.a;
+        if (o.insideOnly) a *= alpha[i] / 255;
+        if (a <= 0) continue;
+        out[i * 4] = c.r;
+        out[i * 4 + 1] = c.g;
+        out[i * 4 + 2] = c.b;
+        out[i * 4 + 3] = Math.round(a * 255);
+      }
+    }
+    return out;
+  }
+  function bevelOptions(s, scale) {
+    const emboss = s.bevelStyle === "emboss";
+    const hi = hexToRgb(s.bevelHighlightColor), sh = hexToRgb(s.bevelShadowColor);
+    return {
+      sigma: ((emboss ? s.bevelSize : s.bevelSize / 2) || 1) * scale,
+      depth: s.bevelDepth,
+      lightDeg: s.bevelLight,
+      raised: s.bevelRaised !== "down",
+      insideOnly: !emboss,
+      highlight: { ...hi, a: s.bevelHighlightOpacity / 100 },
+      shadow: { ...sh, a: s.bevelShadowOpacity / 100 }
+    };
+  }
+  function bevelCanvas(outline, w, h, scale, settings) {
+    const o = bevelOptions(settings, scale);
+    const pad = Math.ceil(o.sigma * 3) + 2;
+    const cw = Math.max(1, Math.ceil(w * scale)) + pad * 2, ch = Math.max(1, Math.ceil(h * scale)) + pad * 2;
+    const mask = document.createElement("canvas");
+    mask.width = cw;
+    mask.height = ch;
+    const mctx = mask.getContext("2d");
+    mctx.translate(pad, pad);
+    mctx.scale(scale, scale);
+    mctx.fillStyle = "#000";
+    mctx.fill(new Path2D(outline));
+    const data = mctx.getImageData(0, 0, cw, ch).data;
+    const alpha = new Uint8ClampedArray(cw * ch);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+    const canvas = document.createElement("canvas");
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext("2d");
+    const image = ctx.createImageData(cw, ch);
+    image.data.set(bevelPixels(alpha, cw, ch, o));
+    ctx.putImageData(image, 0, 0);
+    return { canvas, pad };
+  }
+
   // apps/ZEditor/src/render/boxEffects.js
   function drawTextureMarks(ctx, ann) {
     const { width: w, height: h } = ann;
@@ -7703,9 +7855,10 @@
     }
     const outline = imageEdgeOutline(ann);
     const strokes = strokeLayers(ann);
-    if (outline || strokes.length > 0 || ann.texture || shadows.length > 1) {
+    if (outline || strokes.length > 0 || ann.texture || ann.bevel || shadows.length > 1) {
       const reach = strokeReach(strokes);
-      const pad = strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0;
+      const bevel = ann.bevel ? bevelCanvas(outline || rectOutline(ann), ann.width, ann.height, scaleFactor, effectSettings(ann, BEVEL_EFFECT)) : null;
+      const pad = Math.max(strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0, bevel ? bevel.pad : 0);
       const cut = document.createElement("canvas");
       cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
       cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
@@ -7717,6 +7870,7 @@
       paintContent(cctx);
       if (ann.texture) drawTextureMarks(cctx, ann);
       cctx.restore();
+      if (bevel) cctx.drawImage(bevel.canvas, -bevel.pad / scaleFactor, -bevel.pad / scaleFactor, bevel.canvas.width / scaleFactor, bevel.canvas.height / scaleFactor);
       if (strokes.length > 0) drawStrokeStack(cctx, strokes, new Path2D(outline || rectOutline(ann)), ann.width, ann.height, reach);
       if (shadows.length > 1) {
         const far = ctx.canvas.width + ctx.canvas.height + 4e3;
@@ -7756,16 +7910,6 @@
     if (mixes) ctx.globalCompositeOperation = blend;
     ctx.drawImage(layer, 0, 0);
     ctx.restore();
-  }
-
-  // apps/ZEditor/src/model/color.js
-  function rgbaCss(hex3, alphaPercent) {
-    const { r, g, b } = hexToRgb(hex3);
-    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
-  }
-  function hexToRgb(hex3) {
-    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
-    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
   }
 
   // apps/ZEditor/src/render/filters/luma.js
@@ -8178,58 +8322,6 @@
     const imageData = ctx.getImageData(0, 0, width, height);
     lomoPixels(imageData.data, width, height, lomoParams(ann));
     ctx.putImageData(imageData, 0, 0);
-  }
-
-  // apps/ZEditor/src/render/gaussianBlur.js
-  function boxSizes(sigma, n = 3) {
-    const ideal = Math.sqrt(12 * sigma * sigma / n + 1);
-    let low = Math.floor(ideal);
-    if (low % 2 === 0) low--;
-    const high = low + 2;
-    const m = Math.round((12 * sigma * sigma - n * low * low - 4 * n * low - 3 * n) / (-4 * low - 4));
-    return Array.from({ length: n }, (_, i) => i < m ? low : high);
-  }
-  function boxLine(src, dst, start, count, step, r) {
-    const div = 2 * r + 1, lastIdx = count - 1;
-    for (let ch = 0; ch < 4; ch++) {
-      const at = (i) => src[start + Math.min(lastIdx, Math.max(0, i)) * step + ch];
-      let sum = 0;
-      for (let k = -r; k <= r; k++) sum += at(k);
-      for (let i = 0; i < count; i++) {
-        dst[start + i * step + ch] = Math.round(sum / div);
-        sum += at(i + r + 1) - at(i - r);
-      }
-    }
-  }
-  function gaussianBlur(data, w, h, sigma) {
-    if (!(sigma > 0.3) || w < 2 || h < 2) return;
-    for (let i = 0; i < data.length; i += 4) {
-      const a2 = data[i + 3];
-      if (a2 < 255) {
-        data[i] = data[i] * a2 / 255;
-        data[i + 1] = data[i + 1] * a2 / 255;
-        data[i + 2] = data[i + 2] * a2 / 255;
-      }
-    }
-    const tmp = new Uint8ClampedArray(data.length);
-    let a = data, b = tmp;
-    for (const size of boxSizes(sigma)) {
-      const r = (size - 1) / 2;
-      for (let y = 0; y < h; y++) boxLine(a, b, y * w * 4, w, 4, r);
-      [a, b] = [b, a];
-      for (let x = 0; x < w; x++) boxLine(a, b, x * 4, h, w * 4, r);
-      [a, b] = [b, a];
-    }
-    if (a !== data) data.set(a);
-    for (let i = 0; i < data.length; i += 4) {
-      const al = data[i + 3];
-      if (al > 0 && al < 255) {
-        const k = 255 / al;
-        data[i] = data[i] * k;
-        data[i + 1] = data[i + 1] * k;
-        data[i + 2] = data[i + 2] * k;
-      }
-    }
   }
 
   // apps/ZEditor/src/render/photoAdjust.js
@@ -9011,7 +9103,7 @@
   }
 
   // apps/ZEditor/src/render/clipMask.js
-  var NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap(effectPropNames);
+  var NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, BEVEL_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap(effectPropNames);
   function maskShapeOf(base) {
     const shape = { ...base, opacity: void 0, blend: void 0, hidden: void 0, filter: { type: "none" } };
     for (const prop of NOT_SHAPE_PROPS) shape[prop] = void 0;
@@ -9507,7 +9599,7 @@
     for (const ann of items) {
       if (isClipped(ann)) ctx.counts.clipped++;
       const box = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
-      const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture);
+      const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture || ann.bevel);
       if (ann.type === "trace" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, traceSvg(ann), box)));
       else if (ann.type === "rect" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, rectSvg(ann, ctx.defs, ctx.nextId), box)));
       else if (ann.type === "stroke") parts.push(named(ann, wrapItem(ann, strokeSvg(ann), null)));
@@ -15801,7 +15893,7 @@ ${parts.join("\n")}</g>`);
       canvas.height = Math.max(1, Math.ceil(ann.height));
       drawTextureMarks(canvas.getContext("2d"), ann);
     }, [textureKey, ann.width, ann.height]);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, ann.texture && /* @__PURE__ */ React.createElement("canvas", { ref: textureCanvasRef, className: "ze-ann-image-texture", style: { clipPath: edgeOutline ? `path("${edgeOutline}")` : void 0 } }), /* @__PURE__ */ React.createElement(ShadowFilter, { ann }), strokes.length > 0 && /* @__PURE__ */ React.createElement(StrokeStack, { ann, strokes, outline: edgeOutline || rectOutline(ann) }));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, ann.texture && /* @__PURE__ */ React.createElement("canvas", { ref: textureCanvasRef, className: "ze-ann-image-texture", style: { clipPath: edgeOutline ? `path("${edgeOutline}")` : void 0 } }), /* @__PURE__ */ React.createElement(ShadowFilter, { ann }), ann.bevel && /* @__PURE__ */ React.createElement(BevelOverlay, { ann, outline: edgeOutline || rectOutline(ann) }), strokes.length > 0 && /* @__PURE__ */ React.createElement(StrokeStack, { ann, strokes, outline: edgeOutline || rectOutline(ann) }));
   }
   function StrokeStack({ ann, strokes, outline }) {
     const reach = Math.ceil(strokeReach(strokes)) + 4;
@@ -15830,6 +15922,23 @@ ${parts.join("\n")}</g>`);
       return /* @__PURE__ */ React.createElement(React.Fragment, { key: i }, /* @__PURE__ */ React.createElement("feGaussianBlur", { in: "SourceAlpha", stdDeviation: s.blur / 2, result: "b" + i }), /* @__PURE__ */ React.createElement("feOffset", { in: "b" + i, dx, dy, result: "o" + i }), /* @__PURE__ */ React.createElement("feFlood", { floodColor: s.color, result: "f" + i }), /* @__PURE__ */ React.createElement("feComposite", { in: "f" + i, in2: "o" + i, operator: "in", result: "s" + i }));
     });
     return /* @__PURE__ */ React.createElement("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("filter", { id: shadowFilterId(ann), filterUnits: "userSpaceOnUse", x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach, colorInterpolationFilters: "sRGB" }, nodes, /* @__PURE__ */ React.createElement("feMerge", null, layers.map((_, k) => /* @__PURE__ */ React.createElement("feMergeNode", { key: k, in: "s" + (layers.length - 1 - k) })), /* @__PURE__ */ React.createElement("feMergeNode", { in: "SourceGraphic" }))));
+  }
+  function BevelOverlay({ ann, outline }) {
+    const ref = useRef16(null);
+    const [pad, setPad] = React.useState(0);
+    const settings = effectSettings(ann, BEVEL_EFFECT);
+    const key = JSON.stringify([settings, outline, Math.round(ann.width), Math.round(ann.height)]);
+    useEffect13(() => {
+      const canvas = ref.current;
+      if (!canvas) return;
+      const S = 2;
+      const made = bevelCanvas(outline, ann.width, ann.height, S, settings);
+      canvas.width = made.canvas.width;
+      canvas.height = made.canvas.height;
+      canvas.getContext("2d").drawImage(made.canvas, 0, 0);
+      setPad(made.pad / S);
+    }, [key]);
+    return /* @__PURE__ */ React.createElement("canvas", { ref, className: "ze-ann-image-bevel", style: { left: -pad, top: -pad, width: ann.width + 2 * pad, height: ann.height + 2 * pad } });
   }
 
   // apps/ZEditor/src/ui/canvas/ResizeHandles.jsx
@@ -21405,7 +21514,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "ee2a17f"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "02f11f8"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

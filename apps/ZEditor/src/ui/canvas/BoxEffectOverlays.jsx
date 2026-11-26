@@ -1,7 +1,8 @@
 // Live stroke/texture overlays drawn on top of a box item.
 
 import { effectSettings } from "../../model/controls.js";
-import { STROKE_MITER_LIMIT, TEXTURE_EFFECT } from "../../model/imageEffects.js";
+import { BEVEL_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT } from "../../model/imageEffects.js";
+import { bevelCanvas } from "../../render/bevel.js";
 import { shadowLayers, shadowOffsetOf, strokeLayers, strokeReach } from "../../model/effectStacks.js";
 import { rotatePoint } from "../../model/geometry.js";
 import { angleOf } from "../../model/controls.js";
@@ -30,6 +31,7 @@ export function BoxEffectOverlays({ ann, edgeOutline }) {
         <canvas ref={textureCanvasRef} className="ze-ann-image-texture" style={{ clipPath: edgeOutline ? `path("${edgeOutline}")` : undefined }} />
       )}
       <ShadowFilter ann={ann} />
+      {ann.bevel && <BevelOverlay ann={ann} outline={edgeOutline || rectOutline(ann)} />}
       {strokes.length > 0 && <StrokeStack ann={ann} strokes={strokes} outline={edgeOutline || rectOutline(ann)} />}
     </React.Fragment>
   );
@@ -89,4 +91,24 @@ function ShadowFilter({ ann }) {
       </filter>
     </svg>
   );
+}
+
+// The lit edge of Bevel & Emboss, drawn on a canvas over the picture (the same render/bevel.js the export uses), at twice the page's pixels so it
+// stays sharp. It has a margin round the box so an emboss can spill past the edge.
+function BevelOverlay({ ann, outline }) {
+  const ref = useRef(null);
+  const [pad, setPad] = React.useState(0);
+  const settings = effectSettings(ann, BEVEL_EFFECT);
+  const key = JSON.stringify([settings, outline, Math.round(ann.width), Math.round(ann.height)]);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const S = 2;
+    const made = bevelCanvas(outline, ann.width, ann.height, S, settings);
+    canvas.width = made.canvas.width;
+    canvas.height = made.canvas.height;
+    canvas.getContext("2d").drawImage(made.canvas, 0, 0);
+    setPad(made.pad / S);
+  }, [key]);
+  return <canvas ref={ref} className="ze-ann-image-bevel" style={{ left: -pad, top: -pad, width: ann.width + 2 * pad, height: ann.height + 2 * pad }} />;
 }

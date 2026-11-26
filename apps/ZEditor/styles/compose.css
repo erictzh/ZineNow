@@ -553,3 +553,6 @@
 .ze-guide-card-title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
 .ze-guide-card-title .ze-guide-dot { margin: 0; }
 .ze-guide-card-desc { font-size: 12px; line-height: 1.35; color: var(--ui-fg-muted); font-weight: 400; }
+
+/* The lit edge of Bevel & Emboss: over the picture, never catching clicks. */
+.ze-ann-image-bevel { position: absolute; pointer-events: none; }
