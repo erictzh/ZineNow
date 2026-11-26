@@ -157,19 +157,23 @@ export function DataPanel({ merge, view, hasPage }) {
                 <input className="ze-data-num" type="number" min="1" max={count} placeholder={String(count)} value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
               </div>
               <label className="ze-data-row"><input type="checkbox" checked={hideTemplate} onChange={(e) => setHideTemplate(e.target.checked)} /> Hide the page you designed (it is skipped when exporting)</label>
-              {check.missing.length > 0 && <p className="ze-data-warn">The page uses {check.missing.map((f) => "{{" + f + "}}").join(", ")}, but the file has no such column.</p>}
-              {check.emptyCounts.map((e) => <p key={e.field} className="ze-data-warn">{e.count} of the chosen rows have nothing in “{e.field}”.</p>)}
-              {check.used.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
-              {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
-              <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || check.used.length === 0} onClick={make}>
-                {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
-              </button>
-              {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
             </div>
           </>
         )}
         {merge.message && <p className="ze-data-note" role="status">{merge.message}</p>}
       </div>
+      {parsed && (
+        <div className="ze-data-foot">
+                {check.missing.length > 0 && <p className="ze-data-warn">The page uses {check.missing.map((f) => "{{" + f + "}}").join(", ")}, but the file has no such column.</p>}
+                {check.emptyCounts.map((e) => <p key={e.field} className="ze-data-warn">{e.count} of the chosen rows have nothing in “{e.field}”.</p>)}
+                {check.used.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
+                {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
+                <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || check.used.length === 0} onClick={make}>
+                  {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
+                </button>
+                {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
+        </div>
+      )}
       {EDGES.map((edge) => <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />)}
     </aside>
   );

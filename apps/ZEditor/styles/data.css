@@ -25,3 +25,6 @@
 .ze-panel-dock-item { display: flex; align-items: center; min-width: 170px; background-color: var(--ui-bg); border: 1px solid var(--ui-border); border-bottom: 0; border-radius: 8px 8px 0 0; box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.35); padding-right: 6px; }
 .ze-panel-dock-open { flex: 1; text-align: left; background: none; border: 0; border-bottom: 0; cursor: pointer; }
 .ze-panel-dock-item .ze-guides-settings-btn { border: 0; background: none; }
+
+/* The Make pages button and its warnings stay put under the scrolling part. */
+.ze-data-foot { flex: 0 0 auto; padding: 8px 12px 12px; border-top: 1px solid var(--ui-border); background-color: var(--ui-bg); }
