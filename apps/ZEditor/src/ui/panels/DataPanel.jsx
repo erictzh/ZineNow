@@ -1,5 +1,6 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { SHOW_ON } from "../../model/dataMerge/groups.js";
 import { trackPointerDrag } from "../pointer.js";
 const { useRef, useState } = React;
 
@@ -27,7 +28,7 @@ export function DataPanel({ merge, view, hasPage }) {
   const { parsed, headers, count, idColumn } = merge;
   const from = Number(range.from) || undefined, to = Number(range.to) || undefined;
   const check = merge.usedCheck(from, to);
-  const chosenCount = count === 0 ? 0 : Math.min(count, to || count) - Math.max(1, from || 1) + 1;
+  const chosenCount = count === 0 ? 0 : merge.plannedPages(from, to).length; // pages that would be made
 
   async function onFile(e) {
     const file = e.target.files && e.target.files[0];
@@ -148,6 +149,36 @@ export function DataPanel({ merge, view, hasPage }) {
               </label>
               {!idColumn && <p className="ze-data-help">To order rows yourself, add a column named id.</p>}
             </div>
+            {view.dataAdvanced && (
+              <div className="ze-data-section">
+                <div className="ze-data-title">Data blocks <span className="ze-data-tag">Advanced</span></div>
+                <p className="ze-data-help">Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page.</p>
+                <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.markDataBlock(!merge.selected.isBlock)}>
+                  {merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"}
+                </button>
+                <p className="ze-data-help">{merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."}</p>
+                {merge.blockMode && (
+                  <>
+                    <label className="ze-data-row">Group by{" "}
+                      <select value={merge.groupBy} onChange={(e) => view.setDataGroupBy(e.target.value)}>
+                        <option value="">No grouping</option>
+                        {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </label>
+                    <p className="ze-data-help">{merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."}</p>
+                    <label className="ze-data-row"><input type="checkbox" checked={view.dataRepeatOthers} onChange={(e) => view.setDataRepeatOthers(e.target.checked)} /> Repeat non-data items on the other pages</label>
+                  </>
+                )}
+                {merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && (
+                  <label className="ze-data-row">Selected item shows on{" "}
+                    <select value={merge.selected.showOn} onChange={(e) => merge.setShowOn(e.target.value)}>
+                      {merge.selected.showOn === "" && <option value="">Mixed</option>}
+                      {SHOW_ON.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+            )}
             <div className="ze-data-section">
               <div className="ze-data-title">Make pages</div>
               <p className="ze-data-help">Design one page with fields in it, then make a page for each row.</p>
@@ -161,6 +192,7 @@ export function DataPanel({ merge, view, hasPage }) {
           </>
         )}
         {merge.message && <p className="ze-data-note" role="status">{merge.message}</p>}
+        {parsed && <button type="button" className="ze-data-link" onClick={() => view.setDataAdvanced(!view.dataAdvanced)}>{view.dataAdvanced ? "Hide advanced options" : "Show advanced options"}</button>}
       </div>
       {parsed && (
         <div className="ze-data-foot">

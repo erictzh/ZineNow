@@ -3,6 +3,7 @@
 
 import { checkMerge, mergeAnnotations } from "../model/dataMerge/build.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
+import { dataSlots, mergeGroupPage, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
 import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
 
 const { useMemo, useState } = React;
@@ -22,10 +23,15 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }, [parsed, view.dataOrder, idColumn]);
   const count = records.length;
   const shownNo = Math.min(recordNo, Math.max(0, count - 1));
-  const previewRecord = view.dataPreviewOn && count > 0 ? records[shownNo] : null;
+  const showPreview = view.dataPreviewOn && count > 0;
+  // What the page canvas runs its items through to show the chosen row (and, with data blocks, the rows after it in the other blocks).
+  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en") : null;
 
   const page = pages[selectedIdx] || null;
   const templatePage = page && page.mergedFrom !== undefined ? pages.find((p) => p.key === page.mergedFrom) || null : page;
+  const slotCount = templatePage ? dataSlots(templatePage.annotations || []).length : 0; // data blocks on the designed page (Advanced)
+  const blockMode = slotCount > 0;
+  const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
   const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
 
   function connect(name, text) {
@@ -54,13 +60,22 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     edits.handleUpdateAnnotation(id, { text: token });
   }
 
+  const VIRTUAL_FIELDS = ["page in group", "pages in group", "records in group"];
   function usedCheck(from, to) {
     if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-    return checkMerge(templatePage.annotations || [], headers, chosen);
+    const result = checkMerge(templatePage.annotations || [], headers, chosen);
+    return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)) };
   }
 
-  // One page per chosen row, placed after the template; earlier pages made from this template are replaced.
+  // The pages a merge would make for the chosen rows.
+  function plannedPages(from, to) {
+    const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
+    return blockMode ? planPages(chosen, { slotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
+  }
+
+  // One page per chosen row (with data blocks: one page per group of rows that fit the blocks), placed after the designed page; earlier pages
+  // made from it are replaced.
   function createPages({ from, to, hideTemplate }) {
     if (!templatePage || count === 0) return 0;
     const chosen = selectRecords(count, { from, to });
@@ -68,9 +83,12 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     history.recordUndoCheckpoint();
     const newId = () => nextAnnIdRef.current++;
     const newGroupId = () => "g" + nextAnnIdRef.current++;
-    const made = chosen.map((i) => {
-      const { annotations } = mergeAnnotations(templatePage.annotations || [], records[i], { newId, newGroupId, lang: "en" });
-      const copy = { ...templatePage, key: nextKeyRef.current++, annotations, mergedFrom: templatePage.key, mergeRow: i + 1, hidden: undefined };
+    const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, groupBy }) : null;
+    const made = (plans || chosen).map((item, n) => {
+      const merged = plans
+        ? mergeGroupPage(templatePage.annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers })
+        : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en" });
+      const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: undefined };
       if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
       return copy;
     });
@@ -89,8 +107,29 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     return made.length;
   }
 
+  // ---- Advanced: mark the selected group as a data block, and say which pages a non-data item shows on.
+  const selectedIds = selection.selectedAnnotationIds();
+  const selectedItems = page ? (page.annotations || []).filter((a) => selectedIds.includes(a.id)) : [];
+  const selectedGroups = new Set(selectedItems.map((a) => a.groupId).filter(Boolean));
+  const blockTargets = page ? (page.annotations || []).filter((a) => selectedGroups.has(a.groupId)) : [];
+  const selected = {
+    count: selectedItems.length,
+    grouped: selectedItems.length > 0 && selectedItems.every((a) => a.groupId),
+    isBlock: blockTargets.length > 0 && blockTargets.every((a) => a.dataBlock),
+    showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
+    hasBlock: selectedItems.some((a) => a.dataBlock),
+  };
+  function markDataBlock(on) {
+    if (!selected.grouped) { setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block."); return; }
+    setMessage("");
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, dataBlock: on || undefined, showOn: on ? undefined : a.showOn } : a)));
+  }
+  function setShowOn(value) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? undefined : value } : a)));
+  }
+
   return {
-    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewRecord, message, setMessage,
+    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, insertField, usedCheck, createPages,
   };

@@ -28,3 +28,5 @@
 
 /* The Make pages button and its warnings stay put under the scrolling part. */
 .ze-data-foot { flex: 0 0 auto; padding: 8px 12px 12px; border-top: 1px solid var(--ui-border); background-color: var(--ui-bg); }
+
+.ze-data-tag { font-weight: 400; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-fg-muted); border: 1px solid var(--ui-border); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
