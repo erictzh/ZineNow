@@ -65,10 +65,6 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
           onBlur={() => setDocTitle((t) => t.trim())}
         />
-        <button
-          type="button" className={"ze-menu-trigger" + (view.dataPanelOpen ? " open" : "")} aria-pressed={view.dataPanelOpen}
-          title="Data: fill pages from a spreadsheet (mail merge)" onClick={() => { if (view.dataPanelOpen && view.dataMinimized) view.setDataMinimized(false); else view.setDataPanelOpen(!view.dataPanelOpen); }}
-        >Data</button>
         <TopMenu label="Page">
           {({ close }) => (
             <PageMenuBody

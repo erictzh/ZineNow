@@ -1,5 +1,5 @@
 // Panels folded away with their – button: small title bars in a row at the bottom right. Click one to open the panel again where it was;
-// its × closes it for good (until it is opened from the top bar or tool bar).
+// its × closes it for good (until it is opened from the tool bar).
 
 export function PanelDock({ items }) {
   if (!items.length) return null;

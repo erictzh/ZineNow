@@ -5,7 +5,7 @@ import { SliderNumberInput } from "../controls/inputs.jsx";
 
 export function ToolBar({ selection, edits, view, zoom, dialogs }) {
   const { tool, selectTool, selectedAnnId } = selection;
-  const { layersOpen, setLayersOpen, layersMinimized, setLayersMinimized, centerGuideOn, setCenterGuideOn } = view;
+  const { layersOpen, setLayersOpen, layersMinimized, setLayersMinimized, dataPanelOpen, setDataPanelOpen, dataMinimized, setDataMinimized, centerGuideOn, setCenterGuideOn } = view;
 
   return (
     <div className="ze-tool-bar">
@@ -77,6 +77,19 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
             <path d="M12 3l9 5-9 5-9-5z" />
             <path d="M3 12.5l9 5 9-5" />
             <path d="M3 17l9 5 9-5" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={"ze-tool-icon-btn" + (dataPanelOpen ? " active" : "")}
+          aria-pressed={dataPanelOpen}
+          aria-label="Data panel"
+          title={dataPanelOpen ? "Close the Data panel" : "Data: fill pages from a spreadsheet (mail merge)"}
+          onClick={() => { if (dataPanelOpen && dataMinimized) setDataMinimized(false); else setDataPanelOpen(!dataPanelOpen); }}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="1.5" />
+            <path d="M3 9.5h18M3 14.5h18M9 4v16" />
           </svg>
         </button>
         <button
