@@ -1,5 +1,6 @@
 // Page-number settings.
 
+import { ColorPickerButton } from "../controls/ColorPicker.jsx";
 import { PAGE_NUMBER_FORMATS, PAGE_NUMBER_POSITIONS } from "../../model/pageNumbers.js";
 import { SelectInput } from "../controls/inputs.jsx";
 import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
@@ -40,7 +41,7 @@ export function PageNumbersSettings({ settings, pageCount, onChange }) {
       </label>
       <div className="ze-format-field">
         <span className="ze-format-label">Color</span>
-        <input type="color" className="ze-format-color-input" value={settings.color} onChange={(e) => onChange({ color: e.target.value })} />
+        <ColorPickerButton ariaLabel="Page number colour" value={settings.color} onChange={(hex) => onChange({ color: hex })} />
       </div>
       <span className="ze-format-hint">
         Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.

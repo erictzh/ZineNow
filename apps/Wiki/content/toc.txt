@@ -27,6 +27,7 @@ zeditor | ZEditor
     zoom-and-canvas | Zoom and the outer canvas
     no-paper | "No paper" auto-expanding canvas
     touch-bar | Touch bar
+    colour-picker | Colour picker | square, hue bar, hex and RGB, swatches, eyedropper
     keyboard-shortcuts | Keyboard shortcuts
     undo-redo | Undo / redo (history)
     state-hooks | State hooks | how the app holds a document

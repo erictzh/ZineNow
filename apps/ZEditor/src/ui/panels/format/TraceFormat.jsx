@@ -1,5 +1,6 @@
 // Format panel for a vectorized layer, laid out like Illustrator's Image Trace panel: presets, view, mode, Advanced, Create, colours.
 
+import { ColorPickerButton } from "../../controls/ColorPicker.jsx";
 import { ANGLE_CONTROL } from "../../../model/controls.js";
 import { isLiveTrace, traceColorOf } from "../../../model/trace/traceLayer.js";
 import { TRACE_ADVANCED_CONTROLS, TRACE_ADVANCED_PROPS, TRACE_MAIN_CONTROLS, TRACE_PRESETS, TRACE_VIEW_OPTIONS, matchesPreset, normalizeTraceSettings, presetSettings } from "../../../model/trace/traceSettings.js";
@@ -151,7 +152,7 @@ function TraceColors({ ann, imageTrace }) {
           const hidden = now === "none";
           return (
             <div key={p.color} className={"ze-trace-color" + (hidden ? " is-hidden" : "")}>
-              <input type="color" className="ze-format-color-input" value={hidden ? p.color : now} disabled={hidden} aria-label={"Colour " + p.color} onChange={(e) => imageTrace.recolor(ann, p.color, e.target.value)} />
+              <ColorPickerButton value={hidden ? p.color : now} disabled={hidden} ariaLabel={"Colour " + p.color} onChange={(hex) => imageTrace.recolor(ann, p.color, hex)} />
               <span className="ze-trace-hex">{hidden ? "hidden" : now}</span>
               <button type="button" className="ze-trace-mini" title={hidden ? "Show this colour" : "Hide this colour"} onClick={() => imageTrace.recolor(ann, p.color, hidden ? null : "none")}>{hidden ? "Show" : "Hide"}</button>
               {!hidden && now !== p.color && <button type="button" className="ze-trace-mini" title={"Back to the traced colour " + p.color} onClick={() => imageTrace.recolor(ann, p.color, null)}>Reset</button>}

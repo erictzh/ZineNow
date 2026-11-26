@@ -1,5 +1,6 @@
 // Format panel for a selected image: basics, crop, photo adjustments, filter style, effects, Vectorize, flatten.
 
+import { ColorPickerButton } from "../../controls/ColorPicker.jsx";
 import { ANGLE_CONTROL, angleOf } from "../../../model/controls.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, FILTER_CONTROLS, IMAGE_FILTER_OPTIONS } from "../../../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS, PHOTO_ADJUST_SECTIONS, isAdjusted } from "../../../model/photoAdjust.js";
@@ -142,19 +143,11 @@ function ImageStyleSection({ ann, filterType, filterOption, patch }) {
         <React.Fragment>
           <div className="ze-format-field">
             <span className="ze-format-label">Dark tone</span>
-            <input
-              type="color" className="ze-format-color-input"
-              value={ann.filter.darkColor || DEFAULT_DUOTONE_DARK}
-              onChange={(e) => patch({ filter: { ...ann.filter, darkColor: e.target.value } })}
-            />
+            <ColorPickerButton ariaLabel="Dark tone" value={ann.filter.darkColor || DEFAULT_DUOTONE_DARK} onChange={(hex) => patch({ filter: { ...ann.filter, darkColor: hex } })} />
           </div>
           <div className="ze-format-field">
             <span className="ze-format-label">Light tone</span>
-            <input
-              type="color" className="ze-format-color-input"
-              value={ann.filter.lightColor || DEFAULT_DUOTONE_LIGHT}
-              onChange={(e) => patch({ filter: { ...ann.filter, lightColor: e.target.value } })}
-            />
+            <ColorPickerButton ariaLabel="Light tone" value={ann.filter.lightColor || DEFAULT_DUOTONE_LIGHT} onChange={(hex) => patch({ filter: { ...ann.filter, lightColor: hex } })} />
           </div>
         </React.Fragment>
       )}

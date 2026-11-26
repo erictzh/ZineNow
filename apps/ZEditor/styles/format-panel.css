@@ -400,3 +400,38 @@
 .ze-ai-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: 8px; background: rgba(255,255,255,.03); }
 .ze-ai-box .ze-marquee-box-title { margin-top: 0; }
 .ze-ai-progress { width: 100%; height: 12px; }
+
+/* ---- The colour picker (ui/controls/ColorPicker.jsx): a saturation/brightness square, a hue bar, hex and RGB boxes, swatches. ---- */
+button.ze-format-color-input { display: inline-block; }
+.ze-cp {
+    position: fixed; z-index: 1000; width: 252px; padding: 12px; box-sizing: border-box;
+    background: var(--ui-bg-card, #201918); border: 1px solid var(--ui-border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    display: flex; flex-direction: column; gap: 10px; color: var(--ui-fg); font-size: 12px;
+}
+.ze-cp-main { display: flex; gap: 10px; }
+.ze-cp-sv { position: relative; flex: 1 1 auto; height: 150px; border-radius: 6px; cursor: crosshair; touch-action: none; }
+.ze-cp-hue {
+    position: relative; flex: 0 0 22px; height: 150px; border-radius: 6px; cursor: ns-resize; touch-action: none;
+    background: linear-gradient(to bottom, #f00, #f0f, #00f, #0ff, #0f0, #ff0, #f00);
+}
+.ze-cp-handle { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6), inset 0 0 0 1px rgba(0,0,0,.4); pointer-events: none; }
+.ze-cp-hue-handle { position: absolute; left: -3px; right: -3px; height: 8px; margin-top: -4px; border-radius: 4px; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.6); pointer-events: none; }
+.ze-cp-fields { display: flex; align-items: flex-end; gap: 6px; }
+.ze-cp-preview { flex: 0 0 28px; height: 28px; border-radius: 50%; border: 1px solid var(--ui-border); }
+.ze-cp-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ze-cp-field span { font-size: 10px; color: var(--ui-fg-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ze-cp-field input { width: 100%; box-sizing: border-box; padding: 5px 4px; font: inherit; color: var(--ui-fg); background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 6px; }
+.ze-cp-hex { flex: 1 1 70px; }
+.ze-cp-chan { flex: 0 0 33px; }
+.ze-cp-chan input { text-align: center; padding-left: 2px; padding-right: 2px; -moz-appearance: textfield; appearance: textfield; }
+.ze-cp-chan input::-webkit-outer-spin-button, .ze-cp-chan input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ze-cp-group { display: flex; flex-direction: column; gap: 5px; }
+.ze-cp-label { font-size: 10px; color: var(--ui-fg-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ze-cp-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ze-cp-swatch { width: 24px; height: 24px; min-width: 0; padding: 0; border-radius: 50%; border: 1px solid var(--ui-border); cursor: pointer; }
+.ze-cp-swatch.active { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+.ze-cp-eye { padding: 7px 10px; font-size: 12px; }
+[data-ze-input="touch"] .ze-cp { width: 280px; }
+[data-ze-input="touch"] .ze-cp-sv, [data-ze-input="touch"] .ze-cp-hue { height: 170px; }
+[data-ze-input="touch"] .ze-cp-swatch { width: 30px; height: 30px; }
+[data-ze-input="touch"] .ze-cp-field input { padding: 8px 4px; font-size: 14px; }
