@@ -10,12 +10,13 @@
 4. **Preview**: with *Show this row's words on the page* ticked, the page shows the chosen row's words. Use ◀ ▶ to step through rows. (A box you are typing in shows its field names, so you can edit it.)
 5. **Order**: *As in the file*, or, if your sheet has a column named **id**, *lowest first* or *highest first*.
 6. **Make pages**: choose which rows (leave blank for all), then **Make N pages**. The new pages go right after your designed page, which is **hidden** (crossed-out eye, so it is skipped when exporting) unless you untick that.
-7. Changed your design or data? Go back to the designed page and **Make pages** again: the pages made earlier are **replaced** (it asks you to click once more to confirm). The made pages are ordinary pages: you can edit them by hand, but a re-merge replaces them.
+7. **Make pages for rows … to …**, **Hide the page you designed** and the warnings sit under the panel with the Make button (the same on both tabs).
+8. Changed your design or data? Go back to the designed page and **Make pages** again: the pages made earlier are **replaced** (it asks you to click once more to confirm). The made pages are ordinary pages: you can edit them by hand, but a re-merge replaces them.
 
 - Under the panel you are told if the page uses a field the file has no column for, or if some rows are empty in a field.
 - A field can have a **filter**: `{{name|upper}}`, `{{name|title}}`, `{{price|number}}`, `{{date|date:d MMMM yyyy}}`, `{{city|default:Malaysia}}`. Also `lower`, `trim`, `first`, `pad:3`.
 - One undo step undoes the whole merge.
-- Not yet: pictures from a folder, QR codes, label-sheet size presets for the grid helper.
+- Not yet: QR codes, label-sheet size presets for the grid helper.
 
 ## Advanced: data blocks and groups
 
@@ -24,6 +25,7 @@ Under the file name at the top of the Data panel there are two tabs, **Basic** a
 - A **data block** is a group of items that shows **one record** (a photo, a name, a role). Select its items, group them (**Ctrl+G**), then **Mark the selected group as a data block**. Copy the block (select it, **Ctrl+C**, **Ctrl+V**; a pasted block lands 20 px down and right, so drag it to where you want it) as many times as you want on the page: each copy is a **slot**, filled in reading order (rows from the top, each left to right) with the next record. 10 records with 5 slots make 2 pages; empty slots on the last page are left out.
 - Everything else on the page is a **non-data item**. Fields in it show the group's first row, plus `{{page in group}}`, `{{pages in group}}` and `{{records in group}}`.
 - **Make a grid of copies** (shows when a data block is selected): choose **Columns**, **Rows** and a **Gap (mm)**, then the button. The block stays in the top-left cell and the copies fill the rest, one block width plus the gap apart. Size the block to one cell first (name card, label) and put it where the first cell should be. The panel tells you if some of the grid runs off the page. It is one undo step.
+- **Pictures** (Advanced tab): put a **different photo** on each page or block. Add a column that holds each photo's file name (`ana.jpg`; the extension and capital letters may be left out). **Choose photo folder…** (or **Or choose photo files**) keeps the photos inside the project, shrunk to at most 1600 px on the longest side (PNG stays PNG, the rest become JPEG). Put an ordinary picture on your page as the frame, select it, and under **Selected picture shows the photo named in** choose the column. Each made page then shows that row's photo, cropped to fill the frame and centred. The preview shows it too. If a row has no photo name, or no file with that name, the picture is **left out** (never someone else's photo) and the panel warns you. Many large photos make the project file big: every made page carries its own copy.
 - **Group by** a column (for example `band`): each value starts on a new page, then fills its slots. Without it, records just fill the blocks page after page.
 - **Repeat non-data items on the other pages** (ticked by default): the title, footer, logo and so on show on every page of a group. Unticked, they show on the group's first page only.
 - **Selected item shows on**: for one non-data item, choose *Every page*, *First page of the group*, *Continuation pages only* or *Last page only*. It overrides the tick box for that item.
@@ -42,6 +44,8 @@ Under the file name at the top of the Data panel there are two tabs, **Basic** a
 ### Pages
 
 `model/dataMerge/groups.js` (Advanced) finds the slots (`dataSlots`), groups the records (`groupRecords`), plans the pages (`planPages`) and fills one (`mergeGroupPage`; `showsOnPage` decides Show on). A data block's items carry `dataBlock: true` and a non-data item may carry `showOn`; made pages carry neither.
+
+`model/dataMerge/build.js` also has `makePhotoFinder` (cell text to photo), `fillCrop` (centre-crop to the frame), `fillPictureItem` and `pictureProblems`; `io/dataPhotos.js` reads and shrinks the photos. A picture item with `picField: "column"` is the frame.
 
 `gridCopies` lays out the grid of copies (`makeGrid` in the hook measures the block with `annotationBounds`; mm to pixels is mm / 25.4 x 72 x 1.1).
 

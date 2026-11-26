@@ -1,6 +1,6 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
-import { checkMerge, fieldsUsedOnPage, mergeAnnotations } from "../apps/ZEditor/src/model/dataMerge/build.js";
+import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
 import { dataSlots, gridCopies, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
@@ -177,4 +177,24 @@ ok(gres.items.length === 10 && new Set(gres.items.map((a) => a.groupId)).size ==
 ok(gres.items[0].x === 130 && gres.items[0].y === 30 && gres.items[2].x === 20 && gres.items[2].y === 85, "copies sit one block plus gap apart, across then down");
 ok(gres.items.every((a) => a.dataBlock) && gres.outside === 0, "copies stay data blocks and fit the page");
 ok(gridCopies(gblock, { x: 20, y: 30, width: 100, height: 50 }, { cols: 3, rows: 1, gap: { x: 0, y: 0 } }, { newId: () => gid++, newGroupId: () => "G" + gn++ }, { width: 250, height: 400 }).outside === 1, "blocks that run off the page are counted");
+// ---- Picture fields
+const photos = [{ name: "ana.jpg", src: "data:ana", width: 800, height: 600 }, { name: "Ben.PNG", src: "data:ben", width: 300, height: 600 }];
+const find = makePhotoFinder(photos);
+ok(find("ana.jpg") === photos[0] && find("ANA") === photos[0] && find("pics/Ben.png") === photos[1] && find("ben") === photos[1], "photos are found by name, ignoring folders, capitals and a missing extension");
+ok(find("") === null && find("cara.jpg") === null && find("ana.png") === null, "no cell, no such file, or the wrong extension: not found");
+const crop = fillCrop(800, 600, 100, 100);
+ok(crop.cropW === 600 && crop.cropH === 600 && crop.cropX === 100 && crop.cropY === 0, "a wide photo in a square frame is cropped at the sides, centred");
+const tall = fillCrop(300, 600, 200, 100);
+ok(tall.cropW === 300 && tall.cropH === 150 && tall.cropY === 225, "a tall photo in a wide frame is cropped top and bottom, centred");
+const frame = { id: 1, type: "image", x: 5, y: 5, width: 100, height: 100, src: "data:placeholder", naturalWidth: 10, naturalHeight: 10, picField: "photo" };
+const filledPic = fillPictureItem(frame, { photo: "ana.jpg" }, find);
+ok(filledPic.ann.src === "data:ana" && filledPic.ann.naturalWidth === 800 && filledPic.ann.cropW === 600 && filledPic.ann.width === 100, "a picture field takes the photo and keeps its frame");
+ok(fillPictureItem(frame, { photo: "zed.jpg" }, find).ann === null && fillPictureItem(frame, { photo: "" }, find).ann === null, "a missing photo leaves the picture out");
+ok(fillPictureItem({ id: 2, type: "image" }, {}, find).handled === false, "a picture without a field is left alone");
+let picN = 700;
+const picMerged = mergeAnnotations([frame, { id: 3, type: "text", text: "{{photo}}" }], { photo: "Ben.png" }, { newId: () => picN++, newGroupId: () => "g" + picN++, findPhoto: find });
+ok(picMerged.annotations.length === 2 && picMerged.annotations[0].src === "data:ben" && picMerged.annotations[0].picField === undefined, "a merged page gets the photo and no marker");
+ok(mergeAnnotations([frame], { photo: "nope.jpg" }, { newId: () => picN++, newGroupId: () => "g" + picN++, findPhoto: find }).annotations.length === 0, "and no picture when none is found");
+const pp = pictureProblems([frame], [{ photo: "ana.jpg" }, { photo: "" }, { photo: "x.jpg" }, { photo: "x.jpg" }], find)[0];
+ok(pp.column === "photo" && pp.empty === 1 && pp.notFound.join() === "x.jpg", "picture problems: empty cells, and names with no photo (each once)");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
