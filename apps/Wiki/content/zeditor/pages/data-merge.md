@@ -19,7 +19,7 @@
 
 ## Advanced: data blocks and groups
 
-At the bottom of the Data panel, **Show advanced options** switches this on (remembered in your browser). Basic stays as it is until you do.
+Under the file name at the top of the Data panel there are two tabs, **Basic** and **Advanced** (the file and the tabs stay in place while the rest scrolls). Basic is the default; the tab you leave open is remembered in your browser.
 
 - A **data block** is a group of items that shows **one record** (a photo, a name, a role). Select its items, group them (**Ctrl+G**), then **Mark the selected group as a data block**. Copy the block (select it, **Ctrl+C**, **Ctrl+V**; a pasted block lands 20 px down and right, so drag it to where you want it) as many times as you want on the page: each copy is a **slot**, filled in reading order (rows from the top, each left to right) with the next record. 10 records with 5 slots make 2 pages; empty slots on the last page are left out.
 - Everything else on the page is a **non-data item**. Fields in it show the group's first row, plus `{{page in group}}`, `{{pages in group}}` and `{{records in group}}`.

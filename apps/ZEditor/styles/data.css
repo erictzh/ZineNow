@@ -30,3 +30,10 @@
 .ze-data-foot { flex: 0 0 auto; padding: 8px 12px 12px; border-top: 1px solid var(--ui-border); background-color: var(--ui-bg); }
 
 .ze-data-tag { font-weight: 400; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-fg-muted); border: 1px solid var(--ui-border); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+
+/* The file and the Basic / Advanced tabs stay put above the scrolling part. */
+.ze-data-pinned { flex: 0 0 auto; padding: 10px 12px 0; border-bottom: 1px solid var(--ui-border); }
+.ze-data-tabs { display: flex; gap: 4px; margin-top: 8px; }
+.ze-data-tab { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--ui-fg-muted); font-size: 12px; font-weight: 600; padding: 6px 0; cursor: pointer; }
+.ze-data-tab:hover { color: var(--ui-fg); }
+.ze-data-tab.is-active { color: var(--ui-fg); border-bottom-color: var(--ui-accent); }

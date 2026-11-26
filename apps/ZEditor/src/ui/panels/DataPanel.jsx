@@ -105,6 +105,16 @@ export function DataPanel({ merge, view, hasPage }) {
           </button>
         </span>
       </div>
+      {parsed && (
+        <div className="ze-data-pinned">
+          <div className="ze-data-file"><strong title={view.dataSource.name}>{view.dataSource.name}</strong><span>{count} {count === 1 ? "row" : "rows"}</span></div>
+          <button type="button" className="ze-data-link" onClick={merge.disconnect}>Remove this data</button>
+          <div className="ze-data-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={!view.dataAdvanced} className={"ze-data-tab" + (!view.dataAdvanced ? " is-active" : "")} onClick={() => view.setDataAdvanced(false)}>Basic</button>
+            <button type="button" role="tab" aria-selected={view.dataAdvanced} className={"ze-data-tab" + (view.dataAdvanced ? " is-active" : "")} onClick={() => view.setDataAdvanced(true)}>Advanced</button>
+          </div>
+        </div>
+      )}
       <div className="ze-data-body">
         {!parsed && (
           <div className="ze-data-section">
@@ -122,10 +132,8 @@ export function DataPanel({ merge, view, hasPage }) {
         )}
         {parsed && (
           <>
-            <div className="ze-data-section">
-              <div className="ze-data-file"><strong title={view.dataSource.name}>{view.dataSource.name}</strong><span>{count} {count === 1 ? "row" : "rows"}</span></div>
-              <button type="button" className="ze-data-link" onClick={merge.disconnect}>Remove this data</button>
-            </div>
+            {!view.dataAdvanced && (
+              <>
             <div className="ze-data-section">
               <div className="ze-data-title">Fields</div>
               <p className="ze-data-help">{hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."}</p>
@@ -150,9 +158,11 @@ export function DataPanel({ merge, view, hasPage }) {
               </label>
               {!idColumn && <p className="ze-data-help">To order rows yourself, add a column named id.</p>}
             </div>
+              </>
+            )}
             {view.dataAdvanced && (
               <div className="ze-data-section">
-                <div className="ze-data-title">Data blocks <span className="ze-data-tag">Advanced</span></div>
+                <div className="ze-data-title">Data blocks</div>
                 <p className="ze-data-help">Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page.</p>
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.markDataBlock(!merge.selected.isBlock)}>
                   {merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"}
@@ -205,7 +215,6 @@ export function DataPanel({ merge, view, hasPage }) {
           </>
         )}
         {merge.message && <p className="ze-data-note" role="status">{merge.message}</p>}
-        {parsed && <button type="button" className="ze-data-link" onClick={() => view.setDataAdvanced(!view.dataAdvanced)}>{view.dataAdvanced ? "Hide advanced options" : "Show advanced options"}</button>}
       </div>
       {parsed && (
         <div className="ze-data-foot">
