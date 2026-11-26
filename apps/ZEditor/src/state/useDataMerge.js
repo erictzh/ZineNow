@@ -3,9 +3,11 @@
 
 import { checkMerge, mergeAnnotations } from "../model/dataMerge/build.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
-import { dataSlots, mergeGroupPage, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
+import { annotationBounds } from "../render/itemGeometry.js";
+import { dataSlots, gridCopies, mergeGroupPage, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
 import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
 
+import { MAIN_SCALE } from "../constants.js";
 const { useMemo, useState } = React;
 
 export function useDataMerge({ doc, history, view, edits, selection }) {
@@ -124,12 +126,24 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     setMessage("");
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, dataBlock: on || undefined, showOn: on ? undefined : a.showOn } : a)));
   }
+  // Copies of the selected data block laid out as `cols` x `rows` (the block stays top left); `gapMm` between them.
+  function makeGrid({ cols, rows, gapMm }) {
+    if (!page || !selected.isBlock) return;
+    const boxes = blockTargets.map(annotationBounds);
+    const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
+    const bounds = { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y };
+    const gap = gapMm / 25.4 * 72 * MAIN_SCALE;
+    const result = gridCopies(blockTargets, bounds, { cols, rows, gap: { x: gap, y: gap } }, { newId: () => nextAnnIdRef.current++, newGroupId: () => "g" + nextAnnIdRef.current++ }, { width: page.width * MAIN_SCALE, height: page.height * MAIN_SCALE });
+    if (!result.items.length) { setMessage("A grid of 1 × 1 is just the block."); return; }
+    edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, ...result.items]);
+    setMessage(cols * rows + " blocks in a grid." + (result.outside ? " " + result.outside + " of them are partly off the page: make the block smaller, or the gap, or fewer columns and rows." : ""));
+  }
   function setShowOn(value) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? undefined : value } : a)));
   }
 
   return {
-    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, makeGrid, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, insertField, usedCheck, createPages,
   };
