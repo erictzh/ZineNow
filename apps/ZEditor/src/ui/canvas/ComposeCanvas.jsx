@@ -263,8 +263,8 @@ export function ComposeCanvas({
       window.removeEventListener("keyup", onKey);
       setDragRect(null);
       if (tool === "text") {
-        // A click makes a text box that fits its text; a drag sets its width.
-        if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
+        // A click makes a text box that fits its text; a drag sets its width and, when it is more than a line tall, its height too.
+        if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width), rect.height);
         else onAddText(start.x, start.y);
       } else if (tool === "rect" || tool === "ellipse") {
         onAddRect(rect || {

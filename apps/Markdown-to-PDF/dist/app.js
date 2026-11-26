@@ -1657,7 +1657,7 @@
   // apps/Markdown-to-PDF/src/ui/Header.jsx
   var OPEN_FILE_TYPES = `Opens Markdown (.md, .markdown), plain text (.txt), Word (.docx), EPUB (.epub) and Muse (.muse) files. Replaces the editor's text (${MOD}Z brings it back).`;
   function Header({ onOpenFile, onSaveMarkdown, onQuickSave, savedFileName, onLoadSample, onExport, isExporting, onSendToZineArranger, isSendingToArranger }) {
-    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "ff0a3f0"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "md2ebook-header md2ebook-no-print topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "Md"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "Md to PDF Converter"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Markdown → Publication-ready PDF · build ", "2a91d05"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement(DropMenu, { trigger: "File", align: "right", triggerClassName: "md2ebook-topbar-btn md2ebook-file-menu" }, ({ close }) => /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(MenuItem, { label: "Open file…", detail: "md · txt · docx · epub · muse", shortcut: MOD + "O", hint: OPEN_FILE_TYPES, onClick: onOpenFile, close }), savedFileName ? /* @__PURE__ */ React.createElement(MenuItem, { label: "Save", detail: savedFileName, shortcut: MOD + "S", hint: `Save back to "${savedFileName}", no dialog`, onClick: onQuickSave, close }) : null, /* @__PURE__ */ React.createElement(
       MenuItem,
       {
         label: "Save as Markdown…",
@@ -3584,7 +3584,15 @@
 
   // shared/js/displaySettings.js
   var EVENT = "zn-display-prefs";
-  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var initialOf = (s) => typeof s.initial === "function" ? s.initial() : s.initial;
+  var desktopDefault = (onComputer, otherwise) => () => {
+    try {
+      return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? onComputer : otherwise;
+    } catch (e) {
+      return otherwise;
+    }
+  };
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : initialOf(s);
   var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
   var tidy = (v) => Math.round(v * 1e3) / 1e3;
   function installDisplaySettings(options) {
@@ -3595,7 +3603,7 @@
     const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
     const initialOption = (ch) => ch.options[ch.initial || 0];
     const defaults = {};
-    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const s of sliders) defaults[s.key] = initialOf(s);
     for (const c of checks) defaults[c.key] = false;
     for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
     function load() {
@@ -3837,7 +3845,7 @@
       // where the source code is (a small line in the gear pop-up)
       sliders: [
         { key: "editorFontSize", label: "Editor text size", min: 10, max: 28, step: 0.5, initial: 13.5, unit: "px", cssVar: "--md2ebook-editor-font-size", cssValue: (v) => v + "px" },
-        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) }
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) }
       ],
       groups: [
         { title: "Preview", checks: [

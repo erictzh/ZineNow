@@ -18,9 +18,13 @@ import { layerName } from "../model/layerNames.js";
 import { plainTextLook } from "../io/svgExport.js";
 import { outlinedTextPatch } from "../io/textOutline.js";
 import { resolvePageText } from "../render/pageText.js";
+import { pxToPt } from "../model/text/textLook.js";
 import { makeTextFrameActions } from "./textFrameActions.js";
 
 const { useEffect, useRef } = React;
+
+// A text box drawn at least this tall (editor px) keeps its drawn height; a shorter one fits its text.
+const MIN_DRAWN_FRAME_PX = 30;
 
 export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
@@ -160,7 +164,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     }
   }
 
-  function handleAddText(x, y, width) {
+  function handleAddText(x, y, width, height) {
     if (selectedIdx === null) return;
     const id = nextAnnIdRef.current++;
     // Shares handleUpdateAnnotation's coalesce key for this same id —
@@ -176,6 +180,8 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
       underline: toolDefaults.textUnderline,
       color: toolDefaults.textColor,
       align: toolDefaults.textAlign,
+      // A box drawn taller than a line keeps the height it was drawn with (a fixed frame), instead of shrinking back to one row.
+      ...(height >= MIN_DRAWN_FRAME_PX ? { frameHeight: Math.max(1, Math.round(pxToPt(height))) } : {}),
     }], "ann:" + id);
     setSelectedAnnId(id);
     setSelectedAnnIds([]);

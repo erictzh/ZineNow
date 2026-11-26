@@ -9492,6 +9492,7 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/state/useAnnotationEdits.js
   var { useEffect, useRef } = React;
+  var MIN_DRAWN_FRAME_PX = 30;
   function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
     const { recordUndoCheckpoint } = history;
@@ -9603,7 +9604,7 @@ ${parts.join("\n")}</g>`);
         setSelectedAnnIds([]);
       }
     }
-    function handleAddText(x, y, width) {
+    function handleAddText(x, y, width, height) {
       if (selectedIdx === null) return;
       const id = nextAnnIdRef.current++;
       updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
@@ -9619,7 +9620,9 @@ ${parts.join("\n")}</g>`);
         italic: toolDefaults.textItalic,
         underline: toolDefaults.textUnderline,
         color: toolDefaults.textColor,
-        align: toolDefaults.textAlign
+        align: toolDefaults.textAlign,
+        // A box drawn taller than a line keeps the height it was drawn with (a fixed frame), instead of shrinking back to one row.
+        ...height >= MIN_DRAWN_FRAME_PX ? { frameHeight: Math.max(1, Math.round(pxToPt(height))) } : {}
       }], "ann:" + id);
       setSelectedAnnId(id);
       setSelectedAnnIds([]);
@@ -11010,11 +11013,11 @@ ${parts.join("\n")}</g>`);
           }
           return;
         }
-        if (key === "delete") {
+        if (key === "delete" || key === "backspace") {
           e.preventDefault();
           if (selection.tool === "marquee") return;
           if (selectedAnnId !== null) edits.handleDeleteAnnotation();
-          else if (selectedIdx !== null) {
+          else if (key === "delete" && selectedIdx !== null) {
             if (selectedPageIndices.length > 0) pageOps.handleDeleteSelectedPages();
             else pageOps.handleDelete(selectedIdx);
           }
@@ -11915,7 +11918,15 @@ ${parts.join("\n")}</g>`);
 
   // shared/js/displaySettings.js
   var EVENT = "zn-display-prefs";
-  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var initialOf = (s) => typeof s.initial === "function" ? s.initial() : s.initial;
+  var desktopDefault = (onComputer, otherwise) => () => {
+    try {
+      return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? onComputer : otherwise;
+    } catch (e) {
+      return otherwise;
+    }
+  };
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : initialOf(s);
   var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
   var tidy = (v) => Math.round(v * 1e3) / 1e3;
   function installDisplaySettings(options) {
@@ -11926,7 +11937,7 @@ ${parts.join("\n")}</g>`);
     const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
     const initialOption = (ch) => ch.options[ch.initial || 0];
     const defaults = {};
-    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const s of sliders) defaults[s.key] = initialOf(s);
     for (const c of checks) defaults[c.key] = false;
     for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
     function load2() {
@@ -12170,7 +12181,7 @@ ${parts.join("\n")}</g>`);
       mount: false,
       // App.jsx places it next to the touch bar once that's rendered
       sliders: [
-        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
         { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) }
       ],
       groups: [
@@ -17327,7 +17338,7 @@ ${parts.join("\n")}</g>`);
         window.removeEventListener("keyup", onKey);
         setDragRect(null);
         if (tool === "text") {
-          if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width));
+          if (rect) onAddText(rect.x, rect.y, Math.max(40, rect.width), rect.height);
           else onAddText(start.x, start.y);
         } else if (tool === "rect" || tool === "ellipse") {
           onAddRect(rect || {
@@ -21114,7 +21125,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b1d61d5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "24b42b5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

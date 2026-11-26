@@ -4,7 +4,7 @@ The **Text tool** (**T**) puts words on the page. Everything about how those wor
 
 ## How to use
 
-- Press **T** (or choose Text in the toolbar), then **click** on the page: a box appears that **fits its text** and starts a new line when it reaches 320 px. Or **drag** to draw a box of a set width (at least 40 px).
+- Press **T** (or choose Text in the toolbar), then **click** on the page: a box appears that **fits its text** and starts a new line when it reaches 320 px. Or **drag** to draw a box of a set width (at least 40 px). If you drag it more than about a line tall, the box **keeps the height you drew** (a fixed frame) instead of shrinking back to one row.
 - You can type at once. **Double-click** a box (Move tool) to edit it later; **Esc** finishes editing and keeps the box selected.
 - New boxes take the font, size, bold, italic, underline, colour and alignment last set for the Text tool (the *tool defaults*).
 - **Letter case** (Spacing & layout): As typed, UPPERCASE, lowercase, Title Case or Small caps. **Direction: Stacked** puts every character on its own line, for spines and signs.

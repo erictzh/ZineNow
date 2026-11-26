@@ -14,7 +14,13 @@
 
 const EVENT = "zn-display-prefs";
 
-const clampTo = (v, s) => (Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial);
+// A slider's `initial` is a number, or a function that returns one (decided when the page loads, e.g. by device: see `desktopDefault`).
+const initialOf = (s) => (typeof s.initial === "function" ? s.initial() : s.initial);
+// For a slider's `initial`: `onComputer` where the main input is a mouse or touchpad (hover and a fine pointer), `otherwise` (a tablet or phone) elsewhere.
+export const desktopDefault = (onComputer, otherwise) => () => {
+  try { return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? onComputer : otherwise; } catch (e) { return otherwise; }
+};
+const clampTo = (v, s) => (Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : initialOf(s));
 const snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
 // Rounds away float noise from steps like 0.5 (13.5 + 0.5 * 3).
 const tidy = (v) => Math.round(v * 1000) / 1000;
@@ -50,7 +56,7 @@ export function installDisplaySettings(options) {
   const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
   const initialOption = (ch) => ch.options[ch.initial || 0];
   const defaults = {};
-  for (const s of sliders) defaults[s.key] = s.initial;
+  for (const s of sliders) defaults[s.key] = initialOf(s);
   for (const c of checks) defaults[c.key] = false;
   for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
 

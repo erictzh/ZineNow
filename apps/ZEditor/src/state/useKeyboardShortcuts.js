@@ -82,11 +82,13 @@ export function useKeyboardShortcuts(app) {
         return; // any other Ctrl/Cmd combo — leave the browser's own default alone
       }
 
-      if (key === "delete") {
+      // Delete and Backspace both delete the selected layer(s). With no layer selected Delete removes the page (or the selected pages); Backspace
+      // does not (it is too easy to hit by accident).
+      if (key === "delete" || key === "backspace") {
         e.preventDefault();
         if (selection.tool === "marquee") return; // the selected layer is only the marquee's target: Delete must not remove it
         if (selectedAnnId !== null) edits.handleDeleteAnnotation();
-        else if (selectedIdx !== null) {
+        else if (key === "delete" && selectedIdx !== null) {
           if (selectedPageIndices.length > 0) pageOps.handleDeleteSelectedPages();
           else pageOps.handleDelete(selectedIdx);
         }
