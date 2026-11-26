@@ -1,6 +1,7 @@
 // Draws a text box: fill, stroke, shadow, gradient, photo fill, ransom, curve, decorations, distress.
 
 import { rgbaCss } from "../model/color.js";
+import { strokeIsGradient, strokeStops } from "../model/effectStacks.js";
 import { noiseStream, seededNoise } from "../model/noise.js";
 import { colorAtIndex, colorSegments } from "../model/text/colorRuns.js";
 import { RANSOM_PAPER_COLORS } from "../model/text/textControls.js";
@@ -147,7 +148,8 @@ export async function drawTextOnCanvas(ctx, ann, scaleFactor) {
 
   // One stroke layer round every run: an outside or inside stroke is drawn twice as wide (the other half is hidden by the fill or cut away).
   const strokeRuns = (c, layer) => runs.forEach((run) => withRun(c, run, () => {
-    c.strokeStyle = layer.color;
+    // A gradient stroke runs over the text area, like a gradient fill does.
+    c.strokeStyle = strokeIsGradient(layer) ? makeLinearGradient(c, layer.angle, strokeStops(layer), x + padX, y + padY, innerWidth, textHeight) : layer.color;
     c.lineWidth = (layer.position === "center" ? layer.thickness : layer.thickness * 2) * scaleFactor;
     c.lineJoin = "round"; // stacked strokes round the corners, so thick outlines do not grow sharp spikes
     c.strokeText(run.text, run.x, run.baselineY);

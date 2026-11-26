@@ -5,7 +5,7 @@ import { MAIN_SCALE } from "../constants.js";
 import { hexToRgb } from "../model/color.js";
 import { isClipped } from "../model/clipping.js";
 import { angleOf, blendOf, controlValues, effectSettings, opacityOf } from "../model/controls.js";
-import { strokeLayers, strokeReach } from "../model/effectStacks.js";
+import { gradientLine, strokeIsGradient, strokeLayers, strokeReach } from "../model/effectStacks.js";
 import { imageEdgeOutline, imageShadowOffset } from "../model/imageEffects.js";
 import { rectOutline } from "../model/outlines.js";
 import { RECT_CONTROLS } from "../model/rect.js";
@@ -93,7 +93,13 @@ function rectSvg(ann, defs, nextId) {
     // An inside stroke is drawn twice as wide and cut to the shape; an outside one twice as wide and cut away from it.
     if (strokes.some((s) => s.position === "inside")) defs.push(`<clipPath id="${clipId}"><path d="${d}"/></clipPath>`);
     if (strokes.some((s) => s.position === "outside")) defs.push(`<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${-reach}" y="${-reach}" width="${num(w + 2 * reach)}" height="${num(h + 2 * reach)}"><rect x="${-reach}" y="${-reach}" width="${num(w + 2 * reach)}" height="${num(h + 2 * reach)}" fill="#fff"/><path d="${d}" fill="#000"/></mask>`);
-    stroke = strokes.map((s) => `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${num(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
+    const paints = strokes.map((s) => {
+      if (!strokeIsGradient(s)) return s.color;
+      const id = nextId("sg"), g = gradientLine(s.angle, 0, 0, w, h);
+      defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(g.x1)}" y1="${num(g.y1)}" x2="${num(g.x2)}" y2="${num(g.y2)}"><stop offset="0" stop-color="${s.color}"/><stop offset="1" stop-color="${s.color2}"/></linearGradient>`);
+      return `url(#${id})`;
+    });
+    stroke = strokes.map((s, i) => `<path d="${d}" fill="none" stroke="${paints[i]}" stroke-width="${num(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
   }
   return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
 }

@@ -1,7 +1,8 @@
 // Everything around a box when drawn: rotation, opacity/blend layer, stroke, shadow, texture.
 
 import { angleOf, effectSettings } from "../model/controls.js";
-import { strokeLayers, strokeReach } from "../model/effectStacks.js";
+import { strokeIsGradient, strokeLayers, strokeReach, strokeStops } from "../model/effectStacks.js";
+import { makeLinearGradient } from "./gradients.js";
 import { BEVEL_EFFECT, STROKE_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT, imageEdgeOutline, imageShadowOffsets } from "../model/imageEffects.js";
 import { rotatePoint } from "../model/geometry.js";
 import { bevelCanvas } from "./bevel.js";
@@ -99,7 +100,7 @@ export function drawStrokeStack(ctx, strokes, path, width, height, reach) {
       room.addPath(path);
       ctx.clip(room, "evenodd");
     }
-    ctx.strokeStyle = s.color;
+    ctx.strokeStyle = strokeIsGradient(s) ? makeLinearGradient(ctx, s.angle, strokeStops(s), 0, 0, width, height) : s.color;
     ctx.lineWidth = s.position === "center" ? s.thickness : s.thickness * 2;
     ctx.lineJoin = "miter";
     ctx.miterLimit = STROKE_MITER_LIMIT;

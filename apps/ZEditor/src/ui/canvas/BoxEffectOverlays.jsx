@@ -3,7 +3,7 @@
 import { effectSettings } from "../../model/controls.js";
 import { BEVEL_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT } from "../../model/imageEffects.js";
 import { bevelCanvas } from "../../render/bevel.js";
-import { shadowLayers, shadowOffsetOf, strokeLayers, strokeReach } from "../../model/effectStacks.js";
+import { gradientLine, shadowLayers, shadowOffsetOf, strokeIsGradient, strokeLayers, strokeReach } from "../../model/effectStacks.js";
 import { rotatePoint } from "../../model/geometry.js";
 import { angleOf } from "../../model/controls.js";
 import { shadowFilterId } from "./boxStyles.js";
@@ -50,10 +50,19 @@ function StrokeStack({ ann, strokes, outline }) {
           <rect x={-reach} y={-reach} width={ann.width + 2 * reach} height={ann.height + 2 * reach} fill="#fff" />
           <path d={outline} fill="#000" />
         </mask>
+        {strokes.map((s, i) => {
+          if (!strokeIsGradient(s)) return null;
+          const g = gradientLine(s.angle, 0, 0, ann.width, ann.height);
+          return (
+            <linearGradient key={i} id={id + "-g" + i} gradientUnits="userSpaceOnUse" x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2}>
+              <stop offset="0" stopColor={s.color} /><stop offset="1" stopColor={s.color2} />
+            </linearGradient>
+          );
+        })}
       </defs>
       {strokes.map((s, i) => (
         <path
-          key={i} d={outline} fill="none" stroke={s.color} strokeLinejoin="miter" strokeMiterlimit={STROKE_MITER_LIMIT}
+          key={i} d={outline} fill="none" stroke={strokeIsGradient(s) ? `url(#${id}-g${i})` : s.color} strokeLinejoin="miter" strokeMiterlimit={STROKE_MITER_LIMIT}
           strokeWidth={s.position === "center" ? s.thickness : s.thickness * 2}
           clipPath={s.position === "inside" ? `url(#${id}-in)` : undefined} mask={s.position === "outside" ? `url(#${id}-out)` : undefined}
         />
