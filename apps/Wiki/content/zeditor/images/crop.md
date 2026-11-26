@@ -4,6 +4,7 @@
 
 ## How to use
 
+- **Triple-click** an image to start cropping (a turned image can't be cropped). **Enter** (or **C** again) applies the crop and leaves crop mode.
 - Select an image and press **C**, or use **Edit Crop** in the Format panel's *Crop* section (also the crop button on the touch bar). Switch it off with **Done Cropping**.
 - Drag the **eight handles** of the crop window. **Shift** keeps the window's proportions.
 - The crop cannot be used while the image is rotated (rotate after cropping). The window never leaves the picture and is at least 20 source pixels in size.
