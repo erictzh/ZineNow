@@ -48,6 +48,8 @@ import { PanelResizer } from "./PanelResizer.jsx";
 import { Sidebar } from "./sidebar/Sidebar.jsx";
 import { ToolBar } from "./toolbar/ToolBar.jsx";
 import { TouchBar } from "./TouchBar.jsx";
+import { useDataMerge } from "../state/useDataMerge.js";
+import { DataPanel } from "./panels/DataPanel.jsx";
 import { Topbar } from "./topbar/Topbar.jsx";
 import { attachDisplayGear } from "./displaySettings.js";
 
@@ -68,6 +70,7 @@ export function App() {
   const marquee = useMarquee({ doc, selection, edits, toolDefaults, status, history });
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
+  const dataMerge = useDataMerge({ doc, history, view, edits, selection });
   const pageOps = usePageOps({ doc, history, selection });
   const pageBleed = usePageBleed({ doc, history, status });
   const guides = useGuides({ doc, view, history });
@@ -183,6 +186,7 @@ export function App() {
           <div className="preview-pane" ref={zoom.previewPaneRef}>
             <div className="preview-canvas-wrapper">
               <ComposeCanvas
+                mergeRecord={dataMerge.previewRecord}
                 zoom={zoom.zoomPercent / 100}
                 viewKey={zoom.viewKey}
                 rulerUnit={view.rulerUnit}
@@ -280,6 +284,8 @@ export function App() {
           />
         )}
       </div>
+
+      {view.dataPanelOpen && <DataPanel merge={dataMerge} view={view} hasPage={Boolean(selectedPage)} />}
 
       {selectedPage && view.layersOpen && (
         <LayersPanel

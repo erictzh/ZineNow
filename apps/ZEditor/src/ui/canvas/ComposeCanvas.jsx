@@ -33,6 +33,7 @@ import { ZOOM_PERCENT } from "../../constants.js";
 
 const SNAP_PX = 6; // screen px: how close an edge must come to a ruler guide to snap onto it
 
+import { fillTextItem } from "../../model/dataMerge/build.js";
 const { useState, useRef, useEffect, useLayoutEffect } = React;
 
 export function ComposeCanvas({
@@ -44,7 +45,7 @@ export function ComposeCanvas({
   onStartTextEdit, onFinishTextEdit, onLinkNextFrame, onUnlinkNextFrame, snapGuides, snapItems,
   eraserMode, softEraser, onEraseImagePixels, magicPreview, onMagicClick,
   marquee, marqueeShape, marqueeBrush, marqueeHidden, onMarqueeChange,
-  zoom, rulerUnit, viewKey,
+  zoom, rulerUnit, viewKey, mergeRecord,
 }) {
   const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
   const layerRef = useRef(null);
@@ -435,7 +436,9 @@ export function ComposeCanvas({
     );
   }
 
-  const pageViews = resolvePageText(magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations);
+  const withPreview = magicPreview ? annotations.map((a) => (a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a)) : annotations;
+  // Data merge preview: text with {{column}} shows the chosen row's values (not while that box is being typed in).
+  const pageViews = resolvePageText(mergeRecord ? withPreview.map((a) => (a.id === editingAnnId ? a : fillTextItem(a, mergeRecord, { lang: "en" }).ann)) : withPreview);
   // A text box being typed in shows its handles too (from the moment it's made), so it can be resized right away.
   const showHandlesFor = (a) => (tool === "select" || a.id === editingAnnId) && a.id === selectedAnnId && selectedAnnIds.length === 0;
   const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });

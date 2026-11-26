@@ -37,6 +37,12 @@ export function useViewSettings() {
   // unless the box is unticked), and the face keys left out of that. Saved with the project.
   const [embedFonts, setEmbedFonts] = useState(true);
   const [embedFontsSkip, setEmbedFontsSkip] = useState([]);
+  // Data merge (Data button): the spreadsheet file kept inside the project ({ name, text } or null), the order of its rows ("file", "id-asc", "id-desc"),
+  // whether the page shows the chosen row's values, and whether the Data panel is open. Saved with the project (except the panel being open).
+  const [dataSource, setDataSource] = useState(null);
+  const [dataOrder, setDataOrder] = useState("file");
+  const [dataPreviewOn, setDataPreviewOn] = useState(true);
+  const [dataPanelOpen, setDataPanelOpen] = useState(false);
 
   // The part of these settings a saved project carries.
   function settingsForSave() {
@@ -44,7 +50,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn,
     };
   }
 
@@ -68,6 +74,9 @@ export function useViewSettings() {
     setLayoutSettings(normalizeLayoutSettings(s.layoutSettings)); // older files: the app's defaults
     setEmbedFonts(s.embedFonts !== false); // a project that says nothing (older files) gets the default: on
     setEmbedFontsSkip(Array.isArray(s.embedFontsSkip) ? s.embedFontsSkip.filter((k) => typeof k === "string") : []);
+    setDataSource(s.dataSource && typeof s.dataSource.text === "string" ? { name: String(s.dataSource.name || "data.csv"), text: s.dataSource.text } : null);
+    setDataOrder(["file", "id-asc", "id-desc"].includes(s.dataOrder) ? s.dataOrder : "file");
+    setDataPreviewOn(s.dataPreviewOn !== false);
     setRulerGuides(normalizeGuides(s.rulerGuides)); // older files: guides without a colour get the default
     setGuideColor(GUIDE_COLORS.some((c) => c.key === s.guideColor) ? s.guideColor : DEFAULT_GUIDE_COLOR);
   }
@@ -79,6 +88,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen,
     settingsForSave, applySavedSettings,
   };
 }
