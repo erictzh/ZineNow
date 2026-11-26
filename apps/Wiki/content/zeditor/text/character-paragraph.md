@@ -5,6 +5,7 @@
 ## How to use
 
 **Text/Character**: **Font** (searchable list), **Size** in points, **B / I / U**, **Horizontal Align** (left, centre, right, justify), **Vertical Align** (top, middle, bottom: only in a box with a fixed height), **Color** (swatches or any colour) and **Fill opacity**.
+- **Fill** (its own section under Text/Character): **Solid color** (the Color above) or **Gradient**, which fades from that color to a **To color** across the whole text box, with its opacity, angle and where it starts and ends. (It used to be the Gradient effect further down; it is the same setting, now next to the colour.)
 
 **Spacing & layout:**
 - **Line spacing (%)**, 80–300, default 130: the line height as a percentage of the font size.
