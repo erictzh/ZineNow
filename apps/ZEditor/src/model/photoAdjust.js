@@ -26,6 +26,13 @@ export const PHOTO_ADJUST_SECTIONS = [
     ],
   },
   {
+    id: "detail", title: "Blur",
+    controls: [
+      // Gaussian blur: the radius in page px (the same softness at any export size).
+      adjustSlider("adjBlur", "Gaussian blur (px)", 0, 0, 60),
+    ],
+  },
+  {
     id: "levels", title: "Levels",
     controls: [
       adjustSlider("adjBlack", "Black point", 0, 0, 254),

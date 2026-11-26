@@ -4,9 +4,10 @@
 
 ## How to use
 
-Select an image and open **Photo Adjustments** in the Format panel. Each slider runs −100 to +100 and rests at 0:
+Select an image and open **Photo Adjustments** in the Format panel. Most sliders run −100 to +100 and rest at 0:
 - **Light:** Exposure, Brightness, Contrast, Highlights, Shadows.
 - **Color:** Saturation, White balance (cool ↔ warm), Tint (green ↔ magenta).
+- **Blur:** **Gaussian blur** (0 to 60 px, rests at 0): softens the picture evenly. The radius is measured in page pixels, so the softness looks the same on screen and in the exported PDF. It is applied last, on the adjusted pixels, and blurs transparent edges without a dark or white halo.
 - **Levels:** Black point (0–254), White point (1–255, default 255), Midtones % (10–300, default 100).
 - Each group has a reset; a slider away from its rest value counts as "adjusted".
 
@@ -28,6 +29,10 @@ Exposure, brightness, contrast and levels change each colour channel with a **fu
 - **Shadows / Highlights:** a lift weighted by how dark or bright the pixel is: `shadows × (1 − l)² + highlights × l²`, where `l` is the pixel's luma 0–1 (the squares make the effect strong at the extremes and fade smoothly towards the middle).
 - **White balance and tint** multiply the red and blue channels (warm: more red, less blue) and the green channel (tint).
 - **Saturation** moves each channel away from (or towards) the pixel's luma: `luma + (channel − luma) × saturation`. At `saturation = 0` every channel equals the luma: grey.
+
+### Gaussian blur
+
+A **Gaussian blur** replaces every pixel by a weighted average of its neighbours, the nearer ones counting more (the weights follow a bell curve). Doing that directly is slow, so `gaussianBlur` uses a well-known shortcut: **three box blurs** (plain averages over a window) one after another approximate a Gaussian closely. Each box blur runs along the rows and then down the columns, keeping a *running sum* so the cost does not grow with the radius. Colours are averaged **premultiplied by transparency** (a see-through pixel counts less) and converted back afterwards, so the edge of a cut-out does not get a halo.
 
 ### Writing the result
 

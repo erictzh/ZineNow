@@ -7320,6 +7320,14 @@
       ]
     },
     {
+      id: "detail",
+      title: "Blur",
+      controls: [
+        // Gaussian blur: the radius in page px (the same softness at any export size).
+        adjustSlider("adjBlur", "Gaussian blur (px)", 0, 0, 60)
+      ]
+    },
+    {
       id: "levels",
       title: "Levels",
       controls: [
@@ -8043,6 +8051,58 @@
     ctx.putImageData(imageData, 0, 0);
   }
 
+  // apps/ZEditor/src/render/gaussianBlur.js
+  function boxSizes(sigma, n = 3) {
+    const ideal = Math.sqrt(12 * sigma * sigma / n + 1);
+    let low = Math.floor(ideal);
+    if (low % 2 === 0) low--;
+    const high = low + 2;
+    const m = Math.round((12 * sigma * sigma - n * low * low - 4 * n * low - 3 * n) / (-4 * low - 4));
+    return Array.from({ length: n }, (_, i) => i < m ? low : high);
+  }
+  function boxLine(src, dst, start, count, step, r) {
+    const div = 2 * r + 1, lastIdx = count - 1;
+    for (let ch = 0; ch < 4; ch++) {
+      const at = (i) => src[start + Math.min(lastIdx, Math.max(0, i)) * step + ch];
+      let sum = 0;
+      for (let k = -r; k <= r; k++) sum += at(k);
+      for (let i = 0; i < count; i++) {
+        dst[start + i * step + ch] = Math.round(sum / div);
+        sum += at(i + r + 1) - at(i - r);
+      }
+    }
+  }
+  function gaussianBlur(data, w, h, sigma) {
+    if (!(sigma > 0.3) || w < 2 || h < 2) return;
+    for (let i = 0; i < data.length; i += 4) {
+      const a2 = data[i + 3];
+      if (a2 < 255) {
+        data[i] = data[i] * a2 / 255;
+        data[i + 1] = data[i + 1] * a2 / 255;
+        data[i + 2] = data[i + 2] * a2 / 255;
+      }
+    }
+    const tmp = new Uint8ClampedArray(data.length);
+    let a = data, b = tmp;
+    for (const size of boxSizes(sigma)) {
+      const r = (size - 1) / 2;
+      for (let y = 0; y < h; y++) boxLine(a, b, y * w * 4, w, 4, r);
+      [a, b] = [b, a];
+      for (let x = 0; x < w; x++) boxLine(a, b, x * 4, h, w * 4, r);
+      [a, b] = [b, a];
+    }
+    if (a !== data) data.set(a);
+    for (let i = 0; i < data.length; i += 4) {
+      const al = data[i + 3];
+      if (al > 0 && al < 255) {
+        const k = 255 / al;
+        data[i] = data[i] * k;
+        data[i + 1] = data[i + 1] * k;
+        data[i + 2] = data[i + 2] * k;
+      }
+    }
+  }
+
   // apps/ZEditor/src/render/photoAdjust.js
   function applyPhotoAdjust(ctx, canvas, ann) {
     const { width, height } = canvas;
@@ -8092,6 +8152,7 @@
       data[i + 1] = g;
       data[i + 2] = b;
     }
+    if (v.adjBlur > 0 && ann.width > 0) gaussianBlur(data, width, height, v.adjBlur * (width / ann.width));
     ctx.putImageData(imageData, 0, 0);
   }
 
@@ -15127,6 +15188,34 @@ ${parts.join("\n")}</g>`);
     return null;
   }
 
+  // apps/ZEditor/src/model/colorPalette.js
+  var GREY_NAMES = ["Black", "Dark grey 4", "Dark grey 3", "Dark grey 2", "Dark grey 1", "Grey", "Light grey 1", "Light grey 2", "Light grey 3", "White"];
+  var BASES = [
+    ["Berry", "#980000"],
+    ["Red", "#ff0000"],
+    ["Orange", "#ff9900"],
+    ["Yellow", "#ffff00"],
+    ["Green", "#00ff00"],
+    ["Cyan", "#00ffff"],
+    ["Cornflower blue", "#4a86e8"],
+    ["Blue", "#0000ff"],
+    ["Purple", "#9900ff"],
+    ["Magenta", "#ff00ff"]
+  ];
+  var LIGHT = [["light 3", 0.8], ["light 2", 0.6], ["light 1", 0.4]];
+  var DARK = [["dark 1", 0.2], ["dark 2", 0.4], ["dark 3", 0.6]];
+  var mix = (hex3, target, amount) => {
+    const a = hexToRgb2(hex3), b = target === "white" ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 };
+    return rgbToHex(a.r + (b.r - a.r) * amount, a.g + (b.g - a.g) * amount, a.b + (b.b - a.b) * amount);
+  };
+  function buildPalette() {
+    const rows = [GREY_NAMES.map((name, i) => ({ name, hex: rgbToHex(255 * (i / 9), 255 * (i / 9), 255 * (i / 9)) }))];
+    rows.push(BASES.map(([name, hex3]) => ({ name, hex: hex3 })));
+    for (const [label, amount] of LIGHT) rows.push(BASES.map(([name, hex3]) => ({ name: `Light ${name.toLowerCase()} ${label.slice(6)}`, hex: mix(hex3, "white", amount) })));
+    for (const [label, amount] of DARK) rows.push(BASES.map(([name, hex3]) => ({ name: `Dark ${name.toLowerCase()} ${label.slice(5)}`, hex: mix(hex3, "black", amount) })));
+    return rows;
+  }
+
   // apps/ZEditor/src/ui/controls/ColorPicker.jsx
   var { useState: useState17, useEffect: useEffect11, useRef: useRef14, useLayoutEffect: useLayoutEffect2, useContext, createContext } = React;
   var DocumentColorsContext = createContext(null);
@@ -15177,6 +15266,10 @@ ${parts.join("\n")}</g>`);
     const getDocumentColors = useContext(DocumentColorsContext);
     const [inDocument] = useState17(() => getDocumentColors ? getDocumentColors() : []);
     const svRef = useRef14(null), hueRef = useRef14(null);
+    const [tab, setTab] = useState17("picker");
+    const [palette] = useState17(buildPalette);
+    const [hovered, setHovered] = useState17(null);
+    const named = palette.flat().find((c) => c.hex === value);
     useEffect11(() => {
       if (hsvToHex(hsv.h, hsv.s, hsv.v) !== value) setHsv(hexToHsv(value));
     }, [value]);
@@ -15199,7 +15292,20 @@ ${parts.join("\n")}</g>`);
       applyHex(rgbToHex(next.r, next.g, next.b));
     };
     const swatch = (hex3) => /* @__PURE__ */ React.createElement("button", { key: hex3, type: "button", className: "ze-cp-swatch" + (hex3 === value ? " active" : ""), style: { background: hex3 }, title: hex3, "aria-label": hex3, onClick: () => applyHex(hex3) });
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-cp", ref: popRef, style, role: "dialog", "aria-label": "Colour picker" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-main" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-sv", ref: svRef, ...svDrag, style: { background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})` } }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-handle", style: { left: hsv.s * 100 + "%", top: (1 - hsv.v) * 100 + "%" } })), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-hue", ref: hueRef, ...hueDrag }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-hue-handle", style: { top: (1 - hsv.h / 360) * 100 + "%" } }))), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-fields" }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-preview", style: { background: value }, "aria-hidden": "true" }), /* @__PURE__ */ React.createElement("label", { className: "ze-cp-field ze-cp-hex" }, /* @__PURE__ */ React.createElement("span", null, "Hex"), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-cp", ref: popRef, style, role: "dialog", "aria-label": "Colour picker" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-tabs", role: "tablist" }, /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": tab === "picker", className: tab === "picker" ? "active" : "", onClick: () => setTab("picker") }, "Picker"), /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": tab === "palette", className: tab === "palette" ? "active" : "", onClick: () => setTab("palette") }, "Palette")), tab === "palette" && /* @__PURE__ */ React.createElement("div", { className: "ze-cp-palette-wrap" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-palette", onMouseLeave: () => setHovered(null) }, palette.flat().map((c) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: c.name,
+        type: "button",
+        className: "ze-cp-cell" + (c.hex === value ? " active" : ""),
+        style: { background: c.hex },
+        title: c.name + " · " + c.hex,
+        "aria-label": c.name,
+        onMouseEnter: () => setHovered(c),
+        onFocus: () => setHovered(c),
+        onClick: () => applyHex(c.hex)
+      }
+    ))), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-name" }, hovered ? hovered.name + " · " + hovered.hex : named ? named.name + " · " + named.hex : value)), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-main", hidden: tab !== "picker" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-sv", ref: svRef, ...svDrag, style: { background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})` } }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-handle", style: { left: hsv.s * 100 + "%", top: (1 - hsv.v) * 100 + "%" } })), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-hue", ref: hueRef, ...hueDrag }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-hue-handle", style: { top: (1 - hsv.h / 360) * 100 + "%" } }))), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-fields" }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-preview", style: { background: value }, "aria-hidden": "true" }), /* @__PURE__ */ React.createElement("label", { className: "ze-cp-field ze-cp-hex" }, /* @__PURE__ */ React.createElement("span", null, "Hex"), /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "text",
@@ -15221,48 +15327,45 @@ ${parts.join("\n")}</g>`);
       });
     } }, "Pick a colour from the screen"));
   }
-  function ColorPickerButton({ value, onChange, className = "ze-format-color-input", disabled, ariaLabel = "Colour", title, children }) {
-    const [open, setOpen] = useState17(false);
+  function ColorPickerPopover({ anchorEl, value, onChange, onClose }) {
     const [pos, setPos] = useState17(null);
-    const btnRef = useRef14(null), popRef = useRef14(null);
-    const openedWith = useRef14(value);
+    const popRef = useRef14(null);
+    const openedWith = useRef14(value), latest = useRef14(value);
+    latest.current = value;
     useLayoutEffect2(() => {
-      if (!open || !btnRef.current) return;
-      const b = btnRef.current.getBoundingClientRect(), w = 252, h = popRef.current ? popRef.current.offsetHeight : 380;
+      if (!anchorEl) return;
+      const b = anchorEl.getBoundingClientRect(), w = 252, h = popRef.current ? popRef.current.offsetHeight : 380;
       const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
       const top = b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - 6 - h) : b.bottom + 6;
       setPos({ left, top });
-    }, [open]);
+    }, [anchorEl]);
     useEffect11(() => {
-      if (!open) return void 0;
       const close = (e) => {
-        if (popRef.current && popRef.current.contains(e.target) || btnRef.current && btnRef.current.contains(e.target)) return;
-        setOpen(false);
+        if (popRef.current && popRef.current.contains(e.target) || anchorEl && anchorEl.contains(e.target)) return;
+        onClose();
       };
       const esc = (e) => {
-        if (e.key === "Escape") setOpen(false);
+        if (e.key === "Escape") onClose();
       };
       document.addEventListener("pointerdown", close, true);
       document.addEventListener("keydown", esc);
       return () => {
         document.removeEventListener("pointerdown", close, true);
         document.removeEventListener("keydown", esc);
+        if (latest.current !== openedWith.current) rememberColor(latest.current);
       };
-    }, [open]);
-    useEffect11(() => {
-      if (open) openedWith.current = value;
-      else if (openedWith.current !== value) {
-        rememberColor(value);
-        openedWith.current = value;
-      }
-    }, [open]);
-    const toggle = () => {
-      if (!disabled) setOpen((o) => !o);
-    };
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { type: "button", ref: btnRef, className, style: { backgroundColor: value }, disabled, "aria-label": ariaLabel, title: title || ariaLabel, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle }, children), open && ReactDOM.createPortal(
+    }, [anchorEl]);
+    return ReactDOM.createPortal(
       /* @__PURE__ */ React.createElement(PickerPanel, { value, onChange, popRef, style: pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0 } }),
       document.body
-    ));
+    );
+  }
+  function ColorPickerButton({ value, onChange, className = "ze-format-color-input", disabled, ariaLabel = "Colour", title, children }) {
+    const [open, setOpen] = useState17(false);
+    const btnRef = useRef14(null);
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { type: "button", ref: btnRef, className, style: { backgroundColor: value }, disabled, "aria-label": ariaLabel, title: title || ariaLabel, "aria-haspopup": "dialog", "aria-expanded": open, onClick: () => {
+      if (!disabled) setOpen((o) => !o);
+    } }, children), open && /* @__PURE__ */ React.createElement(ColorPickerPopover, { anchorEl: btnRef.current, value, onChange, onClose: () => setOpen(false) }));
   }
 
   // apps/ZEditor/src/state/useGuides.js
@@ -19999,7 +20102,7 @@ ${parts.join("\n")}</g>`);
       if (v) onSetLook({ blend: v });
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
-  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, guides, rulerUnit }) {
+  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
     const [renamingId, setRenamingId] = useState41(null);
     const [menuOpen, setMenuOpen] = useState41(false);
     const menuRef = useRef29(null);
@@ -20010,6 +20113,10 @@ ${parts.join("\n")}</g>`);
     const panelRef = useRef29(null);
     const headRef = useRef29(null);
     const topFirst = annotations.slice().reverse();
+    const [colorEdit, setColorEdit] = useState41(null);
+    const colorProp = (a) => a.type === "rect" ? (a.fillType || "solid") === "solid" ? "fillColor" : null : a.type === "text" || a.type === "stroke" ? "color" : null;
+    const colorOf = (a) => a && colorProp(a) ? a[colorProp(a)] || (a.type === "rect" ? "#d9d9d9" : "#1a1a1a") : null;
+    const colorEditAnn = colorEdit ? annotations.find((a) => a.id === colorEdit.id) : null;
     const anchorRef = useRef29(null);
     function pickLayer(ann, e, single) {
       const toggle = e.metaKey || withTouchModifier("ctrl", e), shift = withTouchModifier("shift", e);
@@ -20176,7 +20283,11 @@ ${parts.join("\n")}</g>`);
           onDoubleClick: () => setRenamingId(ann.id),
           ...dragHandlersFor(ann.id, ann.id, row, row + 1)
         },
-        /* @__PURE__ */ React.createElement(LayerThumb, { ann }),
+        /* @__PURE__ */ React.createElement("span", { style: { display: "flex", flex: "0 0 auto" }, onDoubleClick: (e) => {
+          if (!colorProp(ann) || ann.locked) return;
+          e.stopPropagation();
+          setColorEdit({ id: ann.id, el: e.currentTarget });
+        }, title: colorProp(ann) ? "Double-click to change the colour" : void 0 }, /* @__PURE__ */ React.createElement(LayerThumb, { ann })),
         isRenaming ? /* @__PURE__ */ React.createElement(RenameInput, { current: layerName(ann), onDone: (text) => finishRename(ann, text) }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, layerName(ann)),
         ann.clipToBelow && /* @__PURE__ */ React.createElement(
           "button",
@@ -20363,6 +20474,7 @@ ${parts.join("\n")}</g>`);
         if (!groupNumbers.has(block.groupId)) groupNumbers.set(block.groupId, groupNumbers.size + 1);
         return groupBlock(block, groupNumbers.get(block.groupId));
       }), guides && /* @__PURE__ */ React.createElement(GuideGroups, { guides, unit: rulerUnit }), /* @__PURE__ */ React.createElement("div", { className: "ze-layer-row ze-layer-row--page" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { backgroundColor: "#ffffff" } })), /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name" }, "Page"))),
+      colorEditAnn && colorProp(colorEditAnn) && /* @__PURE__ */ React.createElement(ColorPickerPopover, { anchorEl: colorEdit.el, value: colorOf(colorEditAnn), onChange: (hex3) => onUpdateLayer(colorEditAnn.id, { [colorProp(colorEditAnn)]: hex3 }), onClose: () => setColorEdit(null) }),
       rowMenuAnn && // Fixed to the screen, so the panel's edge and the list's scrolling can't cut it off.
       /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layer-row-menu", role: "menu", ref: rowMenuRef, style: { left: rowMenu.x, top: rowMenu.y } }, /* @__PURE__ */ React.createElement(
         MenuItem,
@@ -21125,7 +21237,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "24b42b5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b5e97fc"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -21669,6 +21781,7 @@ ${parts.join("\n")}</g>`);
         selectedIds: selection.selectedAnnotationIds(),
         onSelect: selection.handleSelectLayer,
         onSelectRange: selection.handleSelectLayerRange,
+        onUpdateLayer: edits.handleUpdateAnnotation,
         onGroup: edits.handleGroupSelection,
         onUngroup: edits.handleUngroupSelection,
         onDelete: edits.handleDeleteAnnotation,
