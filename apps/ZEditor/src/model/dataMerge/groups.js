@@ -4,6 +4,7 @@
 // "slots"). Everything else on the page is a NON-DATA ITEM; it may carry `showOn` ("every" | "first" | "continuation" | "last") to say which pages
 // of a group it appears on. The records can be grouped by a column ("Group by"): each group gets its own pages, filled slot by slot.
 
+import { translatedAnnotation } from "../annotations.js";
 import { fillTextItem } from "./build.js";
 
 export const SHOW_ON = [
@@ -122,4 +123,22 @@ export function previewAnnotations(annotations, records, start, editingId, lang)
     }
     return fillTextItem(a, counters, { lang }).ann;
   });
+}
+
+// Copies of a data block laid out as a grid: `items` are the block's items and `bounds` the box they cover ({ x, y, width, height }). The block
+// itself stays in the top-left cell; the copies fill the rest of `cols` x `rows`, `gap` ({ x, y }) apart, each a new group. Returns the new
+// items, and how many of the grid's blocks end up outside `page` ({ width, height }, optional).
+export function gridCopies(items, bounds, { cols, rows, gap }, { newId, newGroupId }, page) {
+  const out = [];
+  let outside = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const dx = col * (bounds.width + gap.x), dy = row * (bounds.height + gap.y);
+      if (page && (bounds.x + dx + bounds.width > page.width + 0.5 || bounds.y + dy + bounds.height > page.height + 0.5)) outside++;
+      if (col === 0 && row === 0) continue;
+      const groupId = newGroupId();
+      for (const a of items) out.push({ ...translatedAnnotation(a, dx, dy), id: newId(), groupId, dataBlock: true });
+    }
+  }
+  return { items: out, outside };
 }

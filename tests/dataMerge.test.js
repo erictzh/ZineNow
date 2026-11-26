@@ -1,7 +1,7 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
 import { checkMerge, fieldsUsedOnPage, mergeAnnotations } from "../apps/ZEditor/src/model/dataMerge/build.js";
-import { dataSlots, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
+import { dataSlots, gridCopies, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -170,4 +170,11 @@ ok(showsOnPage("last", { pageInGroup: 2, pagesInGroup: 2 }) && !showsOnPage("las
 const pv = previewAnnotations(gpage, bandPeople, 3, null);
 ok(pv.find((a) => a.id === 4).text === "Black Flags3" && pv.find((a) => a.id === 3).text === "Black Flags5", "the preview fills the blocks with the records from the chosen one on");
 ok(previewAnnotations(gpage, bandPeople, 12, null).filter((a) => a.hidden).length === 2, "slots with no record are hidden in the preview");
+let gid = 500, gn = 900;
+const gblock = [{ id: 1, type: "text", text: "{{a}}", x: 20, y: 30, groupId: "b", dataBlock: true }, { id: 2, type: "rect", x: 20, y: 60, width: 50, height: 10, groupId: "b", dataBlock: true }];
+const gres = gridCopies(gblock, { x: 20, y: 30, width: 100, height: 50 }, { cols: 2, rows: 3, gap: { x: 10, y: 5 } }, { newId: () => gid++, newGroupId: () => "G" + gn++ }, { width: 300, height: 400 });
+ok(gres.items.length === 10 && new Set(gres.items.map((a) => a.groupId)).size === 5, "a 2 x 3 grid adds 5 copies of the block, each its own group");
+ok(gres.items[0].x === 130 && gres.items[0].y === 30 && gres.items[2].x === 20 && gres.items[2].y === 85, "copies sit one block plus gap apart, across then down");
+ok(gres.items.every((a) => a.dataBlock) && gres.outside === 0, "copies stay data blocks and fit the page");
+ok(gridCopies(gblock, { x: 20, y: 30, width: 100, height: 50 }, { cols: 3, rows: 1, gap: { x: 0, y: 0 } }, { newId: () => gid++, newGroupId: () => "G" + gn++ }, { width: 250, height: 400 }).outside === 1, "blocks that run off the page are counted");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
