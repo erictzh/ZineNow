@@ -23,8 +23,8 @@ import { makeTextFrameActions } from "./textFrameActions.js";
 
 const { useEffect, useRef } = React;
 
-// A text box drawn at least this tall (editor px) keeps its drawn height; a shorter one fits its text.
-const MIN_DRAWN_FRAME_PX = 30;
+// A text box drawn at least this tall (editor px) keeps its drawn height (the drag really had a height); a flatter drag only sets the width.
+const MIN_DRAWN_FRAME_PX = 8;
 
 export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
   const { pages, setPages, selectedIdx, selectedPageIndices, nextAnnIdRef, pdfDocsRef, pageFilter } = doc;
