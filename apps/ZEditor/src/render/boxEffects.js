@@ -1,7 +1,9 @@
 // Everything around a box when drawn: rotation, opacity/blend layer, stroke, shadow, texture.
 
 import { angleOf, effectSettings } from "../model/controls.js";
-import { STROKE_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT, imageEdgeOutline, imageShadowOffset } from "../model/imageEffects.js";
+import { strokeLayers, strokeReach } from "../model/effectStacks.js";
+import { STROKE_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT, imageEdgeOutline, imageShadowOffsets } from "../model/imageEffects.js";
+import { rotatePoint } from "../model/geometry.js";
 import { noiseStream } from "../model/noise.js";
 import { rectOutline } from "../model/outlines.js";
 
@@ -83,6 +85,28 @@ export function rotateAboutCenter(ctx, ann, centerX, centerY) {
   ctx.translate(-centerX, -centerY);
 }
 
+// The strokes of a box, the last of the list first so the first ends up on top. Same rule as the live editor: an inside stroke is drawn twice as
+// wide and cut to the shape, an outside one twice as wide and cut away from it. `ctx` is in page px (origin at the box's top-left).
+export function drawStrokeStack(ctx, strokes, path, width, height, reach) {
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const s = strokes[i];
+    ctx.save();
+    if (s.position === "inside") ctx.clip(path);
+    else if (s.position === "outside") {
+      const room = new Path2D();
+      room.rect(-reach - 4, -reach - 4, width + 2 * reach + 8, height + 2 * reach + 8);
+      room.addPath(path);
+      ctx.clip(room, "evenodd");
+    }
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.position === "center" ? s.thickness : s.thickness * 2;
+    ctx.lineJoin = "miter";
+    ctx.miterLimit = STROKE_MITER_LIMIT;
+    ctx.stroke(path);
+    ctx.restore();
+  }
+}
+
 // Draws a box's content with its edge shape, stroke, shadow and texture.
 // `paintContent` paints into the box's own 0..width/0..height space.
 export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
@@ -92,7 +116,8 @@ export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
   // Canvas shadows are measured on the page, not in the rotated box, so
   // the shadow direction stays fixed while the item turns.
   rotateAboutCenter(ctx, ann, x + w / 2, y + h / 2);
-  const shadow = imageShadowOffset(ann);
+  const shadows = imageShadowOffsets(ann); // top first
+  const shadow = shadows.length === 1 ? shadows[0] : null; // one shadow is cast by the picture's own draw; several are drawn one by one below
   if (shadow) {
     ctx.shadowColor = shadow.color;
     ctx.shadowOffsetX = shadow.x * scaleFactor;
@@ -100,13 +125,14 @@ export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
     ctx.shadowBlur = shadow.blur * scaleFactor;
   }
   const outline = imageEdgeOutline(ann);
-  const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-  if (outline || stroke || ann.texture) {
+  const strokes = strokeLayers(ann); // top first
+  if (outline || strokes.length > 0 || ann.texture || shadows.length > 1) {
     // Composed on its own canvas first: clipping on the page's context
     // would also clip away the shadow, and this way the shadow falls
     // from the stroke too. Drawn in the image's own coordinate space,
     // where the outline is defined; `pad` leaves room for the stroke.
-    const pad = stroke ? Math.ceil(stroke.strokeThickness * STROKE_MITER_LIMIT / 2 * scaleFactor) + 2 : 0;
+    const reach = strokeReach(strokes);
+    const pad = strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0;
     const cut = document.createElement("canvas");
     cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
     cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
@@ -118,12 +144,23 @@ export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
     paintContent(cctx);
     if (ann.texture) drawTextureMarks(cctx, ann);
     cctx.restore();
-    if (stroke) {
-      cctx.strokeStyle = stroke.strokeColor;
-      cctx.lineWidth = stroke.strokeThickness;
-      cctx.lineJoin = "miter";
-      cctx.miterLimit = STROKE_MITER_LIMIT;
-      cctx.stroke(new Path2D(outline || rectOutline(ann)));
+    if (strokes.length > 0) drawStrokeStack(cctx, strokes, new Path2D(outline || rectOutline(ann)), ann.width, ann.height, reach);
+    // Several shadows: each is cast alone (the picture is drawn far off the page and only its shadow lands on it), bottom one first, then
+    // the picture itself on top of them all. The shadow offsets turn back with the item so the light stays fixed on the page.
+    if (shadows.length > 1) {
+      const far = ctx.canvas.width + ctx.canvas.height + 4000;
+      const angle = angleOf(ann);
+      const [farX, farY] = rotatePoint(far, 0, -angle);
+      for (let i = shadows.length - 1; i >= 0; i--) {
+        const s = shadows[i];
+        ctx.save();
+        ctx.shadowColor = s.color;
+        ctx.shadowOffsetX = s.x * scaleFactor + far;
+        ctx.shadowOffsetY = s.y * scaleFactor;
+        ctx.shadowBlur = s.blur * scaleFactor;
+        ctx.drawImage(cut, x - pad - farX, y - pad - farY);
+        ctx.restore();
+      }
     }
     ctx.drawImage(cut, x - pad, y - pad);
   } else {

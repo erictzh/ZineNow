@@ -2,7 +2,8 @@
 
 import { EXPORT_SCALE, MAIN_SCALE } from "../constants.js";
 import { angleOf, effectSettings } from "../model/controls.js";
-import { IMAGE_EFFECTS, STROKE_EFFECT, STROKE_MITER_LIMIT, imageShadowOffset } from "../model/imageEffects.js";
+import { strokeLayers, strokeReach } from "../model/effectStacks.js";
+import { IMAGE_EFFECTS, effectPropNames, imageShadowOffsets } from "../model/imageEffects.js";
 import { effectiveImageFilter } from "../model/pageFilters.js";
 import { PHOTO_ADJUST_CONTROLS } from "../model/photoAdjust.js";
 import { RECT_FILL_PROPS } from "../model/rect.js";
@@ -31,10 +32,7 @@ export async function flattenedImagePatch(ann, pageFilter) {
   const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawImageOnCanvas(ctx, box, scale, pageFilter));
   if (!baked) return null;
 
-  const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => [
-    [effect.key, undefined],
-    ...effect.controls.map((c) => [c.prop, undefined]),
-  ]));
+  const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => effectPropNames(effect).map((prop) => [prop, undefined])));
   return {
     ...clearedEffects,
     ...Object.fromEntries(PHOTO_ADJUST_CONTROLS.map((c) => [c.prop, undefined])), // baked in now
@@ -76,7 +74,7 @@ export async function rasterizedRectPatch(ann) {
   const cleared = Object.fromEntries([
     "shape",
     ...RECT_FILL_PROPS,
-    ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+    ...IMAGE_EFFECTS.flatMap(effectPropNames),
   ].map((prop) => [prop, undefined]));
   // A rectangle never followed the page filter, so neither should the image.
   return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
@@ -89,7 +87,7 @@ export async function rasterizedTracePatch(ann) {
   if (!baked) return null;
   const cleared = Object.fromEntries([
     ...TRACE_LAYER_PROPS,
-    ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]),
+    ...IMAGE_EFFECTS.flatMap(effectPropNames),
   ].map((prop) => [prop, undefined]));
   return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
 }
@@ -108,7 +106,7 @@ export async function rasterizedTextPatch(ann) {
   const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
   if (!baked) return null;
   const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
-  const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+  const effectProps = TEXT_EFFECTS.flatMap(effectPropNames);
   const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, undefined]));
   // Text never followed the page filter, so the image shouldn't either.
   return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
@@ -120,10 +118,10 @@ export async function rasterizedTextPatch(ann) {
 // grows to match, keeping the artwork where it was on the page. Returns
 // null when nothing visible remains.
 async function bakeBoxToImage(ann, scale, draw) {
-  const shadow = imageShadowOffset(ann);
-  const strokeReach = ann.stroke ? effectSettings(ann, STROKE_EFFECT).strokeThickness * STROKE_MITER_LIMIT / 2 : 0;
-  const shadowReach = shadow ? Math.hypot(shadow.x, shadow.y) + shadow.blur * 2 : 0;
-  const marginPx = Math.ceil((strokeReach + shadowReach + 1) * scale);
+  const shadows = imageShadowOffsets(ann);
+  const strokeRoom = strokeReach(strokeLayers(ann));
+  const shadowReach = shadows.reduce((m, s) => Math.max(m, Math.hypot(s.x, s.y) + s.blur * 2), 0);
+  const marginPx = Math.ceil((strokeRoom + shadowReach + 1) * scale);
 
   // Snapped to whole canvas pixels: an edge landing partway across a
   // pixel would be slightly transparent, ruling out JPEG for a photo.

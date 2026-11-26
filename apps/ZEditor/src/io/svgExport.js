@@ -5,7 +5,8 @@ import { MAIN_SCALE } from "../constants.js";
 import { hexToRgb } from "../model/color.js";
 import { isClipped } from "../model/clipping.js";
 import { angleOf, blendOf, controlValues, effectSettings, opacityOf } from "../model/controls.js";
-import { STROKE_EFFECT, imageEdgeOutline, imageShadowOffset } from "../model/imageEffects.js";
+import { strokeLayers, strokeReach } from "../model/effectStacks.js";
+import { imageEdgeOutline, imageShadowOffset } from "../model/imageEffects.js";
 import { rectOutline } from "../model/outlines.js";
 import { RECT_CONTROLS } from "../model/rect.js";
 import { HIGHLIGHTER_DEFAULTS, PEN_DEFAULTS, smoothPathD, taperedPathD } from "../model/strokes.js";
@@ -85,9 +86,14 @@ function rectSvg(ann, defs, nextId) {
   const outline = imageEdgeOutline(ann);
   const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num(w)}" height="${num(h)}" ${fill}/>`;
   let stroke = "";
-  if (ann.stroke) {
-    const s = effectSettings(ann, STROKE_EFFECT);
-    stroke = `<path d="${outline || rectOutline(ann)}" fill="none" stroke="${s.strokeColor}" stroke-width="${num(s.strokeThickness)}" stroke-miterlimit="4"/>`;
+  const strokes = strokeLayers(ann);
+  if (strokes.length) {
+    const d = outline || rectOutline(ann), reach = Math.ceil(strokeReach(strokes)) + 4;
+    const clipId = nextId("sc"), maskId = nextId("sm");
+    // An inside stroke is drawn twice as wide and cut to the shape; an outside one twice as wide and cut away from it.
+    if (strokes.some((s) => s.position === "inside")) defs.push(`<clipPath id="${clipId}"><path d="${d}"/></clipPath>`);
+    if (strokes.some((s) => s.position === "outside")) defs.push(`<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${-reach}" y="${-reach}" width="${num(w + 2 * reach)}" height="${num(h + 2 * reach)}"><rect x="${-reach}" y="${-reach}" width="${num(w + 2 * reach)}" height="${num(h + 2 * reach)}" fill="#fff"/><path d="${d}" fill="#000"/></mask>`);
+    stroke = strokes.map((s) => `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${num(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
   }
   return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
 }
@@ -226,7 +232,12 @@ export async function layersToSvg(items, pageFilter, options) {
   if (!parts.length) return null;
 
   // Cropped to what shows: a vectorized layer to its visible shapes (hidden colours leave no margin).
-  const boundsOf = (ann) => (ann.type === "trace" && traceContentBounds(ann)) || annotationBounds(ann);
+  const boundsOf = (ann) => {
+    const b = (ann.type === "trace" && traceContentBounds(ann)) || annotationBounds(ann);
+    if (ann.type !== "rect" || !ann.stroke) return b;
+    const r = Math.ceil(strokeReach(strokeLayers(ann))); // the strokes reach past the box
+    return { ...b, x: b.x - r, y: b.y - r, width: b.width + 2 * r, height: b.height + 2 * r };
+  };
   const bounds = items.map(boundsOf).reduce((u, b) => ({
     x0: Math.min(u.x0, b.x), y0: Math.min(u.y0, b.y), x1: Math.max(u.x1, b.x + b.width), y1: Math.max(u.y1, b.y + b.height),
   }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });

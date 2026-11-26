@@ -448,3 +448,12 @@ button.ze-format-color-input { display: inline-block; }
 .ze-cp-cell.active { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
 .ze-cp-name { min-height: 16px; font-size: 12px; color: var(--ui-fg-muted); text-align: center; }
 [data-ze-input="touch"] .ze-cp-cell { border-radius: 8px; }
+
+/* Stacked strokes and shadows: one card per layer. */
+.ze-stack-card { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: 8px; margin-bottom: 8px; }
+.ze-stack-head { display: flex; align-items: center; justify-content: space-between; }
+.ze-stack-title { font-size: 12px; font-weight: 600; }
+.ze-stack-actions { display: flex; gap: 4px; }
+.ze-stack-btn { width: 26px; height: 26px; min-width: 0; padding: 0; line-height: 1; font-size: 14px; border-radius: 6px; }
+.ze-stack-btn:disabled { opacity: .35; }
+.ze-stack-del:hover { color: #f87171; }

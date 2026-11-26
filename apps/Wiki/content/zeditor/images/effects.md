@@ -8,7 +8,8 @@ In the Format panel, **Effects** lists the effects with a switch each (switching
 - **Edge shapes (one at a time):** *Rounded* (radius %), *Ellipse*, *Torn Edge* (tooth size, depth, variation), *Scissor Cut* (cuts per side, depth, variation).
 - **Feather:** the edge fades to see-through: *Width* (% of the short side), *Fade* (smooth or linear), *Sides* (all round, top and bottom, left and right, or one side). It follows the edge shape if one is on, and switches **Stroke** off (a border on a faded edge looks wrong).
 - **Lomo:** Strength, Contrast, Saturation boost, Colour shift, Shadow and Highlight colours, Vignette (darkness, how far in, round or fits the picture), Grain. Four presets: Classic, Warm, Teal & orange, Faded.
-- **Stroke:** a coloured border (1–40 px). **Shadow:** colour, thickness, direction (0° up, 90° right), blur. **Texture:** grit, dust, scratches in a colour.
+- **Stroke** and **Shadow** can be **stacked**: tick the effect, then **+ Add stroke** / **+ Add shadow** for as many layers as you like (up to 8 each), like Photoshop's layer styles. Each stroke has its own **colour**, **thickness** (1–40 px) and **position**: **Inside**, **Center** or **Outside** the edge. Each shadow has its own colour, distance, direction (0° up, 90° right) and blur. The **first card is on top**; the ↑ ↓ buttons reorder and × deletes. Pictures and shapes can be stacked; text still has one stroke and one shadow. Old projects open exactly as before.
+- **Texture:** grit, dust, scratches in a colour.
 - Rectangles and ellipses get the same edge, stroke, shadow and texture effects.
 
 ## How it works
@@ -37,6 +38,14 @@ To fade an edge over *N* pixels, the code must know **how far each pixel is from
 
 Below is the real code, copied from the repository when the wiki is built. The grey numbers are the file's own **line numbers**; the header of each block names the file and the lines. A **function** is a named, reusable recipe: it takes inputs (its **parameters**), does some work, and gives back a result with `return`.
 
+### Stacked strokes and shadows
+
+A picture or shape stores its strokes in a list, `strokes: [{ color, thickness, position }]`, and its shadows in `shadows: [{ color, thickness, direction, blur }]` (model/effectStacks.js). The old single `stroke` and `shadow` settings are still read (`strokeLayers`, `shadowLayers`), so older files look the same; the `stroke` and `shadow` flags stay the on/off switches.
+
+**Inside, centre, outside.** A line is always drawn centred on the edge, half in and half out. An **inside** stroke is drawn **twice as wide** and then cut to the shape, which leaves exactly its width inside. An **outside** stroke is drawn twice as wide and cut *away* from the shape (a clip with the "even-odd" rule: a big rectangle with the shape cut out of it), leaving its width outside. The live editor does this with an SVG `clipPath` and `mask`, the export with a canvas clip, and the SVG export with the same two.
+
+**Several shadows.** One shadow uses the browser's `drop-shadow` as before. Chained `drop-shadow`s would cast shadows of shadows, so several use one SVG filter: for each shadow the shape's see-through outline is blurred, moved and coloured, then all are laid on top of each other with the picture over them. In the export canvas each shadow is cast alone by drawing the picture far off the page with the shadow offset cancelling the distance, so only the shadow lands on the page.
+
 ### `imageShadowOffset`
 
 ```js file=apps/ZEditor/src/model/imageEffects.js fn=imageShadowOffset
@@ -57,7 +66,7 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 **Worked example.** A 300 × 200 image. **Rounded** with radius 12%: `r = min(300, 200) × 12 / 100 =` **24** px. **Torn edge** with tooth size 10%: `step = 200 × 10 / 100 = 20`; `stepX = 300 / round(300 / 20) = 300 / 15 = 20`: 15 teeth along the top, so 16 points from x = 0 to x = 300, each between 0 and `jitter = 200 × 6 / 100 = 12` px inward.
 
-### `drawBoxWithEffects`
+### `drawBoxWithEffects` (one shadow shown; several are drawn one by one as described above)
 
 ```js file=apps/ZEditor/src/render/boxEffects.js fn=drawBoxWithEffects
 ```
