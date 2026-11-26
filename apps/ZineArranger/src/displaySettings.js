@@ -13,7 +13,7 @@ export function installArrangerDisplaySettings() {
         storageKey: "zinearranger.displayPrefs",
         about: ABOUT, // where the source code is (a small line in the gear pop-up)
         sliders: [
-            { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: function (v) { return String(v / 100); } },
+            { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(90, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: function (v) { return String(v / 100); } },
         ],
         groups: [
             { title: "Show", checks: [

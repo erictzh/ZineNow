@@ -5315,7 +5315,7 @@
       about: ABOUT,
       // where the source code is (a small line in the gear pop-up)
       sliders: [
-        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: function(v) {
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(90, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: function(v) {
           return String(v / 100);
         } }
       ],
@@ -5459,7 +5459,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build 71bbabe";
+    subtitle.textContent += " · build 9af92d4";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();
