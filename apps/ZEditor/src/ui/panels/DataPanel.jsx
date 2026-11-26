@@ -14,7 +14,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
 let rememberedPlace = { position: null, size: null };
 
 export function DataPanel({ merge, view, hasPage }) {
-  const fileRef = useRef(null);
+  const fileRef = useRef(null), photoRef = useRef(null), photoFilesRef = useRef(null);
   const [pasting, setPasting] = useState(false);
   const [pasted, setPasted] = useState("");
   const [range, setRange] = useState({ from: "", to: "" });
@@ -202,30 +202,54 @@ export function DataPanel({ merge, view, hasPage }) {
                 )}
               </div>
             )}
-            <div className="ze-data-section">
-              <div className="ze-data-title">Make pages</div>
-              <p className="ze-data-help">Design one page with fields in it, then make a page for each row.</p>
-              <div className="ze-data-row">Rows{" "}
-                <input className="ze-data-num" type="number" min="1" max={count} placeholder="1" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />
-                {" "}to{" "}
-                <input className="ze-data-num" type="number" min="1" max={count} placeholder={String(count)} value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
+            {view.dataAdvanced && (
+              <div className="ze-data-section">
+                <div className="ze-data-title">Pictures</div>
+                <p className="ze-data-help">Put a different photo on each page or block. Add a column that holds each photo's file name (for example ana.jpg), choose the folder of photos here, then select a picture on your page and choose its column below.</p>
+                <input ref={photoRef} type="file" accept="image/*" multiple webkitdirectory="" directory="" hidden onChange={(e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (files.length) merge.addPhotos(files); }} />
+                <input ref={photoFilesRef} type="file" accept="image/*" multiple hidden onChange={(e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (files.length) merge.addPhotos(files); }} />
+                <button type="button" className="ze-btn ze-data-wide" onClick={() => photoRef.current && photoRef.current.click()}>Choose photo folder…</button>
+                <button type="button" className="ze-data-link" onClick={() => photoFilesRef.current && photoFilesRef.current.click()}>Or choose photo files</button>
+                <p className="ze-data-help">{view.dataPhotos.length === 0 ? "No photos chosen yet." : view.dataPhotos.length + " photo" + (view.dataPhotos.length === 1 ? "" : "s") + " kept in this project (shrunk to 1600 px)."}
+                  {view.dataPhotos.length > 0 && <>{" "}<button type="button" className="ze-data-link" onClick={() => view.setDataPhotos([])}>Remove all</button></>}</p>
+                {merge.selected.isPicture && (
+                  <label className="ze-data-row">Selected picture shows the photo named in{" "}
+                    <select value={merge.selected.picField} onChange={(e) => merge.setPicField(e.target.value)}>
+                      {merge.selected.picField === "\u0000" && <option value={"\u0000"}>Mixed</option>}
+                      <option value="">Nothing (an ordinary picture)</option>
+                      {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
-              <label className="ze-data-row"><input type="checkbox" checked={hideTemplate} onChange={(e) => setHideTemplate(e.target.checked)} /> Hide the page you designed (it is skipped when exporting)</label>
-            </div>
+            )}
           </>
         )}
         {merge.message && <p className="ze-data-note" role="status">{merge.message}</p>}
       </div>
       {parsed && (
         <div className="ze-data-foot">
-                {check.missing.length > 0 && <p className="ze-data-warn">The page uses {check.missing.map((f) => "{{" + f + "}}").join(", ")}, but the file has no such column.</p>}
-                {check.emptyCounts.map((e) => <p key={e.field} className="ze-data-warn">{e.count} of the chosen rows have nothing in “{e.field}”.</p>)}
-                {check.used.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
-                {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
-                <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || check.used.length === 0} onClick={make}>
-                  {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
-                </button>
-                {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
+          <div className="ze-data-row">Make pages for rows{" "}
+            <input className="ze-data-num" type="number" min="1" max={count} placeholder="1" aria-label="From row" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} />
+            {" "}to{" "}
+            <input className="ze-data-num" type="number" min="1" max={count} placeholder={String(count)} aria-label="To row" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} />
+          </div>
+          <label className="ze-data-row"><input type="checkbox" checked={hideTemplate} onChange={(e) => setHideTemplate(e.target.checked)} /> Hide the page you designed (skipped when exporting)</label>
+          {check.missing.length > 0 && <p className="ze-data-warn">The page uses {check.missing.map((f) => "{{" + f + "}}").join(", ")}, but the file has no such column.</p>}
+          {check.emptyCounts.map((e) => <p key={e.field} className="ze-data-warn">{e.count} of the chosen rows have nothing in “{e.field}”.</p>)}
+          {check.pictures.map((p) => (
+            <p key={p.column} className="ze-data-warn">
+              {check.photoCount === 0 ? "A picture uses “" + p.column + "”, but no photos are chosen yet (Advanced tab)." : ""}
+              {check.photoCount > 0 && p.notFound.length > 0 ? p.notFound.length + " photo name" + (p.notFound.length === 1 ? "" : "s") + " in “" + p.column + "” not found: " + p.notFound.slice(0, 3).join(", ") + (p.notFound.length > 3 ? "…" : "") + ". " : ""}
+              {check.photoCount > 0 && p.empty > 0 ? p.empty + " row" + (p.empty === 1 ? " has" : "s have") + " no photo name." : ""}
+            </p>
+          ))}
+          {check.used.length === 0 && check.pictures.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
+          {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
+          <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0)} onClick={make}>
+            {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
+          </button>
+          {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
         </div>
       )}
       {EDGES.map((edge) => <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />)}

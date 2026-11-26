@@ -5,7 +5,7 @@
 // of a group it appears on. The records can be grouped by a column ("Group by"): each group gets its own pages, filled slot by slot.
 
 import { translatedAnnotation } from "../annotations.js";
-import { fillTextItem } from "./build.js";
+import { fillItem, fillTextItem, remapItems } from "./build.js";
 
 export const SHOW_ON = [
   { key: "every", label: "Every page" },
@@ -81,7 +81,7 @@ export function showsOnPage(showOn, plan, repeatOthers) {
 
 // One made page: the designed page's items, data blocks filled from their slot's record (an empty slot is left out), the rest from the group's
 // first record plus the page counters, and skipped where Show on says. New ids as in mergeAnnotations.
-export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, repeatOthers } = {}) {
+export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, repeatOthers, findPhoto } = {}) {
   const slots = dataSlots(annotations);
   const vars = { ...plan.groupRecord, "page in group": String(plan.pageInGroup), "pages in group": String(plan.pagesInGroup), "records in group": String(plan.recordsInGroup) };
   const chosen = [];
@@ -92,36 +92,27 @@ export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, rep
       record = plan.slotRecords[slots.indexOf(slotKey(a))];
       if (!record) continue;
     } else if (!showsOnPage(a.showOn, plan, repeatOthers)) continue;
-    const { ann, result } = fillTextItem(a, record, { lang });
-    if (result) for (const f of result.missing) if (!missing.includes(f)) missing.push(f);
-    chosen.push(ann);
+    const filled = fillItem(a, record, { lang, findPhoto });
+    for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
+    if (filled.ann) chosen.push(filled.ann);
   }
-  const ids = new Map(), groups = new Map();
-  for (const a of chosen) ids.set(a.id, newId());
-  const out = chosen.map((a) => {
-    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined };
-    if (copy.groupId) {
-      if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
-      copy.groupId = groups.get(copy.groupId);
-    }
-    if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : undefined;
-    return copy;
-  });
-  return { annotations: out, missing };
+  return { annotations: remapItems(chosen, newId, newGroupId), missing };
 }
 
 // The designed page as the preview shows it: data blocks show the records from `start` on, one per slot (empty slots hidden), other text shows
 // the record at `start`. The item being typed in is left alone.
-export function previewAnnotations(annotations, records, start, editingId, lang) {
+export function previewAnnotations(annotations, records, start, editingId, lang, findPhoto) {
   const slots = dataSlots(annotations);
   const counters = { ...records[start], "page in group": "1", "pages in group": "1", "records in group": String(records.length) };
   return annotations.map((a) => {
     if (a.id === editingId) return a;
-    if (a.dataBlock) {
-      const record = records[start + slots.indexOf(slotKey(a))];
-      return record ? fillTextItem(a, record, { lang }).ann : { ...a, hidden: true };
+    const record = a.dataBlock ? records[start + slots.indexOf(slotKey(a))] : counters;
+    if (!record) return { ...a, hidden: true };
+    if (a.type === "image" && a.picField) {
+      const filled = fillItem(a, record, { findPhoto });
+      return filled.ann || { ...a, hidden: true };
     }
-    return fillTextItem(a, counters, { lang }).ann;
+    return fillTextItem(a, record, { lang }).ann;
   });
 }
 

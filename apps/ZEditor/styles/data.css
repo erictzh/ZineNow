@@ -1,5 +1,5 @@
 /* Data merge panel (Data button). A floating card at the left of the canvas. */
-.ze-data-panel { position: fixed; top: 128px; left: calc(var(--ze-sidebar-width, 240px) + 16px); width: 300px; height: clamp(300px, 40vh, calc(100vh - 150px)); display: flex; flex-direction: column; z-index: 15; overflow: hidden; background-color: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); font-size: 13px; color: var(--ui-fg); }
+.ze-data-panel { position: fixed; top: 128px; left: calc(var(--ze-sidebar-width, 240px) + 16px); width: 300px; height: clamp(380px, 56vh, calc(100vh - 150px)); display: flex; flex-direction: column; z-index: 15; overflow: hidden; background-color: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); font-size: 13px; color: var(--ui-fg); }
 .ze-data-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; }
 .ze-data-section { padding: 10px 0; border-bottom: 1px solid var(--ui-border); }
 .ze-data-section:last-child { border-bottom: 0; }

@@ -23,25 +23,91 @@ export function fillTextItem(ann, record, options) {
   return { ann: filled, result };
 }
 
-// The items of a template page filled for one record, as new items: every item gets a new id (`newId()`), groups a new group id
-// (`newGroupId()`), and links to other items on the page (threaded text) follow the new ids. Returns { annotations, problems } where problems
-// lists fields the text asks for that the data does not have.
-export function mergeAnnotations(annotations, record, { newId, newGroupId, lang } = {}) {
+// ---- Picture fields: a picture item with `picField: "<column>"` is swapped for the photo that column names (a file in the chosen photo
+// folder), cropped to fill the picture's frame.
+
+// A function that finds a photo ({ name, src, width, height }) from a cell: matched by file name, without regard to folders or capital letters,
+// and a cell without an extension ("ana") matches "ana.jpg". Returns null when there is none.
+export function makePhotoFinder(photos) {
+  const base = (t) => String(t === undefined || t === null ? "" : t).replace(/\\/g, "/").split("/").pop().trim().toLowerCase();
+  const stem = (t) => base(t).replace(/\.[^.]+$/, "");
+  const byName = new Map(), byStem = new Map();
+  for (const photo of photos || []) { byName.set(base(photo.name), photo); if (!byStem.has(stem(photo.name))) byStem.set(stem(photo.name), photo); }
+  return (cell) => {
+    const name = base(cell);
+    if (!name) return null;
+    return byName.get(name) || (/\.[^.]+$/.test(name) ? null : byStem.get(name)) || null;
+  };
+}
+
+// The crop that makes a photo fill a frame (centred; the photo's own proportions kept).
+export function fillCrop(natW, natH, frameW, frameH) {
+  const frame = frameW / frameH;
+  if (natW / natH > frame) { const w = natH * frame; return { cropX: (natW - w) / 2, cropY: 0, cropW: w, cropH: natH }; }
+  const h = natW / frame;
+  return { cropX: 0, cropY: (natH - h) / 2, cropW: natW, cropH: h };
+}
+
+// A picture item for one record: { handled: false } if it is not a picture field; otherwise { handled: true, ann } with the photo in place, or
+// ann null when the cell is empty or names no photo (the item is left out rather than showing someone else's picture).
+export function fillPictureItem(ann, record, find) {
+  if (ann.type !== "image" || !ann.picField) return { handled: false, ann };
+  const photo = find ? find(record[ann.picField]) : null;
+  if (!photo) return { handled: true, ann: null };
+  return { handled: true, ann: { ...ann, src: photo.src, naturalWidth: photo.width, naturalHeight: photo.height, ...fillCrop(photo.width, photo.height, ann.width, ann.height) } };
+}
+
+// The picture columns a page uses, and per column how many of the records leave the picture out: { column, empty, notFound: [names] }.
+export function pictureProblems(annotations, records, find) {
+  const columns = [];
+  for (const a of annotations || []) if (a.type === "image" && a.picField && !columns.includes(a.picField)) columns.push(a.picField);
+  return columns.map((column) => {
+    let empty = 0;
+    const notFound = [];
+    for (const r of records) {
+      const cell = String(r[column] === undefined ? "" : r[column]).trim();
+      if (!cell) empty++;
+      else if (!find || !find(cell)) { if (!notFound.includes(cell)) notFound.push(cell); }
+    }
+    return { column, empty, notFound };
+  });
+}
+
+// New ids for filled items (`chosen`): every item gets one (`newId()`), groups a new group id (`newGroupId()`), links to other items (threaded
+// text) follow, and the merge markers are removed. Shared by Basic and Advanced pages.
+export function remapItems(chosen, newId, newGroupId) {
   const ids = new Map(), groups = new Map();
-  for (const a of annotations) ids.set(a.id, newId());
-  const missing = [];
-  const out = annotations.map((a) => {
-    const { ann, result } = fillTextItem(a, record, { lang });
-    if (result) for (const f of result.missing) if (!missing.includes(f)) missing.push(f);
-    const copy = { ...ann, id: ids.get(a.id) };
+  for (const a of chosen) ids.set(a.id, newId());
+  return chosen.map((a) => {
+    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined };
     if (copy.groupId) {
       if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
       copy.groupId = groups.get(copy.groupId);
     }
-    if (copy.threadFrom != null && ids.has(copy.threadFrom)) copy.threadFrom = ids.get(copy.threadFrom);
+    if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : undefined;
     return copy;
   });
-  return { annotations: out, missing };
+}
+
+// One item filled for a record: text gets its fields, a picture field its photo. Returns { ann, missing } (ann null: leave it out).
+export function fillItem(a, record, { lang, findPhoto } = {}) {
+  const pic = fillPictureItem(a, record, findPhoto);
+  if (pic.handled) return { ann: pic.ann, missing: [] };
+  const { ann, result } = fillTextItem(a, record, { lang });
+  return { ann, missing: result ? result.missing : [] };
+}
+
+// The items of a template page filled for one record, as new items (see remapItems). Returns { annotations, missing } where missing lists fields
+// the text asks for that the data does not have. `findPhoto` (makePhotoFinder) supplies the photos for picture fields.
+export function mergeAnnotations(annotations, record, { newId, newGroupId, lang, findPhoto } = {}) {
+  const missing = [];
+  const chosen = [];
+  for (const a of annotations) {
+    const filled = fillItem(a, record, { lang, findPhoto });
+    for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
+    if (filled.ann) chosen.push(filled.ann);
+  }
+  return { annotations: remapItems(chosen, newId, newGroupId), missing };
 }
 
 // What to tell the person before merging: fields the text asks for that the file has no column for, and how many of the chosen records have

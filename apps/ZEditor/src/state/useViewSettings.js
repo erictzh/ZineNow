@@ -46,6 +46,7 @@ export function useViewSettings() {
   // Advanced data merge (data blocks, Group by): off until switched on; the choice is remembered in this browser, not in the project.
   const [dataAdvanced, setDataAdvancedState] = useState(() => { try { return localStorage.getItem("zeditor.dataAdvanced") === "1"; } catch { return false; } });
   const setDataAdvanced = (on) => { setDataAdvancedState(on); try { localStorage.setItem("zeditor.dataAdvanced", on ? "1" : "0"); } catch { /* not remembered */ } };
+  const [dataPhotos, setDataPhotos] = useState([]); // the photo folder for picture fields: [{ name, src, width, height }]; saved with the project
   const [dataGroupBy, setDataGroupBy] = useState(""); // the column the records are grouped by ("" = none); saved with the project
   const [dataRepeatOthers, setDataRepeatOthers] = useState(true); // non-data items repeat on every page of a group; saved with the project
   // Minimized (– button): the panel folds to a small bar at the bottom right; closed (× button) hides it. Neither is saved with the project.
@@ -58,7 +59,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers, dataPhotos,
     };
   }
 
@@ -87,6 +88,7 @@ export function useViewSettings() {
     setDataPreviewOn(s.dataPreviewOn !== false);
     setDataGroupBy(typeof s.dataGroupBy === "string" ? s.dataGroupBy : "");
     setDataRepeatOthers(s.dataRepeatOthers !== false);
+    setDataPhotos(Array.isArray(s.dataPhotos) ? s.dataPhotos.filter((p) => p && typeof p.name === "string" && typeof p.src === "string" && p.width > 0 && p.height > 0) : []);
     setRulerGuides(normalizeGuides(s.rulerGuides)); // older files: guides without a colour get the default
     setGuideColor(GUIDE_COLORS.some((c) => c.key === s.guideColor) ? s.guideColor : DEFAULT_GUIDE_COLOR);
   }
@@ -98,7 +100,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
-    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
     settingsForSave, applySavedSettings,
   };
 }

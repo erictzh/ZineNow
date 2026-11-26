@@ -1,7 +1,8 @@
 // Data merge (Data button), Basic: connect a spreadsheet (CSV), put its columns into text as {{column}}, preview each row on the page, and make
 // one page per row from the page you designed. The file lives inside the project (view.dataSource).
 
-import { checkMerge, mergeAnnotations } from "../model/dataMerge/build.js";
+import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems } from "../model/dataMerge/build.js";
+import { readPhotos } from "../io/dataPhotos.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
 import { dataSlots, gridCopies, mergeGroupPage, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
@@ -25,9 +26,10 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }, [parsed, view.dataOrder, idColumn]);
   const count = records.length;
   const shownNo = Math.min(recordNo, Math.max(0, count - 1));
+  const findPhoto = useMemo(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
   const showPreview = view.dataPreviewOn && count > 0;
   // What the page canvas runs its items through to show the chosen row (and, with data blocks, the rows after it in the other blocks).
-  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en") : null;
+  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto) : null;
 
   const page = pages[selectedIdx] || null;
   const templatePage = page && page.mergedFrom !== undefined ? pages.find((p) => p.key === page.mergedFrom) || null : page;
@@ -67,7 +69,8 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
     const result = checkMerge(templatePage.annotations || [], headers, chosen);
-    return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)) };
+    const pictures = pictureProblems(templatePage.annotations || [], chosen, findPhoto);
+    return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)), pictures, photoCount: view.dataPhotos.length };
   }
 
   // The pages a merge would make for the chosen rows.
@@ -88,8 +91,8 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, groupBy }) : null;
     const made = (plans || chosen).map((item, n) => {
       const merged = plans
-        ? mergeGroupPage(templatePage.annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers })
-        : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en" });
+        ? mergeGroupPage(templatePage.annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto })
+        : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en", findPhoto });
       const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: undefined };
       if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
       return copy;
@@ -120,7 +123,21 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     isBlock: blockTargets.length > 0 && blockTargets.every((a) => a.dataBlock),
     showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
     hasBlock: selectedItems.some((a) => a.dataBlock),
+    isPicture: selectedItems.length > 0 && selectedItems.every((a) => a.type === "image"),
+    picField: selectedItems.length > 0 && selectedItems.every((a) => (a.picField || "") === (selectedItems[0].picField || "")) ? selectedItems[0].picField || "" : "\u0000",
   };
+  // Photos for picture fields: choose a folder (or files); each is shrunk and kept in the project.
+  async function addPhotos(files) {
+    setMessage("Reading photos…");
+    const added = await readPhotos(files);
+    if (!added.length) { setMessage("No pictures found there (JPEG, PNG, WebP or GIF)."); return; }
+    const kept = view.dataPhotos.filter((p) => !added.some((n) => n.name.toLowerCase() === p.name.toLowerCase()));
+    view.setDataPhotos([...kept, ...added]);
+    setMessage(added.length + (added.length === 1 ? " photo" : " photos") + " added.");
+  }
+  function setPicField(column) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, picField: column || undefined } : a)));
+  }
   function markDataBlock(on) {
     if (!selected.grouped) { setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block."); return; }
     setMessage("");
@@ -143,7 +160,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }
 
   return {
-    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, makeGrid, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, insertField, usedCheck, createPages,
   };
