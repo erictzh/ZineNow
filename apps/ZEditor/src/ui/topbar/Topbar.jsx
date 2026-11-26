@@ -67,7 +67,7 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
         />
         <button
           type="button" className={"ze-menu-trigger" + (view.dataPanelOpen ? " open" : "")} aria-pressed={view.dataPanelOpen}
-          title="Data: fill pages from a spreadsheet (mail merge)" onClick={() => view.setDataPanelOpen(!view.dataPanelOpen)}
+          title="Data: fill pages from a spreadsheet (mail merge)" onClick={() => { if (view.dataPanelOpen && view.dataMinimized) view.setDataMinimized(false); else view.setDataPanelOpen(!view.dataPanelOpen); }}
         >Data</button>
         <TopMenu label="Page">
           {({ close }) => (

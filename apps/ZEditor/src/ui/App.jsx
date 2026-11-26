@@ -49,6 +49,7 @@ import { Sidebar } from "./sidebar/Sidebar.jsx";
 import { ToolBar } from "./toolbar/ToolBar.jsx";
 import { TouchBar } from "./TouchBar.jsx";
 import { useDataMerge } from "../state/useDataMerge.js";
+import { PanelDock } from "./panels/PanelDock.jsx";
 import { DataPanel } from "./panels/DataPanel.jsx";
 import { Topbar } from "./topbar/Topbar.jsx";
 import { attachDisplayGear } from "./displaySettings.js";
@@ -285,16 +286,22 @@ export function App() {
         )}
       </div>
 
-      {view.dataPanelOpen && <DataPanel merge={dataMerge} view={view} hasPage={Boolean(selectedPage)} />}
+      <PanelDock items={[
+        view.dataPanelOpen && view.dataMinimized && { key: "data", label: "Data", onOpen: () => view.setDataMinimized(false), onClose: () => { view.setDataMinimized(false); view.setDataPanelOpen(false); } },
+        selectedPage && view.layersOpen && view.layersMinimized && { key: "layers", label: "Layers" + ((selectedPage.annotations || []).length ? " (" + selectedPage.annotations.length + ")" : ""), onOpen: () => view.setLayersMinimized(false), onClose: () => { view.setLayersMinimized(false); view.setLayersOpen(false); } },
+      ].filter(Boolean)} />
 
-      {selectedPage && view.layersOpen && (
+      {view.dataPanelOpen && !view.dataMinimized && <DataPanel merge={dataMerge} view={view} hasPage={Boolean(selectedPage)} />}
+
+      {selectedPage && view.layersOpen && !view.layersMinimized && (
         <LayersPanel
           position={view.layersPosition}
           onMove={view.setLayersPosition}
           size={view.layersSize}
           onResize={view.setLayersSize}
           onSetLook={(patch) => edits.handleSetLayerLook(selection.selectedAnnotationIds(), patch)}
-          onMinimize={() => view.setLayersOpen(false)}
+          onMinimize={() => view.setLayersMinimized(true)}
+          onClose={() => view.setLayersOpen(false)}
           annotations={selectedPage.annotations || []}
           selectedIds={selection.selectedAnnotationIds()}
           onSelect={selection.handleSelectLayer}

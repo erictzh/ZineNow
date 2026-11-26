@@ -5,7 +5,7 @@ import { SliderNumberInput } from "../controls/inputs.jsx";
 
 export function ToolBar({ selection, edits, view, zoom, dialogs }) {
   const { tool, selectTool, selectedAnnId } = selection;
-  const { layersOpen, setLayersOpen, centerGuideOn, setCenterGuideOn } = view;
+  const { layersOpen, setLayersOpen, layersMinimized, setLayersMinimized, centerGuideOn, setCenterGuideOn } = view;
 
   return (
     <div className="ze-tool-bar">
@@ -71,7 +71,7 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
           aria-pressed={layersOpen}
           aria-label="Layers panel"
           title={layersOpen ? "Minimize the Layers panel" : "Show the Layers panel"}
-          onClick={() => setLayersOpen((open) => !open)}
+          onClick={() => { if (layersOpen && layersMinimized) setLayersMinimized(false); else setLayersOpen((open) => !open); }}
         >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3l9 5-9 5-9-5z" />
