@@ -9,6 +9,24 @@ Status: **proposal, not built** (2026-11-26). Version 2 after the maintainer's d
 3. **Three levels:** starting points (optional), building blocks (no code), formulas (optional, advanced).
 4. **Local and saved:** the CSV and the chosen photos are **embedded in the `.znow` file**. Nothing leaves the browser.
 
+## 1b. Basic and Advanced are kept apart (decided)
+
+So that new users are not intimidated, the Data panel has a **Basic** level and an **Advanced** level behind one switch ("Show advanced options", off by default, remembered).
+
+| | **Basic** (all a new user sees) | **Advanced** (switched on) |
+|---|---|---|
+| Panel | Four steps: Connect, Fields, Preview, Create pages | More sections appear below |
+| Fields | Click a column to insert it | Filters in fields (title case, dates, padding), merge variables |
+| Layout | One record per page, or a grid on the page | Group pages, flowing lists, page roles, continuation designs |
+| Pictures | Picture field and photo folder | Value maps, bind any setting to a field |
+| Order | **CSV order, or by a column named `id`** | (later, if wanted: sort by date, words or number; the code for it already exists) |
+| Conditions | One tick: "hide this box if the cell is empty" | "Show only if…" rules, nesting |
+| Output | Create pages, Export PDF | One PDF per record, QR codes |
+| Check | Plain list ("3 records have no photo") | Detail view |
+| Starting points | A short list, optional | Save your own, share them |
+
+Rules: the Basic panel stays short; plain words everywhere; no formula or code box in Basic; a one-time hint ("Connect a CSV and click a column to add it").
+
 ## 2. Where it lives
 
 | Where | What |
@@ -82,7 +100,7 @@ The engine then uses the **first design** for page 1 (with its slot count), the 
 - **Balance the last pages:** an **option, off by default**. Off means strictly "as many as the slots hold per page". On avoids a single card alone on the last page (11 with five slots gives 4 + 4 + 3).
 - **Fill order:** across then down, or down then across, per slot set.
 - **Page numbers:** `{{group_page}}` / `{{group_pages}}` ("page 2 of 2") inside the group; the ordinary page numbers keep running.
-- **Group order and member order:** set separately (groups newest first, members A to Z).
+- **Group order and member order:** by default the groups come in the order they first appear in the file, and the cards in file order; or both follow the `id` column.
 - **Group from a value:** year, decade, month of a date; first letter; number range.
 - **Two levels:** year then month, or country then band.
 - **Contents page and index:** made automatically from the groups, respecting hidden pages.
@@ -101,7 +119,7 @@ The engine then uses the **first design** for page 1 (with its slot count), the 
 | Letters, envelopes, labels, directory | Layouts in section 4; envelope and label presets as optional starting points |
 | Data sources | CSV, paste from a spreadsheet (later .xlsx), saved in the project, editable in the app |
 | Edit recipient list (tick, search) | Tick, search, edit a cell, add or delete a row |
-| Sort (several fields) | Date, words, number, ID; ascending or descending; several fields (**built and tested**) |
+| Sort (several fields) | **Basic: CSV order, or by a column named `id`.** Date, words, number/ID sorting, ascending or descending, with a second field, exists as tested code and can be switched on in Advanced later (**built and tested**) |
 | Filter (equals, not equal, less, greater, contains, does not contain, is blank, is not blank; and/or) | The same, in plain words |
 | Duplicates | Show and remove by a column |
 | Insert merge field, highlight fields | Chips and ⚡ badges |
@@ -163,19 +181,22 @@ Groups with headers and continuation pages; card slots you place yourself; pictu
 | Decision | Answer |
 |---|---|
 | Data button in the top bar | Yes |
+| Basic and Advanced kept apart, Advanced off by default | Yes |
 | Pictures from a folder, embedded in the .znow | Yes |
 | Merged pages are plain editable pages, merge again replaces them | Yes |
 | Show on: first page / continuation / last page per item | Yes |
 | Cards keep their places on page 2 | Yes (no sliding up) |
 | No built-in "five per page" or other fixed templates; the engine follows the design | Yes |
-| Different continuation design | Yes, from the start, by duplicating the page and tagging its role (section 5) |
+| Different continuation design | Yes, by duplicating the page and tagging its role (section 5) |
 | QR codes | Yes (after a library licence check) |
+| **Ordering** | **CSV order, or a column named `id`. No other sorting in the first versions.** |
+| **Data shape** | **One flat file, with the group value repeated in each row** (no linked files) |
+| **Contents and index pages** | **Later** |
+| **Calculated columns** | **Built from a menu** (tap or click choices such as "Join columns", "Year of date", "First letter"); no typing of formulas, which works the same on a PC and a tablet |
+| **Shareable templates** | **Yes: a normal `.znow` whose name starts with `ZDATA = `** (for example `ZDATA = Name cards.znow`), and also marked inside the file. Opening one offers "Use this template" or "Edit it". |
+| Two levels of groups | One level first (a second level could come later in Advanced) |
 
 ## 12. Still open
 
-1. Balance the last pages: proposed as an optional checkbox, off by default.
-2. Two levels of groups in the first group version, or one?
-3. Contents and index pages: early or later?
-4. Linked files (bands plus members): phase 5, or earlier?
-5. How technical the formula level should be (spreadsheet-like formulas, or click-built rules only).
-6. Should templates you build be shareable as files?
+1. Whether the descending order on `id` (newest first) is wanted in Basic, or only ascending.
+2. Whether Basic should also offer **"Group by"** (one level) or whether groups are Advanced only. Suggestion: one-level grouping in Advanced, since it needs a template with a header and card slots.
