@@ -1,10 +1,10 @@
 ## Intro
 
-**Remove & fill with AI** repairs the marked area with **MI-GAN**, a small neural network trained to *imagine* what should be behind an object. It handles photos with complicated backgrounds, where the classical fills can only blur or copy. It runs **on your device**: nothing is uploaded. It is an experimental feature: switch on "Experimental AI features", and download the model first (a pop-up shows its licence, size and source).
+**Remove & fill with AI** repairs the marked area with **MI-GAN**, a small neural network trained to *imagine* what should be behind an object. It handles photos with complicated backgrounds, where the classical fills can only blur or copy. It runs **on your device**: nothing is uploaded. It is an experimental feature: switch on "Experimental Features (AI & other development)", and download the model first (a pop-up shows its licence, size and source).
 
 ## How to use
 
-1. Turn on **Experimental AI features** (the gear at the bottom left). In the Marquee panel, *Remove & fill → Style → AI (on-device)*.
+1. Turn on **Experimental Features (AI & other development)** (the gear at the bottom left). In the Marquee panel, *Remove & fill → Style → AI (on-device)*.
 2. Press **Download** for the model (MI-GAN, about 28 MB, MIT licence, plus the AI engine ONNX Runtime if you do not have it yet; **Cancel** or **Delete** it any time; after downloading it works offline).
 3. Mark the area (any [Marquee](zeditor/eraser-marquee/marquee) shape) and press **Remove & fill**. **Grow** makes the area a few pixels bigger, which often helps: the model does better when the area covers the object's soft edges and shadow.
 4. **Try another** undoes that fill and fills again with a slightly different view: the model gives the same answer for the same input, so each press shows it a different window. There is a fixed cycle of 7 variations.

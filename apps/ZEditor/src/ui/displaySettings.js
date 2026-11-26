@@ -31,8 +31,8 @@ export function installZeditorDisplaySettings() {
         { key: "staticThumbs", label: "Live page thumbnails", showMeans: true, htmlClass: "ze-static-thumbs", hint: "The page thumbnails show your items and filters as you edit. Untick if the app feels slow: they go back to the plain pages." },
       ] },
       { title: "Experimental", checks: [
-        { key: "aiFeatures", label: "Experimental AI features", hint: "Off (default): the AI features are hidden. On: AI Background Removal (Image panel) and the AI fill style (Marquee panel) appear, and Ai Tools (Local) appears on the ZineNow home page. They need downloaded models.",
-          confirm: { title: "Enable experimental AI features?", text: "These features are still under development and testing. They may need you to download local AI models and use your device's processing power. You can find them in the Image panel and the Marquee panel.", ok: "Enable", cancel: "Cancel" } },
+        { key: "aiFeatures", label: "Experimental Features (AI & other development)", hint: "Off (default): the AI features are hidden. On: AI Background Removal (Image panel) and the AI fill style (Marquee panel) appear, and Ai Tools (Local) and RGB to CMYK appear on the ZineNow home page. They need downloaded models.",
+          confirm: { title: "Enable experimental features?", text: "These features are still under development and testing. Some need you to download local AI models and use your device's processing power. You can find the AI ones in the Image panel and the Marquee panel.", ok: "Enable", cancel: "Cancel" } },
       ] },
       { title: "Show", checks: [
         { key: "hideTopbar", label: "Top bar", showMeans: true, htmlClass: "ze-hide-topbar", hint: "The title and the Page, Project and Export menus" },
