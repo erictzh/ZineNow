@@ -89,16 +89,22 @@ State: **decided** unless marked.
 
 _(Add more ideas below.)_
 
-## 5. Phase plan (agreed order, updated 2026-11-25)
+## 5. Phase plan (agreed order; status updated 2026-11-26)
 
-Each phase ends with build, check, tests, wiki update, HANDOFF note and a pull request; the maintainer tries it on a device before the next phase.
+Each phase ends with build, check, tests, wiki update, HANDOFF note and a pull request; the maintainer tries it on a device before the next phase. The detail of each phase is in HANDOFF.md and the wiki.
 
-0. **Housekeeping (S):** try the middle-button pan; check per-selection Tracking; optional wiki build number includes styles.
-1. **Page layouts (M-L) — DONE 2026-11-25 (see HANDOFF.md):** the shared default variables and per-file Layout settings (with Reset); the 11 layouts with previews, each with a **body text slot**; "Add layout" to the current page (beneath, one undo step) and "New page with layout". Built **first without** layout guides (Phase 5), snapping (Phase 3) and bleed-aware sizing (Phase 4). The margin uses the Page Guide margin if set, else 8% of the page width.
-2. **Text across pages (L) — DONE 2026-11-25, moved up by the maintainer:** cross-page threads, T+ and link icon on the page icon, continuation page with the same layout, a layout change moves the story into the new body slot, safe page deletion/moves, thumbnails and PDF export agree. Uses Phase 1's body slot.
-3. **Snapping to rectangles (S-M) — DONE 2026-11-25:** all item types snap to all visible rectangles, on move and on resize; same Snap setting; works without rulers; Alt bypasses.
-4. **Bleed and PDF export (M) — DONE 2026-11-25:** mm bleed in New Document and page settings (default 0), page grows, dotted trim rectangle, with/without bleed export, TrimBox/BleedBox, crop marks only with bleed. Then layouts become bleed-aware (Full picture).
-5. **Guides (M-L) — DONE 2026-11-25:** 8 colours, side-panel settings, Page/Global groups with the ⋮ toggles, per-page guides, guides snap to page edges/centre/trim/margins. Then **layouts add their guides** in a colour group.
-6. **Illustrator export (M) — DONE 2026-11-25:** whole-page and multi-page SVG, layers as groups, Text as outlines checkbox, later the "Outline Text to Shape" command.
-7. **CMYK converter (separate track, M-L) — first stage DONE 2026-11-25 (no ICC yet):** test the prototype on a real export; shared module + small standalone page; staged conversion.
-8. **Launch:** landing page, demo, tutorial, report-a-problem link, phone/tablet testing, first community.
+| # | Phase | Status | Pull request |
+|---|---|---|---|
+| 0 | Housekeeping | **Partly done.** Wiki build number now covers styles and script; launcher cards take a `name`; per-selection Tracking checked (does not exist, whole-box only). **Waiting on the maintainer:** try the middle-button pan. | #146 |
+| 1 | Page layouts | **Done.** 11 layouts, per-file Layout settings with Reset, "Add to page" replaces an earlier layout (never stacks), "New page after" is the default, Layout button in the page strip. Later tweaks: all text justified; title 25 pt with a line beneath, body 11 pt at 150% line spacing (settings `bodyPt`, `titlePt`, `lineSpacing`). | #137, #139, #148, #149 |
+| 2 | Text across pages | **Done.** Document-level story resolver, T+ and link icon on thumbnails, continuation page with the same layout, layout change moves the story, safe page delete, editor-only "continues on page N" notes. **Not built:** "Unlink here" on the link icon, manual link to a frame on another page, copy/paste of threaded frames across pages. | #138 |
+| 3 | Snapping to rectangles | **Done.** All item types, move and resize, same Snap setting, works without rulers, pink hit line, Alt bypasses. Turned items are not snapped on resize. | #140 |
+| 4 | Bleed and PDF export | **Done.** `bleedMm` on blank pages (New Document and Page → Bleed), page grows, dotted trim line, layouts bleed-aware, Export: Include bleed / Crop marks (TrimBox, BleedBox verified). Not done: bleed for imported PDF pages, trimmed PNG/JPG. | #141 |
+| 5 | Guides | **Done.** 8 colours with fixed named purposes (cards in the guide's Format panel), page and global scope with ⋮ moves, per-guide lock and hide, Layers-panel groups named by purpose, snapping of guides to page edges/middle/trim/margins/other guides, layouts add light-grey guides. Selected guide is just a little darker. Global guide edits are not in Undo. | #142, #147, #150, #151, #153 |
+| 6 | Illustrator export | **Done.** Export page / all pages as SVG with every layer a named group, "SVG: text as outlines" (needs the font file), "Outline Text to Shape" command. Not done: web fonts, clipping masks, a preset dialog. | #143 |
+| 7 | CMYK converter | **First stage done** (new RGB to CMYK page, shared `pdfCmyk.js`; black as K only, grey and colour pictures; PNG predictor handled). **No ICC profiles yet.** | #144 |
+| 8 | Launch | **Partly done:** minizine tutorial, honest status page, Report a problem link and issue templates (the short welcome on the home page was added and then removed by the maintainer). **Waiting on the maintainer:** real phone and tablet testing, a halftone demo picture, the first community, a public handle, folding the minizine once to check the steps. | #145, #152 |
+
+Extra work from testing on a tablet (2026-11-25/26): page strip header is three icon tiles (#154); Shift+click is a range and Ctrl/Cmd+click toggles one, for pages and layers (#155); touch bar gets Ctrl, order Shift, Ctrl, Alt (#156, #157).
+
+**Open ideas (not scheduled):** per-selection Tracking; "Unlink here" and manual cross-page links; ICC colour profiles for RGB to CMYK; ZineArranger building the PDF itself; a proper landing page; making the canvas Shift/Ctrl selection match the panels.
