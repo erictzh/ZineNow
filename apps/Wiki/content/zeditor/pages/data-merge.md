@@ -1,11 +1,11 @@
 ## Intro
 
-**Data** (the button in the top bar) is a **mail merge**: you design one page, put **fields** in its text, connect a spreadsheet, and ZEditor makes **one page for each row**. Use it for letters, invitation cards, name cards, certificates, or any page that repeats with different words. This is the Basic part; everything stays on your device.
+**Data** (the table button next to the Layers button in the tool bar) is a **mail merge**: you design one page, put **fields** in its text, connect a spreadsheet, and ZEditor makes **one page for each row**. Use it for letters, invitation cards, name cards, certificates, or any page that repeats with different words. This is the Basic part; everything stays on your device.
 
 ## How to use
 
 1. Save your sheet as a **CSV** file (in Excel or Google Sheets: *Save as / Download → CSV*). The **first line must be the column names**, then one line per row.
-2. Click **Data** in the top bar, then **Choose CSV file…** (or **Or paste the rows here**). The file is kept **inside your project**, so it travels with the .znow file.
+2. Click the **Data** button (the table icon beside Layers), then **Choose CSV file…** (or **Or paste the rows here**). The file is kept **inside your project**, so it travels with the .znow file.
 3. Design your page. In a text box, write a field in double curly brackets, like `Dear {{name}},`, or click a **field chip** in the Data panel: it adds the field to the selected text box, or to a new one.
 4. **Preview**: with *Show this row's words on the page* ticked, the page shows the chosen row's words. Use ◀ ▶ to step through rows. (A box you are typing in shows its field names, so you can edit it.)
 5. **Order**: *As in the file*, or, if your sheet has a column named **id**, *lowest first* or *highest first*.
