@@ -845,3 +845,5 @@ Text fill gradient (2026-11-26): the text's gradient (`textGradient`, same props
 Bevel hardness and soften (2026-11-26): `bevelHardness` (0 soft fade ... 100 crisp chiselled bands; multiplies the shading strength in `bevelPixels`) and `bevelSoften` (px blur of the finished highlight/shadow, re-masked to the shape for Inner bevel) added to `BEVEL_EFFECT`; old bevels (neither set) look as before.
 
 Interface size default on computers (2026-11-26): 90% (was 75%) where the main input is a mouse or touchpad; tablets and phones 100%.
+
+Page layouts window (2026-11-26): the Layout picker is now a window over the editor instead of a drop-down: `ui/dialogs/LayoutDialog.jsx` (reuses `LayoutSettings`; state `dialogs.layoutOpen`; closes with ×, Esc, a click outside, or after a layout is picked), opened by the page strip's Layout tile (`onOpenLayout`) and by Page → Layout → Choose… (`row.onOpen` in `PageMenu.jsx`). Styles `.ze-modal--layout` in `styles/dialogs.css`.

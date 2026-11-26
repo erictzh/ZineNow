@@ -36,6 +36,7 @@ import { Rulers } from "./canvas/Rulers.jsx";
 import { LiveFilterDefs } from "./canvas/LiveFilterDefs.jsx";
 import { ConfirmDialog } from "./dialogs/ConfirmDialog.jsx";
 import { InsertPdfDialog } from "./dialogs/InsertPdfDialog.jsx";
+import { LayoutDialog } from "./dialogs/LayoutDialog.jsx";
 import { NewDocumentDialog } from "./dialogs/NewDocumentDialog.jsx";
 import { EmbedFontsDialog } from "./dialogs/EmbedFontsDialog.jsx";
 import { ShortcutsDialog } from "./dialogs/ShortcutsDialog.jsx";
@@ -110,7 +111,7 @@ export function App() {
     },
     onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file."),
   }), []);
-  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
+  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
   useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
@@ -155,9 +156,7 @@ export function App() {
           onSelectAll={selection.handleSelectAllPages}
           storyStates={storyStates}
           onContinueStory={layouts.continueStory}
-          layouts={layouts}
-          layoutSettings={view.layoutSettings}
-          onLayoutSettings={view.setLayoutSettings}
+          onOpenLayout={() => dialogs.setLayoutOpen(true)}
           onRotate={pageOps.handleRotate}
           onDelete={pageOps.handleDeleteThumbnail}
           onReorder={pageOps.handleReorder}
@@ -331,6 +330,11 @@ export function App() {
         onChangeAfterPage={files.setInsertAfterPage}
         onConfirm={files.handleConfirmInsertPdf}
         onCancel={() => files.setPendingInsertFile(null)}
+      />
+      <LayoutDialog
+        open={dialogs.layoutOpen} onClose={() => dialogs.setLayoutOpen(false)}
+        settings={view.layoutSettings} onChange={view.setLayoutSettings} hasPage={Boolean(selectedPage)}
+        onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
       />
       <NewDocumentDialog
         open={dialogs.newDocOpen}

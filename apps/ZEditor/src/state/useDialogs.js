@@ -8,6 +8,7 @@ export function useDialogs({ pages, openProjectPicker }) {
   // (so it offers "Open a PDF instead"); false from the empty-state button.
   const [newDocFromProject, setNewDocFromProject] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false); // Page layouts window
   // Project > Embed Fonts…; `embedFontsAskFirst`: opened by switching "Embed system fonts" on, so it starts with the licence question.
   const [embedFontsOpen, setEmbedFontsOpen] = useState(false);
   const [embedFontsAskFirst, setEmbedFontsAskFirst] = useState(false);
@@ -61,7 +62,7 @@ export function useDialogs({ pages, openProjectPicker }) {
 
   return {
     newDocOpen, setNewDocOpen, newDocFromProject, openNewDocDialog,
-    shortcutsOpen, setShortcutsOpen,
+    shortcutsOpen, setShortcutsOpen, layoutOpen, setLayoutOpen,
     embedFontsOpen, embedFontsAskFirst, openEmbedFonts, closeEmbedFonts,
     confirmAction, confirmStep,
     handleNewProjectClick, handleLoadProjectClick, handleConfirmProceed, handleConfirmCancel, handleConfirmYes,

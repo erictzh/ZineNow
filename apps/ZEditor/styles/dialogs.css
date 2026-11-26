@@ -151,3 +151,12 @@ button.ze-welcome-option:hover { border-color: var(--ui-accent); background: var
 .ze-embed-status { font-size: 12px; color: var(--ui-fg-muted); text-align: right; max-width: 260px; }
 .ze-embed-status.is-bad { color: #ff9b81; }
 .ze-embed-total { font-weight: 600; }
+
+/* The Page layouts window: wider than the old drop-down, with bigger layout pictures. */
+.ze-modal--layout { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.ze-modal--layout .ze-layout-dialog-body { overflow-y: auto; padding: 16px 20px 20px; }
+.ze-modal--layout .ze-layout-menu { max-width: none; }
+.ze-modal--layout .ze-layout-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.ze-modal--layout .ze-layout-tile svg { width: 100%; max-width: 110px; height: auto; }
+.ze-modal--layout .ze-layout-tile { font-size: 12px; padding: 8px 6px; }
+.ze-modal-close { width: 30px; height: 30px; min-width: 0; padding: 0; font-size: 20px; line-height: 1; border-radius: 8px; }

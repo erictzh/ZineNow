@@ -10204,6 +10204,7 @@ ${parts.join("\n")}</g>`);
     const [newDocOpen, setNewDocOpen] = useState(false);
     const [newDocFromProject, setNewDocFromProject] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+    const [layoutOpen, setLayoutOpen] = useState(false);
     const [embedFontsOpen, setEmbedFontsOpen] = useState(false);
     const [embedFontsAskFirst, setEmbedFontsAskFirst] = useState(false);
     function openEmbedFonts(askFirst = false) {
@@ -10253,6 +10254,8 @@ ${parts.join("\n")}</g>`);
       openNewDocDialog,
       shortcutsOpen,
       setShortcutsOpen,
+      layoutOpen,
+      setLayoutOpen,
       embedFontsOpen,
       embedFontsAskFirst,
       openEmbedFonts,
@@ -18245,8 +18248,95 @@ ${parts.join("\n")}</g>`);
     )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "This document currently has ", pageCount, " page", pageCount === 1 ? "" : "s", ".")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: onConfirm }, "Insert"))));
   }
 
-  // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
+  // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
   var { useState: useState24 } = React;
+  var PREVIEW_W = 70;
+  var PREVIEW_H = 99;
+  function LayoutPreview({ layout, settings }) {
+    const boxes = place(layout, PREVIEW_W, PREVIEW_H, settings, 4, null);
+    return /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${PREVIEW_W} ${PREVIEW_H}`, width: PREVIEW_W, height: PREVIEW_H, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { width: PREVIEW_W, height: PREVIEW_H, fill: "#fff", stroke: "#8a8078", strokeWidth: "0.6" }), boxes.map((b, i) => {
+      if (b.role === "picture") return /* @__PURE__ */ React.createElement("rect", { key: i, x: b.x, y: b.y, width: b.w, height: b.h, fill: settings.slotGrey });
+      const lineGap = b.role === "title" ? b.h : 4;
+      const lines = Math.max(1, Math.floor(b.h / lineGap));
+      const cols = b.columns > 1 ? b.columns : 1;
+      const colW = (b.w - (cols - 1) * 3) / cols;
+      const thick = b.role === "title" ? Math.max(2.5, b.h * 0.4) : 1.2;
+      return /* @__PURE__ */ React.createElement("g", { key: i, stroke: "#4a4540", strokeWidth: thick, strokeLinecap: "round" }, Array.from({ length: cols }).flatMap((_, c) => Array.from({ length: lines }).map((__, l) => {
+        const y = b.y + (b.role === "title" ? b.h / 2 : lineGap * (l + 0.6));
+        const short = b.role !== "title" && l === lines - 1 ? 0.6 : 1;
+        return /* @__PURE__ */ React.createElement("line", { key: c + "-" + l, x1: b.x + c * (colW + 3), y1: y, x2: b.x + c * (colW + 3) + colW * (b.role === "title" ? 0.7 : short), y2: y });
+      })));
+    }));
+  }
+  function LayoutSettings({ settings, onChange, onApply, hasPage }) {
+    const [where, setWhere] = useState24("new");
+    const target = hasPage ? where : "new";
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "page" ? "active" : "",
+        disabled: !hasPage,
+        onClick: () => setWhere("page"),
+        title: "Applies the layout to this page, replacing an earlier layout on it (your own items stay on top)"
+      },
+      "On this page"
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        className: target === "new" ? "active" : "",
+        onClick: () => setWhere("new"),
+        title: "Adds a new page after this one, holding the layout"
+      },
+      "New page after"
+    )), /* @__PURE__ */ React.createElement("div", { className: "ze-layout-grid" }, LAYOUTS.map((l) => /* @__PURE__ */ React.createElement("button", { key: l.key, type: "button", className: "ze-layout-tile", title: l.label, onClick: () => onApply(l.key, target) }, /* @__PURE__ */ React.createElement(LayoutPreview, { layout: l, settings }), /* @__PURE__ */ React.createElement("span", null, l.label)))), /* @__PURE__ */ React.createElement("details", { className: "ze-layout-settings" }, /* @__PURE__ */ React.createElement("summary", null, "Layout settings (this file)"), LAYOUT_SETTING_FIELDS.map((f) => /* @__PURE__ */ React.createElement("label", { key: f.key, className: "ze-layout-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label, " ", /* @__PURE__ */ React.createElement("small", null, "(", f.unit, ")")), /* @__PURE__ */ React.createElement(
+      NumberBox,
+      {
+        min: f.min,
+        max: f.max,
+        step: f.step,
+        value: settings[f.key],
+        onChange: (e) => {
+          const v = Number(e.target.value);
+          if (e.target.value !== "" && Number.isFinite(v)) onChange({ ...settings, [f.key]: Math.min(f.max, Math.max(f.min, v)) });
+        },
+        "aria-label": f.label
+      }
+    ))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layout-reset", onClick: () => onChange(DEFAULT_LAYOUT_SETTINGS) }, "Reset to defaults"), /* @__PURE__ */ React.createElement("p", { className: "ze-layout-note" }, "Only layouts added from now on use these sizes. Layouts already on a page are ordinary items and stay as they are. The margin follows the Page Guide when it is on.")));
+  }
+
+  // apps/ZEditor/src/ui/dialogs/LayoutDialog.jsx
+  var { useEffect: useEffect20 } = React;
+  function LayoutDialog({ open, onClose, settings, onChange, hasPage, onApply }) {
+    useEffect20(() => {
+      if (!open) return void 0;
+      const esc = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+      };
+      window.addEventListener("keydown", esc, true);
+      return () => window.removeEventListener("keydown", esc, true);
+    }, [open]);
+    if (!open) return null;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onClose }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal ze-modal--layout", role: "dialog", "aria-label": "Page layouts", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head ze-modal-head--with-close" }, /* @__PURE__ */ React.createElement("span", null, "Page layouts"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-modal-close", "aria-label": "Close", title: "Close (Esc)", onClick: onClose }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body ze-layout-dialog-body" }, /* @__PURE__ */ React.createElement(
+      LayoutSettings,
+      {
+        settings,
+        onChange,
+        hasPage,
+        onApply: (key, where) => {
+          onApply(key, where);
+          onClose();
+        }
+      }
+    ))));
+  }
+
+  // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
+  var { useState: useState25 } = React;
   var MM_PER_INCH = 25.4;
   var ptToMm = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
   var mmToPt2 = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
@@ -18259,12 +18349,12 @@ ${parts.join("\n")}</g>`);
     return Number.isFinite(v) && v > 0 ? Math.max(CUSTOM_MIN_MM, Math.min(CUSTOM_MAX_MM, v)) : fallback;
   };
   function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
-    const [presetKey, setPresetKey] = useState24("a5");
-    const [orientation, setOrientation] = useState24("portrait");
-    const [pageCountText, setPageCountText] = useState24("1");
-    const [bleedText, setBleedText] = useState24("0");
-    const [customWText, setCustomWText] = useState24("148");
-    const [customHText, setCustomHText] = useState24("210");
+    const [presetKey, setPresetKey] = useState25("a5");
+    const [orientation, setOrientation] = useState25("portrait");
+    const [pageCountText, setPageCountText] = useState25("1");
+    const [bleedText, setBleedText] = useState25("0");
+    const [customWText, setCustomWText] = useState25("148");
+    const [customHText, setCustomHText] = useState25("210");
     if (!open) return null;
     const noPaper = presetKey === "canvas";
     const custom = presetKey === "custom";
@@ -18329,16 +18419,16 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/dialogs/EmbedFontsDialog.jsx
-  var { useState: useState25, useEffect: useEffect20 } = React;
+  var { useState: useState26, useEffect: useEffect21 } = React;
   var STATUS = {
     uploaded: "Uploaded font: always inside the project",
     embedded: "Embedded in this project",
     generic: "Only a name (there is no font file)"
   };
   function EmbedFontsDialog({ open, startConfirm, onClose, pages, view }) {
-    const [rows, setRows] = useState25(null);
-    const [asking, setAsking] = useState25(false);
-    const [granted, setGranted] = useState25(true);
+    const [rows, setRows] = useState26(null);
+    const [asking, setAsking] = useState26(false);
+    const [granted, setGranted] = useState26(true);
     const supported = canReadSystemFonts();
     async function load2() {
       setRows(null);
@@ -18351,7 +18441,7 @@ ${parts.join("\n")}</g>`);
       }
       setRows(await describeFaces(pages));
     }
-    useEffect20(() => {
+    useEffect21(() => {
       if (open) {
         setAsking(Boolean(startConfirm));
         load2();
@@ -18466,9 +18556,9 @@ ${parts.join("\n")}</g>`);
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect21 } = React;
+  var { useEffect: useEffect22 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect21(() => {
+    useEffect22(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -18481,14 +18571,14 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
-  var { useEffect: useEffect22, useState: useState26 } = React;
+  var { useEffect: useEffect23, useState: useState27 } = React;
   var OPEN_KINDS = [
     { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
     { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
   ];
   function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
-    const [kind, setKind] = useState26("project");
-    useEffect22(() => {
+    const [kind, setKind] = useState27("project");
+    useEffect23(() => {
       if (!open) return void 0;
       const onKey = (e) => {
         if (e.key === "Escape") onClose();
@@ -18510,10 +18600,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/format/GuideFormat.jsx
-  var { useState: useState27 } = React;
+  var { useState: useState28 } = React;
   function GuideFormat({ guide, unit, guides }) {
     const shown = Math.round(ptToUnit(guide.pos, unit) * 1e3) / 1e3;
-    const [text, setText] = useState27(String(shown));
+    const [text, setText] = useState28(String(shown));
     const commit = () => {
       const v = Number(text);
       if (Number.isFinite(v)) guides.update(guide.id, { pos: Math.round(unitToPt(v, unit) * 100) / 100 });
@@ -18548,9 +18638,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState28 } = React;
+  var { useState: useState29 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState28(null);
+    const [draft, setDraft] = useState29(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -18610,7 +18700,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState29, useRef: useRef23, useEffect: useEffect23 } = React;
+  var { useState: useState30, useRef: useRef23, useEffect: useEffect24 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -18630,13 +18720,13 @@ ${parts.join("\n")}</g>`);
     const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState29(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState30(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
     const wasChecked = useRef23(checked);
-    useEffect23(() => {
+    useEffect24(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -18940,13 +19030,13 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiModel.js
-  var { useState: useState30, useEffect: useEffect24, useRef: useRef24, useCallback } = React;
+  var { useState: useState31, useEffect: useEffect25, useRef: useRef24, useCallback } = React;
   function useAiModel(which = "fill", modelKey = "u2netp") {
     const bg = which === "background";
-    const [state, setState] = useState30({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
+    const [state, setState] = useState31({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
     const abortRef = useRef24(null);
     const alive = useRef24(true);
-    useEffect24(() => () => {
+    useEffect25(() => () => {
       alive.current = false;
     }, []);
     const set = (patch) => {
@@ -18960,7 +19050,7 @@ ${parts.join("\n")}</g>`);
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
       }
     }, [modelKey]);
-    useEffect24(() => {
+    useEffect25(() => {
       set({ phase: "checking", error: null });
       refresh();
     }, [refresh]);
@@ -18989,10 +19079,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/format/RemoveBackgroundSection.jsx
-  var { useState: useState31 } = React;
+  var { useState: useState32 } = React;
   var DEFAULT_CUTOFF = 0.1;
   function DecimalBox({ value, onChange, min, max, step, label, disabled }) {
-    const [draft, setDraft] = useState31(null);
+    const [draft, setDraft] = useState32(null);
     return /* @__PURE__ */ React.createElement(
       NumberBox,
       {
@@ -19013,14 +19103,14 @@ ${parts.join("\n")}</g>`);
     );
   }
   function RemoveBackgroundSection({ ann, onRemoveBackground, disabled }) {
-    const [modelKey, setModelKey] = useState31(BG_MODELS[0].key);
+    const [modelKey, setModelKey] = useState32(BG_MODELS[0].key);
     const info = bgModel(modelKey);
     const ai = useAiModel("background", modelKey);
-    const [dialog, setDialog] = useState31(null);
-    const [cutoff, setCutoff] = useState31(DEFAULT_CUTOFF);
-    const [soft, setSoft] = useState31(10);
-    const [busy, setBusy] = useState31("");
-    const [error, setError] = useState31("");
+    const [dialog, setDialog] = useState32(null);
+    const [cutoff, setCutoff] = useState32(DEFAULT_CUTOFF);
+    const [soft, setSoft] = useState32(10);
+    const [busy, setBusy] = useState32("");
+    const [error, setError] = useState32("");
     const ready = ai.phase === "ready";
     const run2 = async () => {
       setError("");
@@ -19069,10 +19159,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiFeatures.js
-  var { useState: useState32, useEffect: useEffect25 } = React;
+  var { useState: useState33, useEffect: useEffect26 } = React;
   function useAiFeatures() {
-    const [on, setOn] = useState32(aiFeaturesOn());
-    useEffect25(() => {
+    const [on, setOn] = useState33(aiFeaturesOn());
+    useEffect26(() => {
       const h = (e) => setOn(Boolean(e.detail && e.detail.aiFeatures));
       window.addEventListener("zn-display-prefs", h);
       setOn(aiFeaturesOn());
@@ -19082,7 +19172,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  var { useState: useState33 } = React;
+  var { useState: useState34 } = React;
   var SHOW_AI_TOOLS_SECTION = false;
   function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
     const aiOn = useAiFeatures();
@@ -19156,7 +19246,7 @@ ${parts.join("\n")}</g>`);
     ));
   }
   function ImageTraceSection({ ann, imageTrace, disabled }) {
-    const [preset, setPreset] = useState33(DEFAULT_TRACE_PRESET);
+    const [preset, setPreset] = useState34(DEFAULT_TRACE_PRESET);
     const busy = imageTrace.busyId === ann.id;
     return /* @__PURE__ */ React.createElement(
       PanelSection,
@@ -19268,25 +19358,25 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState34, useRef: useRef25, useEffect: useEffect26, useMemo: useMemo4 } = React;
+  var { useState: useState35, useRef: useRef25, useEffect: useEffect27, useMemo: useMemo4 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState34(value || "");
-    const [typed, setTyped] = useState34(false);
-    const [open, setOpen] = useState34(false);
-    const [highlight, setHighlight] = useState34(-1);
+    const [query, setQuery] = useState35(value || "");
+    const [typed, setTyped] = useState35(false);
+    const [open, setOpen] = useState35(false);
+    const [highlight, setHighlight] = useState35(-1);
     const previewFromRef = useRef25(null);
     const listRef = useRef25(null);
-    const [status, setStatus] = useState34(null);
-    const [loadingFonts, setLoadingFonts] = useState34(false);
+    const [status, setStatus] = useState35(null);
+    const [loadingFonts, setLoadingFonts] = useState35(false);
     const containerRef = useRef25(null);
     const uploadInputRef = useRef25(null);
-    useEffect26(() => {
+    useEffect27(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect26(() => {
+    useEffect27(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -19300,7 +19390,7 @@ ${parts.join("\n")}</g>`);
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect26(() => {
+    useEffect27(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -19451,10 +19541,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState35, useRef: useRef26 } = React;
+  var { useState: useState36, useRef: useRef26 } = React;
   function TextPhotoFill({ ann, patch }) {
     const inputRef = useRef26(null);
-    const [error, setError] = useState35(null);
+    const [error, setError] = useState36(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -19485,10 +19575,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState36 } = React;
+  var { useState: useState37 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState36("latin");
-    const [count, setCount] = useState36(3);
+    const [kind, setKind] = useState37("latin");
+    const [count, setCount] = useState37(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -19519,7 +19609,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState37 } = React;
+  var { useState: useState38 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -19527,7 +19617,7 @@ ${parts.join("\n")}</g>`);
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState37(null);
+    const [message, setMessage] = useState38(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -19564,7 +19654,7 @@ ${parts.join("\n")}</g>`);
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState37(null);
+    const [sizeDraft, setSizeDraft] = useState38(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -19598,11 +19688,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState38 } = React;
+  var { useState: useState39 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState38("");
-    const [basedOn, setBasedOn] = useState38("");
-    const [message, setMessage] = useState38(null);
+    const [name, setName] = useState39("");
+    const [basedOn, setBasedOn] = useState39("");
+    const [message, setMessage] = useState39(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -19992,11 +20082,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState39, useRef: useRef27, useEffect: useEffect27, useLayoutEffect: useLayoutEffect6 } = React;
+  var { useState: useState40, useRef: useRef27, useEffect: useEffect28, useLayoutEffect: useLayoutEffect6 } = React;
   function TopMenu({ label, solid, icon: icon2, tile, children }) {
-    const [open, setOpen] = useState39(false);
+    const [open, setOpen] = useState40(false);
     const containerRef = useRef27(null);
-    useEffect27(() => {
+    useEffect28(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -20067,16 +20157,16 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/GuideGroups.jsx
-  var { useState: useState40, useEffect: useEffect28, useRef: useRef28 } = React;
+  var { useState: useState41, useEffect: useEffect29, useRef: useRef28 } = React;
   var iconProps = { viewBox: "0 0 24 24", width: 13, height: 13, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var Lock = ({ on }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("rect", { x: "5", y: "11", width: "14", height: "10", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: on ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2" }));
   var Eye = ({ off }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" }), off ? /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }) : /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
   var More = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }));
   function GuideGroups({ guides, unit }) {
-    const [menu, setMenu] = useState40(null);
-    const [folded, setFolded] = useState40({});
+    const [menu, setMenu] = useState41(null);
+    const [folded, setFolded] = useState41({});
     const menuRef = useRef28(null);
-    useEffect28(() => {
+    useEffect29(() => {
       if (!menu) return void 0;
       const close = (e) => {
         if (!menuRef.current || !menuRef.current.contains(e.target)) setMenu(null);
@@ -20411,7 +20501,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState41, useRef: useRef29, useEffect: useEffect29 } = React;
+  var { useState: useState42, useRef: useRef29, useEffect: useEffect30 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -20477,17 +20567,17 @@ ${parts.join("\n")}</g>`);
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
-    const [renamingId, setRenamingId] = useState41(null);
-    const [menuOpen, setMenuOpen] = useState41(false);
+    const [renamingId, setRenamingId] = useState42(null);
+    const [menuOpen, setMenuOpen] = useState42(false);
     const menuRef = useRef29(null);
-    const [dropInfo, setDropInfo] = useState41(null);
-    const [, setCollapseTick] = useState41(0);
+    const [dropInfo, setDropInfo] = useState42(null);
+    const [, setCollapseTick] = useState42(0);
     const dragIdRef = useRef29(null);
     const listRef = useRef29(null);
     const panelRef = useRef29(null);
     const headRef = useRef29(null);
     const topFirst = annotations.slice().reverse();
-    const [colorEdit, setColorEdit] = useState41(null);
+    const [colorEdit, setColorEdit] = useState42(null);
     const colorProp = (a) => a.type === "rect" ? (a.fillType || "solid") === "solid" ? "fillColor" : null : a.type === "text" || a.type === "stroke" ? "color" : null;
     const colorOf = (a) => a && colorProp(a) ? a[colorProp(a)] || (a.type === "rect" ? "#d9d9d9" : "#1a1a1a") : null;
     const colorEditAnn = colorEdit ? annotations.find((a) => a.id === colorEdit.id) : null;
@@ -20507,9 +20597,9 @@ ${parts.join("\n")}</g>`);
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState41(null);
+    const [rowMenu, setRowMenu] = useState42(null);
     const rowMenuRef = useRef29(null);
-    useEffect29(() => {
+    useEffect30(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
         setMenuOpen(false);
@@ -20559,7 +20649,7 @@ ${parts.join("\n")}</g>`);
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect29(() => {
+    useEffect30(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -20604,7 +20694,7 @@ ${parts.join("\n")}</g>`);
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     }
-    useEffect29(() => {
+    useEffect30(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -20991,66 +21081,8 @@ ${parts.join("\n")}</g>`);
     );
   }
 
-  // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
-  var { useState: useState42 } = React;
-  var PREVIEW_W = 70;
-  var PREVIEW_H = 99;
-  function LayoutPreview({ layout, settings }) {
-    const boxes = place(layout, PREVIEW_W, PREVIEW_H, settings, 4, null);
-    return /* @__PURE__ */ React.createElement("svg", { viewBox: `0 0 ${PREVIEW_W} ${PREVIEW_H}`, width: PREVIEW_W, height: PREVIEW_H, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { width: PREVIEW_W, height: PREVIEW_H, fill: "#fff", stroke: "#8a8078", strokeWidth: "0.6" }), boxes.map((b, i) => {
-      if (b.role === "picture") return /* @__PURE__ */ React.createElement("rect", { key: i, x: b.x, y: b.y, width: b.w, height: b.h, fill: settings.slotGrey });
-      const lineGap = b.role === "title" ? b.h : 4;
-      const lines = Math.max(1, Math.floor(b.h / lineGap));
-      const cols = b.columns > 1 ? b.columns : 1;
-      const colW = (b.w - (cols - 1) * 3) / cols;
-      const thick = b.role === "title" ? Math.max(2.5, b.h * 0.4) : 1.2;
-      return /* @__PURE__ */ React.createElement("g", { key: i, stroke: "#4a4540", strokeWidth: thick, strokeLinecap: "round" }, Array.from({ length: cols }).flatMap((_, c) => Array.from({ length: lines }).map((__, l) => {
-        const y = b.y + (b.role === "title" ? b.h / 2 : lineGap * (l + 0.6));
-        const short = b.role !== "title" && l === lines - 1 ? 0.6 : 1;
-        return /* @__PURE__ */ React.createElement("line", { key: c + "-" + l, x1: b.x + c * (colW + 3), y1: y, x2: b.x + c * (colW + 3) + colW * (b.role === "title" ? 0.7 : short), y2: y });
-      })));
-    }));
-  }
-  function LayoutSettings({ settings, onChange, onApply, hasPage }) {
-    const [where, setWhere] = useState42("new");
-    const target = hasPage ? where : "new";
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: target === "page" ? "active" : "",
-        disabled: !hasPage,
-        onClick: () => setWhere("page"),
-        title: "Applies the layout to this page, replacing an earlier layout on it (your own items stay on top)"
-      },
-      "On this page"
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        type: "button",
-        className: target === "new" ? "active" : "",
-        onClick: () => setWhere("new"),
-        title: "Adds a new page after this one, holding the layout"
-      },
-      "New page after"
-    )), /* @__PURE__ */ React.createElement("div", { className: "ze-layout-grid" }, LAYOUTS.map((l) => /* @__PURE__ */ React.createElement("button", { key: l.key, type: "button", className: "ze-layout-tile", title: l.label, onClick: () => onApply(l.key, target) }, /* @__PURE__ */ React.createElement(LayoutPreview, { layout: l, settings }), /* @__PURE__ */ React.createElement("span", null, l.label)))), /* @__PURE__ */ React.createElement("details", { className: "ze-layout-settings" }, /* @__PURE__ */ React.createElement("summary", null, "Layout settings (this file)"), LAYOUT_SETTING_FIELDS.map((f) => /* @__PURE__ */ React.createElement("label", { key: f.key, className: "ze-layout-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, f.label, " ", /* @__PURE__ */ React.createElement("small", null, "(", f.unit, ")")), /* @__PURE__ */ React.createElement(
-      NumberBox,
-      {
-        min: f.min,
-        max: f.max,
-        step: f.step,
-        value: settings[f.key],
-        onChange: (e) => {
-          const v = Number(e.target.value);
-          if (e.target.value !== "" && Number.isFinite(v)) onChange({ ...settings, [f.key]: Math.min(f.max, Math.max(f.min, v)) });
-        },
-        "aria-label": f.label
-      }
-    ))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-layout-reset", onClick: () => onChange(DEFAULT_LAYOUT_SETTINGS) }, "Reset to defaults"), /* @__PURE__ */ React.createElement("p", { className: "ze-layout-note" }, "Only layouts added from now on use these sizes. Layouts already on a page are ordinary items and stay as they are. The margin follows the Page Guide when it is on.")));
-  }
-
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState43, useEffect: useEffect30, useRef: useRef31 } = React;
+  var { useState: useState43, useEffect: useEffect31, useRef: useRef31 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -21072,7 +21104,7 @@ ${parts.join("\n")}</g>`);
     const onRef = useRef31(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
-    useEffect30(() => {
+    useEffect31(() => {
       const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
       window.addEventListener("zn-display-prefs", listener);
       return () => window.removeEventListener("zn-display-prefs", listener);
@@ -21137,7 +21169,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }
-    useEffect30(() => {
+    useEffect31(() => {
       const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
@@ -21153,7 +21185,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }, [pages, selectedKey, on]);
-    useEffect30(() => {
+    useEffect31(() => {
       alive.current = true;
       return () => {
         alive.current = false;
@@ -21251,14 +21283,14 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState44, useRef: useRef32, useEffect: useEffect31 } = React;
+  var { useState: useState44, useRef: useRef32, useEffect: useEffect32 } = React;
   var icon = { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var InsertPdfIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v5h5" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" }));
   var LayoutIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 10h17M10 10v10.5" }));
   var SelectAllIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2", strokeDasharray: "3 2.5" }), /* @__PURE__ */ React.createElement("path", { d: "M8 12.5l3 3 5-6" }));
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
     const dragIndexRef = useRef32(null);
     const bodyRef = useRef32(null);
@@ -21283,7 +21315,7 @@ ${parts.join("\n")}</g>`);
       }
       scrollDirRef.current = 0;
     }
-    useEffect31(() => stopAutoScroll, []);
+    useEffect32(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -21331,15 +21363,7 @@ ${parts.join("\n")}</g>`);
     }
     return /* @__PURE__ */ React.createElement("aside", { className: "ze-sidebar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head" }, /* @__PURE__ */ React.createElement("span", { className: "ze-sidebar-title" }, "Pages", pages.length > 0 ? " (" + pages.length + ")" : ""), pages.length === 0 ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-head-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onLoadClick, disabled: loading }, loading ? "Loading…" : "Load PDF"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onNewDocClick, disabled: loading, title: "Start a blank document with a paper size you choose" }, "New Document")) : (
       // Three tiles in one row: an icon over a short name. Big enough for a finger.
-      /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-tiles", role: "toolbar", "aria-label": "Page actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onInsertPdfClick, disabled: loading, title: "Insert another PDF's pages into this document" }, /* @__PURE__ */ React.createElement(InsertPdfIcon, null), /* @__PURE__ */ React.createElement("span", null, "Insert PDF")), layouts && /* @__PURE__ */ React.createElement(TopMenu, { label: "Layout", tile: true, icon: /* @__PURE__ */ React.createElement(LayoutIcon, null) }, () => /* @__PURE__ */ React.createElement(
-        LayoutSettings,
-        {
-          settings: layoutSettings,
-          onChange: onLayoutSettings,
-          hasPage: selectedIdx !== null && Boolean(pages[selectedIdx]),
-          onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
-        }
-      )), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onSelectAll, disabled: loading, title: "Select every page" }, /* @__PURE__ */ React.createElement(SelectAllIcon, null), /* @__PURE__ */ React.createElement("span", null, "Select all")))
+      /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-tiles", role: "toolbar", "aria-label": "Page actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onInsertPdfClick, disabled: loading, title: "Insert another PDF's pages into this document" }, /* @__PURE__ */ React.createElement(InsertPdfIcon, null), /* @__PURE__ */ React.createElement("span", null, "Insert PDF")), onOpenLayout && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onOpenLayout, title: "Page layouts: ready-made pages (picture and text)" }, /* @__PURE__ */ React.createElement(LayoutIcon, null), /* @__PURE__ */ React.createElement("span", null, "Layout")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tile", onClick: onSelectAll, disabled: loading, title: "Select every page" }, /* @__PURE__ */ React.createElement(SelectAllIcon, null), /* @__PURE__ */ React.createElement("span", null, "Select all")))
     )), /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-body", ref: bodyRef, onDragOver: handleContainerDragOver }, pages.length === 0 && !loading ? /* @__PURE__ */ React.createElement("div", { className: "ze-sidebar-empty" }, 'No pages yet. Click "Load PDF" to bring in a file, or "New Document" to start a blank layout.') : /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-list" }, /* @__PURE__ */ React.createElement(PageGap, { onInsert: () => onInsertBlank(0) }), pages.map((p, idx) => /* @__PURE__ */ React.createElement(React.Fragment, { key: p.key }, dragOverInfo && dragOverInfo.idx === idx && dragOverInfo.before && /* @__PURE__ */ React.createElement("div", { className: "ze-drop-line" }), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-slot" }, /* @__PURE__ */ React.createElement(
       Thumbnail,
       {
@@ -21407,7 +21431,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState45, useEffect: useEffect32 } = React;
+  var { useState: useState45, useEffect: useEffect33 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
@@ -21416,16 +21440,16 @@ ${parts.join("\n")}</g>`);
     const [shift, setShift] = useState45(false);
     const [alt, setAlt] = useState45(false);
     const [ctrl, setCtrl] = useState45(false);
-    useEffect32(() => {
+    useEffect33(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect32(() => {
+    useEffect33(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect32(() => {
+    useEffect33(() => {
       setTouchModifier("ctrl", ctrl);
     }, [ctrl]);
-    useEffect32(() => () => {
+    useEffect33(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
       setTouchModifier("ctrl", false);
@@ -21595,13 +21619,18 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
   var { useState: useState47 } = React;
-  function PageMenuBody({ rows }) {
+  function PageMenuBody({ rows, close }) {
     const [customizing, setCustomizing] = useState47(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
     }
-    return rows.map((row) => /* @__PURE__ */ React.createElement("div", { key: row.key, className: "ze-menu-toggle-row" + (row.disabled ? " disabled" : "") }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, row.label), row.detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, row.detail)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-customize", disabled: row.disabled, onClick: () => setCustomizing(row.key) }, row.openLabel || "Customize…"), !row.noToggle && /* @__PURE__ */ React.createElement("label", { className: "toggle-switch", title: (row.checked ? "Turn off " : "Turn on ") + row.label }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: row.checked, disabled: row.disabled, onChange: (e) => row.onToggle(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))));
+    return rows.map((row) => /* @__PURE__ */ React.createElement("div", { key: row.key, className: "ze-menu-toggle-row" + (row.disabled ? " disabled" : "") }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-toggle-text" }, /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-label" }, row.label), row.detail && /* @__PURE__ */ React.createElement("span", { className: "ze-menu-toggle-detail" }, row.detail)), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-customize", disabled: row.disabled, onClick: () => {
+      if (row.onOpen) {
+        row.onOpen();
+        if (close) close();
+      } else setCustomizing(row.key);
+    } }, row.openLabel || "Customize…"), !row.noToggle && /* @__PURE__ */ React.createElement("label", { className: "toggle-switch", title: (row.checked ? "Turn off " : "Turn on ") + row.label }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: row.checked, disabled: row.disabled, onChange: (e) => row.onToggle(e.target.checked) }), /* @__PURE__ */ React.createElement("span", { className: "toggle-slider" }))));
   }
 
   // apps/ZEditor/src/ui/topbar/Topbar.jsx
@@ -21611,7 +21640,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "45ee401"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "df0b7fe"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -21637,9 +21666,10 @@ ${parts.join("\n")}</g>`);
         },
         onBlur: () => setDocTitle((t) => t.trim())
       }
-    ), /* @__PURE__ */ React.createElement(TopMenu, { label: "Page" }, () => /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(TopMenu, { label: "Page" }, ({ close }) => /* @__PURE__ */ React.createElement(
       PageMenuBody,
       {
+        close,
         rows: [
           {
             key: "layout",
@@ -21648,15 +21678,7 @@ ${parts.join("\n")}</g>`);
             noToggle: true,
             openLabel: "Choose…",
             disabled: doc.pages.length === 0,
-            settings: /* @__PURE__ */ React.createElement(
-              LayoutSettings,
-              {
-                settings: view.layoutSettings,
-                onChange: view.setLayoutSettings,
-                hasPage: Boolean(selectedPage),
-                onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
-              }
-            )
+            onOpen: () => dialogs.setLayoutOpen(true)
           },
           {
             key: "bleed",
@@ -21973,7 +21995,7 @@ ${parts.join("\n")}</g>`);
       },
       onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file.")
     }), []);
-    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
+    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
     useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
@@ -22018,9 +22040,7 @@ ${parts.join("\n")}</g>`);
         onSelectAll: selection.handleSelectAllPages,
         storyStates,
         onContinueStory: layouts.continueStory,
-        layouts,
-        layoutSettings: view.layoutSettings,
-        onLayoutSettings: view.setLayoutSettings,
+        onOpenLayout: () => dialogs.setLayoutOpen(true),
         onRotate: pageOps.handleRotate,
         onDelete: pageOps.handleDeleteThumbnail,
         onReorder: pageOps.handleReorder,
@@ -22181,6 +22201,16 @@ ${parts.join("\n")}</g>`);
         onChangeAfterPage: files.setInsertAfterPage,
         onConfirm: files.handleConfirmInsertPdf,
         onCancel: () => files.setPendingInsertFile(null)
+      }
+    ), /* @__PURE__ */ React.createElement(
+      LayoutDialog,
+      {
+        open: dialogs.layoutOpen,
+        onClose: () => dialogs.setLayoutOpen(false),
+        settings: view.layoutSettings,
+        onChange: view.setLayoutSettings,
+        hasPage: Boolean(selectedPage),
+        onApply: (key, where) => where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key)
       }
     ), /* @__PURE__ */ React.createElement(
       NewDocumentDialog,
