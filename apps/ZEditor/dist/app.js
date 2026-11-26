@@ -11342,11 +11342,13 @@ ${parts.join("\n")}</g>`);
           }
           if (key === "c") {
             if (selectedIdx !== null && selectedAnnId !== null) {
-              const view = resolvePageText(pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
-              const ann = view && view.type === "text" ? standaloneCopy(view) : view;
-              if (ann) {
+              const views = resolvePageText(pages[selectedIdx].annotations || []);
+              const ids = selection.selectedAnnotationIds();
+              const groups = new Set(views.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+              const chosen = views.filter((a) => ids.includes(a.id) || a.groupId && groups.has(a.groupId)).map((a) => a.type === "text" ? standaloneCopy(a) : a);
+              if (chosen.length) {
                 e.preventDefault();
-                clipboardRef.current = JSON.parse(JSON.stringify(ann));
+                clipboardRef.current = JSON.parse(JSON.stringify(chosen));
               }
             }
             return;
@@ -11354,11 +11356,18 @@ ${parts.join("\n")}</g>`);
           if (key === "v") {
             if (clipboardRef.current && selectedIdx !== null) {
               e.preventDefault();
-              const clip = clipboardRef.current;
-              const id = nextAnnIdRef.current++;
-              const newAnn = { ...translatedAnnotation(clip, 20, 20), id, groupId: void 0 };
-              edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
-              setSelectedAnnId(id);
+              const newGroups = /* @__PURE__ */ new Map();
+              const copies = clipboardRef.current.map((clip) => {
+                const copy = { ...translatedAnnotation(clip, 20, 20), id: nextAnnIdRef.current++ };
+                if (clip.groupId) {
+                  if (!newGroups.has(clip.groupId)) newGroups.set(clip.groupId, "g" + nextAnnIdRef.current++);
+                  copy.groupId = newGroups.get(clip.groupId);
+                } else copy.groupId = void 0;
+                return copy;
+              });
+              edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, ...copies]);
+              setSelectedAnnId(copies[0].id);
+              selection.setSelectedAnnIds(copies.slice(1).map((c) => c.id));
             }
             return;
           }
@@ -18594,8 +18603,8 @@ ${parts.join("\n")}</g>`);
       rows: [
         ["Ctrl + Z", "Undo"],
         ["Ctrl + Shift + Z, or Ctrl + Y", "Redo"],
-        ["Ctrl + C", "Copy the selected item"],
-        ["Ctrl + V", "Paste a copied item, or an image from the clipboard"],
+        ["Ctrl + C", "Copy the selected items (a whole group, if one is selected)"],
+        ["Ctrl + V", "Paste the copied items (groups stay groups), or an image from the clipboard"],
         ["Ctrl + S", "Save the project (asks where, the first time)"],
         ["Ctrl + Shift + S", "Save the project to a new file"],
         ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
@@ -22464,7 +22473,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "527b728"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "3660d18"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
