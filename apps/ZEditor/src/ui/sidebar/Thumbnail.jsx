@@ -7,10 +7,10 @@ import { withTouchModifier } from "../touchInput.js";
 // `src`: the picture to show (the page with its items on it, or the plain base thumbnail).
 // `story`: { continues, overflows } from render/pageText.js storyStateOfPages: a link icon when the page's story goes on to
 // another page, "T+" when its last frame's text doesn't all fit (adds the next page).
-export function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, story, onContinueStory, dragHandlers }) {
+export function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, story, onContinueStory, onToggleHidden, dragHandlers }) {
   return (
     <div
-      className={"ze-thumb" + (isSelected ? " is-selected" : "")}
+      className={"ze-thumb" + (isSelected ? " is-selected" : "") + (p.hidden ? " is-hidden" : "")}
       draggable="true"
       // Ctrl / Cmd + click: add or take out one page. Shift + click: every page from the last one clicked to this one.
       onClick={(e) => onSelect(idx, e.metaKey || withTouchModifier("ctrl", e) ? "toggle" : withTouchModifier("shift", e) ? "range" : false)}
@@ -37,6 +37,19 @@ export function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelet
       <div className="ze-thumb-footer">
         <span className="ze-thumb-num">{idx + 1}</span>
         <div className="ze-thumb-actions">
+          <button
+            type="button"
+            className={"log-btn ze-thumb-eye" + (p.hidden ? " is-on" : "")}
+            title={p.hidden ? "Hidden: not exported, printed or numbered. Click to show it again." : "Hide this page from Export PDF, printing and page numbers"}
+            aria-pressed={Boolean(p.hidden)} aria-label={p.hidden ? "Show page" : "Hide page"}
+            onClick={(e) => { e.stopPropagation(); onToggleHidden(idx); }}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+              <circle cx="12" cy="12" r="3" />
+              {p.hidden && <path d="M4 4l16 16" />}
+            </svg>
+          </button>
           <button
             type="button"
             className="log-btn"

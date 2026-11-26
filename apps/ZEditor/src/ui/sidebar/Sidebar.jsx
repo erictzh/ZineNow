@@ -14,7 +14,7 @@ const SelectAllIcon = () => (<svg {...icon}><rect x="3.5" y="3.5" width="17" hei
 const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout }) {
+export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout, onToggleHidden }) {
   const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null); // page key -> thumbnail with its items on it
   const dragIndexRef = useRef(null);
   const bodyRef = useRef(null);
@@ -137,6 +137,7 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
                     onSelect={onSelect}
                     story={storyStates ? storyStates[idx] : null}
                     onContinueStory={onContinueStory}
+                    onToggleHidden={onToggleHidden}
                     onRotate={onRotate}
                     onDelete={onDelete}
                     dragHandlers={dragHandlersFor(idx)}

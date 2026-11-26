@@ -4,6 +4,7 @@ The left sidebar lists every page of the zine as a thumbnail. You use it to pick
 
 ## How to use
 
+- **Hide a page** with the **eye** button on its thumbnail (with several pages selected, it hides or shows all of them). A hidden page is dimmed with a crossed-out eye and number. It stays in the project and in the editor, but is **skipped by Export PDF, Send to ZineArranger and the "all pages" exports**, and **the page numbers skip it** (the pages after it count on as if it were not there; it shows no number itself). Page PNG/JPG/SVG of the page you are on still work. If every page is hidden, export says so.
 - **Click** a thumbnail to open that page. **Shift+click** selects every page from the last one clicked to this one, **Ctrl+click** adds or removes one page (on a touch screen: switch on the touch bar's Shift or Ctrl, then tap); **Select All** selects every page.
 - **Drag** a thumbnail up or down to move it. A line shows where it will land. Dragging near the top or bottom edge scrolls the list. If several pages are selected, they all move together.
 - **⟳** on a thumbnail rotates that page; the bin deletes it.

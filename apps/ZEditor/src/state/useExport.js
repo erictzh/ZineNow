@@ -1,6 +1,7 @@
 // Export PDF, page pictures (JPG / transparent PNG), selected layers as SVG and Send to ZineArranger, with their busy flags.
 
 import { pageImageFileName, titleToFileName } from "../model/documentTitle.js";
+import { visibleIndices } from "../model/pageVisibility.js";
 import { saveFile, savePdfBytes, writeFileHandle } from "../io/fileSave.js";
 import { IMAGE_FORMATS, renderPageImageBlob } from "../io/imageExport.js";
 import { buildExportPdfBytes } from "../io/pdfExport.js";
@@ -21,8 +22,10 @@ export function useExport({ doc, status, view, project, selection }) {
   // Export tells the user how much of the text went into the PDF as real text.
   const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice, { bleed: view.exportBleed, cropMarks: view.exportCropMarks });
 
+  const noVisiblePages = () => { if (visibleIndices(pages).length === 0) { setErrorMsg("Every page is hidden, so there is nothing to export. Show a page first (the eye on its thumbnail)."); return true; } return false; };
+
   async function handleExportPdf() {
-    if (pages.length === 0 || exporting) return;
+    if (pages.length === 0 || exporting || noVisiblePages()) return;
     setErrorMsg(null);
     setNotice(null);
     setExporting(true);
@@ -74,7 +77,7 @@ export function useExport({ doc, status, view, project, selection }) {
           // any other refusal: download the files instead
         }
       }
-      for (let i = 0; i < pages.length; i++) {
+      for (const i of visibleIndices(pages)) { // hidden pages are skipped
         setNotice(`Exporting ${label}: page ${i + 1} of ${pages.length}…`);
         const blob = await renderPageImageBlob(pages, i, pdfDocsRef, view.pageNumbers, format);
         const name = pageImageFileName(project.docTitle, i, pages.length, fmt.ext);
@@ -113,7 +116,7 @@ export function useExport({ doc, status, view, project, selection }) {
   }
   // The page being edited, or every page side by side, as an SVG for Illustrator: each page a group, each layer a named group inside it.
   async function handleExportPagesSvg(allPages) {
-    const indices = allPages ? pages.map((_, i) => i) : doc.selectedIdx !== null ? [doc.selectedIdx] : [];
+    const indices = allPages ? visibleIndices(pages) : doc.selectedIdx !== null ? [doc.selectedIdx] : []; // "all pages" skips hidden ones
     if (!indices.length || exporting) return;
     setErrorMsg(null);
     setNotice(null);
@@ -153,7 +156,7 @@ export function useExport({ doc, status, view, project, selection }) {
   }
 
   async function handleSendToZineArranger() {
-    if (pages.length === 0 || exporting || sendingToArranger) return;
+    if (pages.length === 0 || exporting || sendingToArranger || noVisiblePages()) return;
     setErrorMsg(null);
     setSendingToArranger(true);
     try {
