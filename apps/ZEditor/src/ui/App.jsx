@@ -39,6 +39,7 @@ import { ConfirmDialog } from "./dialogs/ConfirmDialog.jsx";
 import { InsertPdfDialog } from "./dialogs/InsertPdfDialog.jsx";
 import { LayoutDialog } from "./dialogs/LayoutDialog.jsx";
 import { NewDocumentDialog } from "./dialogs/NewDocumentDialog.jsx";
+import { DataTemplateDialog } from "./dialogs/DataTemplateDialog.jsx";
 import { EmbedFontsDialog } from "./dialogs/EmbedFontsDialog.jsx";
 import { ShortcutsDialog } from "./dialogs/ShortcutsDialog.jsx";
 import { WelcomeDialog } from "./dialogs/WelcomeDialog.jsx";
@@ -116,7 +117,7 @@ export function App() {
     },
     onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file."),
   }), []);
-  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
+  const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen || project.templatePrompt);
   useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
 
   const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
@@ -367,6 +368,7 @@ export function App() {
         onClose={() => setWelcomeDismissed(true)}
       />
       <ShortcutsDialog open={dialogs.shortcutsOpen} onClose={() => dialogs.setShortcutsOpen(false)} />
+      <DataTemplateDialog prompt={project.templatePrompt} onChoose={project.chooseTemplate} />
       <EmbedFontsDialog open={dialogs.embedFontsOpen} startConfirm={dialogs.embedFontsAskFirst} onClose={() => dialogs.closeEmbedFonts()} pages={doc.pages} view={view} />
       <ConfirmDialog
         step={dialogs.confirmAction ? dialogs.confirmStep : 0}

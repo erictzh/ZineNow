@@ -13985,6 +13985,204 @@ ${parts.join("\n")}</g>`);
     return { handleRotate, handleInsertBlank, handleToggleHidden, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
   }
 
+  // apps/ZEditor/src/model/dataMerge/fields.js
+  var MONTHS = {
+    en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    ms: ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
+  };
+  var MARK = /\{\{\s*([^{}|]+?)\s*((?:\|[^{}]*)?)\}\}/g;
+  function formatDate(text, pattern, lang = "en") {
+    const m = /^\s*(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?\s*$/.exec(text);
+    if (!m) return text;
+    const year = Number(m[1]), month = m[2] ? Number(m[2]) : 1, day = m[3] ? Number(m[3]) : 1;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
+    const names = MONTHS[lang] || MONTHS.en;
+    return pattern.replace(/yyyy|yy|MMMM|MMM|MM|M|dd|d/g, (t) => ({
+      yyyy: String(year),
+      yy: String(year).slice(-2).padStart(2, "0"),
+      MMMM: names[month - 1],
+      MMM: names[month - 1].slice(0, 3),
+      MM: String(month).padStart(2, "0"),
+      M: String(month),
+      dd: String(day).padStart(2, "0"),
+      d: String(day)
+    })[t]);
+  }
+  var title = (s) => s.toLowerCase().replace(/(^|[\s\-'’(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  function applyFilter(value, spec, lang) {
+    const colon = spec.indexOf(":");
+    const name = (colon < 0 ? spec : spec.slice(0, colon)).trim().toLowerCase();
+    const arg = colon < 0 ? "" : spec.slice(colon + 1);
+    switch (name) {
+      case "upper":
+        return value.toUpperCase();
+      case "lower":
+        return value.toLowerCase();
+      case "title":
+        return title(value);
+      case "trim":
+        return value.trim();
+      case "first":
+        return value.trim().split(/\s+/)[0] || "";
+      case "number": {
+        const n = Number(value.replace(/,/g, ""));
+        return value.trim() !== "" && Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 20 }) : value;
+      }
+      case "pad":
+        return value.padStart(Math.max(0, Number(arg) || 0), "0");
+      case "date":
+        return formatDate(value, arg.trim() || "d MMMM yyyy", lang);
+      case "default":
+        return value.trim() === "" ? arg : value;
+      default:
+        return value;
+    }
+  }
+  function fieldsIn(text) {
+    const out = [];
+    for (const m of String(text).matchAll(MARK)) if (!out.includes(m[1])) out.push(m[1]);
+    return out;
+  }
+  function fillTemplate(text, record, options = {}) {
+    const used = [], missing = [], empty = [];
+    const filled = String(text).replace(MARK, (whole, field, filters) => {
+      if (!used.includes(field)) used.push(field);
+      if (!Object.prototype.hasOwnProperty.call(record, field)) {
+        if (!missing.includes(field)) missing.push(field);
+        return whole;
+      }
+      let value = String(record[field]);
+      if (value.trim() === "" && !empty.includes(field)) empty.push(field);
+      for (const f of filters.split("|").slice(1)) value = applyFilter(value, f, options.lang);
+      return value;
+    });
+    return { text: filled, used, missing, empty };
+  }
+
+  // apps/ZEditor/src/model/dataMerge/build.js
+  function fieldsUsedOnPage(annotations) {
+    const out = [];
+    for (const a of annotations || []) {
+      if (a.type !== "text" || !a.text) continue;
+      for (const f of fieldsIn(a.text)) if (!out.includes(f)) out.push(f);
+    }
+    return out;
+  }
+  function fillTextItem(ann, record, options) {
+    if (ann.type !== "text" || !ann.text || !ann.text.includes("{{")) return { ann, result: null };
+    const result2 = fillTemplate(ann.text, record, options);
+    if (result2.text === ann.text) return { ann, result: result2 };
+    const filled = { ...ann, text: result2.text };
+    if (filled.colorRuns && filled.colorRuns.length) filled.colorRuns = void 0;
+    return { ann: filled, result: result2 };
+  }
+  function makePhotoFinder(photos) {
+    const base = (t) => String(t === void 0 || t === null ? "" : t).replace(/\\/g, "/").split("/").pop().trim().toLowerCase();
+    const stem = (t) => base(t).replace(/\.[^.]+$/, "");
+    const byName = /* @__PURE__ */ new Map(), byStem = /* @__PURE__ */ new Map();
+    for (const photo of photos || []) {
+      byName.set(base(photo.name), photo);
+      if (!byStem.has(stem(photo.name))) byStem.set(stem(photo.name), photo);
+    }
+    return (cell) => {
+      const name = base(cell);
+      if (!name) return null;
+      return byName.get(name) || (/\.[^.]+$/.test(name) ? null : byStem.get(name)) || null;
+    };
+  }
+  function fillCrop(natW, natH, frameW, frameH) {
+    const frame = frameW / frameH;
+    if (natW / natH > frame) {
+      const w = natH * frame;
+      return { cropX: (natW - w) / 2, cropY: 0, cropW: w, cropH: natH };
+    }
+    const h = natW / frame;
+    return { cropX: 0, cropY: (natH - h) / 2, cropW: natW, cropH: h };
+  }
+  function fillPictureItem(ann, record, find) {
+    if (ann.type !== "image" || !ann.picField) return { handled: false, ann };
+    const photo = find ? find(record[ann.picField]) : null;
+    if (!photo) return { handled: true, ann: null };
+    return { handled: true, ann: { ...ann, src: photo.src, naturalWidth: photo.width, naturalHeight: photo.height, ...fillCrop(photo.width, photo.height, ann.width, ann.height) } };
+  }
+  function pictureProblems(annotations, records, find) {
+    const columns = [];
+    for (const a of annotations || []) if (a.type === "image" && a.picField && !columns.includes(a.picField)) columns.push(a.picField);
+    return columns.map((column) => {
+      let empty = 0;
+      const notFound = [];
+      for (const r of records) {
+        const cell = String(r[column] === void 0 ? "" : r[column]).trim();
+        if (!cell) empty++;
+        else if (!find || !find(cell)) {
+          if (!notFound.includes(cell)) notFound.push(cell);
+        }
+      }
+      return { column, empty, notFound };
+    });
+  }
+  function remapItems(chosen, newId2, newGroupId) {
+    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
+    for (const a of chosen) ids.set(a.id, newId2());
+    return chosen.map((a) => {
+      const copy = { ...a, id: ids.get(a.id), dataBlock: void 0, showOn: void 0, picField: void 0 };
+      if (copy.groupId) {
+        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
+        copy.groupId = groups.get(copy.groupId);
+      }
+      if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : void 0;
+      return copy;
+    });
+  }
+  function fillItem(a, record, { lang, findPhoto } = {}) {
+    const pic = fillPictureItem(a, record, findPhoto);
+    if (pic.handled) return { ann: pic.ann, missing: [] };
+    const { ann, result: result2 } = fillTextItem(a, record, { lang });
+    return { ann, missing: result2 ? result2.missing : [] };
+  }
+  function mergeAnnotations(annotations, record, { newId: newId2, newGroupId, lang, findPhoto } = {}) {
+    const missing = [];
+    const chosen = [];
+    for (const a of annotations) {
+      const filled = fillItem(a, record, { lang, findPhoto });
+      for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
+      if (filled.ann) chosen.push(filled.ann);
+    }
+    return { annotations: remapItems(chosen, newId2, newGroupId), missing };
+  }
+  function checkMerge(annotations, headers, records) {
+    const used = fieldsUsedOnPage(annotations);
+    const missing = used.filter((f) => !headers.includes(f));
+    const emptyCounts = used.filter((f) => headers.includes(f)).map((f) => ({ field: f, count: records.filter((r) => String(r[f] === void 0 ? "" : r[f]).trim() === "").length })).filter((e) => e.count > 0);
+    return { used, missing, emptyCounts };
+  }
+
+  // apps/ZEditor/src/model/dataMerge/template.js
+  var TEMPLATE_PREFIX = "ZDATA = ";
+  var VIRTUAL = ["page in group", "pages in group", "records in group"];
+  var stripTemplatePrefix = (name) => String(name || "").replace(/^ZDATA\s*=\s*/i, "");
+  var templateFileName = (title2) => TEMPLATE_PREFIX + titleToFileName(stripTemplatePrefix(title2), ".znow");
+  function templatePages(pages) {
+    const designed = new Set(pages.filter((p) => p.mergedFrom !== void 0).map((p) => p.mergedFrom));
+    return pages.filter((p) => p.mergedFrom === void 0).map((p) => designed.has(p.key) && p.hidden ? { ...p, hidden: void 0 } : p);
+  }
+  function templateNeeds(pages, groupBy) {
+    const columns = [];
+    const add = (c) => {
+      if (c && !columns.includes(c) && !VIRTUAL.includes(c)) columns.push(c);
+    };
+    for (const p of pages) {
+      fieldsUsedOnPage(p.annotations || []).forEach(add);
+      for (const a of p.annotations || []) if (a.type === "image") add(a.picField);
+    }
+    add(groupBy);
+    return columns;
+  }
+  function templateSettings(settings) {
+    const { dataSource, dataPhotos, ...rest } = settings;
+    return rest;
+  }
+
   // apps/ZEditor/src/io/fontEmbed.js
   var faceKey = (family, bold, italic) => family + "|" + (bold ? "b" : "") + (italic ? "i" : "");
   var faceLabel = (f) => f.family + " — " + (f.bold || f.italic ? [f.bold ? "Bold" : "", f.italic ? "Italic" : ""].filter(Boolean).join(" ") : "Regular");
@@ -14078,7 +14276,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/io/projectFile.js
-  function serializeProject({ title: title2, pdfDocs, pages, textStyles, settings, embeddedFonts = [] }) {
+  function serializeProject({ title: title2, pdfDocs, pages, textStyles, settings, embeddedFonts = [], dataTemplate = null }) {
     const docs = {};
     for (const docId of Object.keys(pdfDocs)) {
       docs[docId] = arrayBufferToBase64(pdfDocs[docId].bytes);
@@ -14096,7 +14294,9 @@ ${parts.join("\n")}</g>`);
       fonts,
       textStyles,
       pages: pages.map(({ dataUrl, ...rest }) => rest),
-      settings
+      settings,
+      // A data template (model/dataMerge/template.js): marks the file as one and lists the columns it needs.
+      ...dataTemplate ? { dataTemplate } : {}
     };
     return JSON.stringify(project);
   }
@@ -14160,7 +14360,8 @@ ${parts.join("\n")}</g>`);
       pageSize,
       // Projects saved before titles existed take their file's name (see the caller).
       title: typeof project.title === "string" && project.title ? project.title : null,
-      settings: project.settings || {}
+      settings: project.settings || {},
+      dataTemplate: project.dataTemplate && Array.isArray(project.dataTemplate.columns) ? { columns: project.dataTemplate.columns.filter((c) => typeof c === "string") } : null
     };
   }
 
@@ -14237,6 +14438,8 @@ ${parts.join("\n")}</g>`);
     const [projectFile, setProjectFile] = useState11(null);
     const [docTitle, setDocTitle] = useState11("");
     const [justSaved, setJustSaved] = useState11(false);
+    const [editingTemplate, setEditingTemplate] = useState11(false);
+    const [templatePrompt, setTemplatePrompt] = useState11(null);
     const justSavedTimerRef = useRef10(null);
     function flashSaved() {
       setJustSaved(true);
@@ -14245,9 +14448,38 @@ ${parts.join("\n")}</g>`);
     }
     function startNewDocument(title2) {
       setProjectFile(null);
+      setEditingTemplate(false);
       setDocTitle(title2);
       view.setEmbedFonts(true);
       view.setEmbedFontsSkip([]);
+    }
+    function projectText(embeddedFonts, asTemplate) {
+      const settings = view.settingsForSave();
+      if (!asTemplate) return serializeProject({ title: docTitle, pdfDocs: pdfDocsRef.current, pages, textStyles: toolDefaults.textStyles, settings, embeddedFonts });
+      const designed = templatePages(pages);
+      return serializeProject({
+        title: stripTemplatePrefix(docTitle),
+        pdfDocs: pdfDocsRef.current,
+        pages: designed,
+        textStyles: toolDefaults.textStyles,
+        settings: templateSettings(settings),
+        embeddedFonts,
+        dataTemplate: { version: 1, columns: templateNeeds(designed, view.dataGroupBy) }
+      });
+    }
+    async function handleSaveDataTemplate() {
+      if (pages.length === 0 || savingProject) return;
+      setErrorMsg(null);
+      setSavingProject(true);
+      try {
+        const json = projectText([], true);
+        const handle = await saveFile(json, templateFileName(docTitle), "application/json", "ZEditor data template", [".znow"], "application/octet-stream");
+        if (handle !== "cancelled") status.setNotice("Data template saved. It has your designs and settings, not the spreadsheet or photos. System fonts are not inside it, so the other person needs them (or sees a stand-in).");
+      } catch (err) {
+        setErrorMsg("Couldn't save the data template — " + (err && err.message ? err.message : "unknown error"));
+      } finally {
+        setSavingProject(false);
+      }
     }
     async function handleSaveProject({ saveAs = false } = {}) {
       if (pages.length === 0 || savingProject) return;
@@ -14261,14 +14493,7 @@ ${parts.join("\n")}</g>`);
           embeddedFonts = r.fonts;
           status.setNotice(r.missing.length ? "Saved, but these fonts could not be embedded (open Project > Embed Fonts… and allow font access, or they are not on this computer): " + r.missing.join(", ") : r.fonts.length ? "Embedded " + r.fonts.length + " system font" + (r.fonts.length === 1 ? "" : "s") + " in the project file. Only share it if those fonts' licences allow it (Project > Embed Fonts… to change)." : null);
         }
-        const json = serializeProject({
-          title: docTitle,
-          pdfDocs: pdfDocsRef.current,
-          pages,
-          textStyles: toolDefaults.textStyles,
-          settings: view.settingsForSave(),
-          embeddedFonts
-        });
+        const json = projectText(embeddedFonts, editingTemplate);
         if (!saveAs && projectFile) {
           try {
             await writeFileHandle(projectFile.handle, json);
@@ -14277,7 +14502,7 @@ ${parts.join("\n")}</g>`);
           } catch (err) {
           }
         }
-        const handle = await saveFile(json, titleToFileName(docTitle, ".znow"), "application/json", "ZEditor project file", [".znow"], "application/octet-stream");
+        const handle = await saveFile(json, editingTemplate ? templateFileName(docTitle) : titleToFileName(docTitle, ".znow"), "application/json", editingTemplate ? "ZEditor data template" : "ZEditor project file", [".znow"], "application/octet-stream");
         if (handle !== "cancelled") flashSaved();
         if (handle && handle !== "cancelled") setProjectFile({ handle, name: handle.name });
       } catch (err) {
@@ -14345,11 +14570,15 @@ ${parts.join("\n")}</g>`);
         cancelled = true;
       };
     }, []);
-    async function handleLoadProjectFile(file, handle = null, pageIdx = 0) {
+    async function handleLoadProjectFile(file, handle = null, pageIdx = 0, mode) {
       setErrorMsg(null);
       setLoading(true);
       try {
         const loaded = await readProjectFile(file, () => nextKeyRef.current++);
+        if (loaded.dataTemplate && !mode) {
+          setTemplatePrompt({ file, handle, pageIdx, columns: loaded.dataTemplate.columns, name: stripTemplatePrefix(loaded.title || stripExtension(file.name)) });
+          return;
+        }
         pdfDocsRef.current = loaded.docs;
         toolDefaults.mergeTextStyles(loaded.textStyles);
         toolDefaults.addFontFamilies(loaded.loadedFamilies);
@@ -14360,9 +14589,16 @@ ${parts.join("\n")}</g>`);
         setSelectedIdx(loaded.pages.length > 0 ? Math.min(Math.max(0, pageIdx || 0), loaded.pages.length - 1) : null);
         setSelectedPageIndices([]);
         history.clearHistory();
-        setProjectFile(handle ? { handle, name: handle.name } : null);
-        setDocTitle(loaded.title || stripExtension(file.name));
+        const useTemplate = mode === "use";
+        setProjectFile(handle && !useTemplate ? { handle, name: handle.name } : null);
+        setEditingTemplate(Boolean(loaded.dataTemplate) && mode === "edit");
+        setDocTitle(useTemplate ? stripTemplatePrefix(loaded.title || stripExtension(file.name)) : loaded.title || stripExtension(file.name));
         view.applySavedSettings(loaded.settings);
+        if (useTemplate) {
+          view.setDataTemplateColumns(loaded.dataTemplate.columns);
+          view.setDataPanelOpen(true);
+          view.setDataMinimized(false);
+        }
         announceDocumentOpened();
       } catch (err) {
         setErrorMsg("Couldn't load that project — " + (err && err.message ? err.message : "unknown error"));
@@ -14380,6 +14616,14 @@ ${parts.join("\n")}</g>`);
       reloading,
       reloadKeepingWork,
       startupChecked,
+      editingTemplate,
+      templatePrompt,
+      handleSaveDataTemplate,
+      chooseTemplate: (mode) => {
+        const p = templatePrompt;
+        setTemplatePrompt(null);
+        if (p && mode) handleLoadProjectFile(p.file, p.handle, p.pageIdx, mode);
+      },
       startNewDocument,
       handleSaveProject,
       openProjectPicker,
@@ -14984,6 +15228,7 @@ ${parts.join("\n")}</g>`);
       } catch {
       }
     };
+    const [dataTemplateColumns, setDataTemplateColumns] = useState15([]);
     const [dataPhotos, setDataPhotos] = useState15([]);
     const [dataGroupBy, setDataGroupBy] = useState15("");
     const [dataRepeatOthers, setDataRepeatOthers] = useState15(true);
@@ -15110,6 +15355,8 @@ ${parts.join("\n")}</g>`);
       setDataRepeatOthers,
       dataPhotos,
       setDataPhotos,
+      dataTemplateColumns,
+      setDataTemplateColumns,
       dataMinimized,
       setDataMinimized,
       layersMinimized,
@@ -18512,8 +18759,26 @@ ${parts.join("\n")}</g>`);
     )), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, noPaper ? "No paper: draw anywhere, even outside the first view; the canvas grows to hold everything. Save the project (.znow) to keep it. " : `${formatMm(width)} × ${formatMm(height)} mm (${inches(width)} × ${inches(height)} in)${bleedMm > 0 ? `, trimmed; with ${bleedMm} mm bleed each page is ${formatMm(width + 2 * mmToPt(bleedMm))} × ${formatMm(height + 2 * mmToPt(bleedMm))} mm` : ""}.`, custom ? ` Sizes from ${CUSTOM_MIN_MM} to ${CUSTOM_MAX_MM} mm.` : "", " You can add or remove pages later.")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, onOpenPdf && /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onOpenPdf }, "Open a PDF instead"), /* @__PURE__ */ React.createElement("button", { type: "button", onClick: onCancel }, "Cancel"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "btn-solid", onClick: () => onCreate({ width: width + 2 * mmToPt(bleedMm), height: height + 2 * mmToPt(bleedMm), pageCount, canvas: noPaper, bleedMm }) }, "Create"))));
   }
 
+  // apps/ZEditor/src/ui/dialogs/DataTemplateDialog.jsx
+  var { useEffect: useEffect21 } = React;
+  function DataTemplateDialog({ prompt, onChoose }) {
+    useEffect21(() => {
+      if (!prompt) return void 0;
+      const esc = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onChoose(null);
+        }
+      };
+      window.addEventListener("keydown", esc, true);
+      return () => window.removeEventListener("keydown", esc, true);
+    }, [prompt]);
+    if (!prompt) return null;
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: () => onChoose(null) }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", role: "dialog", "aria-label": "Data template", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head ze-modal-head--with-close" }, /* @__PURE__ */ React.createElement("span", null, "Data template"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-modal-close", "aria-label": "Cancel", title: "Cancel (Esc)", onClick: () => onChoose(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, prompt.name), " is a data template: designs that are filled from a spreadsheet."), prompt.columns.length > 0 && /* @__PURE__ */ React.createElement("p", null, "It expects a CSV with these columns: ", /* @__PURE__ */ React.createElement("strong", null, prompt.columns.join(", ")), "."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "Use this template"), " opens a copy that is not saved anywhere yet, with the Data panel open so you can choose your own CSV. The template file is never changed."), /* @__PURE__ */ React.createElement("p", null, /* @__PURE__ */ React.createElement("strong", null, "Edit it"), " opens the template itself, so you can change its design. Saving keeps it a template."), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary", onClick: () => onChoose("use") }, "Use this template"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", onClick: () => onChoose("edit") }, "Edit it")))));
+  }
+
   // apps/ZEditor/src/ui/dialogs/EmbedFontsDialog.jsx
-  var { useState: useState26, useEffect: useEffect21 } = React;
+  var { useState: useState26, useEffect: useEffect22 } = React;
   var STATUS = {
     uploaded: "Uploaded font: always inside the project",
     embedded: "Embedded in this project",
@@ -18535,7 +18800,7 @@ ${parts.join("\n")}</g>`);
       }
       setRows(await describeFaces(pages));
     }
-    useEffect21(() => {
+    useEffect22(() => {
       if (open) {
         setAsking(Boolean(startConfirm));
         load2();
@@ -18650,9 +18915,9 @@ ${parts.join("\n")}</g>`);
   ];
 
   // apps/ZEditor/src/ui/dialogs/ShortcutsDialog.jsx
-  var { useEffect: useEffect22 } = React;
+  var { useEffect: useEffect23 } = React;
   function ShortcutsDialog({ open, onClose }) {
-    useEffect22(() => {
+    useEffect23(() => {
       if (!open) return;
       const closeOnEscape = (e) => {
         if (e.key === "Escape") onClose();
@@ -18665,14 +18930,14 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/dialogs/WelcomeDialog.jsx
-  var { useEffect: useEffect23, useState: useState27 } = React;
+  var { useEffect: useEffect24, useState: useState27 } = React;
   var OPEN_KINDS = [
     { key: "project", label: "ZineNow project (.znow)", hint: "Keep editing a zine you saved." },
     { key: "pdf", label: "PDF file", hint: "Its pages become the zine's pages." }
   ];
   function WelcomeDialog({ open, onNewDocument, onOpenProject, onOpenPdf, onClose }) {
     const [kind, setKind] = useState27("project");
-    useEffect23(() => {
+    useEffect24(() => {
       if (!open) return void 0;
       const onKey = (e) => {
         if (e.key === "Escape") onClose();
@@ -18794,7 +19059,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState30, useRef: useRef23, useEffect: useEffect24 } = React;
+  var { useState: useState30, useRef: useRef23, useEffect: useEffect25 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -18820,7 +19085,7 @@ ${parts.join("\n")}</g>`);
       setOpenState(value);
     };
     const wasChecked = useRef23(checked);
-    useEffect24(() => {
+    useEffect25(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -19124,13 +19389,13 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiModel.js
-  var { useState: useState31, useEffect: useEffect25, useRef: useRef24, useCallback } = React;
+  var { useState: useState31, useEffect: useEffect26, useRef: useRef24, useCallback } = React;
   function useAiModel(which = "fill", modelKey = "u2netp") {
     const bg = which === "background";
     const [state, setState] = useState31({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
     const abortRef = useRef24(null);
     const alive = useRef24(true);
-    useEffect25(() => () => {
+    useEffect26(() => () => {
       alive.current = false;
     }, []);
     const set = (patch) => {
@@ -19144,7 +19409,7 @@ ${parts.join("\n")}</g>`);
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
       }
     }, [modelKey]);
-    useEffect25(() => {
+    useEffect26(() => {
       set({ phase: "checking", error: null });
       refresh();
     }, [refresh]);
@@ -19253,10 +19518,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiFeatures.js
-  var { useState: useState33, useEffect: useEffect26 } = React;
+  var { useState: useState33, useEffect: useEffect27 } = React;
   function useAiFeatures() {
     const [on, setOn] = useState33(aiFeaturesOn());
-    useEffect26(() => {
+    useEffect27(() => {
       const h = (e) => setOn(Boolean(e.detail && e.detail.aiFeatures));
       window.addEventListener("zn-display-prefs", h);
       setOn(aiFeaturesOn());
@@ -19452,7 +19717,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState35, useRef: useRef25, useEffect: useEffect27, useMemo: useMemo4 } = React;
+  var { useState: useState35, useRef: useRef25, useEffect: useEffect28, useMemo: useMemo4 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
     const [query, setQuery] = useState35(value || "");
     const [typed, setTyped] = useState35(false);
@@ -19464,13 +19729,13 @@ ${parts.join("\n")}</g>`);
     const [loadingFonts, setLoadingFonts] = useState35(false);
     const containerRef = useRef25(null);
     const uploadInputRef = useRef25(null);
-    useEffect27(() => {
+    useEffect28(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect27(() => {
+    useEffect28(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -19484,7 +19749,7 @@ ${parts.join("\n")}</g>`);
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect27(() => {
+    useEffect28(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -20176,11 +20441,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState40, useRef: useRef27, useEffect: useEffect28, useLayoutEffect: useLayoutEffect6 } = React;
+  var { useState: useState40, useRef: useRef27, useEffect: useEffect29, useLayoutEffect: useLayoutEffect6 } = React;
   function TopMenu({ label, solid, icon: icon2, tile, children }) {
     const [open, setOpen] = useState40(false);
     const containerRef = useRef27(null);
-    useEffect28(() => {
+    useEffect29(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -20251,7 +20516,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/GuideGroups.jsx
-  var { useState: useState41, useEffect: useEffect29, useRef: useRef28 } = React;
+  var { useState: useState41, useEffect: useEffect30, useRef: useRef28 } = React;
   var iconProps = { viewBox: "0 0 24 24", width: 13, height: 13, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var Lock = ({ on }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("rect", { x: "5", y: "11", width: "14", height: "10", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: on ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2" }));
   var Eye = ({ off }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" }), off ? /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }) : /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
@@ -20260,7 +20525,7 @@ ${parts.join("\n")}</g>`);
     const [menu, setMenu] = useState41(null);
     const [folded, setFolded] = useState41({});
     const menuRef = useRef28(null);
-    useEffect29(() => {
+    useEffect30(() => {
       if (!menu) return void 0;
       const close = (e) => {
         if (!menuRef.current || !menuRef.current.contains(e.target)) setMenu(null);
@@ -20595,7 +20860,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState42, useRef: useRef29, useEffect: useEffect30 } = React;
+  var { useState: useState42, useRef: useRef29, useEffect: useEffect31 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -20693,7 +20958,7 @@ ${parts.join("\n")}</g>`);
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
     const [rowMenu, setRowMenu] = useState42(null);
     const rowMenuRef = useRef29(null);
-    useEffect30(() => {
+    useEffect31(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
         setMenuOpen(false);
@@ -20743,7 +21008,7 @@ ${parts.join("\n")}</g>`);
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect30(() => {
+    useEffect31(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -20788,7 +21053,7 @@ ${parts.join("\n")}</g>`);
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     }
-    useEffect30(() => {
+    useEffect31(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -21176,7 +21441,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState43, useEffect: useEffect31, useRef: useRef31 } = React;
+  var { useState: useState43, useEffect: useEffect32, useRef: useRef31 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -21198,7 +21463,7 @@ ${parts.join("\n")}</g>`);
     const onRef = useRef31(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
-    useEffect31(() => {
+    useEffect32(() => {
       const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
       window.addEventListener("zn-display-prefs", listener);
       return () => window.removeEventListener("zn-display-prefs", listener);
@@ -21263,7 +21528,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }
-    useEffect31(() => {
+    useEffect32(() => {
       const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
@@ -21279,7 +21544,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }, [pages, selectedKey, on]);
-    useEffect31(() => {
+    useEffect32(() => {
       alive.current = true;
       return () => {
         alive.current = false;
@@ -21391,7 +21656,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState44, useRef: useRef32, useEffect: useEffect32 } = React;
+  var { useState: useState44, useRef: useRef32, useEffect: useEffect33 } = React;
   var icon = { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var InsertPdfIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v5h5" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" }));
   var LayoutIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 10h17M10 10v10.5" }));
@@ -21423,7 +21688,7 @@ ${parts.join("\n")}</g>`);
       }
       scrollDirRef.current = 0;
     }
-    useEffect32(() => stopAutoScroll, []);
+    useEffect33(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -21557,7 +21822,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState45, useEffect: useEffect33 } = React;
+  var { useState: useState45, useEffect: useEffect34 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
@@ -21566,16 +21831,16 @@ ${parts.join("\n")}</g>`);
     const [shift, setShift] = useState45(false);
     const [alt, setAlt] = useState45(false);
     const [ctrl, setCtrl] = useState45(false);
-    useEffect33(() => {
+    useEffect34(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect33(() => {
+    useEffect34(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect33(() => {
+    useEffect34(() => {
       setTouchModifier("ctrl", ctrl);
     }, [ctrl]);
-    useEffect33(() => () => {
+    useEffect34(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
       setTouchModifier("ctrl", false);
@@ -21654,178 +21919,6 @@ ${parts.join("\n")}</g>`);
       },
       /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("rect", { x: "8", y: "8", width: "12", height: "12", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" }))
     ), hasSelection && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-danger", title: "Delete", "aria-label": "Delete", onMouseDown: keep, onClick: () => pressKey("Delete") }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))));
-  }
-
-  // apps/ZEditor/src/model/dataMerge/fields.js
-  var MONTHS = {
-    en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-    ms: ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
-  };
-  var MARK = /\{\{\s*([^{}|]+?)\s*((?:\|[^{}]*)?)\}\}/g;
-  function formatDate(text, pattern, lang = "en") {
-    const m = /^\s*(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?\s*$/.exec(text);
-    if (!m) return text;
-    const year = Number(m[1]), month = m[2] ? Number(m[2]) : 1, day = m[3] ? Number(m[3]) : 1;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
-    const names = MONTHS[lang] || MONTHS.en;
-    return pattern.replace(/yyyy|yy|MMMM|MMM|MM|M|dd|d/g, (t) => ({
-      yyyy: String(year),
-      yy: String(year).slice(-2).padStart(2, "0"),
-      MMMM: names[month - 1],
-      MMM: names[month - 1].slice(0, 3),
-      MM: String(month).padStart(2, "0"),
-      M: String(month),
-      dd: String(day).padStart(2, "0"),
-      d: String(day)
-    })[t]);
-  }
-  var title = (s) => s.toLowerCase().replace(/(^|[\s\-'’(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
-  function applyFilter(value, spec, lang) {
-    const colon = spec.indexOf(":");
-    const name = (colon < 0 ? spec : spec.slice(0, colon)).trim().toLowerCase();
-    const arg = colon < 0 ? "" : spec.slice(colon + 1);
-    switch (name) {
-      case "upper":
-        return value.toUpperCase();
-      case "lower":
-        return value.toLowerCase();
-      case "title":
-        return title(value);
-      case "trim":
-        return value.trim();
-      case "first":
-        return value.trim().split(/\s+/)[0] || "";
-      case "number": {
-        const n = Number(value.replace(/,/g, ""));
-        return value.trim() !== "" && Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 20 }) : value;
-      }
-      case "pad":
-        return value.padStart(Math.max(0, Number(arg) || 0), "0");
-      case "date":
-        return formatDate(value, arg.trim() || "d MMMM yyyy", lang);
-      case "default":
-        return value.trim() === "" ? arg : value;
-      default:
-        return value;
-    }
-  }
-  function fieldsIn(text) {
-    const out = [];
-    for (const m of String(text).matchAll(MARK)) if (!out.includes(m[1])) out.push(m[1]);
-    return out;
-  }
-  function fillTemplate(text, record, options = {}) {
-    const used = [], missing = [], empty = [];
-    const filled = String(text).replace(MARK, (whole, field, filters) => {
-      if (!used.includes(field)) used.push(field);
-      if (!Object.prototype.hasOwnProperty.call(record, field)) {
-        if (!missing.includes(field)) missing.push(field);
-        return whole;
-      }
-      let value = String(record[field]);
-      if (value.trim() === "" && !empty.includes(field)) empty.push(field);
-      for (const f of filters.split("|").slice(1)) value = applyFilter(value, f, options.lang);
-      return value;
-    });
-    return { text: filled, used, missing, empty };
-  }
-
-  // apps/ZEditor/src/model/dataMerge/build.js
-  function fieldsUsedOnPage(annotations) {
-    const out = [];
-    for (const a of annotations || []) {
-      if (a.type !== "text" || !a.text) continue;
-      for (const f of fieldsIn(a.text)) if (!out.includes(f)) out.push(f);
-    }
-    return out;
-  }
-  function fillTextItem(ann, record, options) {
-    if (ann.type !== "text" || !ann.text || !ann.text.includes("{{")) return { ann, result: null };
-    const result2 = fillTemplate(ann.text, record, options);
-    if (result2.text === ann.text) return { ann, result: result2 };
-    const filled = { ...ann, text: result2.text };
-    if (filled.colorRuns && filled.colorRuns.length) filled.colorRuns = void 0;
-    return { ann: filled, result: result2 };
-  }
-  function makePhotoFinder(photos) {
-    const base = (t) => String(t === void 0 || t === null ? "" : t).replace(/\\/g, "/").split("/").pop().trim().toLowerCase();
-    const stem = (t) => base(t).replace(/\.[^.]+$/, "");
-    const byName = /* @__PURE__ */ new Map(), byStem = /* @__PURE__ */ new Map();
-    for (const photo of photos || []) {
-      byName.set(base(photo.name), photo);
-      if (!byStem.has(stem(photo.name))) byStem.set(stem(photo.name), photo);
-    }
-    return (cell) => {
-      const name = base(cell);
-      if (!name) return null;
-      return byName.get(name) || (/\.[^.]+$/.test(name) ? null : byStem.get(name)) || null;
-    };
-  }
-  function fillCrop(natW, natH, frameW, frameH) {
-    const frame = frameW / frameH;
-    if (natW / natH > frame) {
-      const w = natH * frame;
-      return { cropX: (natW - w) / 2, cropY: 0, cropW: w, cropH: natH };
-    }
-    const h = natW / frame;
-    return { cropX: 0, cropY: (natH - h) / 2, cropW: natW, cropH: h };
-  }
-  function fillPictureItem(ann, record, find) {
-    if (ann.type !== "image" || !ann.picField) return { handled: false, ann };
-    const photo = find ? find(record[ann.picField]) : null;
-    if (!photo) return { handled: true, ann: null };
-    return { handled: true, ann: { ...ann, src: photo.src, naturalWidth: photo.width, naturalHeight: photo.height, ...fillCrop(photo.width, photo.height, ann.width, ann.height) } };
-  }
-  function pictureProblems(annotations, records, find) {
-    const columns = [];
-    for (const a of annotations || []) if (a.type === "image" && a.picField && !columns.includes(a.picField)) columns.push(a.picField);
-    return columns.map((column) => {
-      let empty = 0;
-      const notFound = [];
-      for (const r of records) {
-        const cell = String(r[column] === void 0 ? "" : r[column]).trim();
-        if (!cell) empty++;
-        else if (!find || !find(cell)) {
-          if (!notFound.includes(cell)) notFound.push(cell);
-        }
-      }
-      return { column, empty, notFound };
-    });
-  }
-  function remapItems(chosen, newId2, newGroupId) {
-    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
-    for (const a of chosen) ids.set(a.id, newId2());
-    return chosen.map((a) => {
-      const copy = { ...a, id: ids.get(a.id), dataBlock: void 0, showOn: void 0, picField: void 0 };
-      if (copy.groupId) {
-        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
-        copy.groupId = groups.get(copy.groupId);
-      }
-      if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : void 0;
-      return copy;
-    });
-  }
-  function fillItem(a, record, { lang, findPhoto } = {}) {
-    const pic = fillPictureItem(a, record, findPhoto);
-    if (pic.handled) return { ann: pic.ann, missing: [] };
-    const { ann, result: result2 } = fillTextItem(a, record, { lang });
-    return { ann, missing: result2 ? result2.missing : [] };
-  }
-  function mergeAnnotations(annotations, record, { newId: newId2, newGroupId, lang, findPhoto } = {}) {
-    const missing = [];
-    const chosen = [];
-    for (const a of annotations) {
-      const filled = fillItem(a, record, { lang, findPhoto });
-      for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
-      if (filled.ann) chosen.push(filled.ann);
-    }
-    return { annotations: remapItems(chosen, newId2, newGroupId), missing };
-  }
-  function checkMerge(annotations, headers, records) {
-    const used = fieldsUsedOnPage(annotations);
-    const missing = used.filter((f) => !headers.includes(f));
-    const emptyCounts = used.filter((f) => headers.includes(f)).map((f) => ({ field: f, count: records.filter((r) => String(r[f] === void 0 ? "" : r[f]).trim() === "").length })).filter((e) => e.count > 0);
-    return { used, missing, emptyCounts };
   }
 
   // apps/ZEditor/src/io/dataPhotos.js
@@ -22225,6 +22318,7 @@ ${parts.join("\n")}</g>`);
         return false;
       }
       view.setDataSource({ name, text });
+      view.setDataTemplateColumns([]);
       view.setDataOrder("file");
       setRecordNo(0);
       setMessage(result2.problems && result2.problems.length ? result2.problems[0] : "");
@@ -22481,7 +22575,7 @@ ${parts.join("\n")}</g>`);
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startDrag }, /* @__PURE__ */ React.createElement("span", null, "Data"), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize to the bottom right", "aria-label": "Minimize the Data panel", onMouseDown: (e) => e.stopPropagation(), onClick: () => view.setDataMinimized(true) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Close (remembers its place and size)", "aria-label": "Close the Data panel", onMouseDown: (e) => e.stopPropagation(), onClick: () => view.setDataPanelOpen(false) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 5l10 10M15 5L5 15" }))))),
       parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-pinned" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-tabs", role: "tablist" }, /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": !view.dataAdvanced, className: "ze-data-tab" + (!view.dataAdvanced ? " is-active" : ""), onClick: () => view.setDataAdvanced(false) }, "Basic"), /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": view.dataAdvanced, className: "ze-data-tab" + (view.dataAdvanced ? " is-active" : ""), onClick: () => view.setDataAdvanced(true) }, "Advanced"))),
-      /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,text/csv", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose CSV file…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
+      /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, view.dataTemplateColumns.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, "This template needs a CSV with these columns:"), " ", view.dataTemplateColumns.join(", "), "."), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,text/csv", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose CSV file…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
         if (merge.connect("pasted data.csv", pasted)) {
           setPasted("");
           setPasting(false);
@@ -22610,7 +22704,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "45ff331"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "ef6768d"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -22772,6 +22866,15 @@ ${parts.join("\n")}</g>`);
         disabled: pages.length === 0 || savingProject,
         onClick: () => project.handleSaveProject({ saveAs: true }),
         hint: "Saves this project to a new file, and keeps saving there"
+      }
+    ), /* @__PURE__ */ React.createElement(
+      MenuItem,
+      {
+        close,
+        label: "Save as data template…",
+        disabled: pages.length === 0 || savingProject,
+        onClick: project.handleSaveDataTemplate,
+        hint: "Saves a shareable ZDATA = file: your designs and merge settings, without the spreadsheet or photos, so someone can fill it with their own data"
       }
     ), /* @__PURE__ */ React.createElement(
       MenuItem,
@@ -22966,7 +23069,7 @@ ${parts.join("\n")}</g>`);
       },
       onOther: () => dropCtx.current.status.setErrorMsg("That isn't a picture. Drop a .png, .jpg, .gif, .webp or .svg file.")
     }), []);
-    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen);
+    const modalOpen = Boolean(files.pendingInsertFile || dialogs.confirmAction || dialogs.shortcutsOpen || dialogs.layoutOpen || dialogs.newDocOpen || dialogs.embedFontsOpen || project.templatePrompt);
     useKeyboardShortcuts({ doc, history: uiHistory, selection, edits, pageOps, project, marquee, modalOpen, zoom });
     const { pages, selectedIdx, selectedPageIndices, selectedPage, pageFilter } = doc;
     const { tool, selectedAnnId, selectedAnnIds, editingAnnId, croppingAnnId } = selection;
@@ -23215,7 +23318,7 @@ ${parts.join("\n")}</g>`);
         onOpenPdf: files.handleLoadClick,
         onClose: () => setWelcomeDismissed(true)
       }
-    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(EmbedFontsDialog, { open: dialogs.embedFontsOpen, startConfirm: dialogs.embedFontsAskFirst, onClose: () => dialogs.closeEmbedFonts(), pages: doc.pages, view }), /* @__PURE__ */ React.createElement(
+    ), /* @__PURE__ */ React.createElement(ShortcutsDialog, { open: dialogs.shortcutsOpen, onClose: () => dialogs.setShortcutsOpen(false) }), /* @__PURE__ */ React.createElement(DataTemplateDialog, { prompt: project.templatePrompt, onChoose: project.chooseTemplate }), /* @__PURE__ */ React.createElement(EmbedFontsDialog, { open: dialogs.embedFontsOpen, startConfirm: dialogs.embedFontsAskFirst, onClose: () => dialogs.closeEmbedFonts(), pages: doc.pages, view }), /* @__PURE__ */ React.createElement(
       ConfirmDialog,
       {
         step: dialogs.confirmAction ? dialogs.confirmStep : 0,

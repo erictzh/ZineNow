@@ -42,6 +42,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     const result = parseCsv(text);
     if (!result.headers.length || !result.records.length) { setMessage("That file has no rows. A CSV needs a first line of column names, then one line per row."); return false; }
     view.setDataSource({ name, text });
+    view.setDataTemplateColumns([]);
     view.setDataOrder("file");
     setRecordNo(0);
     setMessage(result.problems && result.problems.length ? result.problems[0] : "");

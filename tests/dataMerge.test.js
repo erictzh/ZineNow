@@ -2,6 +2,7 @@
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
 import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
 import { dataSlots, gridCopies, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
+import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -197,4 +198,17 @@ ok(picMerged.annotations.length === 2 && picMerged.annotations[0].src === "data:
 ok(mergeAnnotations([frame], { photo: "nope.jpg" }, { newId: () => picN++, newGroupId: () => "g" + picN++, findPhoto: find }).annotations.length === 0, "and no picture when none is found");
 const pp = pictureProblems([frame], [{ photo: "ana.jpg" }, { photo: "" }, { photo: "x.jpg" }, { photo: "x.jpg" }], find)[0];
 ok(pp.column === "photo" && pp.empty === 1 && pp.notFound.join() === "x.jpg", "picture problems: empty cells, and names with no photo (each once)");
+// ---- Data templates
+ok(templateFileName("Name cards") === "ZDATA = Name cards.znow" && templateFileName("ZDATA = Name cards") === "ZDATA = Name cards.znow", "template file names start with ZDATA = (once)");
+ok(isTemplateFileName("ZDATA = Labels.znow") && isTemplateFileName("zdata=Labels.znow") && !isTemplateFileName("My zine.znow") && stripTemplatePrefix("ZDATA = Labels") === "Labels", "template names are recognised");
+const tpages = [
+  { key: 1, hidden: true, annotations: [{ id: 1, type: "text", text: "{{name}} {{page in group}}" }, { id: 2, type: "image", picField: "photo" }] },
+  { key: 2, mergedFrom: 1, mergeRow: 1, annotations: [] },
+  { key: 3, annotations: [{ id: 3, type: "text", text: "{{city}}" }] },
+];
+const tp = templatePages(tpages);
+ok(tp.length === 2 && tp[0].hidden === undefined && tp[1].key === 3, "a template keeps the designed pages, shown again, and drops the made ones");
+ok(templateNeeds(tp, "band").join() === "name,photo,city,band", "a template lists the columns it needs (fields, picture columns, Group by), without page counters");
+const ts = templateSettings({ dataSource: { name: "x" }, dataPhotos: [1], dataGroupBy: "band", dataRepeatOthers: false, guidesOn: true });
+ok(ts.dataSource === undefined && ts.dataPhotos === undefined && ts.dataGroupBy === "band" && ts.guidesOn === true, "a template carries no data or photos, but keeps the other settings");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

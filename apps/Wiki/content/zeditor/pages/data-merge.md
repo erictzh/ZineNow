@@ -31,6 +31,14 @@ Under the file name at the top of the Data panel there are two tabs, **Basic** a
 - **Selected item shows on**: for one non-data item, choose *Every page*, *First page of the group*, *Continuation pages only* or *Last page only*. It overrides the tick box for that item.
 - The preview shows the chosen row in the first block, the following rows in the next blocks, and hides blocks with no record left.
 
+## Data templates (sharing a design)
+
+A **data template** is a design someone else can fill with their own spreadsheet: name cards, labels, certificates.
+
+- **Project → Save as data template…** saves a copy named **`ZDATA = <title>.znow`** (for example `ZDATA = Name cards.znow`). It holds your designed pages and merge settings (Group by, Repeat non-data items) but **not the spreadsheet and not the photos**, and it leaves out the pages a merge made. The file is also marked as a template inside, with the list of columns it needs. Your own project is not changed.
+- **Opening** a data template asks: **Use this template** opens a copy that is not saved anywhere yet (so the template file is never overwritten) with the Data panel open, which says which columns your CSV needs; **Edit it** opens the template itself, and **Save** keeps it a template (no data, no photos).
+- Share it like any file. System fonts are **not** put inside a template, so the other person needs them (or sees a stand-in); fonts you uploaded travel with it.
+
 ## How it works
 
 ### Reading the file
@@ -46,6 +54,8 @@ Under the file name at the top of the Data panel there are two tabs, **Basic** a
 `model/dataMerge/groups.js` (Advanced) finds the slots (`dataSlots`), groups the records (`groupRecords`), plans the pages (`planPages`) and fills one (`mergeGroupPage`; `showsOnPage` decides Show on). A data block's items carry `dataBlock: true` and a non-data item may carry `showOn`; made pages carry neither.
 
 `model/dataMerge/build.js` also has `makePhotoFinder` (cell text to photo), `fillCrop` (centre-crop to the frame), `fillPictureItem` and `pictureProblems`; `io/dataPhotos.js` reads and shrinks the photos. A picture item with `picField: "column"` is the frame.
+
+`model/dataMerge/template.js` names the file (`templateFileName`), keeps the designed pages (`templatePages`), lists the columns needed (`templateNeeds`) and drops the data and photos from the settings (`templateSettings`). The marker is `dataTemplate: { version, columns }` in the project file (`io/projectFile.js`); `state/useProject.js` asks "use or edit" when it finds one (`DataTemplateDialog.jsx`) and keeps `editingTemplate` so Save keeps a template a template.
 
 `gridCopies` lays out the grid of copies (`makeGrid` in the hook measures the block with `annotationBounds`; mm to pixels is mm / 25.4 x 72 x 1.1).
 

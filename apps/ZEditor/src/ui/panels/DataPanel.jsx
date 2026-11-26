@@ -118,6 +118,7 @@ export function DataPanel({ merge, view, hasPage }) {
       <div className="ze-data-body">
         {!parsed && (
           <div className="ze-data-section">
+            {view.dataTemplateColumns.length > 0 && <p className="ze-data-help"><strong>This template needs a CSV with these columns:</strong> {view.dataTemplateColumns.join(", ")}.</p>}
             <p className="ze-data-help">Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project.</p>
             <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" hidden onChange={onFile} />
             <button type="button" className="ze-btn ze-data-wide" onClick={() => fileRef.current && fileRef.current.click()}>Choose CSV file…</button>

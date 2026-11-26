@@ -206,6 +206,13 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
               />
               <MenuItem
                 close={close}
+                label="Save as data template…"
+                disabled={pages.length === 0 || savingProject}
+                onClick={project.handleSaveDataTemplate}
+                hint="Saves a shareable ZDATA = file: your designs and merge settings, without the spreadsheet or photos, so someone can fill it with their own data"
+              />
+              <MenuItem
+                close={close}
                 label="Load Project"
                 disabled={status.loading}
                 onClick={dialogs.handleLoadProjectClick}
