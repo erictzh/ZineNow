@@ -12,6 +12,7 @@ ZEditor has keyboard shortcuts for the tools, editing, zoom and page navigation.
 | Ctrl+C, Ctrl+V | Copy and paste an item; paste a picture from the clipboard |
 | Ctrl+S, Ctrl+Shift+S | Save, Save As |
 | Delete | Delete the selected item(s), or the selected pages if no item is selected |
+| Enter | While cropping a picture: apply the crop and leave crop mode |
 | Backspace | Delete the selected item(s) (never a page) |
 | Arrow keys, Shift+arrows | Nudge 1 px, or 10 px |
 | ↑ / ↓ | Previous / next page (nothing selected) |

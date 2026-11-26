@@ -82,6 +82,12 @@ export function useKeyboardShortcuts(app) {
         return; // any other Ctrl/Cmd combo — leave the browser's own default alone
       }
 
+      // Enter while cropping a picture applies the crop (it is already shown live; this leaves crop mode).
+      if (key === "enter" && selection.croppingAnnId !== null) {
+        e.preventDefault();
+        selection.handleToggleCrop(selection.croppingAnnId);
+        return;
+      }
       // Delete and Backspace both delete the selected layer(s). With no layer selected Delete removes the page (or the selected pages); Backspace
       // does not (it is too easy to hit by accident).
       if (key === "delete" || key === "backspace") {

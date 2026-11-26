@@ -185,7 +185,12 @@ export function AnnotationImage({ ann, tool, isSelected, showHandles, isCropping
       data-ann-id={ann.id}
       className={"ze-ann-image" + (isSelected ? " is-selected" : "") + (isEraseTarget ? " is-erase-target" : "") + (ann.locked ? " is-locked" : "")}
       style={boxOuterStyle(ann)}
-      onMouseDown={(e) => { if (tool === "select") onPress(e, ann); }}
+      onMouseDown={(e) => {
+        if (tool !== "select") return;
+        onPress(e, ann);
+        // Triple-click opens the crop (as the C key does); a turned picture can't be cropped. Enter, or C again, applies it.
+        if (e.detail >= 3 && !isCropping && !angleOf(ann)) onToggleCrop(ann.id);
+      }}
     >
       {/* Shadow sits on this wrapper, outside the edge clip so the clip
           can't cut it off, and away from the resize handle. It stays
