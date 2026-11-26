@@ -11,6 +11,10 @@
     --ze-page-w: 420px;
     --ze-page-h: 594px; /* ~A5 ratio placeholder */
 }
+/* Wider side panels on bigger windows (plain px, so the panel resizer can read them): roughly 13.5% and 15.5% of a 1920 px wide window. */
+@media (min-width: 1500px) { :root { --ze-sidebar-width: 252px; --ze-format-panel-width: 284px; } }
+@media (min-width: 1800px) { :root { --ze-sidebar-width: 260px; --ze-format-panel-width: 300px; } }
+
 
 * { box-sizing: border-box; }
 

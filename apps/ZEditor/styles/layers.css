@@ -5,11 +5,11 @@
     position: fixed;
     top: 128px;
     right: calc(var(--ze-format-panel-width) + 16px);
-    /* Default shape: tall, about 1 : 2.04 (250 × 510 px), shrunk evenly on a short window so it keeps that
-       shape and stays on screen. Dragging an edge replaces it (inline width/height). The list fills the
-       height left under the Blend/Opacity bar. */
-    width: clamp(200px, calc((100vh - 144px) * 250 / 510), 250px);
-    aspect-ratio: 250 / 510;
+    /* Default shape: about 16% of the window wide and 40% tall (302 × 412 px on a 1920 × 1030 window), within limits, so it is roomier than the
+       old tall strip and stays on screen on a short window. Dragging an edge replaces it (inline width/height). The list fills the height
+       left under the Blend/Opacity bar. */
+    width: clamp(220px, 15.7vw, 360px);
+    height: clamp(300px, 40vh, calc(100vh - 150px));
     display: flex;
     flex-direction: column;
     z-index: 15; /* under the topbar popovers and modals */
