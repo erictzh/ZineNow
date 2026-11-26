@@ -5055,7 +5055,15 @@
 
   // shared/js/displaySettings.js
   var EVENT = "zn-display-prefs";
-  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial;
+  var initialOf = (s) => typeof s.initial === "function" ? s.initial() : s.initial;
+  var desktopDefault = (onComputer, otherwise) => () => {
+    try {
+      return window.matchMedia("(hover: hover) and (pointer: fine)").matches ? onComputer : otherwise;
+    } catch (e) {
+      return otherwise;
+    }
+  };
+  var clampTo = (v, s) => Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : initialOf(s);
   var snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
   var tidy = (v) => Math.round(v * 1e3) / 1e3;
   function installDisplaySettings(options) {
@@ -5066,7 +5074,7 @@
     const optionIndex = (ch, p) => ch.options.findIndex((o) => ch.flags.every((f) => p[f.key] === (o.values[f.key] === true)));
     const initialOption = (ch) => ch.options[ch.initial || 0];
     const defaults = {};
-    for (const s of sliders) defaults[s.key] = s.initial;
+    for (const s of sliders) defaults[s.key] = initialOf(s);
     for (const c of checks) defaults[c.key] = false;
     for (const ch of choices) Object.assign(defaults, optionValues(ch, initialOption(ch)));
     function load() {
@@ -5307,7 +5315,7 @@
       about: ABOUT,
       // where the source code is (a small line in the gear pop-up)
       sliders: [
-        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: function(v) {
+        { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: function(v) {
           return String(v / 100);
         } }
       ],
@@ -5451,7 +5459,7 @@
   (function showBuildNumber() {
     var subtitle = document.querySelector(".topbar-subtitle");
     if (!subtitle) return;
-    subtitle.textContent += " · build de155d9";
+    subtitle.textContent += " · build 71bbabe";
     subtitle.title = "Build number: changes whenever the app is updated";
   })();
   setUpCredit();

@@ -11,7 +11,7 @@
 // No dark paper here on purpose: ZEditor is where colours are picked, and an inverted page would
 // show them wrong.
 
-import { installDisplaySettings } from "../../../../shared/js/displaySettings.js";
+import { desktopDefault, installDisplaySettings } from "../../../../shared/js/displaySettings.js";
 import { ABOUT } from "../../../../shared/js/about.js";
 
 let display = null;
@@ -23,7 +23,7 @@ export function installZeditorDisplaySettings() {
     about: ABOUT, // where the source code is (a small line in the gear pop-up)
     mount: false, // App.jsx places it next to the touch bar once that's rendered
     sliders: [
-      { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: 100, unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
+      { key: "uiScale", label: "Interface size", min: 75, max: 175, step: 5, initial: desktopDefault(75, 100), unit: "%", cssVar: "--zn-ui-zoom", cssValue: (v) => String(v / 100) },
       { key: "thumbSize", label: "Thumbnail size", min: 30, max: 100, step: 5, initial: 100, unit: "%", cssVar: "--ze-thumb-zoom", cssValue: (v) => String(v / 100) },
     ],
     groups: [

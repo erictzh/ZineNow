@@ -34,13 +34,13 @@ Below is the real code, copied from the repository when the wiki is built. The g
 
 ```js file=shared/js/displaySettings.js
 
-const clampTo = (v, s) => (Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : s.initial);
+const clampTo = (v, s) => (Number.isFinite(v) ? Math.min(s.max, Math.max(s.min, v)) : initialOf(s));
 const snap = (v, s) => clampTo(Math.round(v / s.step) * s.step, s);
 // Rounds away float noise from steps like 0.5 (13.5 + 0.5 * 3).
 const tidy = (v) => Math.round(v * 1000) / 1000;
 ```
 
-**The Logic:** `clampTo(v, s)` returns the slider's `initial` if `v` is not a real number (`Number.isFinite` is false for `NaN`), otherwise keeps `v` between `min` and `max`. `snap` rounds to the nearest step first (`Math.round(v / step) * step`), then clamps. `tidy` rounds to three decimals to remove float noise from steps like 0.5.
+**The Logic:** a slider's `initial` can be a number or a function (`initialOf` calls it); the apps' *Interface size* uses `desktopDefault(75, 100)`, which gives **75** where the main input is a mouse or touchpad (`(hover: hover) and (pointer: fine)`) and **100** on a tablet or phone, so the same page looks right on both unless the person chose a size. `clampTo(v, s)` returns the slider's initial value if `v` is not a real number (`Number.isFinite` is false for `NaN`), otherwise keeps `v` between `min` and `max`. `snap` rounds to the nearest step first (`Math.round(v / step) * step`), then clamps. `tidy` rounds to three decimals to remove float noise from steps like 0.5.
 
 **Worked example** (interface size: min 75, max 175, step 5, initial 100). `snap(122)` → `round(24.4) × 5 =` **120**; `snap(122.6)` → `round(24.52) × 5 =` **125**; `snap(40)` → 40 is under the minimum → **75**; `snap(500)` → **175**; `clampTo(NaN)` → **100**. For the editor text size (10 to 28, step 0.5): `tidy(13.5 + 0.5 × 3)` → **15**. (All checked by running the same lines.)
 
