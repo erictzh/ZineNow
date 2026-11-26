@@ -127,3 +127,8 @@
 .ze-sidebar-tiles .ze-menu-trigger.ze-tile > svg:last-child { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; opacity: 0.6; }
 .ze-sidebar-tiles .ze-menu-trigger.ze-tile.open { background: var(--ui-bg-alt, rgba(255,255,255,.06)); border-color: var(--ui-accent); color: var(--ui-fg); }
 .ze-sidebar-tiles .ze-menu-trigger.ze-tile.open > svg:last-child { transform: rotate(180deg); }
+
+/* A hidden page: dimmed, with its eye crossed out (it is skipped by Export PDF, printing and the page numbers). */
+.ze-thumb.is-hidden .ze-thumb-img-wrap img { opacity: 0.35; filter: grayscale(0.6); }
+.ze-thumb.is-hidden .ze-thumb-num { text-decoration: line-through; opacity: 0.7; }
+.ze-thumb-eye.is-on { color: var(--ui-accent-text, #ff8547); }

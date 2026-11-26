@@ -46,6 +46,15 @@ export function usePageOps({ doc, history, selection }) {
     setSelectedPageIndices([]);
   }
 
+  // The crossed-out eye: hides the page (or every page of the selection it is part of) from Export PDF, Send to ZineArranger and the page numbers,
+  // or brings it back. Hidden pages stay in the project.
+  function handleToggleHidden(idx) {
+    const targets = pagesActedOn(idx);
+    const allHidden = targets.every((i) => pages[i] && pages[i].hidden);
+    recordUndoCheckpoint();
+    setPages((prev) => prev.map((p, i) => (targets.includes(i) ? { ...p, hidden: allHidden ? undefined : true } : p)));
+  }
+
   function handleDelete(idx) {
     recordUndoCheckpoint();
     setPages((prev) => removePagesKeepingStories(prev, [idx])); // a story that ran through this page carries on across the gap
@@ -95,5 +104,5 @@ export function usePageOps({ doc, history, selection }) {
     setSelectedPageIndices((prevSel) => prevSel.map((oldIdx) => newIdxOf[oldIdx]));
   }
 
-  return { handleRotate, handleInsertBlank, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
+  return { handleRotate, handleInsertBlank, handleToggleHidden, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
 }

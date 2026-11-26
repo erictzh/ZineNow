@@ -2,6 +2,7 @@
 
 import { fetchImageFile, installImageDrop } from "../../../../shared/js/dropImages.js";
 import { pageNumberSpec } from "../model/pageNumbers.js";
+import { visibleSlot } from "../model/pageVisibility.js";
 import { resolvePageText, setTextDocument, storyStateOfPages } from "../render/pageText.js";
 import { useAnnotationEdits } from "../state/useAnnotationEdits.js";
 import { useDialogs } from "../state/useDialogs.js";
@@ -164,6 +165,7 @@ export function App() {
           onNewDocClick={() => dialogs.openNewDocDialog(false)}
           onInsertPdfClick={files.handleInsertPdfClick}
           onInsertBlank={pageOps.handleInsertBlank}
+          onToggleHidden={pageOps.handleToggleHidden}
           loading={status.loading}
         />
         <div className="ze-compose-area">
@@ -194,7 +196,7 @@ export function App() {
                 pageFilter={pageFilter}
                 onionGhostSrc={view.onionSkinOn ? onionGhostSrc : null}
                 onionSkinOpacity={view.onionSkinOpacity}
-                pageNumberSpec={pageNumberSpec(view.pageNumbers, selectedIdx, pages.length)}
+                pageNumberSpec={(() => { const slot = visibleSlot(pages, selectedIdx); return slot ? pageNumberSpec(view.pageNumbers, slot.index, slot.count) : null; })()}
                 tool={tool}
                 penColor={t.penColor}
                 penWidth={t.penWidth}

@@ -4,6 +4,7 @@ import { bleedPt, cropMarkLines } from "../model/bleed.js";
 import { EXPORT_SCALE } from "../constants.js";
 import { DEFAULT_PAGE_FILTER } from "../model/pageFilters.js";
 import { pageNumberSpec } from "../model/pageNumbers.js";
+import { visibleIndices } from "../model/pageVisibility.js";
 import { renderPageToCanvas } from "../render/pageRender.js";
 import { resolvePageText } from "../render/pageText.js";
 import { measureTextBox } from "../render/textLayout.js";
@@ -24,15 +25,18 @@ export async function buildExportPdfBytes(pages, pdfDocsRef, pageNumbers, onRepo
   const vectorText = createVectorTextExporter(outDoc);
   await prepareWrapShapes(pages); // images that wrap text by their shape need their outline read first
   const overflowPages = []; // preflight: pages with a text frame whose text doesn't all fit
-  for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+  // Hidden pages are skipped, and the page numbers count only the pages that are exported.
+  const order = visibleIndices(pages);
+  for (let slot = 0; slot < order.length; slot++) {
+    const pageIdx = order[slot];
     // Threaded stories and text wrap are worked out for the whole page first (render/pageText.js).
     const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || [], pages) };
     const annotations = page.annotations;
-    if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(pageIdx + 1);
+    if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(slot + 1);
     // Text boxes that can be real text are left out of the page picture and written on top of it.
     const vectorIds = await vectorText.plan(annotations);
     const picturePage = vectorIds.size ? { ...page, annotations: annotations.filter((a) => !vectorIds.has(a.id)) } : page;
-    const canvas = await renderPageToCanvas(picturePage, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
+    const canvas = await renderPageToCanvas(picturePage, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, slot, order.length));
     const pngBytes = await canvasToArrayBuffer(canvas);
     const pngImage = await outDoc.embedPng(pngBytes);
     const pageWidthPts = canvas.width / EXPORT_SCALE;

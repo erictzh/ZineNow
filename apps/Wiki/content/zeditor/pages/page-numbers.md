@@ -13,6 +13,8 @@
 
 The number shows live on the page, and is printed by Export PDF, the image exports and Send to ZineArranger.
 
+Hidden pages (the eye on a page's thumbnail) are not counted: the numbering runs over the visible pages only, so hiding page 2 of 4 makes the old page 3 number 2.
+
 ## How it works
 
 ### One function decides everything

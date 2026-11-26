@@ -4765,6 +4765,15 @@
     return { text, vertical, horizontal, size: settings.size, color: settings.color, marginIn: settings.marginIn };
   }
 
+  // apps/ZEditor/src/model/pageVisibility.js
+  var isHiddenPage = (page) => Boolean(page && page.hidden);
+  var visibleIndices = (pages) => pages.map((_, i) => i).filter((i) => !isHiddenPage(pages[i]));
+  function visibleSlot(pages, idx) {
+    if (idx === null || idx === void 0 || !pages[idx] || isHiddenPage(pages[idx])) return null;
+    const visible = visibleIndices(pages);
+    return { index: visible.indexOf(idx), count: visible.length };
+  }
+
   // apps/ZEditor/src/constants.js
   var THUMB_SCALE = 0.45;
   var THUMB_SHOWN_SCALE = 0.3;
@@ -10718,7 +10727,11 @@ ${parts.join("\n")}</g>`);
       pdfDocsRef,
       EXPORT_SCALE,
       page.filter || DEFAULT_PAGE_FILTER,
-      pageNumberSpec(pageNumbers, pageIdx, pages.length),
+      // A hidden page carries no number; the others are numbered among the visible pages.
+      (() => {
+        const slot = visibleSlot(pages, pageIdx);
+        return slot ? pageNumberSpec(pageNumbers, slot.index, slot.count) : null;
+      })(),
       fmt.transparent
     );
     return new Promise((resolve, reject) => {
@@ -10980,13 +10993,15 @@ ${parts.join("\n")}</g>`);
     const vectorText = createVectorTextExporter(outDoc);
     await prepareWrapShapes(pages);
     const overflowPages = [];
-    for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+    const order = visibleIndices(pages);
+    for (let slot = 0; slot < order.length; slot++) {
+      const pageIdx = order[slot];
       const page = { ...pages[pageIdx], annotations: resolvePageText(pages[pageIdx].annotations || [], pages) };
       const annotations = page.annotations;
-      if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(pageIdx + 1);
+      if (annotations.some((a) => a.type === "text" && !a.hidden && a.storyNextId == null && measureTextBox(a).overflow)) overflowPages.push(slot + 1);
       const vectorIds = await vectorText.plan(annotations);
       const picturePage = vectorIds.size ? { ...page, annotations: annotations.filter((a) => !vectorIds.has(a.id)) } : page;
-      const canvas = await renderPageToCanvas(picturePage, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, pageIdx, pages.length));
+      const canvas = await renderPageToCanvas(picturePage, pdfDocsRef, EXPORT_SCALE, page.filter || DEFAULT_PAGE_FILTER, pageNumberSpec(pageNumbers, slot, order.length));
       const pngBytes = await canvasToArrayBuffer(canvas);
       const pngImage = await outDoc.embedPng(pngBytes);
       const pageWidthPts = canvas.width / EXPORT_SCALE;
@@ -11047,8 +11062,15 @@ ${parts.join("\n")}</g>`);
     const [exporting, setExporting] = useState5(false);
     const [sendingToArranger, setSendingToArranger] = useState5(false);
     const buildBytes = () => buildExportPdfBytes(pages, pdfDocsRef, view.pageNumbers, setNotice, { bleed: view.exportBleed, cropMarks: view.exportCropMarks });
+    const noVisiblePages = () => {
+      if (visibleIndices(pages).length === 0) {
+        setErrorMsg("Every page is hidden, so there is nothing to export. Show a page first (the eye on its thumbnail).");
+        return true;
+      }
+      return false;
+    };
     async function handleExportPdf() {
-      if (pages.length === 0 || exporting) return;
+      if (pages.length === 0 || exporting || noVisiblePages()) return;
       setErrorMsg(null);
       setNotice(null);
       setExporting(true);
@@ -11093,7 +11115,7 @@ ${parts.join("\n")}</g>`);
             if (err && err.name === "AbortError") return;
           }
         }
-        for (let i = 0; i < pages.length; i++) {
+        for (const i of visibleIndices(pages)) {
           setNotice(`Exporting ${label}: page ${i + 1} of ${pages.length}…`);
           const blob = await renderPageImageBlob(pages, i, pdfDocsRef, view.pageNumbers, format);
           const name = pageImageFileName(project.docTitle, i, pages.length, fmt.ext);
@@ -11128,7 +11150,7 @@ ${parts.join("\n")}</g>`);
       return notes;
     }
     async function handleExportPagesSvg(allPages) {
-      const indices = allPages ? pages.map((_, i) => i) : doc.selectedIdx !== null ? [doc.selectedIdx] : [];
+      const indices = allPages ? visibleIndices(pages) : doc.selectedIdx !== null ? [doc.selectedIdx] : [];
       if (!indices.length || exporting) return;
       setErrorMsg(null);
       setNotice(null);
@@ -11170,7 +11192,7 @@ ${parts.join("\n")}</g>`);
       }
     }
     async function handleSendToZineArranger() {
-      if (pages.length === 0 || exporting || sendingToArranger) return;
+      if (pages.length === 0 || exporting || sendingToArranger || noVisiblePages()) return;
       setErrorMsg(null);
       setSendingToArranger(true);
       try {
@@ -13908,6 +13930,12 @@ ${parts.join("\n")}</g>`);
       setSelectedIdx(atIndex);
       setSelectedPageIndices([]);
     }
+    function handleToggleHidden(idx) {
+      const targets = pagesActedOn(idx);
+      const allHidden = targets.every((i) => pages[i] && pages[i].hidden);
+      recordUndoCheckpoint();
+      setPages((prev) => prev.map((p, i) => targets.includes(i) ? { ...p, hidden: allHidden ? void 0 : true } : p));
+    }
     function handleDelete(idx) {
       recordUndoCheckpoint();
       setPages((prev) => removePagesKeepingStories(prev, [idx]));
@@ -13945,7 +13973,7 @@ ${parts.join("\n")}</g>`);
       setSelectedIdx((prevSel) => prevSel === null ? null : newIdxOf[prevSel]);
       setSelectedPageIndices((prevSel) => prevSel.map((oldIdx) => newIdxOf[oldIdx]));
     }
-    return { handleRotate, handleInsertBlank, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
+    return { handleRotate, handleInsertBlank, handleToggleHidden, handleDelete, handleDeleteSelectedPages, handleDeleteThumbnail, handleReorder };
   }
 
   // apps/ZEditor/src/io/fontEmbed.js
@@ -21220,11 +21248,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/sidebar/Thumbnail.jsx
-  function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, story, onContinueStory, dragHandlers }) {
+  function Thumbnail({ p, src, idx, isSelected, onSelect, onRotate, onDelete, story, onContinueStory, onToggleHidden, dragHandlers }) {
     return /* @__PURE__ */ React.createElement(
       "div",
       {
-        className: "ze-thumb" + (isSelected ? " is-selected" : ""),
+        className: "ze-thumb" + (isSelected ? " is-selected" : "") + (p.hidden ? " is-hidden" : ""),
         draggable: "true",
         onClick: (e) => onSelect(idx, e.metaKey || withTouchModifier("ctrl", e) ? "toggle" : withTouchModifier("shift", e) ? "range" : false),
         ...dragHandlers
@@ -21255,6 +21283,20 @@ ${parts.join("\n")}</g>`);
         "T+"
       )),
       /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-footer" }, /* @__PURE__ */ React.createElement("span", { className: "ze-thumb-num" }, idx + 1), /* @__PURE__ */ React.createElement("div", { className: "ze-thumb-actions" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          type: "button",
+          className: "log-btn ze-thumb-eye" + (p.hidden ? " is-on" : ""),
+          title: p.hidden ? "Hidden: not exported, printed or numbered. Click to show it again." : "Hide this page from Export PDF, printing and page numbers",
+          "aria-pressed": Boolean(p.hidden),
+          "aria-label": p.hidden ? "Show page" : "Hide page",
+          onClick: (e) => {
+            e.stopPropagation();
+            onToggleHidden(idx);
+          }
+        },
+        /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "none", stroke: "currentColor", strokeWidth: "1.9", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }), p.hidden && /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }))
+      ), /* @__PURE__ */ React.createElement(
         "button",
         {
           type: "button",
@@ -21290,7 +21332,7 @@ ${parts.join("\n")}</g>`);
   var SelectAllIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2", strokeDasharray: "3 2.5" }), /* @__PURE__ */ React.createElement("path", { d: "M8 12.5l3 3 5-6" }));
   var EDGE_SCROLL_ZONE = 44;
   var EDGE_SCROLL_SPEED = 4;
-  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout }) {
+  function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout, onToggleHidden }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
     const dragIndexRef = useRef32(null);
     const bodyRef = useRef32(null);
@@ -21374,6 +21416,7 @@ ${parts.join("\n")}</g>`);
         onSelect,
         story: storyStates ? storyStates[idx] : null,
         onContinueStory,
+        onToggleHidden,
         onRotate,
         onDelete,
         dragHandlers: dragHandlersFor(idx)
@@ -21640,7 +21683,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "df0b7fe"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f800adf"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -22048,6 +22091,7 @@ ${parts.join("\n")}</g>`);
         onNewDocClick: () => dialogs.openNewDocDialog(false),
         onInsertPdfClick: files.handleInsertPdfClick,
         onInsertBlank: pageOps.handleInsertBlank,
+        onToggleHidden: pageOps.handleToggleHidden,
         loading: status.loading
       }
     ), /* @__PURE__ */ React.createElement("div", { className: "ze-compose-area" }, selectedPage && /* @__PURE__ */ React.createElement(ToolBar, { selection, edits, view, zoom, dialogs }), /* @__PURE__ */ React.createElement("div", { className: "ze-ruler-frame" + (selectedPage && view.rulersOn ? " has-rulers" : "") }, selectedPage && view.rulersOn && /* @__PURE__ */ React.createElement(
@@ -22083,7 +22127,10 @@ ${parts.join("\n")}</g>`);
         pageFilter,
         onionGhostSrc: view.onionSkinOn ? onionGhostSrc : null,
         onionSkinOpacity: view.onionSkinOpacity,
-        pageNumberSpec: pageNumberSpec(view.pageNumbers, selectedIdx, pages.length),
+        pageNumberSpec: (() => {
+          const slot = visibleSlot(pages, selectedIdx);
+          return slot ? pageNumberSpec(view.pageNumbers, slot.index, slot.count) : null;
+        })(),
         tool,
         penColor: t.penColor,
         penWidth: t.penWidth,
