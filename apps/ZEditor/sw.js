@@ -21,6 +21,7 @@ const FILES = [
   "styles/layers.css",
   "styles/font-combobox.css",
   "styles/dialogs.css",
+  "styles/data.css",
   "styles/responsive.css",
   "styles/touch.css",
   "styles/display.css",

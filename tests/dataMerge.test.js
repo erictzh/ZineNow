@@ -1,5 +1,6 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
+import { checkMerge, fieldsUsedOnPage, mergeAnnotations } from "../apps/ZEditor/src/model/dataMerge/build.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -114,4 +115,24 @@ ok(detectSortType([{ y: "1999" }, { y: "2001" }], "y") === "number" && detectSor
 const tied = [{ c: "KL", n: "Zul" }, { c: "Penang", n: "Budi" }, { c: "KL", n: "Ana" }, { c: "Penang", n: "Citra" }];
 ok(sortRecords(tied, [{ column: "c" }, { column: "n", descending: true }]).map((r) => r.c + ":" + r.n).join() === "KL:Zul,KL:Ana,Penang:Citra,Penang:Budi", "sort by one field, then break ties by another (here descending)");
 ok(sortRecords(tied, "c").map((r) => r.n).join() === "Zul,Ana,Budi,Citra", "equal values keep their original order (stable)");
+// ---- Building merged pages from a template page
+const template = [
+  { id: 1, type: "text", text: "Dear {{title}} {{name|title}},", x: 10, y: 10, colorRuns: [{ start: 0, end: 4, color: "#ff0000" }] },
+  { id: 2, type: "text", text: "Fixed words", x: 10, y: 40 },
+  { id: 3, type: "text", text: "{{city}} {{nope}}", x: 10, y: 70, groupId: "g1" },
+  { id: 4, type: "rect", x: 0, y: 0, width: 5, height: 5, groupId: "g1" },
+  { id: 5, type: "text", text: "continues", threadFrom: 3 },
+];
+let nextId = 100, nextGroup = 50;
+const merged = mergeAnnotations(template, { title: "Dr.", name: "ana lopez", city: "Penang" }, { newId: () => nextId++, newGroupId: () => "g" + nextGroup++ });
+ok(merged.annotations.length === 5 && merged.annotations.map((a) => a.id).join() === "100,101,102,103,104", "every item gets a new id");
+ok(merged.annotations[0].text === "Dear Dr. Ana Lopez," && merged.annotations[0].colorRuns === undefined, "the text is filled, and styling that no longer lines up is dropped");
+ok(merged.annotations[1].text === "Fixed words" && merged.annotations[1] !== template[1] || merged.annotations[1].text === "Fixed words", "a box with no field is left as it is");
+ok(merged.annotations[2].groupId === merged.annotations[3].groupId && merged.annotations[2].groupId === "g50", "items that were grouped stay grouped, in a new group");
+ok(merged.annotations[4].threadFrom === 102, "threaded text follows the new ids");
+ok(merged.missing.join() === "nope" && merged.annotations[2].text === "Penang {{nope}}", "a field with no column stays visible and is reported");
+ok(template[0].id === 1 && template[0].text.includes("{{title}}"), "the template itself is not changed");
+ok(fieldsUsedOnPage(template).join() === "title,name,city,nope", "the fields a page uses");
+const chk = checkMerge(template, ["title", "name", "city"], [{ title: "Dr.", name: "A", city: "" }, { title: "", name: "B", city: "x" }]);
+ok(chk.missing.join() === "nope" && chk.emptyCounts.map((e) => e.field + e.count).join() === "title1,city1", "the check lists missing fields and how many records have an empty cell");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
