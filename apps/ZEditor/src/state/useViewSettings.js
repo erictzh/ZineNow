@@ -43,6 +43,9 @@ export function useViewSettings() {
   const [dataOrder, setDataOrder] = useState("file");
   const [dataPreviewOn, setDataPreviewOn] = useState(true);
   const [dataPanelOpen, setDataPanelOpen] = useState(false);
+  // Minimized (– button): the panel folds to a small bar at the bottom right; closed (× button) hides it. Neither is saved with the project.
+  const [dataMinimized, setDataMinimized] = useState(false);
+  const [layersMinimized, setLayersMinimized] = useState(false);
 
   // The part of these settings a saved project carries.
   function settingsForSave() {
@@ -88,7 +91,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
-    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
     settingsForSave, applySavedSettings,
   };
 }

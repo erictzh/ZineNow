@@ -155,7 +155,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, onClose, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -501,9 +501,14 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
               <path d="M14 11v6" />
             </svg>
           </button>
-          <button type="button" className="ze-guides-settings-btn" title="Minimize layers" aria-label="Minimize layers" onClick={onMinimize}>
+          <button type="button" className="ze-guides-settings-btn" title="Minimize to the bottom right" aria-label="Minimize layers" onClick={onMinimize}>
             <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
               <path d="M5 10h10" />
+            </svg>
+          </button>
+          <button type="button" className="ze-guides-settings-btn" title="Close (remembers its place and size)" aria-label="Close layers" onClick={onClose}>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <path d="M5 5l10 10M15 5L5 15" />
             </svg>
           </button>
         </span>

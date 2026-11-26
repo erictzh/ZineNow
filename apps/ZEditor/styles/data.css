@@ -1,8 +1,5 @@
 /* Data merge panel (Data button). A floating card at the left of the canvas. */
-.ze-data-panel { position: fixed; top: 96px; left: calc(var(--ze-sidebar-width, 240px) + 16px); width: 280px; max-height: calc(100vh - 140px); display: flex; flex-direction: column; background: var(--ui-bg-card); border: 1px solid var(--ui-border); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.2); z-index: 40; font-size: 13px; color: var(--ui-fg); background-color: var(--ui-bg);  }
-.ze-data-panel.is-sized { max-height: none; }
-.ze-data-panel { overflow: hidden; }
-.ze-data-head { cursor: move; user-select: none; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-weight: 600; border-bottom: 1px solid var(--ui-border); }
+.ze-data-panel { position: fixed; top: 128px; left: calc(var(--ze-sidebar-width, 240px) + 16px); width: 300px; height: clamp(300px, 40vh, calc(100vh - 150px)); display: flex; flex-direction: column; z-index: 15; overflow: hidden; background-color: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); font-size: 13px; color: var(--ui-fg); }
 .ze-data-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; }
 .ze-data-section { padding: 10px 0; border-bottom: 1px solid var(--ui-border); }
 .ze-data-section:last-child { border-bottom: 0; }
@@ -22,3 +19,9 @@
 .ze-data-num { width: 56px; }
 .ze-data-stepper { display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
 .ze-data-paste { width: 100%; box-sizing: border-box; margin-top: 6px; font-family: monospace; font-size: 12px; }
+
+/* Folded panels (Data, Layers): title bars at the bottom right. */
+.ze-panel-dock { position: fixed; bottom: 0; right: calc(var(--ze-format-panel-width) + 16px); display: flex; gap: 8px; z-index: 16; }
+.ze-panel-dock-item { display: flex; align-items: center; min-width: 170px; background-color: var(--ui-bg); border: 1px solid var(--ui-border); border-bottom: 0; border-radius: 8px 8px 0 0; box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.35); padding-right: 6px; }
+.ze-panel-dock-open { flex: 1; text-align: left; background: none; border: 0; border-bottom: 0; cursor: pointer; }
+.ze-panel-dock-item .ze-guides-settings-btn { border: 0; background: none; }

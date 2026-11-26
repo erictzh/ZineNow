@@ -88,13 +88,20 @@ export function DataPanel({ merge, view, hasPage }) {
         ...(size ? { width: size.width, height: Math.min(size.height, window.innerHeight - (position ? position.y : 96)) } : null),
       }}
     >
-      <div className="ze-data-head" ref={headRef} onMouseDown={startDrag}>
+      <div className="ze-format-panel-head ze-layers-head" ref={headRef} onMouseDown={startDrag}>
         <span>Data</span>
-        <button type="button" className="ze-guides-settings-btn" title="Minimize (the Data button in the top bar brings it back)" aria-label="Minimize the Data panel" onMouseDown={(e) => e.stopPropagation()} onClick={() => view.setDataPanelOpen(false)}>
+        <span className="ze-layers-head-actions" onMouseDown={(e) => e.stopPropagation()}>
+        <button type="button" className="ze-guides-settings-btn" title="Minimize to the bottom right" aria-label="Minimize the Data panel" onMouseDown={(e) => e.stopPropagation()} onClick={() => view.setDataMinimized(true)}>
           <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
             <path d="M5 10h10" />
           </svg>
         </button>
+          <button type="button" className="ze-guides-settings-btn" title="Close (remembers its place and size)" aria-label="Close the Data panel" onMouseDown={(e) => e.stopPropagation()} onClick={() => view.setDataPanelOpen(false)}>
+            <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+              <path d="M5 5l10 10M15 5L5 15" />
+            </svg>
+          </button>
+        </span>
       </div>
       <div className="ze-data-body">
         {!parsed && (
