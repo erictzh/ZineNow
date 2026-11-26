@@ -24,6 +24,8 @@ import { useZoom } from "../state/useZoom.js";
 import { useCanvasGrow } from "../state/useCanvasGrow.js";
 import { useGroupFiles } from "../state/useGroupFiles.js";
 import { useLayouts } from "../state/useLayouts.js";
+import { collectDocumentColors } from "../model/documentColors.js";
+import { DocumentColorsContext } from "./controls/ColorPicker.jsx";
 import { useGuides } from "../state/useGuides.js";
 import { bleedPt } from "../model/bleed.js";
 import { guideSnapTargets } from "../model/guideSet.js";
@@ -116,7 +118,13 @@ export function App() {
   const t = toolDefaults;
   React.useEffect(() => { if (selectedAnnId !== null || selectedAnnIds.length) guides.select(null); }, [selectedAnnId, selectedAnnIds.length]);
 
+  // The colour picker offers the colours this document already uses; it asks for them when it opens, from the latest pages.
+  const pagesRef = React.useRef(doc.pages);
+  pagesRef.current = doc.pages;
+  const documentColors = React.useCallback(() => collectDocumentColors(pagesRef.current), []);
+
   return (
+    <DocumentColorsContext.Provider value={documentColors}>
     <div className="ze-shell">
       <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} pageBleed={pageBleed} guideSet={guides} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
@@ -349,5 +357,6 @@ export function App() {
 
       <LiveFilterDefs pageFilter={pageFilter} />
     </div>
+    </DocumentColorsContext.Provider>
   );
 }
