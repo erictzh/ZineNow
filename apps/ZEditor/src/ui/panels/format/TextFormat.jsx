@@ -1,9 +1,10 @@
 // Format panel for a selected text box.
 
 import { ANGLE_CONTROL } from "../../../model/controls.js";
-import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, KERNING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, PARAGRAPH_CONTROLS, STRIKE_CONTROL, TEXT_EFFECTS, VERTICAL_CONTROL } from "../../../model/text/textControls.js";
+import { CASE_CONTROL, COLUMN_CONTROLS, COMPOSER_CONTROL, FIT_HEIGHT_CONTROL, HYPHENATE_CONTROL, JUSTIFY_LAST_CONTROL, KERNING_CONTROL, LEADING_CONTROL, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, PARAGRAPH_CONTROLS, STRIKE_CONTROL, TEXT_EFFECTS, TEXT_GRADIENT_EFFECT, VERTICAL_CONTROL } from "../../../model/text/textControls.js";
 import { ControlList } from "../../controls/ControlList.jsx";
 import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
+import { SelectInput } from "../../controls/inputs.jsx";
 import { EffectControls } from "../EffectControls.jsx";
 import { TextBasicSection } from "../TextBasicSection.jsx";
 import { TextPhotoFill } from "../TextPhotoFill.jsx";
@@ -29,6 +30,15 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, onOutlineText, tool
         fillAlphaSource={ann} onFillAlpha={patch}
         onChange={patch}
       />
+      {/* Fill: the letters' colour (set above) or a gradient from it to a second colour. The same setting as the old Gradient effect, now beside the colour. */}
+      <PanelSection id="text.fill" title="Fill" defaultOpen summary={ann.textGradient ? "Gradient" : undefined} onReset={() => patch({ ...resetPatch(TEXT_GRADIENT_EFFECT.controls), textGradient: false })}
+        hint="Solid color uses the Color above. Gradient fades from that color to the second color across the whole text box.">
+        <div className="ze-format-field">
+          <span className="ze-format-label">Fill</span>
+          <SelectInput options={[{ key: "solid", label: "Solid color" }, { key: "gradient", label: "Gradient" }]} value={ann.textGradient ? "gradient" : "solid"} onChange={(key) => patch({ textGradient: key === "gradient" })} />
+        </div>
+        {ann.textGradient && <ControlList controls={TEXT_GRADIENT_EFFECT.controls} source={ann} onPatch={patch} />}
+      </PanelSection>
       <PanelSection
         id="text.paragraph" title="Paragraph" onReset={() => patch(resetPatch(ALL_PARAGRAPH_CONTROLS))}
         hint="Justification, indents and paragraph spacing are set by one layout that the editor and Export share (paragraphs are split at each new line). Not used with Ransom, Curve or Stacked text."
@@ -57,7 +67,7 @@ export function TextFormat({ ann, onUpdate, onRasterizeText, onOutlineText, tool
       >
         <TextSpans ann={ann} patch={patch} fontOptions={fontOptions} setFontOptions={setFontOptions} />
       </PanelSection>
-      <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS} before={<TextPhotoFill ann={ann} patch={patch} />} beforeLabel={ann.fillSrc ? "Photo fill" : undefined} />
+      <EffectControls ann={ann} onPatch={patch} effects={TEXT_EFFECTS.filter((effect) => effect !== TEXT_GRADIENT_EFFECT)} before={<TextPhotoFill ann={ann} patch={patch} />} beforeLabel={ann.fillSrc ? "Photo fill" : undefined} />
       <PanelSection id="text.transform" title="Rotation" hint="Opacity and blend are in the Layers panel." onReset={() => patch(resetPatch([ANGLE_CONTROL]))}>
         <ControlList controls={[ANGLE_CONTROL]} source={ann} onPatch={patch} />
       </PanelSection>
