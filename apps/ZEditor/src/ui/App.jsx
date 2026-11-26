@@ -187,7 +187,7 @@ export function App() {
           <div className="preview-pane" ref={zoom.previewPaneRef}>
             <div className="preview-canvas-wrapper">
               <ComposeCanvas
-                mergeRecord={dataMerge.previewRecord}
+                mergePreview={dataMerge.previewFill}
                 zoom={zoom.zoomPercent / 100}
                 viewKey={zoom.viewKey}
                 rulerUnit={view.rulerUnit}

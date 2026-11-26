@@ -14961,6 +14961,22 @@ ${parts.join("\n")}</g>`);
     const [dataOrder, setDataOrder] = useState15("file");
     const [dataPreviewOn, setDataPreviewOn] = useState15(true);
     const [dataPanelOpen, setDataPanelOpen] = useState15(false);
+    const [dataAdvanced, setDataAdvancedState] = useState15(() => {
+      try {
+        return localStorage.getItem("zeditor.dataAdvanced") === "1";
+      } catch {
+        return false;
+      }
+    });
+    const setDataAdvanced = (on) => {
+      setDataAdvancedState(on);
+      try {
+        localStorage.setItem("zeditor.dataAdvanced", on ? "1" : "0");
+      } catch {
+      }
+    };
+    const [dataGroupBy, setDataGroupBy] = useState15("");
+    const [dataRepeatOthers, setDataRepeatOthers] = useState15(true);
     const [dataMinimized, setDataMinimized] = useState15(false);
     const [layersMinimized, setLayersMinimized] = useState15(false);
     function settingsForSave() {
@@ -14987,7 +15003,9 @@ ${parts.join("\n")}</g>`);
         svgOutlineText,
         dataSource,
         dataOrder,
-        dataPreviewOn
+        dataPreviewOn,
+        dataGroupBy,
+        dataRepeatOthers
       };
     }
     function applySavedSettings(s) {
@@ -15012,6 +15030,8 @@ ${parts.join("\n")}</g>`);
       setDataSource(s.dataSource && typeof s.dataSource.text === "string" ? { name: String(s.dataSource.name || "data.csv"), text: s.dataSource.text } : null);
       setDataOrder(["file", "id-asc", "id-desc"].includes(s.dataOrder) ? s.dataOrder : "file");
       setDataPreviewOn(s.dataPreviewOn !== false);
+      setDataGroupBy(typeof s.dataGroupBy === "string" ? s.dataGroupBy : "");
+      setDataRepeatOthers(s.dataRepeatOthers !== false);
       setRulerGuides(normalizeGuides(s.rulerGuides));
       setGuideColor(GUIDE_COLORS.some((c) => c.key === s.guideColor) ? s.guideColor : DEFAULT_GUIDE_COLOR);
     }
@@ -15070,6 +15090,12 @@ ${parts.join("\n")}</g>`);
       setDataPreviewOn,
       dataPanelOpen,
       setDataPanelOpen,
+      dataAdvanced,
+      setDataAdvanced,
+      dataGroupBy,
+      setDataGroupBy,
+      dataRepeatOthers,
+      setDataRepeatOthers,
       dataMinimized,
       setDataMinimized,
       layersMinimized,
@@ -17558,123 +17584,6 @@ ${parts.join("\n")}</g>`);
     return { canvasRef, canvasSize };
   }
 
-  // apps/ZEditor/src/model/dataMerge/fields.js
-  var MONTHS = {
-    en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
-    ms: ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
-  };
-  var MARK = /\{\{\s*([^{}|]+?)\s*((?:\|[^{}]*)?)\}\}/g;
-  function formatDate(text, pattern, lang = "en") {
-    const m = /^\s*(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?\s*$/.exec(text);
-    if (!m) return text;
-    const year = Number(m[1]), month = m[2] ? Number(m[2]) : 1, day = m[3] ? Number(m[3]) : 1;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
-    const names = MONTHS[lang] || MONTHS.en;
-    return pattern.replace(/yyyy|yy|MMMM|MMM|MM|M|dd|d/g, (t) => ({
-      yyyy: String(year),
-      yy: String(year).slice(-2).padStart(2, "0"),
-      MMMM: names[month - 1],
-      MMM: names[month - 1].slice(0, 3),
-      MM: String(month).padStart(2, "0"),
-      M: String(month),
-      dd: String(day).padStart(2, "0"),
-      d: String(day)
-    })[t]);
-  }
-  var title = (s) => s.toLowerCase().replace(/(^|[\s\-'’(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
-  function applyFilter(value, spec, lang) {
-    const colon = spec.indexOf(":");
-    const name = (colon < 0 ? spec : spec.slice(0, colon)).trim().toLowerCase();
-    const arg = colon < 0 ? "" : spec.slice(colon + 1);
-    switch (name) {
-      case "upper":
-        return value.toUpperCase();
-      case "lower":
-        return value.toLowerCase();
-      case "title":
-        return title(value);
-      case "trim":
-        return value.trim();
-      case "first":
-        return value.trim().split(/\s+/)[0] || "";
-      case "number": {
-        const n = Number(value.replace(/,/g, ""));
-        return value.trim() !== "" && Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 20 }) : value;
-      }
-      case "pad":
-        return value.padStart(Math.max(0, Number(arg) || 0), "0");
-      case "date":
-        return formatDate(value, arg.trim() || "d MMMM yyyy", lang);
-      case "default":
-        return value.trim() === "" ? arg : value;
-      default:
-        return value;
-    }
-  }
-  function fieldsIn(text) {
-    const out = [];
-    for (const m of String(text).matchAll(MARK)) if (!out.includes(m[1])) out.push(m[1]);
-    return out;
-  }
-  function fillTemplate(text, record, options = {}) {
-    const used = [], missing = [], empty = [];
-    const filled = String(text).replace(MARK, (whole, field, filters) => {
-      if (!used.includes(field)) used.push(field);
-      if (!Object.prototype.hasOwnProperty.call(record, field)) {
-        if (!missing.includes(field)) missing.push(field);
-        return whole;
-      }
-      let value = String(record[field]);
-      if (value.trim() === "" && !empty.includes(field)) empty.push(field);
-      for (const f of filters.split("|").slice(1)) value = applyFilter(value, f, options.lang);
-      return value;
-    });
-    return { text: filled, used, missing, empty };
-  }
-
-  // apps/ZEditor/src/model/dataMerge/build.js
-  function fieldsUsedOnPage(annotations) {
-    const out = [];
-    for (const a of annotations || []) {
-      if (a.type !== "text" || !a.text) continue;
-      for (const f of fieldsIn(a.text)) if (!out.includes(f)) out.push(f);
-    }
-    return out;
-  }
-  function fillTextItem(ann, record, options) {
-    if (ann.type !== "text" || !ann.text || !ann.text.includes("{{")) return { ann, result: null };
-    const result2 = fillTemplate(ann.text, record, options);
-    if (result2.text === ann.text) return { ann, result: result2 };
-    const filled = { ...ann, text: result2.text };
-    if (filled.colorRuns && filled.colorRuns.length) filled.colorRuns = void 0;
-    return { ann: filled, result: result2 };
-  }
-  function mergeAnnotations(annotations, record, { newId: newId2, newGroupId, lang } = {}) {
-    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
-    for (const a of annotations) ids.set(a.id, newId2());
-    const missing = [];
-    const out = annotations.map((a) => {
-      const { ann, result: result2 } = fillTextItem(a, record, { lang });
-      if (result2) {
-        for (const f of result2.missing) if (!missing.includes(f)) missing.push(f);
-      }
-      const copy = { ...ann, id: ids.get(a.id) };
-      if (copy.groupId) {
-        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
-        copy.groupId = groups.get(copy.groupId);
-      }
-      if (copy.threadFrom != null && ids.has(copy.threadFrom)) copy.threadFrom = ids.get(copy.threadFrom);
-      return copy;
-    });
-    return { annotations: out, missing };
-  }
-  function checkMerge(annotations, headers, records) {
-    const used = fieldsUsedOnPage(annotations);
-    const missing = used.filter((f) => !headers.includes(f));
-    const emptyCounts = used.filter((f) => headers.includes(f)).map((f) => ({ field: f, count: records.filter((r) => String(r[f] === void 0 ? "" : r[f]).trim() === "").length })).filter((e) => e.count > 0);
-    return { used, missing, emptyCounts };
-  }
-
   // apps/ZEditor/src/ui/canvas/ComposeCanvas.jsx
   var SNAP_PX = 6;
   var { useState: useState22, useRef: useRef21, useEffect: useEffect18, useLayoutEffect: useLayoutEffect4 } = React;
@@ -17732,7 +17641,7 @@ ${parts.join("\n")}</g>`);
     zoom,
     rulerUnit,
     viewKey,
-    mergeRecord
+    mergePreview
   }) {
     const { canvasRef, canvasSize } = usePageBackground(page, pdfDocsRef, pageFilter);
     const layerRef = useRef21(null);
@@ -18076,7 +17985,7 @@ ${parts.join("\n")}</g>`);
       return /* @__PURE__ */ React.createElement("div", { className: "preview-empty" }, "No pages yet — load a PDF or start a new document to get started.");
     }
     const withPreview = magicPreview ? annotations.map((a) => a.id === magicPreview.annId ? { ...a, src: magicPreview.src } : a) : annotations;
-    const pageViews = resolvePageText(mergeRecord ? withPreview.map((a) => a.id === editingAnnId ? a : fillTextItem(a, mergeRecord, { lang: "en" }).ann) : withPreview);
+    const pageViews = resolvePageText(mergePreview ? mergePreview(withPreview, editingAnnId) : withPreview);
     const showHandlesFor = (a) => (tool === "select" || a.id === editingAnnId) && a.id === selectedAnnId && selectedAnnIds.length === 0;
     const selectionTurn = selectionTurnFor({ tool, annotations, selectedAnnId, selectedAnnIds, editingAnnId });
     const cursorClass = tool === "text" ? "ze-tool-text" : tool === "pen" || tool === "highlighter" || tool === "rect" || tool === "ellipse" || tool === "marquee" || measuring ? "ze-tool-draw" : softErasing || magicErasing ? "ze-tool-soft-erase" : (
@@ -21733,6 +21642,123 @@ ${parts.join("\n")}</g>`);
     ), hasSelection && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-touch-btn ze-touch-danger", title: "Delete", "aria-label": "Delete", onMouseDown: keep, onClick: () => pressKey("Delete") }, /* @__PURE__ */ React.createElement(Icon, null, /* @__PURE__ */ React.createElement("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))));
   }
 
+  // apps/ZEditor/src/model/dataMerge/fields.js
+  var MONTHS = {
+    en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    ms: ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
+  };
+  var MARK = /\{\{\s*([^{}|]+?)\s*((?:\|[^{}]*)?)\}\}/g;
+  function formatDate(text, pattern, lang = "en") {
+    const m = /^\s*(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?\s*$/.exec(text);
+    if (!m) return text;
+    const year = Number(m[1]), month = m[2] ? Number(m[2]) : 1, day = m[3] ? Number(m[3]) : 1;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
+    const names = MONTHS[lang] || MONTHS.en;
+    return pattern.replace(/yyyy|yy|MMMM|MMM|MM|M|dd|d/g, (t) => ({
+      yyyy: String(year),
+      yy: String(year).slice(-2).padStart(2, "0"),
+      MMMM: names[month - 1],
+      MMM: names[month - 1].slice(0, 3),
+      MM: String(month).padStart(2, "0"),
+      M: String(month),
+      dd: String(day).padStart(2, "0"),
+      d: String(day)
+    })[t]);
+  }
+  var title = (s) => s.toLowerCase().replace(/(^|[\s\-'’(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  function applyFilter(value, spec, lang) {
+    const colon = spec.indexOf(":");
+    const name = (colon < 0 ? spec : spec.slice(0, colon)).trim().toLowerCase();
+    const arg = colon < 0 ? "" : spec.slice(colon + 1);
+    switch (name) {
+      case "upper":
+        return value.toUpperCase();
+      case "lower":
+        return value.toLowerCase();
+      case "title":
+        return title(value);
+      case "trim":
+        return value.trim();
+      case "first":
+        return value.trim().split(/\s+/)[0] || "";
+      case "number": {
+        const n = Number(value.replace(/,/g, ""));
+        return value.trim() !== "" && Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 20 }) : value;
+      }
+      case "pad":
+        return value.padStart(Math.max(0, Number(arg) || 0), "0");
+      case "date":
+        return formatDate(value, arg.trim() || "d MMMM yyyy", lang);
+      case "default":
+        return value.trim() === "" ? arg : value;
+      default:
+        return value;
+    }
+  }
+  function fieldsIn(text) {
+    const out = [];
+    for (const m of String(text).matchAll(MARK)) if (!out.includes(m[1])) out.push(m[1]);
+    return out;
+  }
+  function fillTemplate(text, record, options = {}) {
+    const used = [], missing = [], empty = [];
+    const filled = String(text).replace(MARK, (whole, field, filters) => {
+      if (!used.includes(field)) used.push(field);
+      if (!Object.prototype.hasOwnProperty.call(record, field)) {
+        if (!missing.includes(field)) missing.push(field);
+        return whole;
+      }
+      let value = String(record[field]);
+      if (value.trim() === "" && !empty.includes(field)) empty.push(field);
+      for (const f of filters.split("|").slice(1)) value = applyFilter(value, f, options.lang);
+      return value;
+    });
+    return { text: filled, used, missing, empty };
+  }
+
+  // apps/ZEditor/src/model/dataMerge/build.js
+  function fieldsUsedOnPage(annotations) {
+    const out = [];
+    for (const a of annotations || []) {
+      if (a.type !== "text" || !a.text) continue;
+      for (const f of fieldsIn(a.text)) if (!out.includes(f)) out.push(f);
+    }
+    return out;
+  }
+  function fillTextItem(ann, record, options) {
+    if (ann.type !== "text" || !ann.text || !ann.text.includes("{{")) return { ann, result: null };
+    const result2 = fillTemplate(ann.text, record, options);
+    if (result2.text === ann.text) return { ann, result: result2 };
+    const filled = { ...ann, text: result2.text };
+    if (filled.colorRuns && filled.colorRuns.length) filled.colorRuns = void 0;
+    return { ann: filled, result: result2 };
+  }
+  function mergeAnnotations(annotations, record, { newId: newId2, newGroupId, lang } = {}) {
+    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
+    for (const a of annotations) ids.set(a.id, newId2());
+    const missing = [];
+    const out = annotations.map((a) => {
+      const { ann, result: result2 } = fillTextItem(a, record, { lang });
+      if (result2) {
+        for (const f of result2.missing) if (!missing.includes(f)) missing.push(f);
+      }
+      const copy = { ...ann, id: ids.get(a.id) };
+      if (copy.groupId) {
+        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
+        copy.groupId = groups.get(copy.groupId);
+      }
+      if (copy.threadFrom != null && ids.has(copy.threadFrom)) copy.threadFrom = ids.get(copy.threadFrom);
+      return copy;
+    });
+    return { annotations: out, missing };
+  }
+  function checkMerge(annotations, headers, records) {
+    const used = fieldsUsedOnPage(annotations);
+    const missing = used.filter((f) => !headers.includes(f));
+    const emptyCounts = used.filter((f) => headers.includes(f)).map((f) => ({ field: f, count: records.filter((r) => String(r[f] === void 0 ? "" : r[f]).trim() === "").length })).filter((e) => e.count > 0);
+    return { used, missing, emptyCounts };
+  }
+
   // apps/ZEditor/src/model/dataMerge/csv.js
   var DELIMITERS = [",", ";", "	", "|"];
   function guessDelimiter(text) {
@@ -21835,6 +21861,117 @@ ${parts.join("\n")}</g>`);
       records.push(rec);
     });
     return { headers, records, delimiter: d, problems };
+  }
+
+  // apps/ZEditor/src/model/dataMerge/groups.js
+  var SHOW_ON = [
+    { key: "every", label: "Every page" },
+    { key: "first", label: "First page of the group" },
+    { key: "continuation", label: "Continuation pages only" },
+    { key: "last", label: "Last page only" }
+  ];
+  var slotKey = (a) => a.groupId || "i" + a.id;
+  var ROW_TOLERANCE = 15;
+  function dataSlots(annotations) {
+    const found = /* @__PURE__ */ new Map();
+    for (const a of annotations || []) {
+      if (!a.dataBlock) continue;
+      const key = slotKey(a), x = Number(a.x) || 0, y = Number(a.y) || 0;
+      const have = found.get(key);
+      if (!have) found.set(key, { key, x, y });
+      else {
+        have.x = Math.min(have.x, x);
+        have.y = Math.min(have.y, y);
+      }
+    }
+    const list = [...found.values()].sort((p, q) => p.y - q.y || p.x - q.x);
+    const rows = [];
+    for (const item of list) {
+      const row = rows[rows.length - 1];
+      if (row && item.y - row.y <= ROW_TOLERANCE) row.items.push(item);
+      else rows.push({ y: item.y, items: [item] });
+    }
+    return rows.flatMap((r) => r.items.sort((p, q) => p.x - q.x)).map((i) => i.key);
+  }
+  function groupRecords(records, column) {
+    if (!column) return [{ value: "", records }];
+    const groups = /* @__PURE__ */ new Map();
+    for (const r of records) {
+      const value = String(r[column] === void 0 ? "" : r[column]).trim();
+      if (!groups.has(value)) groups.set(value, { value, records: [] });
+      groups.get(value).records.push(r);
+    }
+    return [...groups.values()];
+  }
+  function planPages(records, { slotCount, groupBy }) {
+    const slots = Math.max(1, slotCount || 1);
+    const pages = [];
+    for (const group of groupRecords(records, groupBy)) {
+      if (!group.records.length) continue;
+      const count = Math.max(1, Math.ceil(group.records.length / slots));
+      for (let p = 0; p < count; p++) {
+        const slice = group.records.slice(p * slots, (p + 1) * slots);
+        pages.push({
+          groupValue: group.value,
+          groupRecord: group.records[0],
+          recordsInGroup: group.records.length,
+          pageInGroup: p + 1,
+          pagesInGroup: count,
+          slotRecords: Array.from({ length: slots }, (_, k) => slice[k] || null)
+        });
+      }
+    }
+    return pages;
+  }
+  function showsOnPage(showOn, plan, repeatOthers) {
+    const first = plan.pageInGroup === 1, last = plan.pageInGroup === plan.pagesInGroup;
+    if (showOn === "first") return first;
+    if (showOn === "continuation") return !first;
+    if (showOn === "last") return last;
+    if (showOn === "every") return true;
+    return repeatOthers !== false || first;
+  }
+  function mergeGroupPage(annotations, plan, { newId: newId2, newGroupId, lang, repeatOthers } = {}) {
+    const slots = dataSlots(annotations);
+    const vars = { ...plan.groupRecord, "page in group": String(plan.pageInGroup), "pages in group": String(plan.pagesInGroup), "records in group": String(plan.recordsInGroup) };
+    const chosen = [];
+    const missing = [];
+    for (const a of annotations) {
+      let record = vars;
+      if (a.dataBlock) {
+        record = plan.slotRecords[slots.indexOf(slotKey(a))];
+        if (!record) continue;
+      } else if (!showsOnPage(a.showOn, plan, repeatOthers)) continue;
+      const { ann, result: result2 } = fillTextItem(a, record, { lang });
+      if (result2) {
+        for (const f of result2.missing) if (!missing.includes(f)) missing.push(f);
+      }
+      chosen.push(ann);
+    }
+    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
+    for (const a of chosen) ids.set(a.id, newId2());
+    const out = chosen.map((a) => {
+      const copy = { ...a, id: ids.get(a.id), dataBlock: void 0, showOn: void 0 };
+      if (copy.groupId) {
+        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
+        copy.groupId = groups.get(copy.groupId);
+      }
+      if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : void 0;
+      return copy;
+    });
+    return { annotations: out, missing };
+  }
+  function previewAnnotations(annotations, records, start, editingId, lang) {
+    const slots = dataSlots(annotations);
+    const counters = { ...records[start], "page in group": "1", "pages in group": "1", "records in group": String(records.length) };
+    return annotations.map((a) => {
+      if (a.id === editingId) return a;
+      if (a.dataBlock) {
+        const record = records[start + slots.indexOf(slotKey(a))];
+        return record ? fillTextItem(a, record, { lang }).ann : { ...a, hidden: true };
+      }
+      return fillTextItem(a, counters, { lang }).ann;
+    });
   }
 
   // apps/ZEditor/src/model/dataMerge/records.js
@@ -21971,9 +22108,13 @@ ${parts.join("\n")}</g>`);
     }, [parsed, view.dataOrder, idColumn]);
     const count = records.length;
     const shownNo = Math.min(recordNo, Math.max(0, count - 1));
-    const previewRecord = view.dataPreviewOn && count > 0 ? records[shownNo] : null;
+    const showPreview = view.dataPreviewOn && count > 0;
+    const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en") : null;
     const page = pages[selectedIdx] || null;
     const templatePage = page && page.mergedFrom !== void 0 ? pages.find((p) => p.key === page.mergedFrom) || null : page;
+    const slotCount = templatePage ? dataSlots(templatePage.annotations || []).length : 0;
+    const blockMode = slotCount > 0;
+    const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
     const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
     function connect(name, text) {
       const result2 = parseCsv(text);
@@ -22005,10 +22146,16 @@ ${parts.join("\n")}</g>`);
       edits.handleAddText(60, 60, 320, 0);
       edits.handleUpdateAnnotation(id, { text: token });
     }
+    const VIRTUAL_FIELDS = ["page in group", "pages in group", "records in group"];
     function usedCheck(from, to) {
       if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
       const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-      return checkMerge(templatePage.annotations || [], headers, chosen);
+      const result2 = checkMerge(templatePage.annotations || [], headers, chosen);
+      return { ...result2, missing: result2.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)) };
+    }
+    function plannedPages(from, to) {
+      const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
+      return blockMode ? planPages(chosen, { slotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
     }
     function createPages({ from, to, hideTemplate }) {
       if (!templatePage || count === 0) return 0;
@@ -22017,9 +22164,10 @@ ${parts.join("\n")}</g>`);
       history.recordUndoCheckpoint();
       const newId2 = () => nextAnnIdRef.current++;
       const newGroupId = () => "g" + nextAnnIdRef.current++;
-      const made = chosen.map((i) => {
-        const { annotations } = mergeAnnotations(templatePage.annotations || [], records[i], { newId: newId2, newGroupId, lang: "en" });
-        const copy = { ...templatePage, key: nextKeyRef.current++, annotations, mergedFrom: templatePage.key, mergeRow: i + 1, hidden: void 0 };
+      const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, groupBy }) : null;
+      const made = (plans || chosen).map((item, n) => {
+        const merged = plans ? mergeGroupPage(templatePage.annotations || [], item, { newId: newId2, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers }) : mergeAnnotations(templatePage.annotations || [], records[item], { newId: newId2, newGroupId, lang: "en" });
+        const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: void 0 };
         if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
         return copy;
       });
@@ -22037,6 +22185,28 @@ ${parts.join("\n")}</g>`);
       setMessage(made.length + (made.length === 1 ? " page made." : " pages made."));
       return made.length;
     }
+    const selectedIds = selection.selectedAnnotationIds();
+    const selectedItems = page ? (page.annotations || []).filter((a) => selectedIds.includes(a.id)) : [];
+    const selectedGroups = new Set(selectedItems.map((a) => a.groupId).filter(Boolean));
+    const blockTargets = page ? (page.annotations || []).filter((a) => selectedGroups.has(a.groupId)) : [];
+    const selected = {
+      count: selectedItems.length,
+      grouped: selectedItems.length > 0 && selectedItems.every((a) => a.groupId),
+      isBlock: blockTargets.length > 0 && blockTargets.every((a) => a.dataBlock),
+      showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
+      hasBlock: selectedItems.some((a) => a.dataBlock)
+    };
+    function markDataBlock(on) {
+      if (!selected.grouped) {
+        setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block.");
+        return;
+      }
+      setMessage("");
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedGroups.has(a.groupId) ? { ...a, dataBlock: on || void 0, showOn: on ? void 0 : a.showOn } : a));
+    }
+    function setShowOn(value) {
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? void 0 : value } : a));
+    }
     return {
       parsed,
       headers,
@@ -22045,7 +22215,14 @@ ${parts.join("\n")}</g>`);
       idColumn,
       recordNo: shownNo,
       setRecordNo,
-      previewRecord,
+      previewFill,
+      slotCount,
+      blockMode,
+      groupBy,
+      selected,
+      markDataBlock,
+      setShowOn,
+      plannedPages,
       message,
       setMessage,
       templatePage,
@@ -22099,7 +22276,7 @@ ${parts.join("\n")}</g>`);
     const { parsed, headers, count, idColumn } = merge;
     const from = Number(range.from) || void 0, to = Number(range.to) || void 0;
     const check = merge.usedCheck(from, to);
-    const chosenCount = count === 0 ? 0 : Math.min(count, to || count) - Math.max(1, from || 1) + 1;
+    const chosenCount = count === 0 ? 0 : merge.plannedPages(from, to).length;
     async function onFile(e) {
       const file = e.target.files && e.target.files[0];
       e.target.value = "";
@@ -22171,7 +22348,7 @@ ${parts.join("\n")}</g>`);
           setPasted("");
           setPasting(false);
         }
-      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id.")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make pages"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Design one page with fields in it, then make a page for each row."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (it is skipped when exporting)"))), merge.message && /* @__PURE__ */ React.createElement("p", { className: "ze-data-note", role: "status" }, merge.message)),
+      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id.")), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Data blocks ", /* @__PURE__ */ React.createElement("span", { className: "ze-data-tag" }, "Advanced")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !hasPage || merge.selected.count === 0, onClick: () => merge.markDataBlock(!merge.selected.isBlock) }, merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."), merge.blockMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Group by", " ", /* @__PURE__ */ React.createElement("select", { value: merge.groupBy, onChange: (e) => view.setDataGroupBy(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "No grouping"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataRepeatOthers, onChange: (e) => view.setDataRepeatOthers(e.target.checked) }), " Repeat non-data items on the other pages")), merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected item shows on", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.showOn, onChange: (e) => merge.setShowOn(e.target.value) }, merge.selected.showOn === "" && /* @__PURE__ */ React.createElement("option", { value: "" }, "Mixed"), SHOW_ON.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label))))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make pages"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Design one page with fields in it, then make a page for each row."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (it is skipped when exporting)"))), merge.message && /* @__PURE__ */ React.createElement("p", { className: "ze-data-note", role: "status" }, merge.message), parsed && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => view.setDataAdvanced(!view.dataAdvanced) }, view.dataAdvanced ? "Hide advanced options" : "Show advanced options")),
       parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-foot" }, check.missing.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "The page uses ", check.missing.map((f) => "{{" + f + "}}").join(", "), ", but the file has no such column."), check.emptyCounts.map((e) => /* @__PURE__ */ React.createElement("p", { key: e.field, className: "ze-data-warn" }, e.count, " of the chosen rows have nothing in “", e.field, "”.")), check.used.length === 0 && hasPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "No field is used on this page yet."), merge.earlierCount > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.earlierCount, " page", merge.earlierCount === 1 ? "" : "s", " made from this page earlier will be replaced."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary ze-data-wide", disabled: !hasPage || chosenCount < 1 || check.used.length === 0, onClick: make }, confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")), merge.onGeneratedPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "This page was made by a merge. Edit the page you designed, then make the pages again.")),
       EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     );
@@ -22287,7 +22464,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "c8e98df"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "527b728"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -22719,7 +22896,7 @@ ${parts.join("\n")}</g>`);
     ), /* @__PURE__ */ React.createElement("div", { className: "preview-pane", ref: zoom.previewPaneRef }, /* @__PURE__ */ React.createElement("div", { className: "preview-canvas-wrapper" }, /* @__PURE__ */ React.createElement(
       ComposeCanvas,
       {
-        mergeRecord: dataMerge.previewRecord,
+        mergePreview: dataMerge.previewFill,
         zoom: zoom.zoomPercent / 100,
         viewKey: zoom.viewKey,
         rulerUnit: view.rulerUnit,

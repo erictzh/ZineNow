@@ -15,7 +15,18 @@
 - Under the panel you are told if the page uses a field the file has no column for, or if some rows are empty in a field.
 - A field can have a **filter**: `{{name|upper}}`, `{{name|title}}`, `{{price|number}}`, `{{date|date:d MMMM yyyy}}`, `{{city|default:Malaysia}}`. Also `lower`, `trim`, `first`, `pad:3`.
 - One undo step undoes the whole merge.
-- Not yet: pictures from a folder, several cards on one sheet, grouping rows, QR codes.
+- Not yet: pictures from a folder, QR codes, a grid helper for labels (you copy the data block yourself).
+
+## Advanced: data blocks and groups
+
+At the bottom of the Data panel, **Show advanced options** switches this on (remembered in your browser). Basic stays as it is until you do.
+
+- A **data block** is a group of items that shows **one record** (a photo, a name, a role). Select its items, group them (**Ctrl+G**), then **Mark the selected group as a data block**. Copy the block as many times as you want on the page: each copy is a **slot**, filled in reading order (rows from the top, each left to right) with the next record. 10 records with 5 slots make 2 pages; empty slots on the last page are left out.
+- Everything else on the page is a **non-data item**. Fields in it show the group's first row, plus `{{page in group}}`, `{{pages in group}}` and `{{records in group}}`.
+- **Group by** a column (for example `band`): each value starts on a new page, then fills its slots. Without it, records just fill the blocks page after page.
+- **Repeat non-data items on the other pages** (ticked by default): the title, footer, logo and so on show on every page of a group. Unticked, they show on the group's first page only.
+- **Selected item shows on**: for one non-data item, choose *Every page*, *First page of the group*, *Continuation pages only* or *Last page only*. It overrides the tick box for that item.
+- The preview shows the chosen row in the first block, the following rows in the next blocks, and hides blocks with no record left.
 
 ## How it works
 
@@ -28,5 +39,7 @@
 `model/dataMerge/fields.js` (`fillTemplate`) replaces each `{{field}}` with the row's cell, applying filters. A field with no column stays visible as written. `model/dataMerge/build.js` (`mergeAnnotations`) copies a page's items with new ids (groups and linked text follow), filling the text boxes. A box whose length changes loses letter-by-letter colouring, which no longer lines up.
 
 ### Pages
+
+`model/dataMerge/groups.js` (Advanced) finds the slots (`dataSlots`), groups the records (`groupRecords`), plans the pages (`planPages`) and fills one (`mergeGroupPage`; `showsOnPage` decides Show on). A data block's items carry `dataBlock: true` and a non-data item may carry `showOn`; made pages carry neither.
 
 `state/useDataMerge.js` keeps the parsed rows, the order and the preview row. Made pages carry `mergedFrom` (the designed page's key) and `mergeRow`; that is how a re-merge finds the pages to replace. The preview is only drawn (`ComposeCanvas` `mergeRecord`); the page's own text is never changed by it.

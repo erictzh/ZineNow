@@ -1,6 +1,7 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
 import { checkMerge, fieldsUsedOnPage, mergeAnnotations } from "../apps/ZEditor/src/model/dataMerge/build.js";
+import { dataSlots, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -135,4 +136,38 @@ ok(template[0].id === 1 && template[0].text.includes("{{title}}"), "the template
 ok(fieldsUsedOnPage(template).join() === "title,name,city,nope", "the fields a page uses");
 const chk = checkMerge(template, ["title", "name", "city"], [{ title: "Dr.", name: "A", city: "" }, { title: "", name: "B", city: "x" }]);
 ok(chk.missing.join() === "nope" && chk.emptyCounts.map((e) => e.field + e.count).join() === "title1,city1", "the check lists missing fields and how many records have an empty cell");
+// ---- Data blocks and group pages (Advanced)
+const band = (n, v) => Array.from({ length: n }, (_, i) => ({ band: v, "first name": v + i }));
+const bandPeople = [...band(10, "Black Flags"), ...band(3, "Red Wolves")];
+const grouped = groupRecords(bandPeople, "band");
+ok(grouped.length === 2 && grouped[0].records.length === 10 && grouped[1].value === "Red Wolves", "records are grouped by a column, in order of first appearance");
+ok(groupRecords(bandPeople, "").length === 1, "no Group by: one group");
+const plan = planPages(bandPeople, { slotCount: 5, groupBy: "band" });
+ok(plan.length === 3 && plan.map((p) => p.pageInGroup + "/" + p.pagesInGroup).join() === "1/2,2/2,1/1", "10 members with 5 slots make 2 pages, 3 members make 1");
+ok(plan[1].slotRecords.map((r) => r["first name"]).join() === "Black Flags5,Black Flags6,Black Flags7,Black Flags8,Black Flags9", "page 2 starts at the 6th member");
+ok(plan[2].slotRecords.filter(Boolean).length === 3 && plan[2].slotRecords[3] === null, "a short last page leaves empty slots");
+ok(planPages(bandPeople, { slotCount: 5 }).length === 3 && planPages([], { slotCount: 5 }).length === 0, "no group: records fill pages in order; no records, no pages");
+const gpage = [
+  { id: 1, type: "text", text: "{{band}}", x: 10, y: 5 },
+  { id: 2, type: "text", text: "{{band}} (cont.)", x: 10, y: 5, showOn: "continuation" },
+  { id: 3, type: "text", text: "{{first name}}", x: 10, y: 50, groupId: "c2", dataBlock: true },
+  { id: 4, type: "text", text: "{{first name}}", x: 10, y: 20, groupId: "c1", dataBlock: true },
+  { id: 5, type: "text", text: "{{first name}}", x: 200, y: 20, groupId: "c3", dataBlock: true },
+  { id: 6, type: "text", text: "Page {{page in group}} of {{pages in group}}", x: 10, y: 290 },
+];
+ok(dataSlots(gpage).join() === "c1,c3,c2", "slots fill rows from the top, each left to right");
+let n = 100;
+const gp = (pl, rep) => mergeGroupPage(gpage, pl, { newId: () => n++, newGroupId: () => "g" + n++, repeatOthers: rep }).annotations;
+const small = planPages(bandPeople, { slotCount: 3, groupBy: "band" });
+const p1 = gp(small[0], true), p2 = gp(small[1], true);
+ok(p1.length === 5 && p1[0].text === "Black Flags", "first page: title, three blocks, counters");
+ok(!p1.some((a) => a.text === "Black Flags (cont.)") && p2.some((a) => a.text === "Black Flags (cont.)"), "Continuation only shows from page 2");
+ok(p1.every((a) => a.dataBlock === undefined && a.showOn === undefined), "made pages carry no merge markers");
+ok(p1.find((a) => a.text.startsWith("Page")).text === "Page 1 of 4", "page counters");
+ok(gp(small[1], false).every((a) => a.text !== "Black Flags" && !a.text.startsWith("Page")), "without Repeat, plain non-data items show on the first page only");
+ok(gp(plan[2], true).filter((a) => /^Red Wolves\d$/.test(a.text)).length === 3, "empty slots are left out");
+ok(showsOnPage("last", { pageInGroup: 2, pagesInGroup: 2 }) && !showsOnPage("last", { pageInGroup: 1, pagesInGroup: 2 }) && showsOnPage("every", { pageInGroup: 2, pagesInGroup: 2 }, false), "Show on rules");
+const pv = previewAnnotations(gpage, bandPeople, 3, null);
+ok(pv.find((a) => a.id === 4).text === "Black Flags3" && pv.find((a) => a.id === 3).text === "Black Flags5", "the preview fills the blocks with the records from the chosen one on");
+ok(previewAnnotations(gpage, bandPeople, 12, null).filter((a) => a.hidden).length === 2, "slots with no record are hidden in the preview");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
