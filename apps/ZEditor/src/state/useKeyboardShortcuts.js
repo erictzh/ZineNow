@@ -57,25 +57,33 @@ export function useKeyboardShortcuts(app) {
         if (key === "g") { e.preventDefault(); if (e.shiftKey) edits.handleUngroupSelection(); else edits.handleGroupSelection(); return; }
         if (key === "c") {
           if (selectedIdx !== null && selectedAnnId !== null) {
-            // A frame of a threaded story copies as a box of its own: its look and the words it shows.
-            const view = resolvePageText(pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
-            const ann = view && view.type === "text" ? standaloneCopy(view) : view;
-            if (ann) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(ann)); }
+            // Every selected item, and the rest of any group one of them belongs to. A frame of a threaded story copies as a box of its own:
+            // its look and the words it shows.
+            const views = resolvePageText(pages[selectedIdx].annotations || []);
+            const ids = selection.selectedAnnotationIds();
+            const groups = new Set(views.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+            const chosen = views.filter((a) => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map((a) => (a.type === "text" ? standaloneCopy(a) : a));
+            if (chosen.length) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(chosen)); }
           }
           return;
         }
         if (key === "v") {
           if (clipboardRef.current && selectedIdx !== null) {
             e.preventDefault();
-            const clip = clipboardRef.current;
-            const id = nextAnnIdRef.current++;
-            // Offset the paste from the original so it's visibly a
-            // second copy, not sitting invisibly on top of the first —
-            // a stroke's whole point list has to shift together, not
-            // just some single x/y the way text/image annotations work.
-            const newAnn = { ...translatedAnnotation(clip, 20, 20), id, groupId: undefined }; // a copy isn't part of the original's group
-            edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, newAnn]);
-            setSelectedAnnId(id);
+            // Offset the paste from the original so it's visibly a second copy, not sitting invisibly on top of the first — a stroke's whole
+            // point list has to shift together, not just some single x/y the way text/image annotations work. Copied groups stay groups (new ones).
+            const newGroups = new Map();
+            const copies = clipboardRef.current.map((clip) => {
+              const copy = { ...translatedAnnotation(clip, 20, 20), id: nextAnnIdRef.current++ };
+              if (clip.groupId) {
+                if (!newGroups.has(clip.groupId)) newGroups.set(clip.groupId, "g" + nextAnnIdRef.current++);
+                copy.groupId = newGroups.get(clip.groupId);
+              } else copy.groupId = undefined;
+              return copy;
+            });
+            edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, ...copies]);
+            setSelectedAnnId(copies[0].id);
+            selection.setSelectedAnnIds(copies.slice(1).map((c) => c.id));
           }
           return;
         }
