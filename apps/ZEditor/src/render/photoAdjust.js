@@ -2,6 +2,7 @@
 
 import { controlValues } from "../model/controls.js";
 import { PHOTO_ADJUST_CONTROLS } from "../model/photoAdjust.js";
+import { gaussianBlur } from "./gaussianBlur.js";
 
 // Edits the canvas's pixels in place. The per-channel steps (levels,
 // exposure, brightness, contrast) are baked into one lookup table; the
@@ -51,5 +52,7 @@ export function applyPhotoAdjust(ctx, canvas, ann) {
     }
     data[i] = r; data[i + 1] = g; data[i + 2] = b; // the clamped array rounds and limits to 0–255
   }
+  // Gaussian blur last, on the adjusted pixels. Its radius is in page px: the canvas may be drawn bigger (Export), so it is scaled to match.
+  if (v.adjBlur > 0 && ann.width > 0) gaussianBlur(data, width, height, v.adjBlur * (width / ann.width));
   ctx.putImageData(imageData, 0, 0);
 }

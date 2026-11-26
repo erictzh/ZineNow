@@ -292,6 +292,7 @@ export function App() {
           selectedIds={selection.selectedAnnotationIds()}
           onSelect={selection.handleSelectLayer}
           onSelectRange={selection.handleSelectLayerRange}
+          onUpdateLayer={edits.handleUpdateAnnotation}
           onGroup={edits.handleGroupSelection}
           onUngroup={edits.handleUngroupSelection}
           onDelete={edits.handleDeleteAnnotation}

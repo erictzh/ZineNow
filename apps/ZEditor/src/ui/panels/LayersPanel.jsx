@@ -13,6 +13,7 @@ import { trackPointerDrag } from "../pointer.js";
 import { TraceSvg } from "../canvas/TraceSvg.jsx";
 import { MenuItem } from "../topbar/TopMenu.jsx";
 import { GuideGroups } from "./GuideGroups.jsx";
+import { ColorPickerPopover } from "../controls/ColorPicker.jsx";
 import { withTouchModifier } from "../touchInput.js";
 const { useState, useRef, useEffect } = React;
 
@@ -154,7 +155,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, guides, rulerUnit }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -165,6 +166,11 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
   const panelRef = useRef(null);
   const headRef = useRef(null);
   const topFirst = annotations.slice().reverse();
+  // Double-clicking a shape's or text's thumbnail opens the colour picker for its colour (a shape's solid fill, a text's colour, a drawn line's colour).
+  const [colorEdit, setColorEdit] = useState(null); // { id, el }: the layer and the thumbnail the picker hangs from
+  const colorProp = (a) => (a.type === "rect" ? ((a.fillType || "solid") === "solid" ? "fillColor" : null) : a.type === "text" || a.type === "stroke" ? "color" : null);
+  const colorOf = (a) => (a && colorProp(a) ? a[colorProp(a)] || (a.type === "rect" ? "#d9d9d9" : "#1a1a1a") : null);
+  const colorEditAnn = colorEdit ? annotations.find((a) => a.id === colorEdit.id) : null;
   // Picking a layer row. Ctrl / Cmd + click adds or takes out one layer; Shift + click on a layer that is not selected takes in every layer
   // from the last one clicked down or up to it (hidden and locked ones are skipped); Shift on a selected layer takes it out, as before.
   const anchorRef = useRef(null);
@@ -336,7 +342,9 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           onDoubleClick={() => setRenamingId(ann.id)}
           {...dragHandlersFor(ann.id, ann.id, row, row + 1)}
         >
-          <LayerThumb ann={ann} />
+          <span style={{ display: "flex", flex: "0 0 auto" }} onDoubleClick={(e) => { if (!colorProp(ann) || ann.locked) return; e.stopPropagation(); setColorEdit({ id: ann.id, el: e.currentTarget }); }} title={colorProp(ann) ? "Double-click to change the colour" : undefined}>
+            <LayerThumb ann={ann} />
+          </span>
           {isRenaming
             ? <RenameInput current={layerName(ann)} onDone={(text) => finishRename(ann, text)} />
             : <span className="ze-layer-name" title="Double-click to rename">{layerName(ann)}</span>}
@@ -513,6 +521,9 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
             <span className="ze-layer-name">Page</span>
           </div>
       </div>
+      {colorEditAnn && colorProp(colorEditAnn) && (
+        <ColorPickerPopover anchorEl={colorEdit.el} value={colorOf(colorEditAnn)} onChange={(hex) => onUpdateLayer(colorEditAnn.id, { [colorProp(colorEditAnn)]: hex })} onClose={() => setColorEdit(null)} />
+      )}
       {rowMenuAnn && (
         // Fixed to the screen, so the panel's edge and the list's scrolling can't cut it off.
         <div className="ze-menu ze-layer-row-menu" role="menu" ref={rowMenuRef} style={{ left: rowMenu.x, top: rowMenu.y }}>

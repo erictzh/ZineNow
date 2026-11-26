@@ -4,6 +4,7 @@
 // in, swatches (recent colours and a zine palette), and an eyedropper where the browser has one. `ColorPickerButton` is the
 // round colour button that opens it; its children (if any) are drawn inside the button.
 
+import { buildPalette } from "../../model/colorPalette.js";
 import { hexToHsv, hexToRgb, hsvToHex, parseColorText, rgbToHex } from "../../model/colorSpaces.js";
 
 const { useState, useEffect, useRef, useLayoutEffect, useContext, createContext } = React;
@@ -55,6 +56,10 @@ function PickerPanel({ value, onChange, popRef, style }) {
   const getDocumentColors = useContext(DocumentColorsContext);
   const [inDocument] = useState(() => (getDocumentColors ? getDocumentColors() : []));
   const svRef = useRef(null), hueRef = useRef(null);
+  const [tab, setTab] = useState("picker"); // "picker" | "palette"
+  const [palette] = useState(buildPalette);
+  const [hovered, setHovered] = useState(null); // the palette cell under the pointer
+  const named = palette.flat().find((c) => c.hex === value);
 
   // Something else changed the colour (a swatch, undo): follow it. Our own drags give the same hex, so they are left alone (this keeps the hue
   // when the colour is grey or black).
@@ -79,7 +84,22 @@ function PickerPanel({ value, onChange, popRef, style }) {
 
   return (
     <div className="ze-cp" ref={popRef} style={style} role="dialog" aria-label="Colour picker">
-      <div className="ze-cp-main">
+      <div className="ze-cp-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "picker"} className={tab === "picker" ? "active" : ""} onClick={() => setTab("picker")}>Picker</button>
+        <button type="button" role="tab" aria-selected={tab === "palette"} className={tab === "palette" ? "active" : ""} onClick={() => setTab("palette")}>Palette</button>
+      </div>
+      {tab === "palette" && (
+        <div className="ze-cp-palette-wrap">
+          <div className="ze-cp-palette" onMouseLeave={() => setHovered(null)}>
+            {palette.flat().map((c) => (
+              <button key={c.name} type="button" className={"ze-cp-cell" + (c.hex === value ? " active" : "")} style={{ background: c.hex }}
+                title={c.name + " · " + c.hex} aria-label={c.name} onMouseEnter={() => setHovered(c)} onFocus={() => setHovered(c)} onClick={() => applyHex(c.hex)} />
+            ))}
+          </div>
+          <div className="ze-cp-name">{hovered ? hovered.name + " · " + hovered.hex : named ? named.name + " · " + named.hex : value}</div>
+        </div>
+      )}
+      <div className="ze-cp-main" hidden={tab !== "picker"}>
         <div className="ze-cp-sv" ref={svRef} {...svDrag} style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})` }}>
           <span className="ze-cp-handle" style={{ left: hsv.s * 100 + "%", top: (1 - hsv.v) * 100 + "%" }} />
         </div>
@@ -119,47 +139,54 @@ function PickerPanel({ value, onChange, popRef, style }) {
   );
 }
 
+// The picker panel itself, opened beside `anchorEl` (a DOM element). It closes on a press outside it (not on the anchor), on Esc, or when
+// the owner stops rendering it; a colour changed meanwhile goes into the recent list at that point.
+export function ColorPickerPopover({ anchorEl, value, onChange, onClose }) {
+  const [pos, setPos] = useState(null);
+  const popRef = useRef(null);
+  const openedWith = useRef(value), latest = useRef(value);
+  latest.current = value;
+
+  useLayoutEffect(() => {
+    if (!anchorEl) return;
+    const b = anchorEl.getBoundingClientRect(), w = 252, h = popRef.current ? popRef.current.offsetHeight : 380;
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
+    const top = b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - 6 - h) : b.bottom + 6;
+    setPos({ left, top });
+  }, [anchorEl]);
+
+  useEffect(() => {
+    const close = (e) => {
+      if ((popRef.current && popRef.current.contains(e.target)) || (anchorEl && anchorEl.contains(e.target))) return;
+      onClose();
+    };
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("pointerdown", close, true);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close, true);
+      document.removeEventListener("keydown", esc);
+      if (latest.current !== openedWith.current) rememberColor(latest.current);
+    };
+  }, [anchorEl]);
+
+  return ReactDOM.createPortal(
+    <PickerPanel value={value} onChange={onChange} popRef={popRef} style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0 }} />,
+    document.body,
+  );
+}
+
 // The round colour button. `value` is "#rrggbb"; `onChange(hex)` is called as the colour changes. `className` styles the button (the
 // existing "ze-format-color-input" circle by default); children are drawn inside it.
 export function ColorPickerButton({ value, onChange, className = "ze-format-color-input", disabled, ariaLabel = "Colour", title, children }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState(null);
-  const btnRef = useRef(null), popRef = useRef(null);
-  const openedWith = useRef(value);
-
-  useLayoutEffect(() => {
-    if (!open || !btnRef.current) return;
-    const b = btnRef.current.getBoundingClientRect(), w = 252, h = popRef.current ? popRef.current.offsetHeight : 380;
-    const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
-    const top = b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - 6 - h) : b.bottom + 6;
-    setPos({ left, top });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const close = (e) => {
-      if ((popRef.current && popRef.current.contains(e.target)) || (btnRef.current && btnRef.current.contains(e.target))) return;
-      setOpen(false);
-    };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("pointerdown", close, true);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("pointerdown", close, true); document.removeEventListener("keydown", esc); };
-  }, [open]);
-
-  // A colour that was changed while the picker was open goes into the recent list when it closes.
-  useEffect(() => { if (open) openedWith.current = value; else if (openedWith.current !== value) { rememberColor(value); openedWith.current = value; } }, [open]);
-
-  const toggle = () => { if (!disabled) setOpen((o) => !o); };
+  const btnRef = useRef(null);
   return (
     <React.Fragment>
-      <button type="button" ref={btnRef} className={className} style={{ backgroundColor: value }} disabled={disabled} aria-label={ariaLabel} title={title || ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={toggle}>
+      <button type="button" ref={btnRef} className={className} style={{ backgroundColor: value }} disabled={disabled} aria-label={ariaLabel} title={title || ariaLabel} aria-haspopup="dialog" aria-expanded={open} onClick={() => { if (!disabled) setOpen((o) => !o); }}>
         {children}
       </button>
-      {open && ReactDOM.createPortal(
-        <PickerPanel value={value} onChange={onChange} popRef={popRef} style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0 }} />,
-        document.body,
-      )}
+      {open && <ColorPickerPopover anchorEl={btnRef.current} value={value} onChange={onChange} onClose={() => setOpen(false)} />}
     </React.Fragment>
   );
 }
