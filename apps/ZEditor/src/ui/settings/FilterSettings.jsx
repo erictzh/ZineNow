@@ -1,5 +1,6 @@
 // Page filter settings.
 
+import { ColorPickerButton } from "../controls/ColorPicker.jsx";
 import { FILTER_CONTROLS, PAGE_FILTER_OPTIONS } from "../../model/pageFilters.js";
 import { ControlList } from "../controls/ControlList.jsx";
 
@@ -25,11 +26,11 @@ export function FilterSettings({
         <React.Fragment>
           <div className="ze-format-field">
             <span className="ze-format-label">Dark tone</span>
-            <input type="color" className="ze-format-color-input" value={duotoneDark} onChange={(e) => onDuotoneDarkChange(e.target.value)} />
+            <ColorPickerButton ariaLabel="Dark tone" value={duotoneDark} onChange={onDuotoneDarkChange} />
           </div>
           <div className="ze-format-field">
             <span className="ze-format-label">Light tone</span>
-            <input type="color" className="ze-format-color-input" value={duotoneLight} onChange={(e) => onDuotoneLightChange(e.target.value)} />
+            <ColorPickerButton ariaLabel="Light tone" value={duotoneLight} onChange={onDuotoneLightChange} />
           </div>
         </React.Fragment>
       )}

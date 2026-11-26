@@ -1,6 +1,7 @@
 // Small inputs: slider with number box, colour pickers, select, draft text input.
 
 import { NumberBox } from "../../../../../shared/js/NumberBox.jsx";
+import { ColorPickerButton } from "./ColorPicker.jsx";
 
 const { useState } = React;
 
@@ -54,15 +55,14 @@ export function StepperNumberInput({ min, max, step = 1, value, onChange, label 
 // the eyedropper is drawn in a difference blend so it shows on any colour.
 export function CustomColorInput({ value, onChange }) {
   return (
-    <label className="ze-custom-color" title="Custom color — pick any color">
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Custom color" />
+    <ColorPickerButton className="ze-custom-color" value={value} onChange={onChange} ariaLabel="Custom color" title="Custom color — pick any color">
       <span className="ze-custom-color-face" style={{ backgroundColor: value }} />
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="m2 22 1-1h3l9-9" />
         <path d="M3 21v-3l9-9" />
         <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" />
       </svg>
-    </label>
+    </ColorPickerButton>
   );
 }
 
@@ -73,7 +73,7 @@ function HexColorInput({ value, onChange }) {
   });
   return (
     <div className="ze-format-slider-row">
-      <input type="color" className="ze-format-color-input" value={value} onChange={(e) => onChange(e.target.value)} />
+      <ColorPickerButton value={value} onChange={onChange} ariaLabel="Colour" />
       <input type="text" className="ze-format-number" spellCheck="false" maxLength="7" aria-label="Hex color" {...hexProps} />
     </div>
   );

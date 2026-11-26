@@ -7393,20 +7393,20 @@
   function normalizeTraceSettings(s = {}) {
     const base = presetSettings(s.preset || DEFAULT_TRACE_PRESET);
     const v = { ...base, ...s };
-    const clamp3 = (x, lo, hi, fb) => Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Math.round(Number(x)))) : fb;
+    const clamp4 = (x, lo, hi, fb) => Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Math.round(Number(x)))) : fb;
     return {
       preset: v.preset,
       mode: ["bw", "gray", "color"].includes(v.mode) ? v.mode : "bw",
-      threshold: clamp3(v.threshold, 0, 255, 128),
-      colors: clamp3(v.colors, 2, 16, 6),
-      detail: clamp3(v.detail, 0, 100, 50),
-      corners: clamp3(v.corners, 0, 100, 50),
-      noise: clamp3(v.noise, 0, 100, 8),
+      threshold: clamp4(v.threshold, 0, 255, 128),
+      colors: clamp4(v.colors, 2, 16, 6),
+      detail: clamp4(v.detail, 0, 100, 50),
+      corners: clamp4(v.corners, 0, 100, 50),
+      noise: clamp4(v.noise, 0, 100, 8),
       ignoreWhite: v.ignoreWhite === "drop" ? "drop" : "keep",
       method: v.method === "abut" ? "abut" : "overlap",
       fills: v.fills === "off" ? "off" : "on",
       strokes: v.strokes === "on" ? "on" : "off",
-      strokeWidth: clamp3(v.strokeWidth, 1, 20, 2),
+      strokeWidth: clamp4(v.strokeWidth, 1, 20, 2),
       view: TRACE_VIEW_OPTIONS.some((o) => o.key === v.view) ? v.view : "result"
     };
   }
@@ -7622,12 +7622,12 @@
   }
 
   // apps/ZEditor/src/model/color.js
-  function rgbaCss(hex2, alphaPercent) {
-    const { r, g, b } = hexToRgb(hex2);
+  function rgbaCss(hex3, alphaPercent) {
+    const { r, g, b } = hexToRgb(hex3);
     return `rgba(${r},${g},${b},${alphaPercent / 100})`;
   }
-  function hexToRgb(hex2) {
-    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex2 || "");
+  function hexToRgb(hex3) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
     return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
   }
 
@@ -8018,8 +8018,8 @@
   }
   function lomoParams(ann) {
     const v = controlValues(ann, LOMO_CONTROLS);
-    const rgb = (hex2) => {
-      const c = hexToRgb(hex2);
+    const rgb = (hex3) => {
+      const c = hexToRgb(hex3);
       return [c.r, c.g, c.b];
     };
     return {
@@ -10559,8 +10559,8 @@ ${parts.join("\n")}</g>`);
       const toPt = 1 / EXPORT_SCALE;
       const pdfY = (canvasY) => pageHeightPts - canvasY * toPt;
       const sizePt = fontSize * toPt;
-      const colorOf = (hex2) => {
-        const c = hexToRgb(hex2 || look.color);
+      const colorOf = (hex3) => {
+        const c = hexToRgb(hex3 || look.color);
         return PDF.rgb(c.r / 255, c.g / 255, c.b / 255);
       };
       const opacity = look.fillAlpha / 100;
@@ -17909,10 +17909,193 @@ ${parts.join("\n")}</g>`);
     )))));
   }
 
+  // apps/ZEditor/src/model/colorSpaces.js
+  var clamp2 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var hex2 = (n) => Math.round(clamp2(n, 0, 255)).toString(16).padStart(2, "0");
+  var rgbToHex = (r, g, b) => "#" + hex2(r) + hex2(g) + hex2(b);
+  function hexToRgb2(hex3) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
+  }
+  function rgbToHsv(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let h = 0;
+    if (d > 0) {
+      if (max === r) h = (g - b) / d % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    return { h, s: max === 0 ? 0 : d / max, v: max };
+  }
+  function hsvToRgb(h, s, v) {
+    h = (h % 360 + 360) % 360;
+    const c = v * s, x = c * (1 - Math.abs(h / 60 % 2 - 1)), m = v - c;
+    const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+    return { r: Math.round((r + m) * 255), g: Math.round((g + m) * 255), b: Math.round((b + m) * 255) };
+  }
+  var hexToHsv = (hex3) => {
+    const { r, g, b } = hexToRgb2(hex3);
+    return rgbToHsv(r, g, b);
+  };
+  var hsvToHex = (h, s, v) => {
+    const { r, g, b } = hsvToRgb(h, s, v);
+    return rgbToHex(r, g, b);
+  };
+  function parseColorText(text) {
+    const t = String(text || "").trim();
+    let m = /^#?([0-9a-f]{6})$/i.exec(t);
+    if (m) return "#" + m[1].toLowerCase();
+    m = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(t);
+    if (m) return ("#" + m[1] + m[1] + m[2] + m[2] + m[3] + m[3]).toLowerCase();
+    m = /^(?:rgb\()?\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*\)?$/i.exec(t);
+    if (m && [m[1], m[2], m[3]].every((n) => Number(n) <= 255)) return rgbToHex(Number(m[1]), Number(m[2]), Number(m[3]));
+    return null;
+  }
+
+  // apps/ZEditor/src/ui/controls/ColorPicker.jsx
+  var { useState: useState27, useEffect: useEffect22, useRef: useRef22, useLayoutEffect: useLayoutEffect5 } = React;
+  var ZINE_PALETTE = ["#000000", "#1a1a1a", "#8a8a8a", "#ffffff", "#f2e8d5", "#e63946", "#ff6b00", "#ffd400", "#2fbf71", "#2a6df4", "#7b2cbf", "#ff4fa3"];
+  var RECENT_KEY = "zinenow.recentColors";
+  var RECENT_MAX = 12;
+  function loadRecent() {
+    try {
+      const list = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      return Array.isArray(list) ? list.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, RECENT_MAX) : [];
+    } catch (err) {
+      return [];
+    }
+  }
+  function rememberColor(hex3) {
+    try {
+      const list = [hex3, ...loadRecent().filter((c) => c !== hex3)].slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    } catch (err) {
+    }
+  }
+  function usePointerDrag(ref, onMove) {
+    const onDown = (e) => {
+      e.preventDefault();
+      const el = ref.current;
+      if (!el) return;
+      el.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        const r = el.getBoundingClientRect();
+        onMove(Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)));
+      };
+      move(e);
+      const up = () => {
+        el.removeEventListener("pointermove", move);
+        el.removeEventListener("pointerup", up);
+        el.removeEventListener("pointercancel", up);
+      };
+      el.addEventListener("pointermove", move);
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+    };
+    return { onPointerDown: onDown };
+  }
+  function PickerPanel({ value, onChange, popRef, style }) {
+    const [hsv, setHsv] = useState27(() => hexToHsv(value));
+    const [hexDraft, setHexDraft] = useState27(null);
+    const [recent] = useState27(loadRecent);
+    const svRef = useRef22(null), hueRef = useRef22(null);
+    useEffect22(() => {
+      if (hsvToHex(hsv.h, hsv.s, hsv.v) !== value) setHsv(hexToHsv(value));
+    }, [value]);
+    const apply = (next) => {
+      setHsv(next);
+      onChange(hsvToHex(next.h, next.s, next.v));
+    };
+    const applyHex = (hex3) => {
+      setHsv(hexToHsv(hex3));
+      onChange(hex3);
+    };
+    const svDrag = usePointerDrag(svRef, (x, y) => apply({ ...hsv, s: x, v: 1 - y }));
+    const hueDrag = usePointerDrag(hueRef, (x, y) => apply({ ...hsv, h: 360 * (1 - y) }));
+    const rgb = hexToRgb2(value);
+    const hueColor = hsvToHex(hsv.h, 1, 1);
+    const setChannel = (key, text) => {
+      const n = Number(text);
+      if (text.trim() === "" || !Number.isFinite(n)) return;
+      const next = { ...rgb, [key]: Math.min(255, Math.max(0, Math.round(n))) };
+      applyHex(rgbToHex(next.r, next.g, next.b));
+    };
+    const swatch = (hex3) => /* @__PURE__ */ React.createElement("button", { key: hex3, type: "button", className: "ze-cp-swatch" + (hex3 === value ? " active" : ""), style: { background: hex3 }, title: hex3, "aria-label": hex3, onClick: () => applyHex(hex3) });
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-cp", ref: popRef, style, role: "dialog", "aria-label": "Colour picker" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-main" }, /* @__PURE__ */ React.createElement("div", { className: "ze-cp-sv", ref: svRef, ...svDrag, style: { background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hueColor})` } }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-handle", style: { left: hsv.s * 100 + "%", top: (1 - hsv.v) * 100 + "%" } })), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-hue", ref: hueRef, ...hueDrag }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-hue-handle", style: { top: (1 - hsv.h / 360) * 100 + "%" } }))), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-fields" }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-preview", style: { background: value }, "aria-hidden": "true" }), /* @__PURE__ */ React.createElement("label", { className: "ze-cp-field ze-cp-hex" }, /* @__PURE__ */ React.createElement("span", null, "Hex"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        spellCheck: "false",
+        autoComplete: "off",
+        value: hexDraft != null ? hexDraft : value,
+        onChange: (e) => {
+          setHexDraft(e.target.value);
+          const hex3 = parseColorText(e.target.value);
+          if (hex3) applyHex(hex3);
+        },
+        onBlur: () => setHexDraft(null),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }
+      }
+    )), ["r", "g", "b"].map((k) => /* @__PURE__ */ React.createElement("label", { key: k, className: "ze-cp-field ze-cp-chan" }, /* @__PURE__ */ React.createElement("span", null, k.toUpperCase()), /* @__PURE__ */ React.createElement("input", { type: "number", min: "0", max: "255", inputMode: "numeric", value: rgb[k], onChange: (e) => setChannel(k, e.target.value) })))), recent.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "ze-cp-group" }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-label" }, "Recent"), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-swatches" }, recent.map(swatch))), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-group" }, /* @__PURE__ */ React.createElement("span", { className: "ze-cp-label" }, "Zine colours"), /* @__PURE__ */ React.createElement("div", { className: "ze-cp-swatches" }, ZINE_PALETTE.map(swatch))), typeof window !== "undefined" && window.EyeDropper && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-cp-eye", onClick: () => {
+      new window.EyeDropper().open().then((r) => applyHex(r.sRGBHex.toLowerCase())).catch(() => {
+      });
+    } }, "Pick a colour from the screen"));
+  }
+  function ColorPickerButton({ value, onChange, className = "ze-format-color-input", disabled, ariaLabel = "Colour", title, children }) {
+    const [open, setOpen] = useState27(false);
+    const [pos, setPos] = useState27(null);
+    const btnRef = useRef22(null), popRef = useRef22(null);
+    const openedWith = useRef22(value);
+    useLayoutEffect5(() => {
+      if (!open || !btnRef.current) return;
+      const b = btnRef.current.getBoundingClientRect(), w = 252, h = popRef.current ? popRef.current.offsetHeight : 380;
+      const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
+      const top = b.bottom + 6 + h > window.innerHeight ? Math.max(8, b.top - 6 - h) : b.bottom + 6;
+      setPos({ left, top });
+    }, [open]);
+    useEffect22(() => {
+      if (!open) return void 0;
+      const close = (e) => {
+        if (popRef.current && popRef.current.contains(e.target) || btnRef.current && btnRef.current.contains(e.target)) return;
+        setOpen(false);
+      };
+      const esc = (e) => {
+        if (e.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("pointerdown", close, true);
+      document.addEventListener("keydown", esc);
+      return () => {
+        document.removeEventListener("pointerdown", close, true);
+        document.removeEventListener("keydown", esc);
+      };
+    }, [open]);
+    useEffect22(() => {
+      if (open) openedWith.current = value;
+      else if (openedWith.current !== value) {
+        rememberColor(value);
+        openedWith.current = value;
+      }
+    }, [open]);
+    const toggle = () => {
+      if (!disabled) setOpen((o) => !o);
+    };
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("button", { type: "button", ref: btnRef, className, style: { backgroundColor: value }, disabled, "aria-label": ariaLabel, title: title || ariaLabel, "aria-haspopup": "dialog", "aria-expanded": open, onClick: toggle }, children), open && ReactDOM.createPortal(
+      /* @__PURE__ */ React.createElement(PickerPanel, { value, onChange, popRef, style: pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0 } }),
+      document.body
+    ));
+  }
+
   // apps/ZEditor/src/ui/controls/inputs.jsx
-  var { useState: useState27 } = React;
+  var { useState: useState28 } = React;
   function useDraftInputProps(value, commitText) {
-    const [draft, setDraft] = useState27(null);
+    const [draft, setDraft] = useState28(null);
     return {
       value: draft != null ? draft : value,
       onChange: (e) => {
@@ -17948,14 +18131,14 @@ ${parts.join("\n")}</g>`);
     return /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min, max, step, "aria-label": label, ...numberProps });
   }
   function CustomColorInput({ value, onChange }) {
-    return /* @__PURE__ */ React.createElement("label", { className: "ze-custom-color", title: "Custom color — pick any color" }, /* @__PURE__ */ React.createElement("input", { type: "color", value, onChange: (e) => onChange(e.target.value), "aria-label": "Custom color" }), /* @__PURE__ */ React.createElement("span", { className: "ze-custom-color-face", style: { backgroundColor: value } }), /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "m2 22 1-1h3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21v-3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" })));
+    return /* @__PURE__ */ React.createElement(ColorPickerButton, { className: "ze-custom-color", value, onChange, ariaLabel: "Custom color", title: "Custom color — pick any color" }, /* @__PURE__ */ React.createElement("span", { className: "ze-custom-color-face", style: { backgroundColor: value } }), /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "m2 22 1-1h3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21v-3l9-9" }), /* @__PURE__ */ React.createElement("path", { d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z" })));
   }
   function HexColorInput({ value, onChange }) {
     const hexProps = useDraftInputProps(value, (text) => {
-      const hex2 = "#" + text.trim().replace(/^#/, "");
-      if (/^#[0-9a-f]{6}$/i.test(hex2)) onChange(hex2.toLowerCase());
+      const hex3 = "#" + text.trim().replace(/^#/, "");
+      if (/^#[0-9a-f]{6}$/i.test(hex3)) onChange(hex3.toLowerCase());
     });
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value, onChange: (e) => onChange(e.target.value) }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "ze-format-number", spellCheck: "false", maxLength: "7", "aria-label": "Hex color", ...hexProps }));
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-slider-row" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value, onChange, ariaLabel: "Colour" }), /* @__PURE__ */ React.createElement("input", { type: "text", className: "ze-format-number", spellCheck: "false", maxLength: "7", "aria-label": "Hex color", ...hexProps }));
   }
   function SelectInput({ options, value, onChange }) {
     return /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value, onChange: (e) => onChange(e.target.value) }, options.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label)));
@@ -17972,7 +18155,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/PanelSection.jsx
-  var { useState: useState28, useRef: useRef22, useEffect: useEffect22 } = React;
+  var { useState: useState29, useRef: useRef23, useEffect: useEffect23 } = React;
   var sectionOpenMemory = {};
   var ESSENTIAL_SECTIONS = /* @__PURE__ */ new Set([
     "text.basic",
@@ -17992,13 +18175,13 @@ ${parts.join("\n")}</g>`);
     const isEssential = essential != null ? essential : ESSENTIAL_SECTIONS.has(id);
     const hasToggle = typeof onToggle === "function";
     const expandable = children != null && children !== false;
-    const [open, setOpenState] = useState28(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
+    const [open, setOpenState] = useState29(() => id in sectionOpenMemory ? sectionOpenMemory[id] : defaultOpen);
     const setOpen = (value) => {
       sectionOpenMemory[id] = value;
       setOpenState(value);
     };
-    const wasChecked = useRef22(checked);
-    useEffect22(() => {
+    const wasChecked = useRef23(checked);
+    useEffect23(() => {
       if (checked && !wasChecked.current && expandable) setOpen(true);
       wasChecked.current = checked;
     }, [checked]);
@@ -18255,13 +18438,13 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiModel.js
-  var { useState: useState29, useEffect: useEffect23, useRef: useRef23, useCallback } = React;
+  var { useState: useState30, useEffect: useEffect24, useRef: useRef24, useCallback } = React;
   function useAiModel(which = "fill", modelKey = "u2netp") {
     const bg = which === "background";
-    const [state, setState] = useState29({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
-    const abortRef = useRef23(null);
-    const alive = useRef23(true);
-    useEffect23(() => () => {
+    const [state, setState] = useState30({ phase: "checking", plan: null, doneMb: 0, totalMb: 0, error: null });
+    const abortRef = useRef24(null);
+    const alive = useRef24(true);
+    useEffect24(() => () => {
       alive.current = false;
     }, []);
     const set = (patch) => {
@@ -18275,7 +18458,7 @@ ${parts.join("\n")}</g>`);
         set({ phase: "none", error: e && e.message ? e.message : String(e) });
       }
     }, [modelKey]);
-    useEffect23(() => {
+    useEffect24(() => {
       set({ phase: "checking", error: null });
       refresh();
     }, [refresh]);
@@ -18304,10 +18487,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/format/RemoveBackgroundSection.jsx
-  var { useState: useState30 } = React;
+  var { useState: useState31 } = React;
   var DEFAULT_CUTOFF = 0.1;
   function DecimalBox({ value, onChange, min, max, step, label, disabled }) {
-    const [draft, setDraft] = useState30(null);
+    const [draft, setDraft] = useState31(null);
     return /* @__PURE__ */ React.createElement(
       NumberBox,
       {
@@ -18328,14 +18511,14 @@ ${parts.join("\n")}</g>`);
     );
   }
   function RemoveBackgroundSection({ ann, onRemoveBackground, disabled }) {
-    const [modelKey, setModelKey] = useState30(BG_MODELS[0].key);
+    const [modelKey, setModelKey] = useState31(BG_MODELS[0].key);
     const info = bgModel(modelKey);
     const ai = useAiModel("background", modelKey);
-    const [dialog, setDialog] = useState30(null);
-    const [cutoff, setCutoff] = useState30(DEFAULT_CUTOFF);
-    const [soft, setSoft] = useState30(10);
-    const [busy, setBusy] = useState30("");
-    const [error, setError] = useState30("");
+    const [dialog, setDialog] = useState31(null);
+    const [cutoff, setCutoff] = useState31(DEFAULT_CUTOFF);
+    const [soft, setSoft] = useState31(10);
+    const [busy, setBusy] = useState31("");
+    const [error, setError] = useState31("");
     const ready = ai.phase === "ready";
     const run2 = async () => {
       setError("");
@@ -18384,10 +18567,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useAiFeatures.js
-  var { useState: useState31, useEffect: useEffect24 } = React;
+  var { useState: useState32, useEffect: useEffect25 } = React;
   function useAiFeatures() {
-    const [on, setOn] = useState31(aiFeaturesOn());
-    useEffect24(() => {
+    const [on, setOn] = useState32(aiFeaturesOn());
+    useEffect25(() => {
       const h = (e) => setOn(Boolean(e.detail && e.detail.aiFeatures));
       window.addEventListener("zn-display-prefs", h);
       setOn(aiFeaturesOn());
@@ -18397,7 +18580,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/format/ImageFormat.jsx
-  var { useState: useState32 } = React;
+  var { useState: useState33 } = React;
   var SHOW_AI_TOOLS_SECTION = false;
   function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlattenImage, onRemoveBackground, onOpenInAiTools, imageTrace }) {
     const aiOn = useAiFeatures();
@@ -18471,7 +18654,7 @@ ${parts.join("\n")}</g>`);
     ));
   }
   function ImageTraceSection({ ann, imageTrace, disabled }) {
-    const [preset, setPreset] = useState32(DEFAULT_TRACE_PRESET);
+    const [preset, setPreset] = useState33(DEFAULT_TRACE_PRESET);
     const busy = imageTrace.busyId === ann.id;
     return /* @__PURE__ */ React.createElement(
       PanelSection,
@@ -18495,23 +18678,7 @@ ${parts.join("\n")}</g>`);
         hint: 'Overrides the page filter for just this image. "Match Page" follows whatever the page filter is set to.'
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement(SelectInput, { options: IMAGE_FILTER_OPTIONS, value: filterType, onChange: (type) => patch({ filter: { ...ann.filter, type } }) })),
-      ann.filter && ann.filter.type === "duotone" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Dark tone"), /* @__PURE__ */ React.createElement(
-        "input",
-        {
-          type: "color",
-          className: "ze-format-color-input",
-          value: ann.filter.darkColor || DEFAULT_DUOTONE_DARK,
-          onChange: (e) => patch({ filter: { ...ann.filter, darkColor: e.target.value } })
-        }
-      )), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Light tone"), /* @__PURE__ */ React.createElement(
-        "input",
-        {
-          type: "color",
-          className: "ze-format-color-input",
-          value: ann.filter.lightColor || DEFAULT_DUOTONE_LIGHT,
-          onChange: (e) => patch({ filter: { ...ann.filter, lightColor: e.target.value } })
-        }
-      ))),
+      ann.filter && ann.filter.type === "duotone" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Dark tone"), /* @__PURE__ */ React.createElement(ColorPickerButton, { ariaLabel: "Dark tone", value: ann.filter.darkColor || DEFAULT_DUOTONE_DARK, onChange: (hex3) => patch({ filter: { ...ann.filter, darkColor: hex3 } }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Light tone"), /* @__PURE__ */ React.createElement(ColorPickerButton, { ariaLabel: "Light tone", value: ann.filter.lightColor || DEFAULT_DUOTONE_LIGHT, onChange: (hex3) => patch({ filter: { ...ann.filter, lightColor: hex3 } }) }))),
       ann.filter && FILTER_CONTROLS[ann.filter.type] && /* @__PURE__ */ React.createElement(
         ControlList,
         {
@@ -18599,25 +18766,25 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/controls/FontCombobox.jsx
-  var { useState: useState33, useRef: useRef24, useEffect: useEffect25, useMemo: useMemo4 } = React;
+  var { useState: useState34, useRef: useRef25, useEffect: useEffect26, useMemo: useMemo4 } = React;
   function FontCombobox({ fontOptions, setFontOptions, value, onChange }) {
-    const [query, setQuery] = useState33(value || "");
-    const [typed, setTyped] = useState33(false);
-    const [open, setOpen] = useState33(false);
-    const [highlight, setHighlight] = useState33(-1);
-    const previewFromRef = useRef24(null);
-    const listRef = useRef24(null);
-    const [status, setStatus] = useState33(null);
-    const [loadingFonts, setLoadingFonts] = useState33(false);
-    const containerRef = useRef24(null);
-    const uploadInputRef = useRef24(null);
-    useEffect25(() => {
+    const [query, setQuery] = useState34(value || "");
+    const [typed, setTyped] = useState34(false);
+    const [open, setOpen] = useState34(false);
+    const [highlight, setHighlight] = useState34(-1);
+    const previewFromRef = useRef25(null);
+    const listRef = useRef25(null);
+    const [status, setStatus] = useState34(null);
+    const [loadingFonts, setLoadingFonts] = useState34(false);
+    const containerRef = useRef25(null);
+    const uploadInputRef = useRef25(null);
+    useEffect26(() => {
       if (previewFromRef.current === null) {
         setQuery(value || "");
         setTyped(false);
       }
     }, [value]);
-    useEffect25(() => {
+    useEffect26(() => {
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) {
           cancelPreview();
@@ -18631,7 +18798,7 @@ ${parts.join("\n")}</g>`);
       if (!q) return fontOptions;
       return fontOptions.filter((f) => f.toLowerCase().includes(q));
     }, [fontOptions, query, typed]);
-    useEffect25(() => {
+    useEffect26(() => {
       if (!open || highlight < 0 || !listRef.current) return;
       const item = listRef.current.children[highlight];
       if (item) item.scrollIntoView({ block: "nearest" });
@@ -18782,10 +18949,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextPhotoFill.jsx
-  var { useState: useState34, useRef: useRef25 } = React;
+  var { useState: useState35, useRef: useRef26 } = React;
   function TextPhotoFill({ ann, patch }) {
-    const inputRef = useRef25(null);
-    const [error, setError] = useState34(null);
+    const inputRef = useRef26(null);
+    const [error, setError] = useState35(null);
     const hasPhoto = Boolean(ann.fillSrc);
     async function handleChosen(e) {
       const file = e.target.files && e.target.files[0];
@@ -18816,10 +18983,10 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextPlaceholder.jsx
-  var { useState: useState35 } = React;
+  var { useState: useState36 } = React;
   function TextPlaceholder({ ann, patch }) {
-    const [kind, setKind] = useState35("latin");
-    const [count, setCount] = useState35(3);
+    const [kind, setKind] = useState36("latin");
+    const [count, setCount] = useState36(3);
     const text = ann.text || "";
     const replace = () => patch({ text: placeholderText(kind, count), colorRuns: void 0 });
     const append = () => patch({ text: (text && !text.endsWith("\n") ? text + "\n" : text) + placeholderText(kind, count) });
@@ -18850,7 +19017,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextSpans.jsx
-  var { useState: useState36 } = React;
+  var { useState: useState37 } = React;
   var ALIGNS = [
     { key: "left", label: "Align left", path: "M4 6h16M4 12h10M4 18h13" },
     { key: "center", label: "Align center", path: "M4 6h16M7 12h10M5.5 18h13" },
@@ -18858,7 +19025,7 @@ ${parts.join("\n")}</g>`);
     { key: "justify", label: "Justify", path: "M4 6h16M4 12h16M4 18h16" }
   ];
   function TextSpans({ ann, patch, fontOptions, setFontOptions }) {
-    const [message, setMessage] = useState36(null);
+    const [message, setMessage] = useState37(null);
     const keepFocus = (e) => e.preventDefault();
     const text = ann.text || "";
     const runs = ann.colorRuns;
@@ -18895,7 +19062,7 @@ ${parts.join("\n")}</g>`);
       if (to < 0) to = text.length;
       patch({ colorRuns: setRunProps(runs, from, Math.max(to, from + 1), { align }) });
     }
-    const [sizeDraft, setSizeDraft] = useState36(null);
+    const [sizeDraft, setSizeDraft] = useState37(null);
     function applySize() {
       if (sizeDraft == null) return;
       const pt = Number(sizeDraft);
@@ -18929,11 +19096,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/TextStyles.jsx
-  var { useState: useState37 } = React;
+  var { useState: useState38 } = React;
   function TextStyles({ ann, patch, textStyles, onSaveStyle, onDeleteStyle, styleActions }) {
-    const [name, setName] = useState37("");
-    const [basedOn, setBasedOn] = useState37("");
-    const [message, setMessage] = useState37(null);
+    const [name, setName] = useState38("");
+    const [basedOn, setBasedOn] = useState38("");
+    const [message, setMessage] = useState38(null);
     const linkedName = ann.styleName || null;
     const linkedStyle = linkedName ? textStyles.find((s) => s.name === linkedName) : null;
     const overrideCount = (ann.styleOverrides || []).length;
@@ -19097,7 +19264,7 @@ ${parts.join("\n")}</g>`);
       /* @__PURE__ */ React.createElement("div", { className: "ze-trace-colors" }, paths.map((p) => {
         const now = traceColorOf(ann, p.color);
         const hidden = now === "none";
-        return /* @__PURE__ */ React.createElement("div", { key: p.color, className: "ze-trace-color" + (hidden ? " is-hidden" : "") }, /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: hidden ? p.color : now, disabled: hidden, "aria-label": "Colour " + p.color, onChange: (e) => imageTrace.recolor(ann, p.color, e.target.value) }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-hex" }, hidden ? "hidden" : now), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: hidden ? "Show this colour" : "Hide this colour", onClick: () => imageTrace.recolor(ann, p.color, hidden ? null : "none") }, hidden ? "Show" : "Hide"), !hidden && now !== p.color && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: "Back to the traced colour " + p.color, onClick: () => imageTrace.recolor(ann, p.color, null) }, "Reset"));
+        return /* @__PURE__ */ React.createElement("div", { key: p.color, className: "ze-trace-color" + (hidden ? " is-hidden" : "") }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: hidden ? p.color : now, disabled: hidden, ariaLabel: "Colour " + p.color, onChange: (hex3) => imageTrace.recolor(ann, p.color, hex3) }), /* @__PURE__ */ React.createElement("span", { className: "ze-trace-hex" }, hidden ? "hidden" : now), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: hidden ? "Show this colour" : "Hide this colour", onClick: () => imageTrace.recolor(ann, p.color, hidden ? null : "none") }, hidden ? "Show" : "Hide"), !hidden && now !== p.color && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-trace-mini", title: "Back to the traced colour " + p.color, onClick: () => imageTrace.recolor(ann, p.color, null) }, "Reset"));
       }))
     );
   }
@@ -19311,11 +19478,11 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/TopMenu.jsx
-  var { useState: useState38, useRef: useRef26, useEffect: useEffect26, useLayoutEffect: useLayoutEffect5 } = React;
+  var { useState: useState39, useRef: useRef27, useEffect: useEffect27, useLayoutEffect: useLayoutEffect6 } = React;
   function TopMenu({ label, solid, icon: icon2, tile, children }) {
-    const [open, setOpen] = useState38(false);
-    const containerRef = useRef26(null);
-    useEffect26(() => {
+    const [open, setOpen] = useState39(false);
+    const containerRef = useRef27(null);
+    useEffect27(() => {
       if (!open) return;
       function handleClickOutside(e) {
         if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false);
@@ -19330,8 +19497,8 @@ ${parts.join("\n")}</g>`);
         document.removeEventListener("keydown", handleEscape);
       };
     }, [open]);
-    const menuRef = useRef26(null);
-    useLayoutEffect5(() => {
+    const menuRef = useRef27(null);
+    useLayoutEffect6(() => {
       const menu = menuRef.current;
       if (!open || !menu) return;
       const fit = () => {
@@ -19386,16 +19553,16 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/GuideGroups.jsx
-  var { useState: useState39, useEffect: useEffect27, useRef: useRef27 } = React;
+  var { useState: useState40, useEffect: useEffect28, useRef: useRef28 } = React;
   var iconProps = { viewBox: "0 0 24 24", width: 13, height: 13, fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var Lock = ({ on }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("rect", { x: "5", y: "11", width: "14", height: "10", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: on ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2" }));
   var Eye = ({ off }) => /* @__PURE__ */ React.createElement("svg", { ...iconProps }, /* @__PURE__ */ React.createElement("path", { d: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" }), off ? /* @__PURE__ */ React.createElement("path", { d: "M4 4l16 16" }) : /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "3" }));
   var More = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }));
   function GuideGroups({ guides, unit }) {
-    const [menu, setMenu] = useState39(null);
-    const [folded, setFolded] = useState39({});
-    const menuRef = useRef27(null);
-    useEffect27(() => {
+    const [menu, setMenu] = useState40(null);
+    const [folded, setFolded] = useState40({});
+    const menuRef = useRef28(null);
+    useEffect28(() => {
       if (!menu) return void 0;
       const close = (e) => {
         if (!menuRef.current || !menuRef.current.contains(e.target)) setMenu(null);
@@ -19730,7 +19897,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/panels/LayersPanel.jsx
-  var { useState: useState40, useRef: useRef28, useEffect: useEffect28 } = React;
+  var { useState: useState41, useRef: useRef29, useEffect: useEffect29 } = React;
   function LayerThumb({ ann }) {
     if (ann.type === "image") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("img", { src: ann.src, alt: "", draggable: "false" }));
     if (ann.type === "rect") return /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb" }, /* @__PURE__ */ React.createElement("span", { className: "ze-layer-thumb-fill", style: { background: rectFillCss(ann), borderRadius: isEllipse(ann) ? "50%" : void 0 } }));
@@ -19779,7 +19946,7 @@ ${parts.join("\n")}</g>`);
     { key: "sw", left: true, bottom: true },
     { key: "se", right: true, bottom: true }
   ];
-  var clamp2 = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  var clamp3 = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
   var MoreIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "13", height: "13", fill: "currentColor", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "5", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "12", r: "1.9" }), /* @__PURE__ */ React.createElement("circle", { cx: "12", cy: "19", r: "1.9" }));
   var GroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "19", height: "19", rx: "2", strokeDasharray: "3 3" }), /* @__PURE__ */ React.createElement("rect", { x: "6.5", y: "6.5", width: "7", height: "7", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "10.5", y: "10.5", width: "7", height: "7", rx: "1" }));
   var UngroupIcon = () => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "15", height: "15", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "2.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("rect", { x: "13.5", y: "13.5", width: "8", height: "8", rx: "1" }), /* @__PURE__ */ React.createElement("path", { d: "M14 4h6v6M4 14v6h6", strokeDasharray: "2 2.5" }));
@@ -19796,17 +19963,17 @@ ${parts.join("\n")}</g>`);
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
   function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, guides, rulerUnit }) {
-    const [renamingId, setRenamingId] = useState40(null);
-    const [menuOpen, setMenuOpen] = useState40(false);
-    const menuRef = useRef28(null);
-    const [dropInfo, setDropInfo] = useState40(null);
-    const [, setCollapseTick] = useState40(0);
-    const dragIdRef = useRef28(null);
-    const listRef = useRef28(null);
-    const panelRef = useRef28(null);
-    const headRef = useRef28(null);
+    const [renamingId, setRenamingId] = useState41(null);
+    const [menuOpen, setMenuOpen] = useState41(false);
+    const menuRef = useRef29(null);
+    const [dropInfo, setDropInfo] = useState41(null);
+    const [, setCollapseTick] = useState41(0);
+    const dragIdRef = useRef29(null);
+    const listRef = useRef29(null);
+    const panelRef = useRef29(null);
+    const headRef = useRef29(null);
     const topFirst = annotations.slice().reverse();
-    const anchorRef = useRef28(null);
+    const anchorRef = useRef29(null);
     function pickLayer(ann, e, single) {
       const toggle = e.metaKey || withTouchModifier("ctrl", e), shift = withTouchModifier("shift", e);
       if (shift && !toggle && !selectedIds.includes(ann.id) && anchorRef.current !== null && anchorRef.current !== ann.id && onSelectRange) {
@@ -19822,9 +19989,9 @@ ${parts.join("\n")}</g>`);
     const canUngroup = annotations.some((a) => a.groupId && selectedIds.includes(a.id));
     const canClip = clipTargets(annotations, selectedIds).length > 0;
     const canRelease = annotations.some((a) => selectedIds.includes(a.id) && a.clipToBelow);
-    const [rowMenu, setRowMenu] = useState40(null);
-    const rowMenuRef = useRef28(null);
-    useEffect28(() => {
+    const [rowMenu, setRowMenu] = useState41(null);
+    const rowMenuRef = useRef29(null);
+    useEffect29(() => {
       if (!menuOpen && !rowMenu) return;
       const close = () => {
         setMenuOpen(false);
@@ -19874,7 +20041,7 @@ ${parts.join("\n")}</g>`);
         y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
       };
     }
-    useEffect28(() => {
+    useEffect29(() => {
       if (!position) return;
       const keepInView = () => {
         const next = inView(position.x, position.y);
@@ -19901,12 +20068,12 @@ ${parts.join("\n")}</g>`);
       const move = (ev) => {
         const dx = ev.clientX - clientX, dy = ev.clientY - clientY;
         let left = start.left, width = start.width, height = start.height;
-        if (edge.right) width = clamp2(start.width + dx, MIN_WIDTH, window.innerWidth - start.left);
+        if (edge.right) width = clamp3(start.width + dx, MIN_WIDTH, window.innerWidth - start.left);
         if (edge.left) {
-          width = clamp2(start.width - dx, MIN_WIDTH, start.right);
+          width = clamp3(start.width - dx, MIN_WIDTH, start.right);
           left = start.right - width;
         }
-        if (edge.bottom) height = clamp2(start.height + dy, MIN_HEIGHT, window.innerHeight - start.top);
+        if (edge.bottom) height = clamp3(start.height + dy, MIN_HEIGHT, window.innerHeight - start.top);
         onResize({ width: Math.round(width), height: Math.round(height) });
         onMove({ x: Math.round(left), y: Math.round(start.top) });
       };
@@ -19919,7 +20086,7 @@ ${parts.join("\n")}</g>`);
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     }
-    useEffect28(() => {
+    useEffect29(() => {
       const row = listRef.current && listRef.current.querySelector(".ze-layer-row.is-selected");
       if (row) row.scrollIntoView({ block: "nearest" });
     }, [selectedIds[0]]);
@@ -20184,13 +20351,13 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/PanelResizer.jsx
-  var { useLayoutEffect: useLayoutEffect6, useRef: useRef29 } = React;
+  var { useLayoutEffect: useLayoutEffect7, useRef: useRef30 } = React;
   var MIN_CANVAS = 360;
   var KEY_STEP = 16;
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
-    const widthRef = useRef29(null);
+    const widthRef = useRef30(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
-    const clamp3 = (px) => {
+    const clamp4 = (px) => {
       const body = bodyRef.current;
       const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
       return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
@@ -20223,7 +20390,7 @@ ${parts.join("\n")}</g>`);
         } catch (e) {
         }
       } else {
-        widthRef.current = clamp3(px);
+        widthRef.current = clamp4(px);
         root.style.setProperty(cssVar, widthRef.current + "px");
         if (save) {
           try {
@@ -20233,7 +20400,7 @@ ${parts.join("\n")}</g>`);
         }
       }
     };
-    useLayoutEffect6(() => {
+    useLayoutEffect7(() => {
       let saved = null;
       try {
         saved = parseInt(localStorage.getItem(storageKey), 10);
@@ -20241,7 +20408,7 @@ ${parts.join("\n")}</g>`);
       }
       if (saved > 0) apply(saved, false);
       const onResize = () => {
-        if (widthRef.current != null && clamp3(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+        if (widthRef.current != null && clamp4(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
       };
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
@@ -20302,7 +20469,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/settings/LayoutSettings.jsx
-  var { useState: useState41 } = React;
+  var { useState: useState42 } = React;
   var PREVIEW_W = 70;
   var PREVIEW_H = 99;
   function LayoutPreview({ layout, settings }) {
@@ -20322,7 +20489,7 @@ ${parts.join("\n")}</g>`);
     }));
   }
   function LayoutSettings({ settings, onChange, onApply, hasPage }) {
-    const [where, setWhere] = useState41("new");
+    const [where, setWhere] = useState42("new");
     const target = hasPage ? where : "new";
     return /* @__PURE__ */ React.createElement("div", { className: "ze-layout-menu" }, /* @__PURE__ */ React.createElement("div", { className: "ze-layout-where", role: "group", "aria-label": "Where to add the layout" }, /* @__PURE__ */ React.createElement(
       "button",
@@ -20360,7 +20527,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/state/useLiveThumbs.js
-  var { useState: useState42, useEffect: useEffect29, useRef: useRef30 } = React;
+  var { useState: useState43, useEffect: useEffect30, useRef: useRef31 } = React;
   var SELECTED_GAP_MS = 150;
   var OTHER_GAP_MS = 25;
   var SLOW_FACTOR = 4;
@@ -20368,21 +20535,21 @@ ${parts.join("\n")}</g>`);
   var needsLive = (p) => p.annotations && p.annotations.length > 0 || filterOn(p.filter);
   var revokeLater = (url) => setTimeout(() => URL.revokeObjectURL(url), 1500);
   function useLiveThumbs(pages, selectedKey) {
-    const [urls, setUrls] = useState42({});
-    const urlsRef = useRef30({});
-    const madeFrom = useRef30(/* @__PURE__ */ new Map());
-    const baseCache = useRef30(null);
-    const latest = useRef30({ pages, selectedKey });
-    const timer3 = useRef30(0);
-    const running = useRef30(false);
-    const lastEnd = useRef30(0);
-    const lastMs = useRef30(0);
-    const alive = useRef30(true);
-    const [on, setOn] = useState42(() => !document.documentElement.classList.contains("ze-static-thumbs"));
-    const onRef = useRef30(on);
+    const [urls, setUrls] = useState43({});
+    const urlsRef = useRef31({});
+    const madeFrom = useRef31(/* @__PURE__ */ new Map());
+    const baseCache = useRef31(null);
+    const latest = useRef31({ pages, selectedKey });
+    const timer3 = useRef31(0);
+    const running = useRef31(false);
+    const lastEnd = useRef31(0);
+    const lastMs = useRef31(0);
+    const alive = useRef31(true);
+    const [on, setOn] = useState43(() => !document.documentElement.classList.contains("ze-static-thumbs"));
+    const onRef = useRef31(on);
     onRef.current = on;
     latest.current = { pages, selectedKey };
-    useEffect29(() => {
+    useEffect30(() => {
       const listener = (e) => setOn(!(e.detail && e.detail.staticThumbs));
       window.addEventListener("zn-display-prefs", listener);
       return () => window.removeEventListener("zn-display-prefs", listener);
@@ -20447,7 +20614,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }
-    useEffect29(() => {
+    useEffect30(() => {
       const wanted = new Set(on ? pages.filter(needsLive).map((p) => p.key) : []);
       let next = null;
       for (const k of Object.keys(urlsRef.current)) {
@@ -20463,7 +20630,7 @@ ${parts.join("\n")}</g>`);
       }
       schedule();
     }, [pages, selectedKey, on]);
-    useEffect29(() => {
+    useEffect30(() => {
       alive.current = true;
       return () => {
         alive.current = false;
@@ -20561,7 +20728,7 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/sidebar/Sidebar.jsx
-  var { useState: useState43, useRef: useRef31, useEffect: useEffect30 } = React;
+  var { useState: useState44, useRef: useRef32, useEffect: useEffect31 } = React;
   var icon = { viewBox: "0 0 24 24", width: 20, height: 20, fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   var InsertPdfIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 3v5h5" }), /* @__PURE__ */ React.createElement("path", { d: "M12 11v6M9 14h6" }));
   var LayoutIcon = () => /* @__PURE__ */ React.createElement("svg", { ...icon }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "17", height: "17", rx: "2" }), /* @__PURE__ */ React.createElement("path", { d: "M3.5 10h17M10 10v10.5" }));
@@ -20570,11 +20737,11 @@ ${parts.join("\n")}</g>`);
   var EDGE_SCROLL_SPEED = 4;
   function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
     const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null);
-    const dragIndexRef = useRef31(null);
-    const bodyRef = useRef31(null);
-    const scrollDirRef = useRef31(0);
-    const rafRef = useRef31(null);
-    const [dragOverInfo, setDragOverInfo] = useState43(null);
+    const dragIndexRef = useRef32(null);
+    const bodyRef = useRef32(null);
+    const scrollDirRef = useRef32(0);
+    const rafRef = useRef32(null);
+    const [dragOverInfo, setDragOverInfo] = useState44(null);
     function startAutoScroll() {
       if (rafRef.current) return;
       const step = () => {
@@ -20593,7 +20760,7 @@ ${parts.join("\n")}</g>`);
       }
       scrollDirRef.current = 0;
     }
-    useEffect30(() => stopAutoScroll, []);
+    useEffect31(() => stopAutoScroll, []);
     function handleContainerDragOver(e) {
       const el = bodyRef.current;
       if (!el) return;
@@ -20717,25 +20884,25 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/TouchBar.jsx
-  var { useState: useState44, useEffect: useEffect31 } = React;
+  var { useState: useState45, useEffect: useEffect32 } = React;
   function pressKey(key, mods) {
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods }));
   }
   var Icon = ({ children }) => /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "18", height: "18", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, children);
   function TouchBar({ selectedAnn, isEditing, isCropping, onEditText, marqueePolygonOpen }) {
-    const [shift, setShift] = useState44(false);
-    const [alt, setAlt] = useState44(false);
-    const [ctrl, setCtrl] = useState44(false);
-    useEffect31(() => {
+    const [shift, setShift] = useState45(false);
+    const [alt, setAlt] = useState45(false);
+    const [ctrl, setCtrl] = useState45(false);
+    useEffect32(() => {
       setTouchModifier("shift", shift);
     }, [shift]);
-    useEffect31(() => {
+    useEffect32(() => {
       setTouchModifier("alt", alt);
     }, [alt]);
-    useEffect31(() => {
+    useEffect32(() => {
       setTouchModifier("ctrl", ctrl);
     }, [ctrl]);
-    useEffect31(() => () => {
+    useEffect32(() => () => {
       setTouchModifier("shift", false);
       setTouchModifier("alt", false);
       setTouchModifier("ctrl", false);
@@ -20817,9 +20984,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/settings/BleedSettings.jsx
-  var { useState: useState45 } = React;
+  var { useState: useState46 } = React;
   function BleedSettings({ currentMm, onApply }) {
-    const [text, setText] = useState45(String(currentMm || 0));
+    const [text, setText] = useState46(String(currentMm || 0));
     const value = cleanBleedMm(text);
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (mm)"), /* @__PURE__ */ React.createElement(
       NumberBox,
@@ -20847,7 +21014,7 @@ ${parts.join("\n")}</g>`);
     filter,
     onFilterPatch
   }) {
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Filter"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: filterType, onChange: (e) => onFilterTypeChange(e.target.value) }, PAGE_FILTER_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label)))), filterType === "duotone" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Dark tone"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: duotoneDark, onChange: (e) => onDuotoneDarkChange(e.target.value) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Light tone"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: duotoneLight, onChange: (e) => onDuotoneLightChange(e.target.value) }))), FILTER_CONTROLS[filterType] && /* @__PURE__ */ React.createElement(ControlList, { controls: FILTER_CONTROLS[filterType], source: filter, onPatch: onFilterPatch }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Applies to the selected pages' backgrounds and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too."));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Filter"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: filterType, onChange: (e) => onFilterTypeChange(e.target.value) }, PAGE_FILTER_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label)))), filterType === "duotone" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Dark tone"), /* @__PURE__ */ React.createElement(ColorPickerButton, { ariaLabel: "Dark tone", value: duotoneDark, onChange: onDuotoneDarkChange })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Light tone"), /* @__PURE__ */ React.createElement(ColorPickerButton, { ariaLabel: "Light tone", value: duotoneLight, onChange: onDuotoneLightChange }))), FILTER_CONTROLS[filterType] && /* @__PURE__ */ React.createElement(ControlList, { controls: FILTER_CONTROLS[filterType], source: filter, onPatch: onFilterPatch }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Applies to the selected pages' backgrounds and any placed images (other pages keep their own setting). Pen and text stay crisp on top. Baked into Export PDF too."));
   }
 
   // apps/ZEditor/src/ui/settings/GuidesSettings.jsx
@@ -20894,7 +21061,7 @@ ${parts.join("\n")}</g>`);
   // apps/ZEditor/src/ui/settings/PageNumbersSettings.jsx
   function PageNumbersSettings({ settings, pageCount, onChange }) {
     const whole = (value, fallback, min = 0) => Math.max(min, Math.round(Number(value)) || fallback);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Start numbering on page"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), value: settings.from, onChange: (e) => onChange({ from: whole(e.target.value, 1, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stop after page (empty = last)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), placeholder: "last", "data-allow-empty": true, value: settings.to || "", onChange: (e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "First page shows number"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", step: "1", value: settings.first, onChange: (e) => onChange({ first: Math.round(Number(e.target.value)) || 0 }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Position"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_POSITIONS, value: settings.position, onChange: (position) => onChange({ position }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Style"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_FORMATS, value: settings.format, onChange: (format) => onChange({ format }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size (pt)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "4", max: "48", value: settings.size, onChange: (e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Distance from edge (in)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "0", max: "3", step: "0.05", value: settings.marginIn, onChange: (e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement("input", { type: "color", className: "ze-format-color-input", value: settings.color, onChange: (e) => onChange({ color: e.target.value }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.'));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Start numbering on page"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), value: settings.from, onChange: (e) => onChange({ from: whole(e.target.value, 1, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Stop after page (empty = last)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "1", max: Math.max(1, pageCount), placeholder: "last", "data-allow-empty": true, value: settings.to || "", onChange: (e) => onChange({ to: e.target.value === "" ? 0 : whole(e.target.value, 0, 1) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "First page shows number"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", step: "1", value: settings.first, onChange: (e) => onChange({ first: Math.round(Number(e.target.value)) || 0 }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Position"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_POSITIONS, value: settings.position, onChange: (position) => onChange({ position }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Style"), /* @__PURE__ */ React.createElement(SelectInput, { options: PAGE_NUMBER_FORMATS, value: settings.format, onChange: (format) => onChange({ format }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Size (pt)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "4", max: "48", value: settings.size, onChange: (e) => onChange({ size: Math.min(48, whole(e.target.value, 10, 4)) }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Distance from edge (in)"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: "0", max: "3", step: "0.05", value: settings.marginIn, onChange: (e) => onChange({ marginIn: Math.max(0, Number(e.target.value) || 0) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Color"), /* @__PURE__ */ React.createElement(ColorPickerButton, { ariaLabel: "Page number colour", value: settings.color, onChange: (hex3) => onChange({ color: hex3 }) })), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, 'Pages are counted by their place in the document. "Outer corner" puts odd pages on the right and even pages on the left, like a printed booklet. Drawn on top of everything in Export PDF and Send to ZineArranger.'));
   }
 
   // apps/ZEditor/src/ui/settings/RulersSettings.jsx
@@ -20904,9 +21071,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState46 } = React;
+  var { useState: useState47 } = React;
   function PageMenuBody({ rows }) {
-    const [customizing, setCustomizing] = useState46(null);
+    const [customizing, setCustomizing] = useState47(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -20921,7 +21088,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f0f2fe1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "4f05dde"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
