@@ -5,7 +5,6 @@ import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, PAGE_FILTER_OPTIONS } from
 import { BleedSettings } from "../settings/BleedSettings.jsx";
 import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
-import { LayoutSettings } from "../settings/LayoutSettings.jsx";
 import { OnionSkinSettings } from "../settings/OnionSkinSettings.jsx";
 import { PageNumbersSettings } from "../settings/PageNumbersSettings.jsx";
 import { RulersSettings } from "../settings/RulersSettings.jsx";
@@ -67,8 +66,9 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
           onBlur={() => setDocTitle((t) => t.trim())}
         />
         <TopMenu label="Page">
-          {() => (
+          {({ close }) => (
             <PageMenuBody
+              close={close}
               rows={[
                 {
                   key: "layout",
@@ -77,14 +77,7 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
                   noToggle: true,
                   openLabel: "Choose…",
                   disabled: doc.pages.length === 0,
-                  settings: (
-                    <LayoutSettings
-                      settings={view.layoutSettings}
-                      onChange={view.setLayoutSettings}
-                      hasPage={Boolean(selectedPage)}
-                      onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
-                    />
-                  ),
+                  onOpen: () => dialogs.setLayoutOpen(true),
                 },
                 {
                   key: "bleed",

@@ -4,8 +4,8 @@
 
 ## How to use
 
-1. **Page → Layout → Choose…**
-2. Pick where it goes at the top: **New page after** (the default) adds a new blank page after the current one holding the layout, or **On this page** applies it to the current page, **under** your own items. Picking another layout on the same page **replaces** the earlier one instead of stacking; the text area keeps its words and moves into the new layout's text area. Both are **one undo step**. The same picker is also the **Layout** button at the top of the page strip on the left.
+1. Click **Layout** at the top of the page strip on the left, or **Page → Layout → Choose…**. It opens the **Page layouts window** over the editor (close it with ×, **Esc**, or a click outside it).
+2. Pick where it goes at the top: **New page after** (the default) adds a new blank page after the current one holding the layout, or **On this page** applies it to the current page, **under** your own items. Picking another layout on the same page **replaces** the earlier one instead of stacking; the text area keeps its words and moves into the new layout's text area. Both are **one undo step**. 
 3. Click a layout's little picture.
 4. **Layout settings (this file)** (fold-out at the bottom): **Margin**, **Gap between pieces**, **Split** of the half-and-half layouts, **Body text size**, **Title size**, **Body line spacing**, **Caption size**, **Column gap**. **Reset to defaults** puts them back. These are saved **in the project file**, so a different document keeps the app's defaults.
 - All layout text is **justified** (both edges straight); change it in the Format panel like any text.

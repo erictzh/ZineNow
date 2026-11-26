@@ -1,7 +1,5 @@
 // The page list: selecting, drag-to-reorder with edge auto-scroll, adding pages.
 
-import { TopMenu } from "../topbar/TopMenu.jsx";
-import { LayoutSettings } from "../settings/LayoutSettings.jsx";
 import { useLiveThumbs } from "../../state/useLiveThumbs.js";
 import { PageGap } from "./PageGap.jsx";
 import { Thumbnail } from "./Thumbnail.jsx";
@@ -16,7 +14,7 @@ const SelectAllIcon = () => (<svg {...icon}><rect x="3.5" y="3.5" width="17" hei
 const EDGE_SCROLL_ZONE = 44; // px from top/bottom edge that triggers scrolling
 const EDGE_SCROLL_SPEED = 4; // px per frame — deliberately slow, not a fast jump
 
-export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, layouts, layoutSettings, onLayoutSettings }) {
+export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onSelectAll, onRotate, onDelete, onReorder, onLoadClick, onNewDocClick, onInsertPdfClick, onInsertBlank, loading, storyStates, onContinueStory, onOpenLayout }) {
   const liveThumbs = useLiveThumbs(pages, pages[selectedIdx] ? pages[selectedIdx].key : null); // page key -> thumbnail with its items on it
   const dragIndexRef = useRef(null);
   const bodyRef = useRef(null);
@@ -104,17 +102,11 @@ export function Sidebar({ pages, selectedIdx, selectedPageIndices, onSelect, onS
               <InsertPdfIcon />
               <span>Insert PDF</span>
             </button>
-            {layouts && (
-              <TopMenu label="Layout" tile icon={<LayoutIcon />}>
-                {() => (
-                  <LayoutSettings
-                    settings={layoutSettings}
-                    onChange={onLayoutSettings}
-                    hasPage={selectedIdx !== null && Boolean(pages[selectedIdx])}
-                    onApply={(key, where) => (where === "page" ? layouts.addLayoutToPage(key) : layouts.addPageWithLayout(key))}
-                  />
-                )}
-              </TopMenu>
+            {onOpenLayout && (
+              <button type="button" className="ze-tile" onClick={onOpenLayout} title="Page layouts: ready-made pages (picture and text)">
+                <LayoutIcon />
+                <span>Layout</span>
+              </button>
             )}
             <button type="button" className="ze-tile" onClick={onSelectAll} disabled={loading} title="Select every page">
               <SelectAllIcon />

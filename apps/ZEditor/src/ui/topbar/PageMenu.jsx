@@ -5,7 +5,8 @@ const { useState } = React;
 // ---- Page menu — Filter, Onion Skin, Page Numbers and Guides, each a row
 // with an on/off toggle and "Customize…", which swaps the menu to that
 // feature's settings (with a back arrow) instead of opening a second popup.
-export function PageMenuBody({ rows }) {
+// A row with `onOpen` (instead of `settings`) opens something else, such as a window, when its button is pressed, and then closes the menu (`close`).
+export function PageMenuBody({ rows, close }) {
   const [customizing, setCustomizing] = useState(null);
   const active = rows.find((r) => r.key === customizing);
 
@@ -31,7 +32,7 @@ export function PageMenuBody({ rows }) {
         <span className="ze-menu-toggle-label">{row.label}</span>
         {row.detail && <span className="ze-menu-toggle-detail">{row.detail}</span>}
       </div>
-      <button type="button" className="ze-menu-customize" disabled={row.disabled} onClick={() => setCustomizing(row.key)}>
+      <button type="button" className="ze-menu-customize" disabled={row.disabled} onClick={() => { if (row.onOpen) { row.onOpen(); if (close) close(); } else setCustomizing(row.key); }}>
         {row.openLabel || "Customize…"}
       </button>
       {!row.noToggle && (
