@@ -7507,20 +7507,20 @@
   function normalizeTraceSettings(s = {}) {
     const base = presetSettings(s.preset || DEFAULT_TRACE_PRESET);
     const v = { ...base, ...s };
-    const clamp4 = (x, lo, hi, fb) => Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Math.round(Number(x)))) : fb;
+    const clamp5 = (x, lo, hi, fb) => Number.isFinite(Number(x)) ? Math.min(hi, Math.max(lo, Math.round(Number(x)))) : fb;
     return {
       preset: v.preset,
       mode: ["bw", "gray", "color"].includes(v.mode) ? v.mode : "bw",
-      threshold: clamp4(v.threshold, 0, 255, 128),
-      colors: clamp4(v.colors, 2, 16, 6),
-      detail: clamp4(v.detail, 0, 100, 50),
-      corners: clamp4(v.corners, 0, 100, 50),
-      noise: clamp4(v.noise, 0, 100, 8),
+      threshold: clamp5(v.threshold, 0, 255, 128),
+      colors: clamp5(v.colors, 2, 16, 6),
+      detail: clamp5(v.detail, 0, 100, 50),
+      corners: clamp5(v.corners, 0, 100, 50),
+      noise: clamp5(v.noise, 0, 100, 8),
       ignoreWhite: v.ignoreWhite === "drop" ? "drop" : "keep",
       method: v.method === "abut" ? "abut" : "overlap",
       fills: v.fills === "off" ? "off" : "on",
       strokes: v.strokes === "on" ? "on" : "off",
-      strokeWidth: clamp4(v.strokeWidth, 1, 20, 2),
+      strokeWidth: clamp5(v.strokeWidth, 1, 20, 2),
       view: TRACE_VIEW_OPTIONS.some((o) => o.key === v.view) ? v.view : "result"
     };
   }
@@ -21135,7 +21135,7 @@ ${parts.join("\n")}</g>`);
   function PanelResizer({ bodyRef, side, cssVar, otherVar, storageKey, min, max, label }) {
     const widthRef = useRef30(null);
     const cssPx = (name) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
-    const clamp4 = (px) => {
+    const clamp5 = (px) => {
       const body = bodyRef.current;
       const room = (body ? body.getBoundingClientRect().width : window.innerWidth) - (otherVar ? cssPx(otherVar) : 0) - MIN_CANVAS;
       return Math.round(Math.min(Math.max(min, Math.min(max, room)), Math.max(min, px)));
@@ -21168,7 +21168,7 @@ ${parts.join("\n")}</g>`);
         } catch (e) {
         }
       } else {
-        widthRef.current = clamp4(px);
+        widthRef.current = clamp5(px);
         root.style.setProperty(cssVar, widthRef.current + "px");
         if (save) {
           try {
@@ -21186,7 +21186,7 @@ ${parts.join("\n")}</g>`);
       }
       if (saved > 0) apply(saved, false);
       const onResize = () => {
-        if (widthRef.current != null && clamp4(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
+        if (widthRef.current != null && clamp5(widthRef.current) !== widthRef.current) apply(widthRef.current, false);
       };
       window.addEventListener("resize", onResize);
       return () => window.removeEventListener("resize", onResize);
@@ -22038,6 +22038,17 @@ ${parts.join("\n")}</g>`);
 
   // apps/ZEditor/src/ui/panels/DataPanel.jsx
   var { useRef: useRef33, useState: useState47 } = React;
+  var MIN_WIDTH2 = 240;
+  var MIN_HEIGHT2 = 200;
+  var EDGES = [
+    { key: "w", left: true },
+    { key: "e", right: true },
+    { key: "s", bottom: true },
+    { key: "sw", left: true, bottom: true },
+    { key: "se", right: true, bottom: true }
+  ];
+  var clamp4 = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+  var rememberedPlace = { position: null, size: null };
   function DataPanel({ merge, view, hasPage }) {
     const fileRef = useRef33(null);
     const [pasting, setPasting] = useState47(false);
@@ -22045,6 +22056,17 @@ ${parts.join("\n")}</g>`);
     const [range, setRange] = useState47({ from: "", to: "" });
     const [hideTemplate, setHideTemplate] = useState47(true);
     const [confirming, setConfirming] = useState47(false);
+    const panelRef = useRef33(null), headRef = useRef33(null);
+    const [position, setPositionState] = useState47(rememberedPlace.position);
+    const [size, setSizeState] = useState47(rememberedPlace.size);
+    const setPosition = (v) => {
+      rememberedPlace.position = v;
+      setPositionState(v);
+    };
+    const setSize = (v) => {
+      rememberedPlace.size = v;
+      setSizeState(v);
+    };
     const { parsed, headers, count, idColumn } = merge;
     const from = Number(range.from) || void 0, to = Number(range.to) || void 0;
     const check = merge.usedCheck(from, to);
@@ -22063,12 +22085,66 @@ ${parts.join("\n")}</g>`);
       setConfirming(false);
       merge.createPages({ from, to, hideTemplate });
     }
-    return /* @__PURE__ */ React.createElement("aside", { className: "ze-data-panel", "aria-label": "Data merge" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-head" }, /* @__PURE__ */ React.createElement("span", null, "Data"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-modal-close", "aria-label": "Close", title: "Close", onClick: () => view.setDataPanelOpen(false) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,text/csv", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose CSV file…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
-      if (merge.connect("pasted data.csv", pasted)) {
-        setPasted("");
-        setPasting(false);
-      }
-    } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id.")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make pages"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Design one page with fields in it, then make a page for each row."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (it is skipped when exporting)"), check.missing.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "The page uses ", check.missing.map((f) => "{{" + f + "}}").join(", "), ", but the file has no such column."), check.emptyCounts.map((e) => /* @__PURE__ */ React.createElement("p", { key: e.field, className: "ze-data-warn" }, e.count, " of the chosen rows have nothing in “", e.field, "”.")), check.used.length === 0 && hasPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "No field is used on this page yet."), merge.earlierCount > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.earlierCount, " page", merge.earlierCount === 1 ? "" : "s", " made from this page earlier will be replaced."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary ze-data-wide", disabled: !hasPage || chosenCount < 1 || check.used.length === 0, onClick: make }, confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")), merge.onGeneratedPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "This page was made by a merge. Edit the page you designed, then make the pages again."))), merge.message && /* @__PURE__ */ React.createElement("p", { className: "ze-data-note", role: "status" }, merge.message)));
+    const inView = (x, y) => ({
+      x: Math.max(0, Math.min(x, window.innerWidth - panelRef.current.offsetWidth)),
+      y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight))
+    });
+    function startDrag(e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const start = panelRef.current.getBoundingClientRect();
+      const { clientX, clientY } = e;
+      trackPointerDrag((ev) => setPosition(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+    }
+    function startResize(e, edge) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const start = panelRef.current.getBoundingClientRect();
+      const { clientX, clientY, pointerId } = e;
+      const handle = e.currentTarget;
+      handle.setPointerCapture(pointerId);
+      const move = (ev) => {
+        const dx = ev.clientX - clientX, dy = ev.clientY - clientY;
+        let left = start.left, width = start.width, height = start.height;
+        if (edge.right) width = clamp4(start.width + dx, MIN_WIDTH2, window.innerWidth - start.left);
+        if (edge.left) {
+          width = clamp4(start.width - dx, MIN_WIDTH2, start.right);
+          left = start.right - width;
+        }
+        if (edge.bottom) height = clamp4(start.height + dy, MIN_HEIGHT2, window.innerHeight - start.top);
+        setSize({ width: Math.round(width), height: Math.round(height) });
+        setPosition({ x: Math.round(left), y: Math.round(start.top) });
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    }
+    return /* @__PURE__ */ React.createElement(
+      "aside",
+      {
+        className: "ze-data-panel" + (size ? " is-sized" : ""),
+        "aria-label": "Data merge",
+        ref: panelRef,
+        style: {
+          ...position ? { left: position.x, top: position.y } : null,
+          ...size ? { width: size.width, height: Math.min(size.height, window.innerHeight - (position ? position.y : 96)) } : null
+        }
+      },
+      /* @__PURE__ */ React.createElement("div", { className: "ze-data-head", ref: headRef, onMouseDown: startDrag }, /* @__PURE__ */ React.createElement("span", null, "Data"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize (the Data button in the top bar brings it back)", "aria-label": "Minimize the Data panel", onMouseDown: (e) => e.stopPropagation(), onClick: () => view.setDataPanelOpen(false) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" })))),
+      /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,text/csv", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose CSV file…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
+        if (merge.connect("pasted data.csv", pasted)) {
+          setPasted("");
+          setPasting(false);
+        }
+      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id.")), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make pages"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Design one page with fields in it, then make a page for each row."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (it is skipped when exporting)"), check.missing.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "The page uses ", check.missing.map((f) => "{{" + f + "}}").join(", "), ", but the file has no such column."), check.emptyCounts.map((e) => /* @__PURE__ */ React.createElement("p", { key: e.field, className: "ze-data-warn" }, e.count, " of the chosen rows have nothing in “", e.field, "”.")), check.used.length === 0 && hasPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "No field is used on this page yet."), merge.earlierCount > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.earlierCount, " page", merge.earlierCount === 1 ? "" : "s", " made from this page earlier will be replaced."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary ze-data-wide", disabled: !hasPage || chosenCount < 1 || check.used.length === 0, onClick: make }, confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")), merge.onGeneratedPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "This page was made by a merge. Edit the page you designed, then make the pages again."))), merge.message && /* @__PURE__ */ React.createElement("p", { className: "ze-data-note", role: "status" }, merge.message)),
+      EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
+    );
   }
 
   // apps/ZEditor/src/ui/settings/BleedSettings.jsx
@@ -22181,7 +22257,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "855dfd6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "359680e"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

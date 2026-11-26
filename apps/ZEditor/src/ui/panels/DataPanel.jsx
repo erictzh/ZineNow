@@ -1,6 +1,16 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { trackPointerDrag } from "../pointer.js";
 const { useRef, useState } = React;
+
+// Dragging and resizing work as in the Layers panel. Where the panel was left is kept while the editor is open.
+const MIN_WIDTH = 240, MIN_HEIGHT = 200;
+const EDGES = [
+  { key: "w", left: true }, { key: "e", right: true }, { key: "s", bottom: true },
+  { key: "sw", left: true, bottom: true }, { key: "se", right: true, bottom: true },
+];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+let rememberedPlace = { position: null, size: null };
 
 export function DataPanel({ merge, view, hasPage }) {
   const fileRef = useRef(null);
@@ -9,6 +19,11 @@ export function DataPanel({ merge, view, hasPage }) {
   const [range, setRange] = useState({ from: "", to: "" });
   const [hideTemplate, setHideTemplate] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const panelRef = useRef(null), headRef = useRef(null);
+  const [position, setPositionState] = useState(rememberedPlace.position);
+  const [size, setSizeState] = useState(rememberedPlace.size);
+  const setPosition = (v) => { rememberedPlace.position = v; setPositionState(v); };
+  const setSize = (v) => { rememberedPlace.size = v; setSizeState(v); };
   const { parsed, headers, count, idColumn } = merge;
   const from = Number(range.from) || undefined, to = Number(range.to) || undefined;
   const check = merge.usedCheck(from, to);
@@ -26,11 +41,60 @@ export function DataPanel({ merge, view, hasPage }) {
     merge.createPages({ from, to, hideTemplate });
   }
 
+  // Keeps the title bar on screen so the panel can always be grabbed.
+  const inView = (x, y) => ({
+    x: Math.max(0, Math.min(x, window.innerWidth - panelRef.current.offsetWidth)),
+    y: Math.max(0, Math.min(y, window.innerHeight - headRef.current.offsetHeight)),
+  });
+  function startDrag(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const start = panelRef.current.getBoundingClientRect();
+    const { clientX, clientY } = e;
+    trackPointerDrag((ev) => setPosition(inView(start.left + ev.clientX - clientX, start.top + ev.clientY - clientY)));
+  }
+  function startResize(e, edge) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const start = panelRef.current.getBoundingClientRect();
+    const { clientX, clientY, pointerId } = e;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(pointerId);
+    const move = (ev) => {
+      const dx = ev.clientX - clientX, dy = ev.clientY - clientY;
+      let left = start.left, width = start.width, height = start.height;
+      if (edge.right) width = clamp(start.width + dx, MIN_WIDTH, window.innerWidth - start.left);
+      if (edge.left) { width = clamp(start.width - dx, MIN_WIDTH, start.right); left = start.right - width; }
+      if (edge.bottom) height = clamp(start.height + dy, MIN_HEIGHT, window.innerHeight - start.top);
+      setSize({ width: Math.round(width), height: Math.round(height) });
+      setPosition({ x: Math.round(left), y: Math.round(start.top) });
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+
   return (
-    <aside className="ze-data-panel" aria-label="Data merge">
-      <div className="ze-data-head">
+    <aside
+      className={"ze-data-panel" + (size ? " is-sized" : "")} aria-label="Data merge" ref={panelRef}
+      style={{
+        ...(position ? { left: position.x, top: position.y } : null),
+        ...(size ? { width: size.width, height: Math.min(size.height, window.innerHeight - (position ? position.y : 96)) } : null),
+      }}
+    >
+      <div className="ze-data-head" ref={headRef} onMouseDown={startDrag}>
         <span>Data</span>
-        <button type="button" className="ze-modal-close" aria-label="Close" title="Close" onClick={() => view.setDataPanelOpen(false)}>×</button>
+        <button type="button" className="ze-guides-settings-btn" title="Minimize (the Data button in the top bar brings it back)" aria-label="Minimize the Data panel" onMouseDown={(e) => e.stopPropagation()} onClick={() => view.setDataPanelOpen(false)}>
+          <svg viewBox="0 0 20 20" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M5 10h10" />
+          </svg>
+        </button>
       </div>
       <div className="ze-data-body">
         {!parsed && (
@@ -99,6 +163,7 @@ export function DataPanel({ merge, view, hasPage }) {
         )}
         {merge.message && <p className="ze-data-note" role="status">{merge.message}</p>}
       </div>
+      {EDGES.map((edge) => <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />)}
     </aside>
   );
 }
