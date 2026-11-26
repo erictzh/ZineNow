@@ -4,7 +4,7 @@ Cuts the main subject out of a picture and makes everything else see-through. It
 
 ## Turn it on first
 
-The AI features are hidden by default. Click the **gear** at the bottom left of ZEditor and tick **Experimental AI features**. A pop-up explains that they are still being developed and tested and may need you to download models and use your device's processing power. Press **Enable**. (Cancel leaves it off. Untick it any time to hide them again. The choice is remembered.) This also shows the **AI (on-device)** fill style in the Marquee panel.
+The AI features are hidden by default. Click the **gear** at the bottom left of ZEditor and tick **Experimental Features (AI & other development)**. A pop-up explains that they are still being developed and tested and may need you to download models and use your device's processing power. Press **Enable**. (Cancel leaves it off. Untick it any time to hide them again. The choice is remembered.) This also shows the **AI (on-device)** fill style in the Marquee panel.
 
 ## Steps
 

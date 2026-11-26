@@ -194,7 +194,7 @@
   }
 
   // ------------------------------------------------------------------
-  // "Experimental AI features" (the gear, bottom left): off by default. Experimental apps (experimental: true in the config) are hidden while it
+  // "Experimental Features (AI & other development)" (the gear, bottom left): off by default. Experimental apps (experimental: true in the config) are hidden while it
   // is off. The setting is ZEditor's own (localStorage "zeditor.displayPrefs", key aiFeatures), so one switch controls both places.
   // ------------------------------------------------------------------
   const PREFS_KEY = "zeditor.displayPrefs";

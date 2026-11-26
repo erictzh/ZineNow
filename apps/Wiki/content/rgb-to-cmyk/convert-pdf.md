@@ -6,7 +6,7 @@ It is a plain conversion, **not** a colour-managed one: it does not use a printe
 
 ## How to use
 
-1. Open **RGB to CMYK** from the home page.
+1. On the home page, click the **gear** and tick **Experimental Features (AI & other development)**; the **RGB to CMYK** card appears. Open it.
 2. Drop a PDF on the box (or click it to choose one).
 3. Choose what to convert (all on by default):
    - **Black and grey colours → black ink only.** Black text and lines print from the black plate alone, with no coloured fringes.

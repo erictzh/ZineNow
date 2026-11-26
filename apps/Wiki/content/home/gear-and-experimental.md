@@ -1,12 +1,12 @@
 ## Intro
 
-The home page's **gear** (bottom left) holds one setting: **Experimental AI features**, off by default. It controls two things: whether **experimental apps** (Ai Tools (Local)) show up on the home page, and whether ZEditor's AI features appear. It is **one switch shared by both**, and the home page gear also carries the **Tutorial / Wiki** link and the licence line.
+The home page's **gear** (bottom left) holds one setting: **Experimental Features (AI & other development)**, off by default. It controls two things: whether **experimental apps** (Ai Tools (Local) and RGB to CMYK) show up on the home page, and whether ZEditor's AI features appear. It is **one switch shared by both**, and the home page gear also carries the **Tutorial / Wiki** link and the licence line.
 
 ## How to use
 
-1. Click the **gear**. Tick **Experimental AI features**.
-2. A pop-up explains: *These features are still under development and testing. They may need you to download local AI models and use your device's processing power. You will find them in the Ai Tools (Local) app here, and in ZEditor's Image panel and Marquee panel.* **Enable** or **Cancel**.
-3. After enabling, the Ai Tools card appears. Untick it to hide AI everywhere again (no confirmation needed to turn off).
+1. Click the **gear**. Tick **Experimental Features (AI & other development)**.
+2. A pop-up explains that these features are still under development and testing (some download local AI models, some are newer tools with rough edges). **Enable** or **Cancel**.
+3. After enabling, the Ai Tools and RGB to CMYK cards appear. Untick it to hide AI everywhere again (no confirmation needed to turn off).
 - The same switch exists in ZEditor's gear.
 - **Tutorial / Wiki** opens this textbook.
 

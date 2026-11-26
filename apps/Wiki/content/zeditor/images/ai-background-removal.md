@@ -1,10 +1,10 @@
 ## Intro
 
-**AI Background Removal** makes everything except the main subject of a picture see-through, using a small artificial-intelligence model that runs **on your own device**: nothing is uploaded. It is an **experimental** feature: it is hidden until "Experimental AI features" is switched on in the Display gear, and each model is a download you choose to make.
+**AI Background Removal** makes everything except the main subject of a picture see-through, using a small artificial-intelligence model that runs **on your own device**: nothing is uploaded. It is an **experimental** feature: it is hidden until "Experimental Features (AI & other development)" is switched on in the Display gear, and each model is a download you choose to make.
 
 ## How to use
 
-1. Switch on **Experimental AI features** (the gear at the bottom left of ZEditor, or the Home page).
+1. Switch on **Experimental Features (AI & other development)** (the gear at the bottom left of ZEditor, or the Home page).
 2. Select an image: Format panel → **AI Background Removal**.
 3. Choose a **model**: *U²-Netp (General)*, 4.4 MB, for one subject of any kind; or *MODNet (Portrait)*, 25 MB, for head-and-shoulders photos with soft hair edges.
 4. Press **Download** (a pop-up shows the licence, size and where it comes from; you can **Cancel** a download or **Delete** a model later). It then works offline.

@@ -66,7 +66,8 @@ window.ZINENOW_APPS = [
   {
     folder: "RgbToCmyk",
     name: "RGB to CMYK",
-    desc: "Make a PDF print-friendly (CMYK)"
+    desc: "Make a PDF print-friendly (CMYK)",
+    experimental: true
   },
   {
     folder: "AiToolsLocal",

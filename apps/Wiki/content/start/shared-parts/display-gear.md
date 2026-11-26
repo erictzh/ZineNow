@@ -8,7 +8,7 @@ The **gear** at the bottom left of each app opens a small **Display** pop-up wit
 - **Reset** returns every setting to its default (greyed out when nothing was changed).
 - A small grey link line at the bottom gives the source code and notices ([About and Source link](start/shared-parts/about-and-source)).
 - Press **Esc** or click elsewhere to close it.
-- Some ticks ask first (a pop-up with Cancel and OK), such as ZEditor's *Experimental AI features*.
+- Some ticks ask first (a pop-up with Cancel and OK), such as ZEditor's *Experimental Features (AI & other development)*.
 
 ## How it works
 
