@@ -7,13 +7,25 @@ import { isEllipse } from "../../model/outlines.js";
 import { ControlList } from "../controls/ControlList.jsx";
 import { SelectInput } from "../controls/inputs.jsx";
 import { PanelSection, resetPatch } from "../controls/PanelSection.jsx";
+import { DEFAULT_SHADOW, DEFAULT_STROKE, shadowsPatch, strokesPatch, storedShadows as shadowLayersAny, storedStrokes as strokeLayersAny } from "../../model/effectStacks.js";
+import { ShadowStack, StrokeStack } from "./StackedEffects.jsx";
 
 // One section per effect, each with its own on/off checkbox. The edge
 // shapes (Rounded, Ellipse, Torn Edge, Scissor Cut) replace each other.
 // `before` (optional) is shown first inside the group, e.g. the text panel's Photo fill;
 // `beforeLabel` names it in the group's summary while it's on.
 export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
+  // Pictures and shapes keep any number of strokes and shadows (a list each); text keeps one of each.
+  const stacked = (effect) => ann.type !== "text" && (effect.key === "stroke" || effect.key === "shadow");
+  const toggleStack = (effect, on) => {
+    const make = effect.key === "stroke" ? strokesPatch : shadowsPatch;
+    const layers = effect.key === "stroke" ? strokeLayersAny(ann) : shadowLayersAny(ann);
+    if (!on) { onPatch({ [effect.key]: false }); return; }
+    const first = effect.key === "stroke" ? [DEFAULT_STROKE] : [DEFAULT_SHADOW];
+    onPatch(make(layers.length ? layers : first));
+  };
   const toggleEffect = (effect, on) => {
+    if (stacked(effect)) { toggleStack(effect, on); return; }
     const otherEdgesOff = effect.outline && on
       ? Object.fromEntries(effects.filter((e) => e.outline).map((e) => [e.key, false]))
       : {};
@@ -38,10 +50,11 @@ export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, 
             checked={Boolean(ann[effect.key])}
             onToggle={(on) => toggleEffect(effect, on)}
             hint={hint || undefined}
-            onReset={effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : undefined}
+            onReset={stacked(effect) ? undefined : effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : undefined}
           >
             {effect.presets && <PresetPicker effect={effect} ann={ann} onPatch={onPatch} />}
-            {effect.controls.length > 0 && <ControlList controls={effect.controls} source={ann} onPatch={onPatch} />}
+            {stacked(effect) && (effect.key === "stroke" ? <StrokeStack ann={ann} onPatch={onPatch} /> : <ShadowStack ann={ann} onPatch={onPatch} />)}
+            {!stacked(effect) && effect.controls.length > 0 && <ControlList controls={effect.controls} source={ann} onPatch={onPatch} />}
           </PanelSection>
         );
       })}

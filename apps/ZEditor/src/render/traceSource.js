@@ -17,7 +17,7 @@ export async function traceSourceFromImage(ann, pageFilter) {
   canvas.height = Math.max(1, Math.round(ann.height * scale));
   const plain = {
     ...ann, x: 0, y: 0, angle: undefined, opacity: undefined, blend: undefined,
-    ...Object.fromEntries(IMAGE_EFFECTS.map((effect) => [effect.key, undefined])),
+    ...Object.fromEntries(IMAGE_EFFECTS.map((effect) => [effect.key, undefined])), // flags off: the stroke and shadow lists are then ignored
   };
   await drawImageOnCanvas(canvas.getContext("2d"), plain, scale, pageFilter);
   return canvas.toDataURL("image/png");

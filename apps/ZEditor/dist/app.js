@@ -4821,6 +4821,66 @@
     return controlValues(ann, [BLEND_CONTROL]).blend;
   }
 
+  // apps/ZEditor/src/model/effectStacks.js
+  var STROKE_MITER_LIMIT = 4;
+  var STROKE_POSITIONS = [
+    { key: "inside", label: "Inside" },
+    { key: "center", label: "Center" },
+    { key: "outside", label: "Outside" }
+  ];
+  var DEFAULT_STROKE = { color: "#000000", thickness: 4, position: "center" };
+  var DEFAULT_SHADOW = { color: "#000000", thickness: 6, direction: 135, blur: 0 };
+  var MAX_LAYERS = 8;
+  var num = (v, lo, hi, fallback) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.min(hi, Math.max(lo, Number(v))) : fallback;
+  var hexOr = (v, fallback) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback;
+  var cleanStroke = (s) => ({
+    color: hexOr(s && s.color, DEFAULT_STROKE.color),
+    thickness: num(s && s.thickness, 1, 40, DEFAULT_STROKE.thickness),
+    position: STROKE_POSITIONS.some((p) => p.key === (s && s.position)) ? s.position : DEFAULT_STROKE.position
+  });
+  var cleanShadow = (s) => ({
+    color: hexOr(s && s.color, DEFAULT_SHADOW.color),
+    thickness: num(s && s.thickness, 0, 60, DEFAULT_SHADOW.thickness),
+    direction: num(s && s.direction, 0, 360, DEFAULT_SHADOW.direction),
+    blur: num(s && s.blur, 0, 40, DEFAULT_SHADOW.blur)
+  });
+  function strokeLayers(ann) {
+    if (!ann.stroke) return [];
+    if (Array.isArray(ann.strokes)) return ann.strokes.slice(0, MAX_LAYERS).map(cleanStroke);
+    return [cleanStroke({ color: ann.strokeColor, thickness: ann.strokeThickness, position: "center" })];
+  }
+  function shadowLayers(ann) {
+    if (!ann.shadow) return [];
+    if (Array.isArray(ann.shadows)) return ann.shadows.slice(0, MAX_LAYERS).map(cleanShadow);
+    return [cleanShadow({ color: ann.shadowColor, thickness: ann.shadowThickness, direction: ann.shadowDirection, blur: ann.shadowBlur })];
+  }
+  function strokesPatch(layers) {
+    return { strokes: layers.map(cleanStroke), stroke: layers.length > 0, strokeColor: void 0, strokeThickness: void 0, ...layers.length ? { feather: false } : {} };
+  }
+  function shadowsPatch(layers) {
+    return { shadows: layers.map(cleanShadow), shadow: layers.length > 0, shadowColor: void 0, shadowThickness: void 0, shadowDirection: void 0, shadowBlur: void 0 };
+  }
+  function strokeReach(layers) {
+    let reach = 0;
+    for (const s of layers) {
+      const r = s.position === "inside" ? 0 : s.position === "outside" ? s.thickness * STROKE_MITER_LIMIT : s.thickness * STROKE_MITER_LIMIT / 2;
+      reach = Math.max(reach, r);
+    }
+    return reach;
+  }
+  function shadowOffsetOf(s) {
+    const radians = s.direction * Math.PI / 180;
+    return { x: Math.sin(radians) * s.thickness, y: -Math.cos(radians) * s.thickness, blur: s.blur, color: s.color };
+  }
+  function storedStrokes(ann) {
+    if (Array.isArray(ann.strokes)) return ann.strokes.slice(0, MAX_LAYERS).map(cleanStroke);
+    return ann.stroke ? strokeLayers(ann) : [];
+  }
+  function storedShadows(ann) {
+    if (Array.isArray(ann.shadows)) return ann.shadows.slice(0, MAX_LAYERS).map(cleanShadow);
+    return ann.shadow ? shadowLayers(ann) : [];
+  }
+
   // apps/ZEditor/src/model/noise.js
   function seededNoise(i, variation, j = 0) {
     const v = Math.sin((i + variation * 97) * 12.9898 + j * 78.233) * 43758.5453;
@@ -4929,6 +4989,8 @@
   var STROKE_EFFECT = {
     key: "stroke",
     label: "Stroke",
+    extraProps: ["strokes"],
+    // pictures and shapes keep any number of strokes in a list (model/effectStacks.js)
     excludes: ["feather"],
     // a stroke on a faded edge looks wrong, so turning one on turns the other off
     controls: [
@@ -4936,10 +4998,11 @@
       { kind: "slider", prop: "strokeThickness", label: "Thickness (px)", min: 1, max: 40, fallback: 4 }
     ]
   };
-  var STROKE_MITER_LIMIT = 4;
+  var effectPropNames = (effect) => [effect.key, ...effect.controls.map((c) => c.prop), ...effect.extraProps || []];
   var SHADOW_EFFECT = {
     key: "shadow",
     label: "Shadow",
+    extraProps: ["shadows"],
     controls: [
       { kind: "color", prop: "shadowColor", label: "Color", fallback: "#000000" },
       { kind: "slider", prop: "shadowThickness", label: "Thickness (px)", min: 0, max: 60, fallback: 6 },
@@ -5007,16 +5070,10 @@
     return edge ? edge.outline(ann) : null;
   }
   function imageShadowOffset(ann) {
-    if (!ann.shadow) return null;
-    const { shadowThickness, shadowDirection, shadowBlur, shadowColor } = effectSettings(ann, SHADOW_EFFECT);
-    if (shadowThickness <= 0 && shadowBlur <= 0) return null;
-    const radians = shadowDirection * Math.PI / 180;
-    return {
-      x: Math.sin(radians) * shadowThickness,
-      y: -Math.cos(radians) * shadowThickness,
-      blur: shadowBlur,
-      color: shadowColor
-    };
+    return imageShadowOffsets(ann)[0] || null;
+  }
+  function imageShadowOffsets(ann) {
+    return shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0).map(shadowOffsetOf);
   }
 
   // apps/ZEditor/src/model/text/colorRuns.js
@@ -7503,6 +7560,48 @@
     return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
   }
 
+  // apps/ZEditor/src/model/geometry.js
+  function rotatePoint(x, y, degrees) {
+    const radians = degrees * Math.PI / 180;
+    const cos = Math.cos(radians), sin = Math.sin(radians);
+    return [x * cos - y * sin, x * sin + y * cos];
+  }
+  function dragBox(start, point, square, fromCenter) {
+    let dx = point.x - start.x, dy = point.y - start.y;
+    if (square) {
+      const side = Math.max(Math.abs(dx), Math.abs(dy));
+      dx = (dx < 0 ? -1 : 1) * side;
+      dy = (dy < 0 ? -1 : 1) * side;
+    }
+    const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
+    const x1 = start.x + dx, y1 = start.y + dy;
+    return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
+  }
+  var MIN_RESIZE_SIZE = 20;
+  function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE, angle = 0) {
+    const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
+    const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
+    let width = box.width + signX * dx;
+    let height = box.height + signY * dy;
+    if (keepAspect) {
+      const scaleX = width / box.width, scaleY = height / box.height;
+      const minScale = minSize / Math.min(box.width, box.height);
+      const scale = Math.max(minScale, signX && signY ? Math.max(scaleX, scaleY) : signX ? scaleX : scaleY);
+      width = box.width * scale;
+      height = box.height * scale;
+    } else {
+      width = Math.max(minSize, width);
+      height = Math.max(minSize, height);
+    }
+    const anchorX = signX > 0 ? 0 : signX < 0 ? 1 : 0.5;
+    const anchorY = signY > 0 ? 0 : signY < 0 ? 1 : 0.5;
+    const [oldOffsetX, oldOffsetY] = rotatePoint((anchorX - 0.5) * box.width, (anchorY - 0.5) * box.height, angle);
+    const [newOffsetX, newOffsetY] = rotatePoint((anchorX - 0.5) * width, (anchorY - 0.5) * height, angle);
+    const centerX = box.x + box.width / 2 + oldOffsetX - newOffsetX;
+    const centerY = box.y + box.height / 2 + oldOffsetY - newOffsetY;
+    return { x: centerX - width / 2, y: centerY - height / 2, width, height };
+  }
+
   // apps/ZEditor/src/render/boxEffects.js
   function drawTextureMarks(ctx, ann) {
     const { width: w, height: h } = ann;
@@ -7570,12 +7669,32 @@
     ctx.rotate(angle * Math.PI / 180);
     ctx.translate(-centerX, -centerY);
   }
+  function drawStrokeStack(ctx, strokes, path, width, height, reach) {
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const s = strokes[i];
+      ctx.save();
+      if (s.position === "inside") ctx.clip(path);
+      else if (s.position === "outside") {
+        const room = new Path2D();
+        room.rect(-reach - 4, -reach - 4, width + 2 * reach + 8, height + 2 * reach + 8);
+        room.addPath(path);
+        ctx.clip(room, "evenodd");
+      }
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.position === "center" ? s.thickness : s.thickness * 2;
+      ctx.lineJoin = "miter";
+      ctx.miterLimit = STROKE_MITER_LIMIT;
+      ctx.stroke(path);
+      ctx.restore();
+    }
+  }
   function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
     const x = ann.x * scaleFactor, y = ann.y * scaleFactor;
     const w = ann.width * scaleFactor, h = ann.height * scaleFactor;
     ctx.save();
     rotateAboutCenter(ctx, ann, x + w / 2, y + h / 2);
-    const shadow = imageShadowOffset(ann);
+    const shadows = imageShadowOffsets(ann);
+    const shadow = shadows.length === 1 ? shadows[0] : null;
     if (shadow) {
       ctx.shadowColor = shadow.color;
       ctx.shadowOffsetX = shadow.x * scaleFactor;
@@ -7583,9 +7702,10 @@
       ctx.shadowBlur = shadow.blur * scaleFactor;
     }
     const outline = imageEdgeOutline(ann);
-    const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-    if (outline || stroke || ann.texture) {
-      const pad = stroke ? Math.ceil(stroke.strokeThickness * STROKE_MITER_LIMIT / 2 * scaleFactor) + 2 : 0;
+    const strokes = strokeLayers(ann);
+    if (outline || strokes.length > 0 || ann.texture || shadows.length > 1) {
+      const reach = strokeReach(strokes);
+      const pad = strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0;
       const cut = document.createElement("canvas");
       cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
       cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
@@ -7597,12 +7717,21 @@
       paintContent(cctx);
       if (ann.texture) drawTextureMarks(cctx, ann);
       cctx.restore();
-      if (stroke) {
-        cctx.strokeStyle = stroke.strokeColor;
-        cctx.lineWidth = stroke.strokeThickness;
-        cctx.lineJoin = "miter";
-        cctx.miterLimit = STROKE_MITER_LIMIT;
-        cctx.stroke(new Path2D(outline || rectOutline(ann)));
+      if (strokes.length > 0) drawStrokeStack(cctx, strokes, new Path2D(outline || rectOutline(ann)), ann.width, ann.height, reach);
+      if (shadows.length > 1) {
+        const far = ctx.canvas.width + ctx.canvas.height + 4e3;
+        const angle = angleOf(ann);
+        const [farX, farY] = rotatePoint(far, 0, -angle);
+        for (let i = shadows.length - 1; i >= 0; i--) {
+          const s = shadows[i];
+          ctx.save();
+          ctx.shadowColor = s.color;
+          ctx.shadowOffsetX = s.x * scaleFactor + far;
+          ctx.shadowOffsetY = s.y * scaleFactor;
+          ctx.shadowBlur = s.blur * scaleFactor;
+          ctx.drawImage(cut, x - pad - farX, y - pad - farY);
+          ctx.restore();
+        }
       }
       ctx.drawImage(cut, x - pad, y - pad);
     } else {
@@ -8717,10 +8846,7 @@
     const scale = hasLook ? exportScale : Math.min(exportScale, sourceScale);
     const baked = await bakeBoxToImage(ann, scale, (ctx, box) => drawImageOnCanvas(ctx, box, scale, pageFilter));
     if (!baked) return null;
-    const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => [
-      [effect.key, void 0],
-      ...effect.controls.map((c) => [c.prop, void 0])
-    ]));
+    const clearedEffects = Object.fromEntries(IMAGE_EFFECTS.flatMap((effect) => effectPropNames(effect).map((prop) => [prop, void 0])));
     return {
       ...clearedEffects,
       ...Object.fromEntries(PHOTO_ADJUST_CONTROLS.map((c) => [c.prop, void 0])),
@@ -8754,7 +8880,7 @@
     const cleared = Object.fromEntries([
       "shape",
       ...RECT_FILL_PROPS,
-      ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
+      ...IMAGE_EFFECTS.flatMap(effectPropNames)
     ].map((prop) => [prop, void 0]));
     return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
   }
@@ -8764,7 +8890,7 @@
     if (!baked) return null;
     const cleared = Object.fromEntries([
       ...TRACE_LAYER_PROPS,
-      ...IMAGE_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)])
+      ...IMAGE_EFFECTS.flatMap(effectPropNames)
     ].map((prop) => [prop, void 0]));
     return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
   }
@@ -8776,15 +8902,15 @@
     const baked = await bakeBoxToImage(box, scale, (ctx, boxAtOrigin) => drawTextOnCanvas(ctx, boxAtOrigin, scale));
     if (!baked) return null;
     const textProps = ["text", "fontFamily", "fontSize", "bold", "italic", "underline", "color", "align", "lineSpacing", "letterSpacing", "strike", "textCase", "vertical", "fitHeight", "fillAlpha", "colorRuns", ...TEXT_PHOTO_PROPS];
-    const effectProps = TEXT_EFFECTS.flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+    const effectProps = TEXT_EFFECTS.flatMap(effectPropNames);
     const cleared = Object.fromEntries([...textProps, ...effectProps].map((prop) => [prop, void 0]));
     return { ...cleared, ...baked, type: "image", filter: { type: "none" } };
   }
   async function bakeBoxToImage(ann, scale, draw) {
-    const shadow = imageShadowOffset(ann);
-    const strokeReach = ann.stroke ? effectSettings(ann, STROKE_EFFECT).strokeThickness * STROKE_MITER_LIMIT / 2 : 0;
-    const shadowReach = shadow ? Math.hypot(shadow.x, shadow.y) + shadow.blur * 2 : 0;
-    const marginPx = Math.ceil((strokeReach + shadowReach + 1) * scale);
+    const shadows = imageShadowOffsets(ann);
+    const strokeRoom = strokeReach(strokeLayers(ann));
+    const shadowReach = shadows.reduce((m, s) => Math.max(m, Math.hypot(s.x, s.y) + s.blur * 2), 0);
+    const marginPx = Math.ceil((strokeRoom + shadowReach + 1) * scale);
     const widthPx = Math.max(1, Math.round(ann.width * scale));
     const heightPx = Math.max(1, Math.round(ann.height * scale));
     const radians = angleOf(ann) * Math.PI / 180;
@@ -8841,48 +8967,6 @@
     return { src, left, top, width, height };
   }
 
-  // apps/ZEditor/src/model/geometry.js
-  function rotatePoint(x, y, degrees) {
-    const radians = degrees * Math.PI / 180;
-    const cos = Math.cos(radians), sin = Math.sin(radians);
-    return [x * cos - y * sin, x * sin + y * cos];
-  }
-  function dragBox(start, point, square, fromCenter) {
-    let dx = point.x - start.x, dy = point.y - start.y;
-    if (square) {
-      const side = Math.max(Math.abs(dx), Math.abs(dy));
-      dx = (dx < 0 ? -1 : 1) * side;
-      dy = (dy < 0 ? -1 : 1) * side;
-    }
-    const x0 = fromCenter ? start.x - dx : start.x, y0 = fromCenter ? start.y - dy : start.y;
-    const x1 = start.x + dx, y1 = start.y + dy;
-    return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
-  }
-  var MIN_RESIZE_SIZE = 20;
-  function resizedBox(box, handle, dx, dy, keepAspect, minSize = MIN_RESIZE_SIZE, angle = 0) {
-    const signX = handle.includes("e") ? 1 : handle.includes("w") ? -1 : 0;
-    const signY = handle.includes("s") ? 1 : handle.includes("n") ? -1 : 0;
-    let width = box.width + signX * dx;
-    let height = box.height + signY * dy;
-    if (keepAspect) {
-      const scaleX = width / box.width, scaleY = height / box.height;
-      const minScale = minSize / Math.min(box.width, box.height);
-      const scale = Math.max(minScale, signX && signY ? Math.max(scaleX, scaleY) : signX ? scaleX : scaleY);
-      width = box.width * scale;
-      height = box.height * scale;
-    } else {
-      width = Math.max(minSize, width);
-      height = Math.max(minSize, height);
-    }
-    const anchorX = signX > 0 ? 0 : signX < 0 ? 1 : 0.5;
-    const anchorY = signY > 0 ? 0 : signY < 0 ? 1 : 0.5;
-    const [oldOffsetX, oldOffsetY] = rotatePoint((anchorX - 0.5) * box.width, (anchorY - 0.5) * box.height, angle);
-    const [newOffsetX, newOffsetY] = rotatePoint((anchorX - 0.5) * width, (anchorY - 0.5) * height, angle);
-    const centerX = box.x + box.width / 2 + oldOffsetX - newOffsetX;
-    const centerY = box.y + box.height / 2 + oldOffsetY - newOffsetY;
-    return { x: centerX - width / 2, y: centerY - height / 2, width, height };
-  }
-
   // apps/ZEditor/src/render/itemGeometry.js
   function annotationBounds(ann) {
     if (ann.type === "stroke") {
@@ -8927,7 +9011,7 @@
   }
 
   // apps/ZEditor/src/render/clipMask.js
-  var NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap((effect) => [effect.key, ...effect.controls.map((c) => c.prop)]);
+  var NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap(effectPropNames);
   function maskShapeOf(base) {
     const shape = { ...base, opacity: void 0, blend: void 0, hidden: void 0, filter: { type: "none" } };
     for (const prop of NOT_SHAPE_PROPS) shape[prop] = void 0;
@@ -9290,7 +9374,7 @@
   }
 
   // apps/ZEditor/src/io/svgExport.js
-  var num = (v) => String(Math.round(v * 100) / 100);
+  var num2 = (v) => String(Math.round(v * 100) / 100);
   var escapeXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   function svgColor(css) {
     const m = /^rgba?\(([^)]+)\)$/.exec(css || "");
@@ -9301,8 +9385,8 @@
   function wrapItem(ann, inner, box) {
     const attrs = [];
     const angle = angleOf(ann);
-    if (angle && box) attrs.push(`transform="rotate(${num(angle)} ${num(box.x + box.width / 2)} ${num(box.y + box.height / 2)})"`);
-    if (opacityOf(ann) < 1) attrs.push(`opacity="${num(opacityOf(ann))}"`);
+    if (angle && box) attrs.push(`transform="rotate(${num2(angle)} ${num2(box.x + box.width / 2)} ${num2(box.y + box.height / 2)})"`);
+    if (opacityOf(ann) < 1) attrs.push(`opacity="${num2(opacityOf(ann))}"`);
     if (blendOf(ann) !== "normal") attrs.push(`style="mix-blend-mode:${blendOf(ann)}"`);
     return attrs.length ? `<g ${attrs.join(" ")}>${inner}</g>` : inner;
   }
@@ -9310,11 +9394,11 @@
     if (!ann.traceW || !ann.traceH) return "";
     const paths = traceDrawList(ann).map((p) => {
       const fill = p.fill ? `fill="${p.fill}"` : `fill="none"`;
-      const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${num(p.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"` : "";
+      const stroke = p.stroke ? ` stroke="${p.stroke}" stroke-width="${num2(p.strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"` : "";
       return `<path d="${p.d}" ${fill}${stroke}/>`;
     }).join("");
     const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
-    return `<g transform="translate(${num(ann.x)} ${num(ann.y)}) scale(${+sx.toFixed(6)} ${+sy.toFixed(6)})">${paths}</g>`;
+    return `<g transform="translate(${num2(ann.x)} ${num2(ann.y)}) scale(${+sx.toFixed(6)} ${+sy.toFixed(6)})">${paths}</g>`;
   }
   function rectSvg(ann, defs, nextId) {
     const v = controlValues(ann, RECT_CONTROLS);
@@ -9322,30 +9406,34 @@
     let fill;
     if (v.fillType === "solid") {
       const { r, g, b } = hexToRgb(v.fillColor);
-      fill = `fill="rgb(${r},${g},${b})"${v.fillAlpha < 100 ? ` fill-opacity="${num(v.fillAlpha / 100)}"` : ""}`;
+      fill = `fill="rgb(${r},${g},${b})"${v.fillAlpha < 100 ? ` fill-opacity="${num2(v.fillAlpha / 100)}"` : ""}`;
     } else {
       const id = nextId("grad");
       const stops = rectGradientStops(ann).map((s) => {
         const c = svgColor(s.color);
-        return `<stop offset="${num(s.percent)}%" stop-color="${c.color}"${c.opacity < 1 ? ` stop-opacity="${num(c.opacity)}"` : ""}/>`;
+        return `<stop offset="${num2(s.percent)}%" stop-color="${c.color}"${c.opacity < 1 ? ` stop-opacity="${num2(c.opacity)}"` : ""}/>`;
       }).join("");
       if (v.fillType === "linear") {
         const rad = v.gradientAngle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
         const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
-        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num(w / 2 - dx * half)}" y1="${num(h / 2 - dy * half)}" x2="${num(w / 2 + dx * half)}" y2="${num(h / 2 + dy * half)}">${stops}</linearGradient>`);
+        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num2(w / 2 - dx * half)}" y1="${num2(h / 2 - dy * half)}" x2="${num2(w / 2 + dx * half)}" y2="${num2(h / 2 + dy * half)}">${stops}</linearGradient>`);
       } else {
-        defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${num(w / 2)} ${num(h / 2)}) scale(${num(w / 2 * Math.SQRT2)} ${num(h / 2 * Math.SQRT2)})">${stops}</radialGradient>`);
+        defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(${num2(w / 2)} ${num2(h / 2)}) scale(${num2(w / 2 * Math.SQRT2)} ${num2(h / 2 * Math.SQRT2)})">${stops}</radialGradient>`);
       }
       fill = `fill="url(#${id})"`;
     }
     const outline = imageEdgeOutline(ann);
-    const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num(w)}" height="${num(h)}" ${fill}/>`;
+    const shape = outline ? `<path d="${outline}" ${fill}/>` : `<rect width="${num2(w)}" height="${num2(h)}" ${fill}/>`;
     let stroke = "";
-    if (ann.stroke) {
-      const s = effectSettings(ann, STROKE_EFFECT);
-      stroke = `<path d="${outline || rectOutline(ann)}" fill="none" stroke="${s.strokeColor}" stroke-width="${num(s.strokeThickness)}" stroke-miterlimit="4"/>`;
+    const strokes = strokeLayers(ann);
+    if (strokes.length) {
+      const d = outline || rectOutline(ann), reach = Math.ceil(strokeReach(strokes)) + 4;
+      const clipId = nextId("sc"), maskId = nextId("sm");
+      if (strokes.some((s) => s.position === "inside")) defs.push(`<clipPath id="${clipId}"><path d="${d}"/></clipPath>`);
+      if (strokes.some((s) => s.position === "outside")) defs.push(`<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${-reach}" y="${-reach}" width="${num2(w + 2 * reach)}" height="${num2(h + 2 * reach)}"><rect x="${-reach}" y="${-reach}" width="${num2(w + 2 * reach)}" height="${num2(h + 2 * reach)}" fill="#fff"/><path d="${d}" fill="#000"/></mask>`);
+      stroke = strokes.map((s) => `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${num2(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
     }
-    return `<g transform="translate(${num(ann.x)} ${num(ann.y)})">${shape}${stroke}</g>`;
+    return `<g transform="translate(${num2(ann.x)} ${num2(ann.y)})">${shape}${stroke}</g>`;
   }
   function strokeSvg(ann) {
     const isHi = ann.tool === "highlighter";
@@ -9353,7 +9441,7 @@
     const width = ann.strokeWidth || (isHi ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width);
     const alpha = isHi ? ` opacity="0.45"` : "";
     if (ann.taper > 0) return `<path d="${taperedPathD(ann.points, width, ann.taper)}" fill="${color}"${alpha}/>`;
-    return `<path d="${smoothPathD(ann.points)}" fill="none" stroke="${color}" stroke-width="${num(width)}" stroke-linecap="round" stroke-linejoin="round"${alpha}/>`;
+    return `<path d="${smoothPathD(ann.points)}" fill="none" stroke="${color}" stroke-width="${num2(width)}" stroke-linecap="round" stroke-linejoin="round"${alpha}/>`;
   }
   function plainTextLook(ann) {
     const look = textLook(ann);
@@ -9377,18 +9465,18 @@
     if (!outlined) fonts.add(family);
     if (look.label) {
       const c = hexToRgb(look.label.labelColor);
-      out += `<rect x="${num(x)}" y="${num(y)}" width="${num(boxWidth)}" height="${num(boxHeight)}" rx="${num(look.label.labelRadius || 0)}" fill="rgb(${c.r},${c.g},${c.b})"${look.label.labelAlpha < 100 ? ` fill-opacity="${num(look.label.labelAlpha / 100)}"` : ""}/>`;
+      out += `<rect x="${num2(x)}" y="${num2(y)}" width="${num2(boxWidth)}" height="${num2(boxHeight)}" rx="${num2(look.label.labelRadius || 0)}" fill="rgb(${c.r},${c.g},${c.b})"${look.label.labelAlpha < 100 ? ` fill-opacity="${num2(look.label.labelAlpha / 100)}"` : ""}/>`;
     }
     for (const rule of columnRules(layout, ann)) {
-      out += `<line x1="${num(rule.x)}" y1="${num(rule.y0)}" x2="${num(rule.x)}" y2="${num(rule.y1)}" stroke="${rule.color}" stroke-width="${num(rule.width)}"/>`;
+      out += `<line x1="${num2(rule.x)}" y1="${num2(rule.y0)}" x2="${num2(rule.x)}" y2="${num2(rule.y1)}" stroke="${rule.color}" stroke-width="${num2(rule.width)}"/>`;
     }
-    const base = `font-family="${escapeXml(family)}, sans-serif" font-size="${num(fontSize)}"${ann.bold ? ` font-weight="bold"` : ""}${ann.italic ? ` font-style="italic"` : ""}` + (look.letterSpacingPx ? ` letter-spacing="${num(look.letterSpacingPx)}"` : "") + (look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "");
+    const base = `font-family="${escapeXml(family)}, sans-serif" font-size="${num2(fontSize)}"${ann.bold ? ` font-weight="bold"` : ""}${ann.italic ? ` font-style="italic"` : ""}` + (look.letterSpacingPx ? ` letter-spacing="${num2(look.letterSpacingPx)}"` : "") + (look.fillAlpha < 100 ? ` fill-opacity="${num2(look.fillAlpha / 100)}"` : "");
     const tspans = runs.filter((r) => r.text.trim()).map((r) => {
       const font = r.font ? ` style="font:${escapeXml(r.font)}"` : "";
-      return `<tspan x="${num(r.x)}" y="${num(r.baselineY)}" fill="${r.color || look.color}"${font}>${escapeXml(r.text)}</tspan>`;
+      return `<tspan x="${num2(r.x)}" y="${num2(r.baselineY)}" fill="${r.color || look.color}"${font}>${escapeXml(r.text)}</tspan>`;
     }).join("");
     if (outlined) {
-      const fillOpacity = look.fillAlpha < 100 ? ` fill-opacity="${num(look.fillAlpha / 100)}"` : "";
+      const fillOpacity = look.fillAlpha < 100 ? ` fill-opacity="${num2(look.fillAlpha / 100)}"` : "";
       out += outlined.map((p) => `<path d="${p.d}" fill="${p.r.color || look.color}"${fillOpacity}/>`).join("");
     } else out += `<text ${base} xml:space="preserve">${tspans}</text>`;
     for (const ext of lineExtents) {
@@ -9398,13 +9486,13 @@
         const struck = seg.strike != null ? seg.strike : look.strike !== "none";
         if (underlined) lines.push(ext.baselineY + fontSize * 0.12);
         if (struck) lines.push(ext.baselineY - fontSize * 0.3);
-        for (const ly of lines) out += `<line x1="${num(seg.x0)}" y1="${num(ly)}" x2="${num(seg.x1)}" y2="${num(ly)}" stroke="${seg.color || look.color}" stroke-width="${num(Math.max(1, fontSize / 15))}"/>`;
+        for (const ly of lines) out += `<line x1="${num2(seg.x0)}" y1="${num2(ly)}" x2="${num2(seg.x1)}" y2="${num2(ly)}" stroke="${seg.color || look.color}" stroke-width="${num2(Math.max(1, fontSize / 15))}"/>`;
       }
     }
     return { svg: out, box: { x, y, width: boxWidth, height: boxHeight }, outlined: Boolean(outlined) };
   }
   function imageTag(patch) {
-    return `<image href="${patch.src}" x="${num(patch.x)}" y="${num(patch.y)}" width="${num(patch.width)}" height="${num(patch.height)}" preserveAspectRatio="none"/>`;
+    return `<image href="${patch.src}" x="${num2(patch.x)}" y="${num2(patch.y)}" width="${num2(patch.width)}" height="${num2(patch.height)}" preserveAspectRatio="none"/>`;
   }
   var groupId = (name, taken) => {
     const base = String(name).trim().slice(0, 40).replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "") || "Layer";
@@ -9454,7 +9542,12 @@
     const ctx = newContext(options);
     const parts = await layerParts(items, pageFilter, ctx);
     if (!parts.length) return null;
-    const boundsOf = (ann) => ann.type === "trace" && traceContentBounds(ann) || annotationBounds(ann);
+    const boundsOf = (ann) => {
+      const b = ann.type === "trace" && traceContentBounds(ann) || annotationBounds(ann);
+      if (ann.type !== "rect" || !ann.stroke) return b;
+      const r = Math.ceil(strokeReach(strokeLayers(ann)));
+      return { ...b, x: b.x - r, y: b.y - r, width: b.width + 2 * r, height: b.height + 2 * r };
+    };
     const bounds = items.map(boundsOf).reduce((u, b) => ({
       x0: Math.min(u.x0, b.x),
       y0: Math.min(u.y0, b.y),
@@ -9464,7 +9557,7 @@
     const pad = 1;
     const vb = { x: bounds.x0 - pad, y: bounds.y0 - pad, w: bounds.x1 - bounds.x0 + pad * 2, h: bounds.y1 - bounds.y0 + pad * 2 };
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(vb.w / MAIN_SCALE)}pt" height="${num(vb.h / MAIN_SCALE)}pt" viewBox="${num(vb.x)} ${num(vb.y)} ${num(vb.w)} ${num(vb.h)}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num2(vb.w / MAIN_SCALE)}pt" height="${num2(vb.h / MAIN_SCALE)}pt" viewBox="${num2(vb.x)} ${num2(vb.y)} ${num2(vb.w)} ${num2(vb.h)}">
 ` + (ctx.defs.length ? `<defs>${ctx.defs.join("")}</defs>
 ` : "") + parts.join("\n") + "\n</svg>\n";
     return result(svg, ctx);
@@ -9482,21 +9575,21 @@
       let background = "";
       if (!page.isBlank) {
         const canvas = await renderPageToCanvas({ ...page, annotations: [] }, pdfDocsRef, 2, filter, null);
-        background = `<g id="Page_background" data-name="Page background"><image href="${canvas.toDataURL("image/png")}" x="0" y="0" width="${num(size.width)}" height="${num(size.height)}" preserveAspectRatio="none"/></g>`;
+        background = `<g id="Page_background" data-name="Page background"><image href="${canvas.toDataURL("image/png")}" x="0" y="0" width="${num2(size.width)}" height="${num2(size.height)}" preserveAspectRatio="none"/></g>`;
         ctx.counts.pictures++;
       } else if (!page.isCanvas) {
-        background = `<g id="Page_background" data-name="Page background"><rect width="${num(size.width)}" height="${num(size.height)}" fill="#ffffff"/></g>`;
+        background = `<g id="Page_background" data-name="Page background"><rect width="${num2(size.width)}" height="${num2(size.height)}" fill="#ffffff"/></g>`;
       }
       const parts = await layerParts(items, filter, ctx);
       const name = `Page ${groups.length + 1}`;
-      groups.push(`<g id="${name.replace(" ", "_")}" data-name="${name}" transform="translate(${num(offset)} 0)">${background}
+      groups.push(`<g id="${name.replace(" ", "_")}" data-name="${name}" transform="translate(${num2(offset)} 0)">${background}
 ${parts.join("\n")}</g>`);
       offset += size.width + GAP;
       maxH = Math.max(maxH, size.height);
     }
     const totalW = offset - GAP;
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num(totalW / MAIN_SCALE)}pt" height="${num(maxH / MAIN_SCALE)}pt" viewBox="0 0 ${num(totalW)} ${num(maxH)}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num2(totalW / MAIN_SCALE)}pt" height="${num2(maxH / MAIN_SCALE)}pt" viewBox="0 0 ${num2(totalW)} ${num2(maxH)}">
 ` + (ctx.defs.length ? `<defs>${ctx.defs.join("")}</defs>
 ` : "") + groups.join("\n") + "\n</svg>\n";
     return result(svg, ctx);
@@ -11284,7 +11377,7 @@ ${parts.join("\n")}</g>`);
     const cos = Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (lu * lv)));
     return Math.acos(cos) * 180 / Math.PI;
   }
-  var num2 = (v) => String(Math.round(v * 10) / 10);
+  var num3 = (v) => String(Math.round(v * 10) / 10);
   function smoothPathD2(poly, cornerAngle, tolerance = 1) {
     const n = poly.length;
     if (n < 3) return "";
@@ -11300,7 +11393,7 @@ ${parts.join("\n")}</g>`);
       const arm = (q) => Math.min(Math.hypot(q[0] - p[0], q[1] - p[1]) / 2, reach);
       return { corner: false, a: at(p, prev, arm(prev)), b: at(p, next, arm(next)) };
     });
-    const xy = (q) => num2(q[0]) + " " + num2(q[1]);
+    const xy = (q) => num3(q[0]) + " " + num3(q[1]);
     let d = "M" + xy(joins[n - 1].b);
     for (let i = 0; i < n; i++) {
       const j = joins[i];
@@ -11444,6 +11537,7 @@ ${parts.join("\n")}</g>`);
       opacity: void 0,
       blend: void 0,
       ...Object.fromEntries(IMAGE_EFFECTS.map((effect) => [effect.key, void 0]))
+      // flags off: the stroke and shadow lists are then ignored
     };
     await drawImageOnCanvas(canvas.getContext("2d"), plain, scale, pageFilter);
     return canvas.toDataURL("image/png");
@@ -13172,16 +13266,16 @@ ${parts.join("\n")}</g>`);
     const surround = fillOnly || settings.cutLeaves === "surround";
     const style = settings.fillStyle === "detail" ? "detail" : settings.fillStyle === "pattern" ? "pattern" : settings.fillStyle === "ai" ? "ai" : "smooth";
     const fillInfo = { fellBack: false };
-    const num3 = (v, fallback, lo, hi) => Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : fallback;
+    const num4 = (v, fallback, lo, hi) => Number.isFinite(Number(v)) ? Math.min(hi, Math.max(lo, Number(v))) : fallback;
     const fillOpts = {
       // the panel's fine-tune settings (model/marquee.js)
       style,
-      grainAmount: settings.fillGrain === false ? 0 : num3(settings.fillGrainAmount, 100, 0, 300) / 100,
-      half: Math.round(num3(settings.fillPatch, 15, 5, 41)) - 1 >> 1,
-      reach: num3(settings.fillReach, 80, 20, 600),
-      mix: num3(settings.fillMix, 100, 0, 100) / 100,
-      grow: Math.round(num3(settings.fillGrow, 0, 0, 40)),
-      seed: Math.round(num3(settings.fillSeed, 0, 0, 1e6))
+      grainAmount: settings.fillGrain === false ? 0 : num4(settings.fillGrainAmount, 100, 0, 300) / 100,
+      half: Math.round(num4(settings.fillPatch, 15, 5, 41)) - 1 >> 1,
+      reach: num4(settings.fillReach, 80, 20, 600),
+      mix: num4(settings.fillMix, 100, 0, 100) / 100,
+      grow: Math.round(num4(settings.fillGrow, 0, 0, 40)),
+      seed: Math.round(num4(settings.fillSeed, 0, 0, 1e6))
     };
     if (fromLayer) {
       let base = target;
@@ -15659,41 +15753,18 @@ ${parts.join("\n")}</g>`);
     };
   }
 
-  // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
-  var { useRef: useRef16, useEffect: useEffect13 } = React;
-  function BoxEffectOverlays({ ann, edgeOutline }) {
-    const textureCanvasRef = useRef16(null);
-    const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
-    const stroke = ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null;
-    useEffect13(() => {
-      const canvas = textureCanvasRef.current;
-      if (!textureKey || !canvas) return;
-      canvas.width = Math.max(1, Math.ceil(ann.width));
-      canvas.height = Math.max(1, Math.ceil(ann.height));
-      drawTextureMarks(canvas.getContext("2d"), ann);
-    }, [textureKey, ann.width, ann.height]);
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, ann.texture && /* @__PURE__ */ React.createElement("canvas", { ref: textureCanvasRef, className: "ze-ann-image-texture", style: { clipPath: edgeOutline ? `path("${edgeOutline}")` : void 0 } }), stroke && /* @__PURE__ */ React.createElement("svg", { className: "ze-ann-image-stroke", width: ann.width, height: ann.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement(
-      "path",
-      {
-        d: edgeOutline || rectOutline(ann),
-        fill: "none",
-        stroke: stroke.strokeColor,
-        strokeWidth: stroke.strokeThickness,
-        strokeLinejoin: "miter",
-        strokeMiterlimit: STROKE_MITER_LIMIT
-      }
-    )));
-  }
-
   // apps/ZEditor/src/ui/canvas/boxStyles.js
+  var shadowFilterId = (ann) => "ze-shadows-" + ann.id;
   var rotationCss = (ann) => angleOf(ann) ? `rotate(${angleOf(ann)}deg)` : void 0;
   function boxGroupStyle(ann) {
-    const shadow = imageShadowOffset(ann);
+    const shadows = imageShadowOffsets(ann);
+    const shadow = shadows.length === 1 ? shadows[0] : null;
     const opacity = opacityOf(ann);
     const blend = blendOf(ann);
     const [shadowX, shadowY] = shadow ? rotatePoint(shadow.x, shadow.y, -angleOf(ann)) : [0, 0];
     return {
-      filter: shadow ? `drop-shadow(${shadowX}px ${shadowY}px ${shadow.blur}px ${shadow.color})` : void 0,
+      // One shadow: the CSS drop-shadow. Several: an SVG filter, so each falls from the shape alone (chained drop-shadows would cast shadows of shadows).
+      filter: shadows.length > 1 ? `url(#${shadowFilterId(ann)})` : shadow ? `drop-shadow(${shadowX}px ${shadowY}px ${shadow.blur}px ${shadow.color})` : void 0,
       opacity: opacity < 1 ? opacity : void 0,
       // A rotated box is its own stacking context, which would trap this
       // blend inside it; see boxOuterStyle, which carries it instead.
@@ -15710,6 +15781,50 @@ ${parts.join("\n")}</g>`);
       transform: rotationCss(ann),
       mixBlendMode: angleOf(ann) && blend !== "normal" ? blend : void 0
     };
+  }
+
+  // apps/ZEditor/src/ui/canvas/BoxEffectOverlays.jsx
+  var { useRef: useRef16, useEffect: useEffect13 } = React;
+  function BoxEffectOverlays({ ann, edgeOutline }) {
+    const textureCanvasRef = useRef16(null);
+    const textureKey = ann.texture ? JSON.stringify(effectSettings(ann, TEXTURE_EFFECT)) : null;
+    const strokes = strokeLayers(ann);
+    useEffect13(() => {
+      const canvas = textureCanvasRef.current;
+      if (!textureKey || !canvas) return;
+      canvas.width = Math.max(1, Math.ceil(ann.width));
+      canvas.height = Math.max(1, Math.ceil(ann.height));
+      drawTextureMarks(canvas.getContext("2d"), ann);
+    }, [textureKey, ann.width, ann.height]);
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, ann.texture && /* @__PURE__ */ React.createElement("canvas", { ref: textureCanvasRef, className: "ze-ann-image-texture", style: { clipPath: edgeOutline ? `path("${edgeOutline}")` : void 0 } }), /* @__PURE__ */ React.createElement(ShadowFilter, { ann }), strokes.length > 0 && /* @__PURE__ */ React.createElement(StrokeStack, { ann, strokes, outline: edgeOutline || rectOutline(ann) }));
+  }
+  function StrokeStack({ ann, strokes, outline }) {
+    const reach = Math.ceil(strokeReach(strokes)) + 4;
+    const id = "ze-stroke-" + ann.id;
+    return /* @__PURE__ */ React.createElement("svg", { className: "ze-ann-image-stroke", width: ann.width, height: ann.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("clipPath", { id: id + "-in" }, /* @__PURE__ */ React.createElement("path", { d: outline })), /* @__PURE__ */ React.createElement("mask", { id: id + "-out", maskUnits: "userSpaceOnUse", x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach }, /* @__PURE__ */ React.createElement("rect", { x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach, fill: "#fff" }), /* @__PURE__ */ React.createElement("path", { d: outline, fill: "#000" }))), strokes.map((s, i) => /* @__PURE__ */ React.createElement(
+      "path",
+      {
+        key: i,
+        d: outline,
+        fill: "none",
+        stroke: s.color,
+        strokeLinejoin: "miter",
+        strokeMiterlimit: STROKE_MITER_LIMIT,
+        strokeWidth: s.position === "center" ? s.thickness : s.thickness * 2,
+        clipPath: s.position === "inside" ? `url(#${id}-in)` : void 0,
+        mask: s.position === "outside" ? `url(#${id}-out)` : void 0
+      }
+    )).reverse());
+  }
+  function ShadowFilter({ ann }) {
+    const layers = shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0);
+    if (layers.length < 2) return null;
+    const reach = Math.ceil(layers.reduce((m, s) => Math.max(m, s.thickness + s.blur * 2), 0)) + 4;
+    const nodes = layers.map((s, i) => {
+      const o = shadowOffsetOf(s), [dx, dy] = rotatePoint(o.x, o.y, -angleOf(ann));
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: i }, /* @__PURE__ */ React.createElement("feGaussianBlur", { in: "SourceAlpha", stdDeviation: s.blur / 2, result: "b" + i }), /* @__PURE__ */ React.createElement("feOffset", { in: "b" + i, dx, dy, result: "o" + i }), /* @__PURE__ */ React.createElement("feFlood", { floodColor: s.color, result: "f" + i }), /* @__PURE__ */ React.createElement("feComposite", { in: "f" + i, in2: "o" + i, operator: "in", result: "s" + i }));
+    });
+    return /* @__PURE__ */ React.createElement("svg", { width: "0", height: "0", style: { position: "absolute" }, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("filter", { id: shadowFilterId(ann), filterUnits: "userSpaceOnUse", x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach, colorInterpolationFilters: "sRGB" }, nodes, /* @__PURE__ */ React.createElement("feMerge", null, layers.map((_, k) => /* @__PURE__ */ React.createElement("feMergeNode", { key: k, in: "s" + (layers.length - 1 - k) })), /* @__PURE__ */ React.createElement("feMergeNode", { in: "SourceGraphic" }))));
   }
 
   // apps/ZEditor/src/ui/canvas/ResizeHandles.jsx
@@ -18337,9 +18452,54 @@ ${parts.join("\n")}</g>`);
   }
   var resetPatch = (controls) => Object.fromEntries(controls.map((c) => [c.prop, void 0]));
 
+  // apps/ZEditor/src/ui/panels/StackedEffects.jsx
+  function Row({ label, children }) {
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, label), children);
+  }
+  function LayerCard({ index, count, title, onMove, onDelete, children }) {
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-stack-card" }, /* @__PURE__ */ React.createElement("div", { className: "ze-stack-head" }, /* @__PURE__ */ React.createElement("span", { className: "ze-stack-title" }, title, " ", index + 1), /* @__PURE__ */ React.createElement("span", { className: "ze-stack-actions" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-stack-btn", title: "Move up (drawn on top of the one below)", "aria-label": "Move up", disabled: index === 0, onClick: () => onMove(-1) }, "↑"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-stack-btn", title: "Move down", "aria-label": "Move down", disabled: index === count - 1, onClick: () => onMove(1) }, "↓"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-stack-btn ze-stack-del", title: "Delete this layer", "aria-label": "Delete this layer", onClick: onDelete }, "×"))), children);
+  }
+  function useStack(layers, store) {
+    const update = (i, change) => store(layers.map((l, k) => k === i ? { ...l, ...change } : l));
+    const remove = (i) => store(layers.filter((_, k) => k !== i));
+    const move = (i, dir) => {
+      const j = i + dir;
+      if (j < 0 || j >= layers.length) return;
+      const next = layers.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      store(next);
+    };
+    return { update, remove, move };
+  }
+  function StrokeStack2({ ann, onPatch }) {
+    const layers = strokeLayers(ann);
+    const { update, remove, move } = useStack(layers, (list) => onPatch(strokesPatch(list)));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, layers.map((s, i) => /* @__PURE__ */ React.createElement(LayerCard, { key: i, index: i, count: layers.length, title: "Stroke", onMove: (d) => move(i, d), onDelete: () => remove(i) }, /* @__PURE__ */ React.createElement(Row, { label: "Color" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: s.color, ariaLabel: "Stroke colour", onChange: (color) => update(i, { color }) })), /* @__PURE__ */ React.createElement(Row, { label: "Thickness (px)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 40, value: s.thickness, onChange: (thickness) => update(i, { thickness }) })), /* @__PURE__ */ React.createElement(Row, { label: "Position" }, /* @__PURE__ */ React.createElement(SelectInput, { options: STROKE_POSITIONS, value: s.position, onChange: (position) => update(i, { position }) })))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: layers.length >= MAX_LAYERS, onClick: () => onPatch(strokesPatch([...layers, { ...DEFAULT_STROKE, ...layers.length ? { color: layers[0].color } : {} }])) }, "+ Add stroke"));
+  }
+  function ShadowStack({ ann, onPatch }) {
+    const layers = shadowLayers(ann);
+    const { update, remove, move } = useStack(layers, (list) => onPatch(shadowsPatch(list)));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, layers.map((s, i) => /* @__PURE__ */ React.createElement(LayerCard, { key: i, index: i, count: layers.length, title: "Shadow", onMove: (d) => move(i, d), onDelete: () => remove(i) }, /* @__PURE__ */ React.createElement(Row, { label: "Color" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: s.color, ariaLabel: "Shadow colour", onChange: (color) => update(i, { color }) })), /* @__PURE__ */ React.createElement(Row, { label: "Distance (px)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: 60, value: s.thickness, onChange: (thickness) => update(i, { thickness }) })), /* @__PURE__ */ React.createElement(Row, { label: "Direction (°)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: 360, value: s.direction, onChange: (direction) => update(i, { direction }) })), /* @__PURE__ */ React.createElement(Row, { label: "Blur (px)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: 40, value: s.blur, onChange: (blur) => update(i, { blur }) })))), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Direction: 0° is up, 90° right, 180° down, 270° left."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: layers.length >= MAX_LAYERS, onClick: () => onPatch(shadowsPatch([...layers, { ...DEFAULT_SHADOW, ...layers.length ? { color: layers[0].color } : {} }])) }, "+ Add shadow"));
+  }
+
   // apps/ZEditor/src/ui/panels/EffectControls.jsx
   function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
+    const stacked = (effect) => ann.type !== "text" && (effect.key === "stroke" || effect.key === "shadow");
+    const toggleStack = (effect, on) => {
+      const make = effect.key === "stroke" ? strokesPatch : shadowsPatch;
+      const layers = effect.key === "stroke" ? storedStrokes(ann) : storedShadows(ann);
+      if (!on) {
+        onPatch({ [effect.key]: false });
+        return;
+      }
+      const first = effect.key === "stroke" ? [DEFAULT_STROKE] : [DEFAULT_SHADOW];
+      onPatch(make(layers.length ? layers : first));
+    };
     const toggleEffect = (effect, on) => {
+      if (stacked(effect)) {
+        toggleStack(effect, on);
+        return;
+      }
       const otherEdgesOff = effect.outline && on ? Object.fromEntries(effects.filter((e) => e.outline).map((e) => [e.key, false])) : {};
       const excluded = on && effect.excludes ? Object.fromEntries(effect.excludes.map((key) => [key, false])) : {};
       onPatch({ ...otherEdgesOff, ...excluded, [effect.key]: on });
@@ -18357,10 +18517,11 @@ ${parts.join("\n")}</g>`);
           checked: Boolean(ann[effect.key]),
           onToggle: (on) => toggleEffect(effect, on),
           hint: hint || void 0,
-          onReset: effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : void 0
+          onReset: stacked(effect) ? void 0 : effect.controls.length > 0 ? () => onPatch(resetPatch(effect.controls)) : void 0
         },
         effect.presets && /* @__PURE__ */ React.createElement(PresetPicker, { effect, ann, onPatch }),
-        effect.controls.length > 0 && /* @__PURE__ */ React.createElement(ControlList, { controls: effect.controls, source: ann, onPatch })
+        stacked(effect) && (effect.key === "stroke" ? /* @__PURE__ */ React.createElement(StrokeStack2, { ann, onPatch }) : /* @__PURE__ */ React.createElement(ShadowStack, { ann, onPatch })),
+        !stacked(effect) && effect.controls.length > 0 && /* @__PURE__ */ React.createElement(ControlList, { controls: effect.controls, source: ann, onPatch })
       );
     }));
   }
@@ -21237,7 +21398,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b5e97fc"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "2441863"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
