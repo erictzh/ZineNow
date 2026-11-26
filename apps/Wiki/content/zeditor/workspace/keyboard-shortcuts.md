@@ -97,21 +97,24 @@ Below is the real code, copied from the repository when the wiki is built. The g
 ```js file=apps/ZEditor/src/state/useKeyboardShortcuts.js
         if (key === "c") {
           if (selectedIdx !== null && selectedAnnId !== null) {
-            // A frame of a threaded story copies as a box of its own: its look and the words it shows.
-            const view = resolvePageText(pages[selectedIdx].annotations || []).find((a) => a.id === selectedAnnId);
-            const ann = view && view.type === "text" ? standaloneCopy(view) : view;
-            if (ann) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(ann)); }
+            // Every selected item, and the rest of any group one of them belongs to. A frame of a threaded story copies as a box of its own:
+            // its look and the words it shows.
+            const views = resolvePageText(pages[selectedIdx].annotations || []);
+            const ids = selection.selectedAnnotationIds();
+            const groups = new Set(views.filter((a) => ids.includes(a.id) && a.groupId).map((a) => a.groupId));
+            const chosen = views.filter((a) => ids.includes(a.id) || (a.groupId && groups.has(a.groupId))).map((a) => (a.type === "text" ? standaloneCopy(a) : a));
+            if (chosen.length) { e.preventDefault(); clipboardRef.current = JSON.parse(JSON.stringify(chosen)); }
           }
           return;
         }
 ```
 
 **The Logic:**
-- `.find(...)` returns the first item with the selected id, or nothing.
+- Every selected item is copied, plus the rest of any group one of them is in (so a whole group, such as a data block, copies together). A threaded text frame copies as a box of its own.
 - `JSON.parse(JSON.stringify(ann))` is the common way to make a **deep copy**: `JSON.stringify` writes the object out as text, `JSON.parse` reads it back as a brand-new object that shares nothing with the original. Editing the copy can never change the original.
 - It is stored in `clipboardRef`, a ref, not state: copying should not make the screen redraw.
 
-**Worked example.** You select an image at (100, 100) and press Ctrl+C: a deep copy goes into `clipboardRef`. Ctrl+V adds a copy with a new id, moved by `translatedAnnotation(clip, 20, 20)`, so it appears at **(120, 120)**: down and right of the original, so you can see there are two. A second Ctrl+V pastes another copy at (120, 120) again (the clipboard still holds the original position).
+**Worked example.** You select an image at (100, 100) and press Ctrl+C: a deep copy goes into `clipboardRef`. Ctrl+V adds a copy with a new id (copied groups become new groups), moved by `translatedAnnotation(clip, 20, 20)`, so it appears at **(120, 120)**: down and right of the original, so you can see there are two. A second Ctrl+V pastes another copy at (120, 120) again (the clipboard still holds the original position).
 
 ### Nudging with the arrow keys
 

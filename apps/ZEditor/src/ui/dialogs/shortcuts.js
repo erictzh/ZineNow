@@ -26,8 +26,8 @@ export const KEYBOARD_SHORTCUTS = [
     rows: [
       ["Ctrl + Z", "Undo"],
       ["Ctrl + Shift + Z, or Ctrl + Y", "Redo"],
-      ["Ctrl + C", "Copy the selected item"],
-      ["Ctrl + V", "Paste a copied item, or an image from the clipboard"],
+      ["Ctrl + C", "Copy the selected items (a whole group, if one is selected)"],
+      ["Ctrl + V", "Paste the copied items (groups stay groups), or an image from the clipboard"],
       ["Ctrl + S", "Save the project (asks where, the first time)"],
       ["Ctrl + Shift + S", "Save the project to a new file"],
       ["Delete", "Delete the selected item, or the selected page(s) if no item is selected"],
