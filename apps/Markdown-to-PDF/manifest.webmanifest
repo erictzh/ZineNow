@@ -1,5 +1,5 @@
 {
-  "id": "./",
+  "id": "zinenow-md-to-pdf",
   "name": "ZineNow Md to PDF",
   "short_name": "Md to PDF",
   "description": "Turn Markdown into a paginated PDF eBook or zine.",

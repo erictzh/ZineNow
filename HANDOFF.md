@@ -847,3 +847,5 @@ Bevel hardness and soften (2026-11-26): `bevelHardness` (0 soft fade ... 100 cri
 Interface size default on computers (2026-11-26): 90% (was 75%) where the main input is a mouse or touchpad; tablets and phones 100%.
 
 Page layouts window (2026-11-26): the Layout picker is now a window over the editor instead of a drop-down: `ui/dialogs/LayoutDialog.jsx` (reuses `LayoutSettings`; state `dialogs.layoutOpen`; closes with ×, Esc, a click outside, or after a layout is picked), opened by the page strip's Layout tile (`onOpenLayout`) and by Page → Layout → Choose… (`row.onOpen` in `PageMenu.jsx`). Styles `.ze-modal--layout` in `styles/dialogs.css`.
+
+PWA ids (2026-11-26): every `manifest.webmanifest` had `"id": "./"`, which the browser resolves against the site ROOT, so all apps shared one identity (installing ZEditor could show the Wiki's name and icon). Now unique: zinenow-zeditor, zinenow-wiki, zinenow-zine-arranger, zinenow-md-to-pdf, zinenow-ai-tools-local. People who installed earlier must uninstall and reinstall each app once. RGB to CMYK has no manifest yet; give it its own id when it gets one.

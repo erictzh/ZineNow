@@ -1,5 +1,5 @@
 {
-  "id": "./",
+  "id": "zinenow-ai-tools-local",
   "name": "ZineNow Ai Tools (Local)",
   "short_name": "Ai Tools",
   "description": "Remove objects from pictures with an AI model that runs on your device.",
