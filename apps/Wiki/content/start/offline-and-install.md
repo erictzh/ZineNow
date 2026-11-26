@@ -11,6 +11,10 @@ The apps can be **installed** like phone apps and work **offline** once visited.
 
 ## How it works
 
+### Each app needs its own manifest `id`
+
+The manifest's `id` tells the browser *which app this is*. It is read as a web address against the **site's root**, not against the app's folder: a value like `"./"` therefore means the same thing for every app on the site. If two apps share an `id`, the browser treats them as one app, so installing one can show the other's name and icon (a ZEditor install showing as "Wiki"). Each manifest now has its own `id` (`zinenow-zeditor`, `zinenow-wiki`, `zinenow-zine-arranger`, `zinenow-md-to-pdf`, `zinenow-ai-tools-local`). The `id` only has to be unique; nothing needs to exist at that address. Changing it makes the browser see a *new* app, so an app installed earlier should be uninstalled and installed again.
+
 ### Registering
 
 `register.js` runs only over `http(s)`. It adds the manifest `<link>` and registers `sw.js`. After the worker is ready, the page sends it a list of everything it has loaded (`performance.getEntriesByType("resource")`) so files fetched *before* the worker took control (fonts, CDN scripts) are saved too. `updateViaCache: "none"` makes the browser check `sw.js` against the server every time, ignoring its ordinary HTTP cache.
