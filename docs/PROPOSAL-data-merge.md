@@ -108,6 +108,11 @@ DATA
 - **Grids and label sheets:** many records per page, with gaps, label-sheet presets, bleed and crop marks.
 - **Serial numbers and counters:** No. 001 of 150, page-order numbers, "record 3 of 120".
 - **Repeat blocks (later):** records flow down a column or into linked text frames, like a directory or a listings page.
+- **Filters inside a field:** `{{name|title}}` (Ana Lopez), `{{date|date:d MMMM yyyy}}` (26 November 2026, also in Malay), `{{serial|pad:3}}` (007), `{{price|number}}` (1,234,567), `{{nick|default:friend}}`.
+- **Sort and choose records:** put a timeline in date order (it reads "c. 1400" and "500 BCE"), or merge only a range or the ticked ones.
+- **Front and back:** a template of two pages makes a front and a back for every record.
+- **Zigzag layouts:** odd records on the left, even on the right (timelines).
+- **QR codes from a field:** see section 11.
 - **Straight into the folded zine:** merged pages go to ZineArranger as one PDF for the one-sheet minizine.
 - **Hidden template:** the template page can be hidden, so it is not exported or numbered.
 
@@ -152,6 +157,11 @@ Same as traditional: one template plus a table, a preview, the ability to merge 
 | Distro catalogue listings | A listing line | title, price, format, contact | Records flowing in columns | 4 |
 | Calendar or zine fest schedule | A day card | date, event, place | One card per row, hide empty lines | 2 and 3 |
 | Quote or poem zine | A quote page | quote, author | One page per quote, colour by theme | 1 and 2 |
+| **Invitation cards** | A6 card; optionally a front and a back | guest, title, table, rsvp link | 4 per A4 sheet, or 2 pages per guest; a QR code to RSVP | 1, 3 and QR |
+| **Historical timeline** | One event block (year, title, detail, picture) | year, event, detail, picture | Records sorted by date, zigzagging left and right down a page | sort in 1; flow in 4 |
+| **Formal / invitational letters** | A letter page with a letterhead | salutation, name, address, date, body | One page per recipient; names and dates formatted | 1 |
+| **Image gallery with descriptions** | One cell: picture and caption | photo, title, description | 12 per A4 sheet (3 x 4) | 2 and 3 |
+| **Name cards** | One 90 x 55 mm card | name, role, company, serial | 10 per A4 sheet, bleed and crop marks; optional QR contact | 3 and QR |
 
 ## 8. Rules and edge cases
 
@@ -170,10 +180,38 @@ Same as traditional: one template plus a table, a preview, the ability to merge 
 3. **Layouts:** grids and label presets, serial numbers, bleed and crop marks.
 4. **Flow:** repeating records in columns; starter templates (directory zine, labels, cards).
 
-## 10. Decisions needed
+## 10. Decisions (answered 2026-11-26, with plain explanations)
 
-1. Which to make first: labels and letters, or a directory-style zine from a spreadsheet?
-2. Pictures matched by **file name from a folder**: acceptable?
-3. Merged pages as **plain editable pages** (recommended), or live pages that follow the template?
-4. Is a **QR code from a field** wanted? (needs a small extra library)
-5. Where should the button be: top bar **Data** (proposed), or inside the Project menu?
+1. **What do I build first?** (This only decides the order.) The five new scenarios, plus labels, letters and a directory, all need the same core first. After the core, the next steps open different scenarios: *pictures and grids* give the gallery, name cards and labels; *flow* gives the timeline and directory. **My plan:** core, then pictures and grids, then flow. Say if you would rather have the timeline sooner.
+2. **Pictures from a folder:** yes. When you choose the photo folder, the pictures are **copied into the project (.znow)**, so the merge still works later even if the folder is gone. The file gets bigger by the size of the photos, and ZEditor will show the total and offer to shrink large photos.
+3. **Merged pages: plain or live?** Plain means the merged pages become ordinary pages you can edit freely, like any page you made by hand; to refresh them after changing the template, you run "Merge again" (it replaces them, after a warning). Live would keep every merged page permanently tied to the template, so you could not touch a single page by hand. **Decided: plain** (the proposal as written).
+4. **QR codes:** yes, see section 11.
+5. **Data button:** top bar, next to Page, Project and Export. Decided.
+
+## 11. QR codes: how they would work
+
+- A **QR box** is a new item you place on the template, like a picture box. In its settings you say what goes in the code: one field (`{{rsvp}}`) or a sentence with fields, such as a link, a phone number, a Wi-Fi name, or a contact card.
+- For each record ZEditor works out the code from that record's value. Ana gets a code for her own RSVP link, Budi gets his.
+- The code is drawn as **small squares (vector shapes)**, not a picture, so it stays sharp at any print size and in the PDF.
+- Settings: **size** (a code should be at least about 20 mm), **error correction** (higher survives a stain or a fold better, but is denser), a **quiet margin** round the code, and colours (dark squares on a light background scan best).
+- A record with an **empty** field gets no code, and the check before merging lists it.
+- It needs a **small open-source QR library** (a few KB, MIT licence). It runs in the browser, so no data is sent anywhere. I would check its licence before adding it, as with every library.
+- **Scanning is a real-world test:** ZEditor cannot know if your printer prints a code well. Print one sheet and scan a few with a phone before printing 200.
+
+## 12. Do the five new scenarios work with this design?
+
+I checked what each one needs and tested the parts that are pure logic (reading the CSV, filling the fields, laying out grids, sorting, matching photos) in `tests/dataMerge.test.js`, using sample data for all five. **This proves the data side works. The panel, the page creation and the QR drawing are not built yet.**
+
+| Scenario | What it needs | Works in the design? | Tested in the data core | Still to build |
+|---|---|---|---|---|
+| Invitation cards | A6 grid or front/back pages, names, optional table, QR RSVP | Yes | 4 per A4 exactly fill the sheet; 6 guests make 2 sheets; a two-page template makes 12 pages; a missing table number takes a default; a missing RSVP link is reported | Grid page maker; QR box |
+| Historical timeline | Sort by year, zigzag sides, long details, optional pictures | Yes, after the flow phase | Years like "c. 1400" and "500 BCE" sort correctly; sides alternate; rows with no year go last; details with line breaks survive | Records flowing down a page (phase 4); a line or arrows between events |
+| Formal letters | One page per person; titles, names in the right case, address blocks, dates, long paragraphs | Yes (needs only phase 1) | Semicolon files; `Siti Aminah` from `SITI AMINAH`; "1 Disember 2026"; multi-line addresses and bodies in one cell | Page maker and the field panel |
+| Image gallery with descriptions | Picture and caption cells, 12 per sheet, photo files matched by name | Yes | 3 x 4 cells all inside A4; 15 pictures need 2 sheets; photos found whatever the capitals or missing extension; missing files listed by name | Picture fields; photos stored in the .znow |
+| Name cards | 10 per A4, accents and Chinese names, serial numbers, hide an empty line | Yes | 2 x 5 fits A4 exactly; 11 people make 2 sheets; `Lim Wei Jie 林伟杰` and `Émilie` kept; an empty role hides its line; `No. 011` | Grid page maker; bleed and crop marks per card (bleed exists, grid use is new); QR box |
+
+**Known limits for these scenarios**
+- A timeline with spacing **proportional to the dates** (a long gap for a long time) is a stretch goal; the plan zigzags evenly in date order.
+- Fancy invitation **fonts** must be uploaded or allowed, as for outlines and PDF text.
+- Very **long descriptions** need a "shrink to fit" or a bigger cell; the check before merging lists any that overflow.
+- Gallery pictures of different shapes are **fitted** (cropped to fill, or shrunk to fit: a setting).
