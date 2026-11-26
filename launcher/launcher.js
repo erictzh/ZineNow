@@ -327,6 +327,9 @@
     addHint.className = "zn-modal-hint is-ok";
   }
 
+  // The "+" button is for the maintainer: it only shows with ?dev on the address.
+  if (/[?&]dev(=|&|$)/.test(location.search)) $("fab-add").hidden = false;
+
   $("fab-add").addEventListener("click", () => {
     addFolderInput.value = "";
     addDescInput.value = "";

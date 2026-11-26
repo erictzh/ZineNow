@@ -6,7 +6,7 @@ The home page shows one **card** per app: its logo (or two-letter badge), name, 
 
 - **Open** launches the app in a new tab.
 - **⋯ → About** slides in a panel with the app's readme (if one was given in the config).
-- A round **+** button at the bottom right opens **New app snippet**: type a folder name (exactly as under `apps/`, case-sensitive), an optional description and an optional readme (Markdown), and it prints a ready-made entry; **Copy snippet**, then paste it into `config/apps-config.js` and refresh. (It writes nothing itself.)
+- A round **+** button at the bottom right, **hidden for visitors** and shown only when the address ends in `?dev` (for example `index.html?dev`), opens **New app snippet**: type a folder name (exactly as under `apps/`, case-sensitive), an optional description and an optional readme (Markdown), and it prints a ready-made entry; **Copy snippet**, then paste it into `config/apps-config.js` and refresh. (It writes nothing itself.)
 - An app's logo is `apps/<folder>/app-logo.png`; without one a letter badge is used.
 - Cards for **experimental** apps appear only when [Experimental Features (AI & other development)](home/gear-and-experimental) is on.
 

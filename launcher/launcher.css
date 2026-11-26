@@ -255,6 +255,7 @@ input[type="text"]:focus, textarea:focus {
     z-index: 30;
     font-weight: bold;
 }
+.zn-fab[hidden] { display: none; }
 .zn-fab:hover { background: var(--ui-accent-hover); }
 .zn-fab:active { transform: scale(0.94); }
 
