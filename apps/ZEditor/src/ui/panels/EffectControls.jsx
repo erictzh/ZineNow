@@ -15,8 +15,8 @@ import { ShadowStack, StrokeStack } from "./StackedEffects.jsx";
 // `before` (optional) is shown first inside the group, e.g. the text panel's Photo fill;
 // `beforeLabel` names it in the group's summary while it's on.
 export function EffectControls({ ann, onPatch, effects = IMAGE_EFFECTS, before, beforeLabel, essential }) {
-  // Pictures and shapes keep any number of strokes and shadows (a list each); text keeps one of each.
-  const stacked = (effect) => ann.type !== "text" && (effect.key === "stroke" || effect.key === "shadow");
+  // Pictures, shapes and text keep any number of strokes and shadows (a list each).
+  const stacked = (effect) => effect.key === "stroke" || effect.key === "shadow";
   const toggleStack = (effect, on) => {
     const make = effect.key === "stroke" ? strokesPatch : shadowsPatch;
     const layers = effect.key === "stroke" ? strokeLayersAny(ann) : shadowLayersAny(ann);

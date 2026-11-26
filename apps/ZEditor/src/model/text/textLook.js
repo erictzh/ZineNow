@@ -2,6 +2,7 @@
 
 import { MAIN_SCALE } from "../../constants.js";
 import { controlValues, effectSettings } from "../controls.js";
+import { shadowLayers, shadowOffsetOf, strokeLayers } from "../effectStacks.js";
 import { STROKE_EFFECT, imageShadowOffset } from "../imageEffects.js";
 import { hasLayoutSpans } from "./colorRuns.js";
 import { CASE_CONTROL, CURVE_EFFECT, DISTRESS_EFFECT, LETTER_SPACING_CONTROL, LINE_SPACING_CONTROL, RANSOM_EFFECT, STRIKE_CONTROL, TEXT_FILL_ALPHA_CONTROL, TEXT_GRADIENT_EFFECT, TEXT_LABEL_EFFECT, TEXT_PHOTO_CONTROLS, VERTICAL_CONTROL } from "./textControls.js";
@@ -25,7 +26,9 @@ export function stackText(text) {
 // Export. Ransom, curve and stacked text keep their own layout and ignore it.
 export const usesTypeset = (ann) => !(ann.ransom || ann.curve || ann.vertical === "stacked")
   && Boolean((ann.wrapObstacles && ann.wrapObstacles.length) || ann.storyHeadId != null || ann.align === "justify" || ann.hyphenate === "english" || ann.columns > 1 || ann.frameHeight > 0 || ann.indentFirst || ann.indentLeft || ann.indentRight || ann.spaceBefore || ann.spaceAfter || ann.composer === "paragraph" || hasLayoutSpans(ann.colorRuns));
-export const usesCanvasText = (ann) => Boolean(ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length) || usesTypeset(ann));
+// Strokes or shadows kept in lists (and switched on): drawn on the canvas, with every layer.
+export const hasTextStack = (ann) => Boolean((Array.isArray(ann.strokes) && ann.stroke) || (Array.isArray(ann.shadows) && ann.shadow));
+export const usesCanvasText = (ann) => Boolean(hasTextStack(ann) || ann.ransom || ann.distress || ann.curve || ann.vertical === "stacked" || ann.fitHeight > 0 || (ann.colorRuns && ann.colorRuns.length) || usesTypeset(ann));
 // Point sizes the panel works in become editor px (the page is shown at MAIN_SCALE px per pt).
 export const ptToPx = (pt) => (pt || 0) * MAIN_SCALE;
 export const pxToPt = (px) => px / MAIN_SCALE;
@@ -41,6 +44,7 @@ export function textLook(ann) {
   // Kept with a photo too: it shows through a faded photo, under it.
   const gradient = ann.textGradient ? effectSettings(ann, TEXT_GRADIENT_EFFECT) : null;
   const label = ann.labelBox ? effectSettings(ann, TEXT_LABEL_EFFECT) : null;
+  const stack = hasTextStack(ann);
   return {
     photo,
     ransom: ann.ransom ? effectSettings(ann, RANSOM_EFFECT) : null,
@@ -65,8 +69,14 @@ export function textLook(ann) {
     textCase: controlValues(ann, [CASE_CONTROL]).textCase,
     stacked: controlValues(ann, [VERTICAL_CONTROL]).vertical === "stacked",
     color, fillAlpha,
-    stroke: ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null,
-    shadow: imageShadowOffset(ann),
+    // Text keeps one stroke and one shadow in the old props, or any number in lists (`strokes`, `shadows`, model/effectStacks.js). `stack` says
+    // the lists are in use: such a box is drawn on the canvas (live and export, one renderer) with every layer. `stroke` and `shadow` stay set
+    // when there is at least one layer, for the code that only asks whether the text has one.
+    stack,
+    strokes: stack ? strokeLayers(ann) : [],
+    shadows: stack ? shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0).map(shadowOffsetOf) : [],
+    stroke: stack ? (strokeLayers(ann).length ? { strokeColor: strokeLayers(ann)[0].color, strokeThickness: Math.max(...strokeLayers(ann).map((s) => s.thickness)) * 2 } : null) : (ann.stroke ? effectSettings(ann, STROKE_EFFECT) : null),
+    shadow: stack ? (shadowLayers(ann).filter((s) => s.thickness > 0 || s.blur > 0).map(shadowOffsetOf)[0] || null) : imageShadowOffset(ann),
     gradient,
     label,
     // The box's inner padding grows by the label's padding so the bar sits around the text.

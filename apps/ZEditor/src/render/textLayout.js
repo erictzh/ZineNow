@@ -362,7 +362,8 @@ export function textCanvasMargin(ann, look) {
   const fontSize = ann.fontSize || 16;
   let margin = 2;
   if (look.stroke) margin += look.stroke.strokeThickness * 2;
-  if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
+  if (look.stack) margin += look.shadows.reduce((m, s) => Math.max(m, Math.hypot(s.x, s.y) + s.blur * 2), 0);
+  else if (look.shadow) margin += Math.hypot(look.shadow.x, look.shadow.y) + look.shadow.blur * 2;
   if (look.ransom) margin += fontSize * (look.ransom.ransomShift / 100 + 0.35 + look.ransom.ransomSize / 100);
   if (look.curve) margin += fontSize * 0.6; // turned letters at the ends of an arc reach past the box
   return Math.ceil(margin);

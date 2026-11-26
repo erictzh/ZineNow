@@ -21,7 +21,7 @@ const hexOr = (v, fallback) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(
 
 const cleanStroke = (s) => ({
   color: hexOr(s && s.color, DEFAULT_STROKE.color),
-  thickness: num(s && s.thickness, 1, 40, DEFAULT_STROKE.thickness),
+  thickness: num(s && s.thickness, 0.5, 40, DEFAULT_STROKE.thickness),
   position: STROKE_POSITIONS.some((p) => p.key === (s && s.position)) ? s.position : DEFAULT_STROKE.position,
 });
 const cleanShadow = (s) => ({
@@ -31,11 +31,20 @@ const cleanShadow = (s) => ({
   blur: num(s && s.blur, 0, 40, DEFAULT_SHADOW.blur),
 });
 
+// An old single stroke as a layer. A picture's old stroke was centred on the edge. A text's old stroke was drawn centred but UNDER the letters, so only
+// its outer half showed: that is an outside stroke half as thick, which looks exactly the same.
+function legacyStroke(ann) {
+  const t = Number.isFinite(Number(ann.strokeThickness)) && ann.strokeThickness != null ? Number(ann.strokeThickness) : DEFAULT_STROKE.thickness;
+  return ann.type === "text"
+    ? { color: hexOr(ann.strokeColor, DEFAULT_STROKE.color), thickness: Math.min(40, Math.max(0.5, t / 2)), position: "outside" }
+    : cleanStroke({ color: ann.strokeColor, thickness: ann.strokeThickness, position: "center" });
+}
+
 // The item's strokes, top first: [{ color, thickness (px), position: "inside" | "center" | "outside" }].
 export function strokeLayers(ann) {
   if (!ann.stroke) return []; // the flag is the on/off switch (the effect's checkbox; it is false when the list is empty)
   if (Array.isArray(ann.strokes)) return ann.strokes.slice(0, MAX_LAYERS).map(cleanStroke);
-  return [cleanStroke({ color: ann.strokeColor, thickness: ann.strokeThickness, position: "center" })];
+  return [legacyStroke(ann)];
 }
 
 // The item's shadows, top first: [{ color, thickness (distance, px), direction (°), blur (px) }].
