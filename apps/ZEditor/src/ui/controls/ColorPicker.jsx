@@ -6,7 +6,10 @@
 
 import { hexToHsv, hexToRgb, hsvToHex, parseColorText, rgbToHex } from "../../model/colorSpaces.js";
 
-const { useState, useEffect, useRef, useLayoutEffect } = React;
+const { useState, useEffect, useRef, useLayoutEffect, useContext, createContext } = React;
+
+// App.jsx provides a function that returns the colours the document already uses (model/documentColors.js); it is asked once, when a picker opens.
+export const DocumentColorsContext = createContext(null);
 
 const ZINE_PALETTE = ["#000000", "#1a1a1a", "#8a8a8a", "#ffffff", "#f2e8d5", "#e63946", "#ff6b00", "#ffd400", "#2fbf71", "#2a6df4", "#7b2cbf", "#ff4fa3"];
 const RECENT_KEY = "zinenow.recentColors";
@@ -49,6 +52,8 @@ function PickerPanel({ value, onChange, popRef, style }) {
   const [hsv, setHsv] = useState(() => hexToHsv(value));
   const [hexDraft, setHexDraft] = useState(null);
   const [recent] = useState(loadRecent);
+  const getDocumentColors = useContext(DocumentColorsContext);
+  const [inDocument] = useState(() => (getDocumentColors ? getDocumentColors() : []));
   const svRef = useRef(null), hueRef = useRef(null);
 
   // Something else changed the colour (a swatch, undo): follow it. Our own drags give the same hex, so they are left alone (this keeps the hue
@@ -99,6 +104,7 @@ function PickerPanel({ value, onChange, popRef, style }) {
           </label>
         ))}
       </div>
+      {inDocument.length > 0 && (<div className="ze-cp-group"><span className="ze-cp-label">In this document</span><div className="ze-cp-swatches">{inDocument.map(swatch)}</div></div>)}
       {recent.length > 0 && (<div className="ze-cp-group"><span className="ze-cp-label">Recent</span><div className="ze-cp-swatches">{recent.map(swatch)}</div></div>)}
       <div className="ze-cp-group">
         <span className="ze-cp-label">Zine colours</span>

@@ -8,6 +8,7 @@ Wherever ZEditor asks for a colour (text, shapes, strokes, page numbers, image t
 - **The big square:** left to right is how strong the colour is (saturation), bottom to top is how bright it is. Drag the small ring.
 - **The tall bar:** the hue (the "which colour" slider: red, magenta, blue, cyan, green, yellow). Drag the marker or click on the bar.
 - **Hex:** type or paste a colour like `#E63946`, `E63946` or even `#e39`. **R, G, B:** the same colour as three numbers from 0 to 255; you can also type `26, 26, 26` or `rgb(26 26 26)` into the Hex box.
+- **In this document:** the colours already used on your pages (most used first), so you can match one exactly. It also lists colours stored by effects that are switched off.
 - **Recent:** the last colours you picked, kept in this browser. **Zine colours:** a few ready colours (black, ink, grey, white, paper cream, punk red, orange, yellow, green, blue, purple, pink).
 - **Pick a colour from the screen:** an eyedropper, shown only in browsers that support it (Chrome and Edge).
 - Click anywhere outside, or press **Esc**, to close. Changes apply as you drag.
