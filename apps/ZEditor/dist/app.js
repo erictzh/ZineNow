@@ -4828,7 +4828,7 @@
     { key: "center", label: "Center" },
     { key: "outside", label: "Outside" }
   ];
-  var DEFAULT_STROKE = { color: "#000000", thickness: 4, position: "center" };
+  var DEFAULT_STROKE = { color: "#000000", thickness: 4, position: "center", fill: "solid", color2: "#ffd400", angle: 90 };
   var DEFAULT_SHADOW = { color: "#000000", thickness: 6, direction: 135, blur: 0 };
   var MAX_LAYERS = 8;
   var num = (v, lo, hi, fallback) => Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.min(hi, Math.max(lo, Number(v))) : fallback;
@@ -4836,7 +4836,10 @@
   var cleanStroke = (s) => ({
     color: hexOr(s && s.color, DEFAULT_STROKE.color),
     thickness: num(s && s.thickness, 0.5, 40, DEFAULT_STROKE.thickness),
-    position: STROKE_POSITIONS.some((p) => p.key === (s && s.position)) ? s.position : DEFAULT_STROKE.position
+    position: STROKE_POSITIONS.some((p) => p.key === (s && s.position)) ? s.position : DEFAULT_STROKE.position,
+    fill: s && s.fill === "gradient" ? "gradient" : "solid",
+    color2: hexOr(s && s.color2, DEFAULT_STROKE.color2),
+    angle: num(s && s.angle, 0, 360, DEFAULT_STROKE.angle)
   });
   var cleanShadow = (s) => ({
     color: hexOr(s && s.color, DEFAULT_SHADOW.color),
@@ -4883,6 +4886,13 @@
   function storedShadows(ann) {
     if (Array.isArray(ann.shadows)) return ann.shadows.slice(0, MAX_LAYERS).map(cleanShadow);
     return ann.shadow ? shadowLayers(ann) : [];
+  }
+  var strokeIsGradient = (s) => s.fill === "gradient";
+  var strokeStops = (s) => [{ percent: 0, color: s.color }, { percent: 100, color: s.color2 }];
+  function gradientLine(angle, x, y, w, h) {
+    const rad = angle * Math.PI / 180, dx = Math.sin(rad), dy = -Math.cos(rad);
+    const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2, cx = x + w / 2, cy = y + h / 2;
+    return { x1: cx - dx * half, y1: cy - dy * half, x2: cx + dx * half, y2: cy + dy * half };
   }
 
   // apps/ZEditor/src/model/noise.js
@@ -7588,6 +7598,82 @@
     return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
   }
 
+  // apps/ZEditor/src/model/color.js
+  function rgbaCss(hex3, alphaPercent) {
+    const { r, g, b } = hexToRgb(hex3);
+    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
+  }
+  function hexToRgb(hex3) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
+  }
+
+  // apps/ZEditor/src/render/gradients.js
+  function rectGradientStops(ann) {
+    const v = controlValues(ann, RECT_CONTROLS);
+    const c1 = hexToRgb(v.fillColor), c2 = hexToRgb(v.gradientColor);
+    const a1 = v.fillAlpha / 100, a2 = v.gradientAlpha / 100;
+    const start = v.gradientStart, end = Math.max(v.gradientStart, v.gradientEnd);
+    const steps = a1 === a2 ? 1 : 16;
+    const stops = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const a = a1 + (a2 - a1) * t;
+      const channel = (p, q) => {
+        const premultiplied = p * a1 + (q * a2 - p * a1) * t;
+        return Math.round(a > 0 ? premultiplied / a : p + (q - p) * t);
+      };
+      stops.push({
+        percent: start + (end - start) * t,
+        color: `rgba(${channel(c1.r, c2.r)},${channel(c1.g, c2.g)},${channel(c1.b, c2.b)},${+a.toFixed(4)})`
+      });
+    }
+    return stops;
+  }
+  function rectFillCss(ann) {
+    const v = controlValues(ann, RECT_CONTROLS);
+    if (v.fillType === "solid") {
+      const { r, g, b } = hexToRgb(v.fillColor);
+      return `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
+    }
+    const stops = rectGradientStops(ann).map((s) => `${s.color} ${s.percent}%`).join(", ");
+    return v.fillType === "linear" ? `linear-gradient(${v.gradientAngle}deg, ${stops})` : `radial-gradient(ellipse farthest-corner at 50% 50%, ${stops})`;
+  }
+  function makeLinearGradient(ctx, angleDegrees, stops, x, y, w, h) {
+    const radians = angleDegrees * Math.PI / 180;
+    const dx = Math.sin(radians), dy = -Math.cos(radians);
+    const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
+    const centerX = x + w / 2, centerY = y + h / 2;
+    const gradient = ctx.createLinearGradient(centerX - dx * half, centerY - dy * half, centerX + dx * half, centerY + dy * half);
+    stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
+    return gradient;
+  }
+  function paintRectFill(ctx, ann) {
+    const v = controlValues(ann, RECT_CONTROLS);
+    const w = ann.width, h = ann.height;
+    if (v.fillType === "solid") {
+      const { r, g, b } = hexToRgb(v.fillColor);
+      ctx.fillStyle = `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
+      ctx.fillRect(0, 0, w, h);
+      return;
+    }
+    const stops = rectGradientStops(ann);
+    if (v.fillType === "linear") {
+      ctx.fillStyle = makeLinearGradient(ctx, v.gradientAngle, stops, 0, 0, w, h);
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      const reach = Math.SQRT2;
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(w / 2 * reach, h / 2 * reach);
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-1 / reach, -1 / reach, 2 / reach, 2 / reach);
+      ctx.restore();
+    }
+  }
+
   // apps/ZEditor/src/model/geometry.js
   function rotatePoint(x, y, degrees) {
     const radians = degrees * Math.PI / 180;
@@ -7628,16 +7714,6 @@
     const centerX = box.x + box.width / 2 + oldOffsetX - newOffsetX;
     const centerY = box.y + box.height / 2 + oldOffsetY - newOffsetY;
     return { x: centerX - width / 2, y: centerY - height / 2, width, height };
-  }
-
-  // apps/ZEditor/src/model/color.js
-  function rgbaCss(hex3, alphaPercent) {
-    const { r, g, b } = hexToRgb(hex3);
-    return `rgba(${r},${g},${b},${alphaPercent / 100})`;
-  }
-  function hexToRgb(hex3) {
-    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex3 || "");
-    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 0, g: 0, b: 0 };
   }
 
   // apps/ZEditor/src/render/gaussianBlur.js
@@ -7845,7 +7921,7 @@
         room.addPath(path);
         ctx.clip(room, "evenodd");
       }
-      ctx.strokeStyle = s.color;
+      ctx.strokeStyle = strokeIsGradient(s) ? makeLinearGradient(ctx, s.angle, strokeStops(s), 0, 0, width, height) : s.color;
       ctx.lineWidth = s.position === "center" ? s.thickness : s.thickness * 2;
       ctx.lineJoin = "miter";
       ctx.miterLimit = STROKE_MITER_LIMIT;
@@ -8504,72 +8580,6 @@
     return d;
   }
 
-  // apps/ZEditor/src/render/gradients.js
-  function rectGradientStops(ann) {
-    const v = controlValues(ann, RECT_CONTROLS);
-    const c1 = hexToRgb(v.fillColor), c2 = hexToRgb(v.gradientColor);
-    const a1 = v.fillAlpha / 100, a2 = v.gradientAlpha / 100;
-    const start = v.gradientStart, end = Math.max(v.gradientStart, v.gradientEnd);
-    const steps = a1 === a2 ? 1 : 16;
-    const stops = [];
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const a = a1 + (a2 - a1) * t;
-      const channel = (p, q) => {
-        const premultiplied = p * a1 + (q * a2 - p * a1) * t;
-        return Math.round(a > 0 ? premultiplied / a : p + (q - p) * t);
-      };
-      stops.push({
-        percent: start + (end - start) * t,
-        color: `rgba(${channel(c1.r, c2.r)},${channel(c1.g, c2.g)},${channel(c1.b, c2.b)},${+a.toFixed(4)})`
-      });
-    }
-    return stops;
-  }
-  function rectFillCss(ann) {
-    const v = controlValues(ann, RECT_CONTROLS);
-    if (v.fillType === "solid") {
-      const { r, g, b } = hexToRgb(v.fillColor);
-      return `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
-    }
-    const stops = rectGradientStops(ann).map((s) => `${s.color} ${s.percent}%`).join(", ");
-    return v.fillType === "linear" ? `linear-gradient(${v.gradientAngle}deg, ${stops})` : `radial-gradient(ellipse farthest-corner at 50% 50%, ${stops})`;
-  }
-  function makeLinearGradient(ctx, angleDegrees, stops, x, y, w, h) {
-    const radians = angleDegrees * Math.PI / 180;
-    const dx = Math.sin(radians), dy = -Math.cos(radians);
-    const half = (Math.abs(w * dx) + Math.abs(h * dy)) / 2;
-    const centerX = x + w / 2, centerY = y + h / 2;
-    const gradient = ctx.createLinearGradient(centerX - dx * half, centerY - dy * half, centerX + dx * half, centerY + dy * half);
-    stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
-    return gradient;
-  }
-  function paintRectFill(ctx, ann) {
-    const v = controlValues(ann, RECT_CONTROLS);
-    const w = ann.width, h = ann.height;
-    if (v.fillType === "solid") {
-      const { r, g, b } = hexToRgb(v.fillColor);
-      ctx.fillStyle = `rgba(${r},${g},${b},${v.fillAlpha / 100})`;
-      ctx.fillRect(0, 0, w, h);
-      return;
-    }
-    const stops = rectGradientStops(ann);
-    if (v.fillType === "linear") {
-      ctx.fillStyle = makeLinearGradient(ctx, v.gradientAngle, stops, 0, 0, w, h);
-      ctx.fillRect(0, 0, w, h);
-    } else {
-      const reach = Math.SQRT2;
-      ctx.save();
-      ctx.translate(w / 2, h / 2);
-      ctx.scale(w / 2 * reach, h / 2 * reach);
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-      stops.forEach((s) => gradient.addColorStop(s.percent / 100, s.color));
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-1 / reach, -1 / reach, 2 / reach, 2 / reach);
-      ctx.restore();
-    }
-  }
-
   // apps/ZEditor/src/render/drawShapes.js
   function drawStrokeOnCanvas(ctx, ann, scaleFactor) {
     const isHi = ann.tool === "highlighter";
@@ -8783,7 +8793,7 @@
     const fillsThroughLayer = Boolean(photoImg || look.gradient && (look.ransom || curve2));
     const tilePad = fontSize * 0.06;
     const strokeRuns = (c, layer) => runs.forEach((run2) => withRun(c, run2, () => {
-      c.strokeStyle = layer.color;
+      c.strokeStyle = strokeIsGradient(layer) ? makeLinearGradient(c, layer.angle, strokeStops(layer), x + padX, y + padY, innerWidth, textHeight) : layer.color;
       c.lineWidth = (layer.position === "center" ? layer.thickness : layer.thickness * 2) * scaleFactor;
       c.lineJoin = "round";
       c.strokeText(run2.text, run2.x, run2.baselineY);
@@ -9579,7 +9589,13 @@
       const clipId = nextId("sc"), maskId = nextId("sm");
       if (strokes.some((s) => s.position === "inside")) defs.push(`<clipPath id="${clipId}"><path d="${d}"/></clipPath>`);
       if (strokes.some((s) => s.position === "outside")) defs.push(`<mask id="${maskId}" maskUnits="userSpaceOnUse" x="${-reach}" y="${-reach}" width="${num2(w + 2 * reach)}" height="${num2(h + 2 * reach)}"><rect x="${-reach}" y="${-reach}" width="${num2(w + 2 * reach)}" height="${num2(h + 2 * reach)}" fill="#fff"/><path d="${d}" fill="#000"/></mask>`);
-      stroke = strokes.map((s) => `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${num2(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
+      const paints = strokes.map((s) => {
+        if (!strokeIsGradient(s)) return s.color;
+        const id = nextId("sg"), g = gradientLine(s.angle, 0, 0, w, h);
+        defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${num2(g.x1)}" y1="${num2(g.y1)}" x2="${num2(g.x2)}" y2="${num2(g.y2)}"><stop offset="0" stop-color="${s.color}"/><stop offset="1" stop-color="${s.color2}"/></linearGradient>`);
+        return `url(#${id})`;
+      });
+      stroke = strokes.map((s, i) => `<path d="${d}" fill="none" stroke="${paints[i]}" stroke-width="${num2(s.position === "center" ? s.thickness : s.thickness * 2)}" stroke-miterlimit="4"${s.position === "inside" ? ` clip-path="url(#${clipId})"` : ""}${s.position === "outside" ? ` mask="url(#${maskId})"` : ""}/>`).reverse().join("");
     }
     return `<g transform="translate(${num2(ann.x)} ${num2(ann.y)})">${shape}${stroke}</g>`;
   }
@@ -15954,13 +15970,17 @@ ${parts.join("\n")}</g>`);
   function StrokeStack({ ann, strokes, outline }) {
     const reach = Math.ceil(strokeReach(strokes)) + 4;
     const id = "ze-stroke-" + ann.id;
-    return /* @__PURE__ */ React.createElement("svg", { className: "ze-ann-image-stroke", width: ann.width, height: ann.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("clipPath", { id: id + "-in" }, /* @__PURE__ */ React.createElement("path", { d: outline })), /* @__PURE__ */ React.createElement("mask", { id: id + "-out", maskUnits: "userSpaceOnUse", x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach }, /* @__PURE__ */ React.createElement("rect", { x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach, fill: "#fff" }), /* @__PURE__ */ React.createElement("path", { d: outline, fill: "#000" }))), strokes.map((s, i) => /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("svg", { className: "ze-ann-image-stroke", width: ann.width, height: ann.height, "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("defs", null, /* @__PURE__ */ React.createElement("clipPath", { id: id + "-in" }, /* @__PURE__ */ React.createElement("path", { d: outline })), /* @__PURE__ */ React.createElement("mask", { id: id + "-out", maskUnits: "userSpaceOnUse", x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach }, /* @__PURE__ */ React.createElement("rect", { x: -reach, y: -reach, width: ann.width + 2 * reach, height: ann.height + 2 * reach, fill: "#fff" }), /* @__PURE__ */ React.createElement("path", { d: outline, fill: "#000" })), strokes.map((s, i) => {
+      if (!strokeIsGradient(s)) return null;
+      const g = gradientLine(s.angle, 0, 0, ann.width, ann.height);
+      return /* @__PURE__ */ React.createElement("linearGradient", { key: i, id: id + "-g" + i, gradientUnits: "userSpaceOnUse", x1: g.x1, y1: g.y1, x2: g.x2, y2: g.y2 }, /* @__PURE__ */ React.createElement("stop", { offset: "0", stopColor: s.color }), /* @__PURE__ */ React.createElement("stop", { offset: "1", stopColor: s.color2 }));
+    })), strokes.map((s, i) => /* @__PURE__ */ React.createElement(
       "path",
       {
         key: i,
         d: outline,
         fill: "none",
-        stroke: s.color,
+        stroke: strokeIsGradient(s) ? `url(#${id}-g${i})` : s.color,
         strokeLinejoin: "miter",
         strokeMiterlimit: STROKE_MITER_LIMIT,
         strokeWidth: s.position === "center" ? s.thickness : s.thickness * 2,
@@ -18643,10 +18663,11 @@ ${parts.join("\n")}</g>`);
     };
     return { update, remove, move };
   }
+  var STROKE_FILLS = [{ key: "solid", label: "Solid color" }, { key: "gradient", label: "Gradient" }];
   function StrokeStack2({ ann, onPatch }) {
     const layers = strokeLayers(ann);
     const { update, remove, move } = useStack(layers, (list) => onPatch(strokesPatch(list)));
-    return /* @__PURE__ */ React.createElement(React.Fragment, null, layers.map((s, i) => /* @__PURE__ */ React.createElement(LayerCard, { key: i, index: i, count: layers.length, title: "Stroke", onMove: (d) => move(i, d), onDelete: () => remove(i) }, /* @__PURE__ */ React.createElement(Row, { label: "Color" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: s.color, ariaLabel: "Stroke colour", onChange: (color) => update(i, { color }) })), /* @__PURE__ */ React.createElement(Row, { label: "Thickness (px)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 40, value: s.thickness, onChange: (thickness) => update(i, { thickness }) })), /* @__PURE__ */ React.createElement(Row, { label: "Position" }, /* @__PURE__ */ React.createElement(SelectInput, { options: STROKE_POSITIONS, value: s.position, onChange: (position) => update(i, { position }) })))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: layers.length >= MAX_LAYERS, onClick: () => onPatch(strokesPatch([...layers, { ...DEFAULT_STROKE, ...layers.length ? { color: layers[0].color } : {} }])) }, "+ Add stroke"));
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, layers.map((s, i) => /* @__PURE__ */ React.createElement(LayerCard, { key: i, index: i, count: layers.length, title: "Stroke", onMove: (d) => move(i, d), onDelete: () => remove(i) }, /* @__PURE__ */ React.createElement(Row, { label: "Fill" }, /* @__PURE__ */ React.createElement(SelectInput, { options: STROKE_FILLS, value: s.fill, onChange: (fill) => update(i, { fill }) })), /* @__PURE__ */ React.createElement(Row, { label: s.fill === "gradient" ? "Color 1" : "Color" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: s.color, ariaLabel: "Stroke colour", onChange: (color) => update(i, { color }) })), s.fill === "gradient" && /* @__PURE__ */ React.createElement(Row, { label: "Color 2" }, /* @__PURE__ */ React.createElement(ColorPickerButton, { value: s.color2, ariaLabel: "Stroke second colour", onChange: (color2) => update(i, { color2 }) })), s.fill === "gradient" && /* @__PURE__ */ React.createElement(Row, { label: "Angle (°)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 0, max: 360, value: s.angle, onChange: (angle) => update(i, { angle }) })), /* @__PURE__ */ React.createElement(Row, { label: "Thickness (px)" }, /* @__PURE__ */ React.createElement(SliderNumberInput, { min: 1, max: 40, value: s.thickness, onChange: (thickness) => update(i, { thickness }) })), /* @__PURE__ */ React.createElement(Row, { label: "Position" }, /* @__PURE__ */ React.createElement(SelectInput, { options: STROKE_POSITIONS, value: s.position, onChange: (position) => update(i, { position }) })))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", disabled: layers.length >= MAX_LAYERS, onClick: () => onPatch(strokesPatch([...layers, { ...DEFAULT_STROKE, ...layers.length ? { color: layers[0].color } : {} }])) }, "+ Add stroke"));
   }
   function ShadowStack({ ann, onPatch }) {
     const layers = shadowLayers(ann);
@@ -21570,7 +21591,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "33d6c3a"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "4cc32e6"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

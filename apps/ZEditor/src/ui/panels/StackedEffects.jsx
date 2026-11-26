@@ -45,6 +45,8 @@ function useStack(layers, store) {
   return { update, remove, move };
 }
 
+const STROKE_FILLS = [{ key: "solid", label: "Solid color" }, { key: "gradient", label: "Gradient" }];
+
 export function StrokeStack({ ann, onPatch }) {
   const layers = strokeLayers(ann);
   const { update, remove, move } = useStack(layers, (list) => onPatch(strokesPatch(list)));
@@ -52,7 +54,10 @@ export function StrokeStack({ ann, onPatch }) {
     <React.Fragment>
       {layers.map((s, i) => (
         <LayerCard key={i} index={i} count={layers.length} title="Stroke" onMove={(d) => move(i, d)} onDelete={() => remove(i)}>
-          <Row label="Color"><ColorPickerButton value={s.color} ariaLabel="Stroke colour" onChange={(color) => update(i, { color })} /></Row>
+          <Row label="Fill"><SelectInput options={STROKE_FILLS} value={s.fill} onChange={(fill) => update(i, { fill })} /></Row>
+          <Row label={s.fill === "gradient" ? "Color 1" : "Color"}><ColorPickerButton value={s.color} ariaLabel="Stroke colour" onChange={(color) => update(i, { color })} /></Row>
+          {s.fill === "gradient" && <Row label="Color 2"><ColorPickerButton value={s.color2} ariaLabel="Stroke second colour" onChange={(color2) => update(i, { color2 })} /></Row>}
+          {s.fill === "gradient" && <Row label="Angle (°)"><SliderNumberInput min={0} max={360} value={s.angle} onChange={(angle) => update(i, { angle })} /></Row>}
           <Row label="Thickness (px)"><SliderNumberInput min={1} max={40} value={s.thickness} onChange={(thickness) => update(i, { thickness })} /></Row>
           <Row label="Position"><SelectInput options={STROKE_POSITIONS} value={s.position} onChange={(position) => update(i, { position })} /></Row>
         </LayerCard>

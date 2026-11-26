@@ -1,5 +1,5 @@
 // Stacked strokes and shadows (model/effectStacks.js).
-import { DEFAULT_SHADOW, DEFAULT_STROKE, shadowLayers, shadowOffsetOf, shadowReach, shadowsPatch, strokeLayers, strokeReach, strokesPatch } from "../apps/ZEditor/src/model/effectStacks.js";
+import { gradientLine, strokeIsGradient, strokeStops, DEFAULT_SHADOW, DEFAULT_STROKE, shadowLayers, shadowOffsetOf, shadowReach, shadowsPatch, strokeLayers, strokeReach, strokesPatch } from "../apps/ZEditor/src/model/effectStacks.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -33,4 +33,11 @@ ok(strokeReach([{ position: "center", thickness: 2 }, { position: "outside", thi
 ok(shadowReach([{ thickness: 5, blur: 4 }, { thickness: 10, blur: 0 }]) === 13, "shadow reach is distance plus blur, the largest wins");
 const o = shadowOffsetOf({ thickness: 10, direction: 90, blur: 0, color: "#000000" }), d = shadowOffsetOf({ thickness: 10, direction: 180, blur: 0, color: "#000000" });
 ok(Math.abs(o.x - 10) < 1e-9 && Math.abs(o.y) < 1e-9 && Math.abs(d.y - 10) < 1e-9, "direction 90° is right and 180° is down");
+const gs = strokeLayers({ stroke: true, strokes: [{ color: "#112233", color2: "#445566", fill: "gradient", angle: 45 }, { color: "#000000" }] });
+ok(strokeIsGradient(gs[0]) && !strokeIsGradient(gs[1]) && gs[0].angle === 45 && gs[0].color2 === "#445566", "a stroke can be a gradient; the default is solid");
+ok(strokeStops(gs[0]).map((s) => s.percent + s.color).join() === "0#112233,100#445566", "a gradient stroke runs from colour 1 to colour 2");
+ok(strokeLayers({ stroke: true, strokes: [{ fill: "wavy", color2: "x", angle: 999 }] })[0].fill === "solid" && strokeLayers({ stroke: true, strokes: [{ angle: 999 }] })[0].angle === 360, "bad gradient settings are made safe");
+const gl = gradientLine(90, 0, 0, 100, 40), gu = gradientLine(0, 0, 0, 100, 40);
+ok(Math.abs(gl.x1) < 1e-9 && Math.abs(gl.x2 - 100) < 1e-9 && Math.abs(gl.y1 - 20) < 1e-9, "angle 90° runs left to right through the middle");
+ok(Math.abs(gu.y1 - 40) < 1e-9 && Math.abs(gu.y2) < 1e-9, "angle 0° runs from the bottom to the top");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
