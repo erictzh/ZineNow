@@ -2,13 +2,13 @@
 
 import { blendOf } from "../model/controls.js";
 import { clipBaseIndex, isClipped } from "../model/clipping.js";
-import { SHADOW_EFFECT, STROKE_EFFECT, TEXTURE_EFFECT, effectPropNames } from "../model/imageEffects.js";
+import { BEVEL_EFFECT, SHADOW_EFFECT, STROKE_EFFECT, TEXTURE_EFFECT, effectPropNames } from "../model/imageEffects.js";
 import { TEXT_LABEL_EFFECT } from "../model/text/textControls.js";
 import { drawAnnotationOnCanvas } from "./drawAnnotation.js";
 
-// What a layer's own look adds to its outline but isn't its shape: stroke, shadow, texture, a text label.
+// What a layer's own look adds to its outline but isn't its shape: stroke, shadow, bevel, texture, a text label.
 // The mask is the layer's shape alone (its edge shape, rotation and crop count), at full strength.
-const NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap(effectPropNames);
+const NOT_SHAPE_PROPS = [STROKE_EFFECT, SHADOW_EFFECT, BEVEL_EFFECT, TEXTURE_EFFECT, TEXT_LABEL_EFFECT].flatMap(effectPropNames);
 
 export function maskShapeOf(base) {
   const shape = { ...base, opacity: undefined, blend: undefined, hidden: undefined, filter: { type: "none" } };

@@ -86,7 +86,25 @@ export const LOMO_EFFECT = {
   ],
 };
 
-export const IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, TEXTURE_EFFECT];
+// Bevel and Emboss: a lit raised (or pressed) edge made from the outline (render/bevel.js). "Inner bevel" stays on the shape; "Emboss" is wider and
+// spills over the edge too. Light direction: where the light comes FROM (0° top, 90° right, 180° bottom, 270° left).
+export const BEVEL_EFFECT = {
+  key: "bevel",
+  label: "Bevel & Emboss",
+  controls: [
+    { kind: "select", prop: "bevelStyle", label: "Style", fallback: "inner", options: [{ key: "inner", label: "Inner bevel" }, { key: "emboss", label: "Emboss (spills past the edge)" }] },
+    { kind: "select", prop: "bevelRaised", label: "Surface", fallback: "up", options: [{ key: "up", label: "Raised" }, { key: "down", label: "Pressed in" }] },
+    { kind: "slider", prop: "bevelDepth", label: "Depth (%)", min: 1, max: 100, fallback: 60 },
+    { kind: "slider", prop: "bevelSize", label: "Size (px)", min: 1, max: 40, fallback: 8 },
+    { kind: "slider", prop: "bevelLight", label: "Light from (°)", min: 0, max: 360, fallback: 315, hint: "0° is the top, 90° the right, 180° the bottom, 270° the left; 315° is the top left." },
+    { kind: "color", prop: "bevelHighlightColor", label: "Highlight", fallback: "#ffffff" },
+    { kind: "slider", prop: "bevelHighlightOpacity", label: "Highlight strength (%)", min: 0, max: 100, fallback: 75 },
+    { kind: "color", prop: "bevelShadowColor", label: "Shadow", fallback: "#000000" },
+    { kind: "slider", prop: "bevelShadowOpacity", label: "Shadow strength (%)", min: 0, max: 100, fallback: 60 },
+  ],
+};
+
+export const IMAGE_EFFECTS = [ROUNDED_EFFECT, ELLIPSE_EFFECT, TORN_EDGE_EFFECT, SCISSOR_CUT_EFFECT, FEATHER_EFFECT, LOMO_EFFECT, STROKE_EFFECT, SHADOW_EFFECT, BEVEL_EFFECT, TEXTURE_EFFECT];
 
 // The active edge shape's outline, or null for a plain rectangle.
 export function imageEdgeOutline(ann) {

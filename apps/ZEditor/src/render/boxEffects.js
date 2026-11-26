@@ -2,8 +2,9 @@
 
 import { angleOf, effectSettings } from "../model/controls.js";
 import { strokeLayers, strokeReach } from "../model/effectStacks.js";
-import { STROKE_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT, imageEdgeOutline, imageShadowOffsets } from "../model/imageEffects.js";
+import { BEVEL_EFFECT, STROKE_EFFECT, STROKE_MITER_LIMIT, TEXTURE_EFFECT, imageEdgeOutline, imageShadowOffsets } from "../model/imageEffects.js";
 import { rotatePoint } from "../model/geometry.js";
+import { bevelCanvas } from "./bevel.js";
 import { noiseStream } from "../model/noise.js";
 import { rectOutline } from "../model/outlines.js";
 
@@ -126,13 +127,15 @@ export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
   }
   const outline = imageEdgeOutline(ann);
   const strokes = strokeLayers(ann); // top first
-  if (outline || strokes.length > 0 || ann.texture || shadows.length > 1) {
+  if (outline || strokes.length > 0 || ann.texture || ann.bevel || shadows.length > 1) {
     // Composed on its own canvas first: clipping on the page's context
     // would also clip away the shadow, and this way the shadow falls
     // from the stroke too. Drawn in the image's own coordinate space,
     // where the outline is defined; `pad` leaves room for the stroke.
     const reach = strokeReach(strokes);
-    const pad = strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0;
+    // The bevel is lit from the outline alone; it needs room round the box for an emboss that spills past the edge.
+    const bevel = ann.bevel ? bevelCanvas(outline || rectOutline(ann), ann.width, ann.height, scaleFactor, effectSettings(ann, BEVEL_EFFECT)) : null;
+    const pad = Math.max(strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0, bevel ? bevel.pad : 0);
     const cut = document.createElement("canvas");
     cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
     cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
@@ -144,6 +147,7 @@ export function drawBoxWithEffects(ctx, ann, scaleFactor, paintContent) {
     paintContent(cctx);
     if (ann.texture) drawTextureMarks(cctx, ann);
     cctx.restore();
+    if (bevel) cctx.drawImage(bevel.canvas, -bevel.pad / scaleFactor, -bevel.pad / scaleFactor, bevel.canvas.width / scaleFactor, bevel.canvas.height / scaleFactor);
     if (strokes.length > 0) drawStrokeStack(cctx, strokes, new Path2D(outline || rectOutline(ann)), ann.width, ann.height, reach);
     // Several shadows: each is cast alone (the picture is drawn far off the page and only its shadow lands on it), bottom one first, then
     // the picture itself on top of them all. The shadow offsets turn back with the item so the light stays fixed on the page.

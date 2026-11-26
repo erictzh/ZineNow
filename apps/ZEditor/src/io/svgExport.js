@@ -191,7 +191,7 @@ async function layerParts(items, pageFilter, ctx) {
     if (isClipped(ann)) ctx.counts.clipped++;
     const box = { x: ann.x, y: ann.y, width: ann.width, height: ann.height };
     // A shadow or texture has no plain SVG equivalent: such a layer goes in as a picture of itself.
-    const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture);
+    const hasLookOnly = Boolean(imageShadowOffset(ann) || ann.texture || ann.bevel);
     if (ann.type === "trace" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, traceSvg(ann), box)));
     else if (ann.type === "rect" && !hasLookOnly) parts.push(named(ann, wrapItem(ann, rectSvg(ann, ctx.defs, ctx.nextId), box)));
     else if (ann.type === "stroke") parts.push(named(ann, wrapItem(ann, strokeSvg(ann), null)));
