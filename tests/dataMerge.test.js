@@ -3,7 +3,7 @@
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
-import { alternateSide, matchPhotos, numberOf, selectRecords, sortRecords } from "../apps/ZEditor/src/model/dataMerge/records.js";
+import { alternateSide, dateOf, detectSortType, matchPhotos, numberOf, selectRecords, sortRecords } from "../apps/ZEditor/src/model/dataMerge/records.js";
 let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log("FAIL:", msg); } else console.log("ok  :", msg); };
 
@@ -52,7 +52,7 @@ ok(numberOf("c. 1400") === 1400 && numberOf("500 BCE") === -500 && numberOf("-44
 const sorted = sortRecords(timeline.records, "year");
 ok(sorted.map((r) => r.year).join("|") === "500 BCE|c. 1400|1511|1824|1957|1963", "the timeline is put in date order, with BCE first");
 ok(sorted.map((r, i) => alternateSide(i)).join() === "left,right,left,right,left,right", "events zigzag left and right");
-ok(sortRecords(timeline.records, "year", { descending: true })[0].year === "1963", "newest first on request");
+ok(sortRecords(timeline.records, { column: "year", descending: true })[0].year === "1963", "newest first on request");
 ok(sortRecords([{ y: "1990" }, { y: "unknown" }, { y: "1980" }], "y").map((r) => r.y).join() === "1980,1990,unknown", "a row with no year goes last");
 ok(timeline.records[0].detail === "A long account\nover two lines", "a detail with line breaks survives");
 
@@ -94,4 +94,24 @@ ok(GRID_PRESETS.every((p) => gridCells(p).length === p.cols * p.rows), "every pr
 const directory = parseCsv("name,bio,photo\n" + Array.from({ length: 40 }, (_, i) => `Person ${i + 1},Bio ${i + 1},p${i + 1}.jpg`).join("\n"));
 ok(directory.records.length === 40 && mergedPageCount(40, 1) === 40, "a 40-person directory is 40 pages");
 ok(selectRecords(40, { from: 5, to: 8 }).join() === "4,5,6,7" && selectRecords(5, { ticked: [0, 3] }).join() === "0,3" && selectRecords(3).length === 3, "all, a range or the ticked records");
+// ---- Sorting by words, by number or ID, and by date, both ways
+const people2 = [{ name: "émilie", id: "A10", joined: "03/04/2026", score: "RM 1,200" }, { name: "Zul", id: "A2", joined: "2026-01-15", score: "300" }, { name: "Ana", id: "A1", joined: "26 Nov 2025", score: "" }, { name: "Budi", id: "", joined: "5 Mac 2026", score: "45.5" }, { name: "citra", id: "B1", joined: "", score: "9" }];
+const names = (rows) => rows.map((r) => r.name).join(",");
+ok(names(sortRecords(people2, { column: "name", as: "text" })) === "Ana,Budi,citra,émilie,Zul", "words A to Z: capitals and accents do not matter");
+ok(names(sortRecords(people2, { column: "name", as: "text", descending: true })) === "Zul,émilie,citra,Budi,Ana", "words Z to A");
+ok(names(sortRecords(people2, { column: "id", as: "natural" })) === "Ana,Zul,émilie,citra,Budi", "IDs sort naturally: A1, A2, A10, B1, and the blank last");
+ok(names(sortRecords(people2, { column: "id", as: "natural", descending: true })) === "citra,émilie,Zul,Ana,Budi", "IDs descending, the blank still last");
+ok(names(sortRecords(people2, { column: "id", as: "text" })).startsWith("Ana,émilie,Zul"), "plain text order differs from natural order: A1, A10, A2");
+const byScore = sortRecords(people2, { column: "score", as: "number" }).map((r) => r.score).join("|");
+ok(byScore === "9|45.5|300|RM 1,200|", "number sort: 9, 45.5, 300, 1200, blank");
+ok(sortRecords(people2, { column: "score", as: "number", descending: true }).map((r) => r.score).join("|") === "RM 1,200|300|45.5|9|", "numbers descending, the blank still last");
+ok(dateOf("03/04/2026") === dateOf("3 April 2026") && dateOf("03/04/2026", "mdy") === dateOf("March 4, 2026") && dateOf("26/11/2026") === dateOf("2026-11-26") && dateOf("13/02/2026", "mdy") === dateOf("13 Feb 2026"), "dates read as day-first or month-first, in numbers or words, and a first part over 12 is the day");
+ok(dateOf("5 Mac 2026") === dateOf("2026-03-05") && dateOf("1 Disember 2026") === dateOf("2026-12-01") && dateOf("hello") === null, "Malay month names; a word is not a date");
+ok(names(sortRecords(people2, { column: "joined", as: "date" })) === "Ana,Zul,Budi,émilie,citra", "dates oldest first (mixed formats: 26 Nov 2025, 2026-01-15, 5 Mac 2026, 03/04/2026), the blank last");
+ok(names(sortRecords(people2, { column: "joined", as: "date", descending: true })) === "émilie,Budi,Zul,Ana,citra", "dates newest first");
+ok(detectSortType(people2, "joined") === "date" && detectSortType(people2, "score") === "number" && detectSortType(people2, "name") === "text", "automatic picks date, number or words from the cells");
+ok(detectSortType([{ y: "1999" }, { y: "2001" }], "y") === "number" && detectSortType([{ c: "A1" }, { c: "A2" }], "c") === "text", "a column of years is numbers; codes are words (choose 'ID' to sort them naturally)");
+const tied = [{ c: "KL", n: "Zul" }, { c: "Penang", n: "Budi" }, { c: "KL", n: "Ana" }, { c: "Penang", n: "Citra" }];
+ok(sortRecords(tied, [{ column: "c" }, { column: "n", descending: true }]).map((r) => r.c + ":" + r.n).join() === "KL:Zul,KL:Ana,Penang:Citra,Penang:Budi", "sort by one field, then break ties by another (here descending)");
+ok(sortRecords(tied, "c").map((r) => r.n).join() === "Zul,Ana,Budi,Citra", "equal values keep their original order (stable)");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

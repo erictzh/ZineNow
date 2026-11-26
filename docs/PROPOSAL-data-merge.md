@@ -58,7 +58,13 @@ DATA
  3 PREVIEW
    [x] Show record   ◀ 3 / 120 ▶   Missing field → shows {{field}} in red
 
- 4 MERGE
+ 4 SORT & CHOOSE                            (optional)
+   Sort by  [joined ▾]  as [Date ▾]   (•) ↑ Ascending  ( ) ↓ Descending
+   then by  [name   ▾]  as [Words ▾]  (•) ↑ Ascending  ( ) ↓ Descending   [+ another]
+   Records: (•) All 120   ( ) Range [1]–[120]   ( ) Ticked
+   [ ] Day first (26/11/2026)   [x] Blank cells go last
+
+ 5 MERGE
    [Create pages…]   [Export PDF…]
 ```
 
@@ -109,7 +115,13 @@ DATA
 - **Serial numbers and counters:** No. 001 of 150, page-order numbers, "record 3 of 120".
 - **Repeat blocks (later):** records flow down a column or into linked text frames, like a directory or a listings page.
 - **Filters inside a field:** `{{name|title}}` (Ana Lopez), `{{date|date:d MMMM yyyy}}` (26 November 2026, also in Malay), `{{serial|pad:3}}` (007), `{{price|number}}` (1,234,567), `{{nick|default:friend}}`.
-- **Sort and choose records:** put a timeline in date order (it reads "c. 1400" and "500 BCE"), or merge only a range or the ticked ones.
+- **Sort by any field, both ways:** pick a column and how to read it, then **ascending** or **descending**; add a second field to break ties ("by city, then by name").
+  - **Date:** reads 2026-11-26, 26/11/2026 (day first, or month first if you choose), "26 Nov 2026", "5 Mac 2026" (English or Malay month names) and "500 BCE".
+  - **Words (A to Z):** capitals and accents do not matter ("émilie" sorts among the E's).
+  - **Number:** also reads "RM 1,200", "c. 1400" and "-44".
+  - **ID or code:** natural order, so A1, A2, A10 (not A1, A10, A2) and ID-007 before ID-12.
+  - **Automatic** guesses from the cells (dates, numbers or words). Cells that are blank go **last**, whichever way you sort, and equal records keep their order.
+  - Sort first, then choose a range: "the 10 newest".
 - **Front and back:** a template of two pages makes a front and a back for every record.
 - **Zigzag layouts:** odd records on the left, even on the right (timelines).
 - **QR codes from a field:** see section 11.
@@ -158,7 +170,7 @@ Same as traditional: one template plus a table, a preview, the ability to merge 
 | Calendar or zine fest schedule | A day card | date, event, place | One card per row, hide empty lines | 2 and 3 |
 | Quote or poem zine | A quote page | quote, author | One page per quote, colour by theme | 1 and 2 |
 | **Invitation cards** | A6 card; optionally a front and a back | guest, title, table, rsvp link | 4 per A4 sheet, or 2 pages per guest; a QR code to RSVP | 1, 3 and QR |
-| **Historical timeline** | One event block (year, title, detail, picture) | year, event, detail, picture | Records sorted by date, zigzagging left and right down a page | sort in 1; flow in 4 |
+| **Historical timeline** | One event block (year, title, detail, picture) | year, event, detail, picture | Records sorted by date (oldest or newest first), zigzagging left and right down a page | sort in 1; flow in 4 |
 | **Formal / invitational letters** | A letter page with a letterhead | salutation, name, address, date, body | One page per recipient; names and dates formatted | 1 |
 | **Image gallery with descriptions** | One cell: picture and caption | photo, title, description | 12 per A4 sheet (3 x 4) | 2 and 3 |
 | **Name cards** | One 90 x 55 mm card | name, role, company, serial | 10 per A4 sheet, bleed and crop marks; optional QR contact | 3 and QR |
