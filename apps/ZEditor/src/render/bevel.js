@@ -9,7 +9,8 @@ import { gaussianBlur } from "./gaussianBlur.js";
 
 // `alpha`: the mask, one byte per pixel (255 inside the shape), width x height.
 // o: { sigma (px: how wide the sloped edge is, about 2 x sigma), depth (0..100), lightDeg (the direction the light comes FROM: 0 top, 90 right,
-//      180 bottom, 270 left), raised (true: the edge stands up; false: it is pressed in), insideOnly (bevel: only on the shape; emboss: spills
+//      180 bottom, 270 left), hardness (0..100: 0 fades the light smoothly across the edge, 100 makes crisp flat bands), soften (px: blurs the
+//      finished highlight and shadow), raised (true: the edge stands up; false: it is pressed in), insideOnly (bevel: only on the shape; emboss: spills
 //      past the edge too), highlight: { r, g, b, a (0..1) }, shadow: { r, g, b, a } }
 // Returns RGBA bytes (not premultiplied) of the highlight and shadow colours with their strength as alpha.
 export function bevelPixels(alpha, width, height, o) {
@@ -22,7 +23,8 @@ export function bevelPixels(alpha, width, height, o) {
   const lx = Math.sin(rad), ly = -Math.cos(rad); // unit vector pointing toward the light (y grows downward)
   const sign = o.raised ? 1 : -1;
   const slopeMax = 0.4 / Math.max(0.5, o.sigma); // the steepest slope a blurred step edge has: shading is measured against it
-  const strength = (o.depth / 100) * 1.4;
+  // Hardness steepens how fast the light reaches full strength: soft bevels fade across the whole edge, hard ones are crisp flat facets.
+  const strength = (o.depth / 100) * 1.4 * (1 + ((o.hardness || 0) / 100) * 8);
   const h = (x, y) => px[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -38,6 +40,10 @@ export function bevelPixels(alpha, width, height, o) {
       out[i * 4] = c.r; out[i * 4 + 1] = c.g; out[i * 4 + 2] = c.b; out[i * 4 + 3] = Math.round(a * 255);
     }
   }
+  if (o.soften > 0.3) {
+    gaussianBlur(out, width, height, o.soften); // blurs colour and strength together (premultiplied inside)
+    if (o.insideOnly) for (let i = 0; i < n; i++) out[i * 4 + 3] = (out[i * 4 + 3] * alpha[i]) / 255; // a bevel stays on the shape
+  }
   return out;
 }
 
@@ -47,7 +53,7 @@ export function bevelOptions(s, scale) {
   const hi = hexToRgb(s.bevelHighlightColor), sh = hexToRgb(s.bevelShadowColor);
   return {
     sigma: ((emboss ? s.bevelSize : s.bevelSize / 2) || 1) * scale,
-    depth: s.bevelDepth, lightDeg: s.bevelLight, raised: s.bevelRaised !== "down", insideOnly: !emboss,
+    depth: s.bevelDepth, hardness: s.bevelHardness, soften: s.bevelSoften * scale, lightDeg: s.bevelLight, raised: s.bevelRaised !== "down", insideOnly: !emboss,
     highlight: { ...hi, a: s.bevelHighlightOpacity / 100 }, shadow: { ...sh, a: s.bevelShadowOpacity / 100 },
   };
 }

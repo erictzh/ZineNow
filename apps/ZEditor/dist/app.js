@@ -5084,7 +5084,9 @@
       { kind: "select", prop: "bevelStyle", label: "Style", fallback: "inner", options: [{ key: "inner", label: "Inner bevel" }, { key: "emboss", label: "Emboss (spills past the edge)" }] },
       { kind: "select", prop: "bevelRaised", label: "Surface", fallback: "up", options: [{ key: "up", label: "Raised" }, { key: "down", label: "Pressed in" }] },
       { kind: "slider", prop: "bevelDepth", label: "Depth (%)", min: 1, max: 100, fallback: 60 },
-      { kind: "slider", prop: "bevelSize", label: "Size (px)", min: 1, max: 40, fallback: 8 },
+      { kind: "slider", prop: "bevelSize", label: "Size (px)", min: 1, max: 40, fallback: 8, hint: "How wide the sloped edge is." },
+      { kind: "slider", prop: "bevelHardness", label: "Hardness (%)", min: 0, max: 100, fallback: 0, hint: "0 fades the light smoothly across the edge (a soft, rounded bevel); 100 makes crisp flat bands (a hard, chiselled edge)." },
+      { kind: "slider", prop: "bevelSoften", label: "Soften (px)", min: 0, max: 20, fallback: 0, hint: "Blurs the finished highlight and shadow, whatever the hardness." },
       { kind: "slider", prop: "bevelLight", label: "Light from (°)", min: 0, max: 360, fallback: 315, hint: "0° is the top, 90° the right, 180° the bottom, 270° the left; 315° is the top left." },
       { kind: "color", prop: "bevelHighlightColor", label: "Highlight", fallback: "#ffffff" },
       { kind: "slider", prop: "bevelHighlightOpacity", label: "Highlight strength (%)", min: 0, max: 100, fallback: 75 },
@@ -7785,7 +7787,7 @@
     const lx = Math.sin(rad), ly = -Math.cos(rad);
     const sign = o.raised ? 1 : -1;
     const slopeMax = 0.4 / Math.max(0.5, o.sigma);
-    const strength = o.depth / 100 * 1.4;
+    const strength = o.depth / 100 * 1.4 * (1 + (o.hardness || 0) / 100 * 8);
     const h = (x, y) => px[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255;
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -7803,6 +7805,10 @@
         out[i * 4 + 3] = Math.round(a * 255);
       }
     }
+    if (o.soften > 0.3) {
+      gaussianBlur(out, width, height, o.soften);
+      if (o.insideOnly) for (let i = 0; i < n; i++) out[i * 4 + 3] = out[i * 4 + 3] * alpha[i] / 255;
+    }
     return out;
   }
   function bevelOptions(s, scale) {
@@ -7811,6 +7817,8 @@
     return {
       sigma: ((emboss ? s.bevelSize : s.bevelSize / 2) || 1) * scale,
       depth: s.bevelDepth,
+      hardness: s.bevelHardness,
+      soften: s.bevelSoften * scale,
       lightDeg: s.bevelLight,
       raised: s.bevelRaised !== "down",
       insideOnly: !emboss,
@@ -21603,7 +21611,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "9cc7ce8"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "ccd26fd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

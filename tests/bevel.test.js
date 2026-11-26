@@ -31,4 +31,10 @@ const light = bevelPixels(box, W, H, { ...base, lightDeg: 0 });
 ok(at(light, 50, 31).r === 255 && at(light, 31, 50).a < at(light, 50, 31).a, "light from the top lights the top edge most");
 const none = bevelPixels(box, W, H, { ...base, highlight: { ...hi, a: 0 }, shadow: { ...sh, a: 0 } });
 ok(none.every((v, i) => i % 4 !== 3 || v === 0), "zero strength draws nothing");
+// Hardness: a mid-slope pixel is much stronger on a hard bevel than on a soft one; soften spreads without leaving the shape.
+const softB = bevelPixels(box, W, H, { ...base, depth: 40, hardness: 0 }), hardB = bevelPixels(box, W, H, { ...base, depth: 40, hardness: 100 });
+ok(at(hardB, 50, 33).a > at(softB, 50, 33).a, "a hard bevel reaches full strength sooner than a soft one");
+const crisp = bevelPixels(box, W, H, { ...base, hardness: 100, soften: 0 }), blurred = bevelPixels(box, W, H, { ...base, hardness: 100, soften: 3 });
+const spread = (px) => { let n = 0; for (let x = 28; x < 50; x++) if (at(px, x, 50).a > 5) n++; return n; };
+ok(spread(blurred) >= spread(crisp) && at(blurred, 20, 50).a === 0 && at(blurred, 29, 50).a === 0, "soften blurs the edge but a bevel stays on the shape");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
