@@ -79,7 +79,7 @@ export function remapItems(chosen, newId, newGroupId) {
   const ids = new Map(), groups = new Map();
   for (const a of chosen) ids.set(a.id, newId());
   return chosen.map((a) => {
-    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined, qrText: undefined };
+    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined, qrText: undefined, flowText: undefined };
     if (copy.groupId) {
       if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
       copy.groupId = groups.get(copy.groupId);

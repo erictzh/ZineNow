@@ -4,6 +4,7 @@ import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, fillQrItem, qr
 import { cloneItems, dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/model/dataMerge/calc.js";
+import { flowBoxOf, mergeFlowPage, planFlowPages, splitFlowText } from "../apps/ZEditor/src/model/dataMerge/flow.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -255,4 +256,21 @@ ok(qrProblems([qrFrame, { ...qrFrame, qrText: "{{c}}" }], [{ id: "1", c: "" }, {
 let qn = 900;
 const qm = mergeAnnotations([qrFrame], { id: "7" }, { newId: () => qn++, newGroupId: () => "g" + qn++, makeQr: fakeQr });
 ok(qm.annotations.length === 1 && qm.annotations[0].src === "qr:https://e.org/7" && qm.annotations[0].qrText === undefined, "a merged page gets the QR code and no marker");
+// ---- Letters that run onto a second page
+const fitTen = (k, rest) => Math.min(rest.length, 10 + k * 0); // 10 characters a page
+ok(splitFlowText("short", fitTen).parts.join("|") === "short", "text that fits makes one part");
+const sp = splitFlowText("aaaa bbbb cccc dddd eeee ffff", (k, rest) => (rest.length <= 10 ? rest.length : 10));
+ok(sp.parts.length === 3 && sp.parts[0] === "aaaa bbbb" && !sp.cut, "long text is cut into parts, leading and trailing spaces removed");
+ok(splitFlowText("abc def", () => 0).cut === true && splitFlowText("abc def", () => 0).parts.length === 1, "a box that fits nothing does not loop forever");
+ok(splitFlowText("x ".repeat(100), () => 2, 5).parts.length === 5, "there is a limit to how many pages one record can take");
+const L1 = [{ id: 1, type: "text", text: "Dear {{name}}, {{body}}", flowText: true, frameHeight: 100 }, { id: 2, type: "text", text: "To {{name}}", showOn: "first" }, { id: 3, type: "text", text: "Page {{page in group}} of {{pages in group}}" }];
+const L2 = [{ id: 11, type: "text", text: "", flowText: true, frameHeight: 100 }, { id: 13, type: "text", text: "Page {{page in group}} of {{pages in group}}" }];
+const fl = planFlowPages([{ name: "Ana", body: "x".repeat(8) }, { name: "Ben", body: "y".repeat(40) }], L1, L2, (box, rest) => (rest.length <= 20 ? rest.length : 20), "en");
+ok(fl.map((p) => p.recordNo + ":" + p.pageInGroup + "/" + p.pagesInGroup).join() === "1:1/1,2:1/3,2:2/3,2:3/3", "a short record gets one page, a long one three");
+ok(fl[0].flowText === "Dear Ana, xxxxxxxx" && fl[1].design === "first" && fl[2].design === "continuation", "the first page holds the start, later pages use the continuation design");
+let fn = 1300;
+const fpage = (plan, ann) => mergeFlowPage(ann, plan, { newId: () => fn++, newGroupId: () => "g" + fn++, repeatOthers: true }).annotations;
+const fp1 = fpage(fl[1], L1), fp2 = fpage(fl[2], L2);
+ok(fp1.map((a) => a.text).join("|") === fl[1].flowText + "|To Ben|Page 1 of 3" && fp2.map((a) => a.text).join("|") === fl[2].flowText + "|Page 2 of 3", "the long text goes in the long-text box, Show on and page counters work");
+ok(fp1.every((a) => a.flowText === undefined) && flowBoxOf(L1).id === 1 && flowBoxOf([{ type: "text", text: "a" }]) === null, "made pages carry no marker; the long-text box is found");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
