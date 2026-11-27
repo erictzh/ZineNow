@@ -310,7 +310,7 @@ export function DataPanel({ merge, view, hasPage }) {
               {check.photoCount > 0 && p.empty > 0 ? p.empty + " row" + (p.empty === 1 ? " has" : "s have") + " no photo name." : ""}
             </p>
           ))}
-          {check.qrs.filter((q) => q.empty > 0).map((q) => <p key={q.text} className="ze-data-warn">{q.empty} of the chosen rows give an empty QR code for “{q.text}”, so it is left out.</p>)}
+          {check.qrs.filter((q) => q.empty > 0).map((q) => <p key={q.text} className="ze-data-warn">{q.text === "" ? "A QR code on the page has no text yet, so it is left out." : q.empty + " of the chosen rows give an empty QR code for “" + q.text + "”, so it is left out."}</p>)}
           {check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
           {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
           <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0)} onClick={make}>

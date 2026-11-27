@@ -7,7 +7,7 @@ import { recordFileNames, recordGroups } from "../model/dataMerge/export.js";
 import { saveFile, writeFileHandle } from "../io/fileSave.js";
 import { buildExportPdfBytes } from "../io/pdfExport.js";
 import { makeZip } from "../io/zipWriter.js";
-import { qrDataUrl } from "../io/qrImage.js";
+import { qrDataUrl, qrPatch } from "../io/qrImage.js";
 import { readPhotos } from "../io/dataPhotos.js";
 import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
@@ -247,7 +247,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
   // A picture becomes the QR code of `text` (which may use {{fields}}); an empty text makes it an ordinary picture again.
   function setQrText(text) {
-    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, qrText: text || undefined, picField: text ? undefined : a.picField } : a)), "qr:" + selectedIds.join(","));
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...(text ? qrPatch(text) : { qrText: undefined }), picField: text ? undefined : a.picField } : a)), "qr:" + selectedIds.join(","));
   }
   function markDataBlock(on) {
     if (!selected.grouped) { setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block."); return; }

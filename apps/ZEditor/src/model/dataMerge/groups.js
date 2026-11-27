@@ -116,7 +116,7 @@ export function previewAnnotations(annotations, records, start, editingId, lang,
     if (!record) return { ...a, hidden: true };
     if (a.type === "image" && (a.picField || a.qrText)) {
       const filled = fillItem(a, record, { findPhoto, makeQr, lang });
-      return filled.ann || { ...a, hidden: true };
+      return filled.ann || (a.qrText && !a.picField ? a : { ...a, hidden: true }); // a QR that cannot be made yet keeps its grey placeholder
     }
     return fillTextItem(a, record, { lang }).ann;
   });

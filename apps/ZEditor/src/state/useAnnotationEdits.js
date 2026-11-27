@@ -12,6 +12,7 @@ import { isThreaded, removeFromPages } from "../model/text/threads.js";
 import { patchedPages } from "../render/storyEdits.js";
 import { flattenedImagePatch, rasterizedRectPatch, rasterizedTextPatch } from "../render/bake.js";
 import { rotatedAnnotation } from "../render/itemGeometry.js";
+import { qrPatch } from "../io/qrImage.js";
 import { getPageDisplaySize } from "../render/pageRender.js";
 import { isSvgFile, svgFileToPng } from "../io/images.js";
 import { layerName } from "../model/layerNames.js";
@@ -186,6 +187,20 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     setSelectedAnnId(id);
     setSelectedAnnIds([]);
     setEditingAnnId(id);
+  }
+
+  // The QR tool: a square QR picture in the middle of the page, with no text yet (the Format panel's QR box is where it is typed).
+  async function handleAddQr() {
+    if (selectedIdx === null) return;
+    const display = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+    const side = 150;
+    const id = nextAnnIdRef.current++;
+    updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+      id, type: "image", x: Math.max(0, (display.width - side) / 2), y: Math.max(0, (display.height - side) / 2), width: side, height: side, ...qrPatch(""),
+    }]);
+    selectTool("select");
+    setSelectedAnnId(id);
+    setSelectedAnnIds([]);
   }
 
   function handleAddRect(box) {
@@ -446,7 +461,7 @@ export function useAnnotationEdits({ doc, history, selection, toolDefaults }) {
     updateAnnotationsFor, updatePagesFor, updatePageFilter,
     handleRotateAnnotations, handleMoveAnnotations, finishTextEdit,
     handleGroupSelection, handleUngroupSelection, handleSetClip, handleToggleClip, handleClipSelection,
-    handleAddText, handleAddRect, handleAddStroke,
+    handleAddText, handleAddRect, handleAddQr, handleAddStroke,
     handleToggleLayerFlag, handleReorderLayers, handleRenameGroup, handleSetGroupFlag,
     imageInputRef, handleImageToolClick, addImageAnnotationFromFile, handleImageFileChosen,
     handleUpdateAnnotation, handleSetLayerLook, handleFlattenImage, handleRemoveBackground, handleOpenInAiTools, handleRasterizeText, handleOutlineText, handleRasterizeRect,

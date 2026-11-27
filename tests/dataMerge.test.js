@@ -292,4 +292,8 @@ ok(zv.getUint32(0, true) === 0x04034b50 && zv.getUint32(zip.length - 22, true) =
 ok(fillTemplate("{{Name}} {{ CITY }}", { name: "Ana", city: "Ipoh" }).text === "Ana Ipoh" && fillTemplate("{{Name}}", { name: "Ana" }).missing.length === 0, "a field name matches its column whatever the capital letters");
 const cm = checkMerge([{ id: 1, type: "text", text: "{{Name}} {{AGE}}" }], ["name", "age"], [{ name: "a", age: "" }]);
 ok(cm.missing.length === 0 && cm.emptyCounts.map((e) => e.field + e.count).join() === "AGE1", "the check agrees");
+ok(fillQrItem({ ...qrFrame, qrText: "" }, { id: "1" }, fakeQr).ann === null && fillQrItem({ ...qrFrame, qrText: "" }, { id: "1" }, fakeQr).handled === true, "a QR with no text yet is left out of made pages");
+ok(qrProblems([{ ...qrFrame, qrText: "" }], [{ id: "1" }])[0].empty === 1, "and counted in the check");
+const qpv = previewAnnotations([{ ...qrFrame, qrText: "{{nope}}" }], [{ id: "1" }], 0, null, "en", null, fakeQr);
+ok(qpv[0].hidden === undefined && qpv[0].src === "x", "a QR that cannot be made yet keeps its placeholder in the preview");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
