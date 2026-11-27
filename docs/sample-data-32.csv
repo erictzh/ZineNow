@@ -30,4 +30,4 @@ id,name,title,position,group,seat,ticket no.,date,amount,photo,kind,note
 29,Alexander Nanta Linggi,YB,Minister of Works,Red,A4,T-1377,2026-12-08,1623,photo29.jpg,cabinet list (check name and post are current),
 30,Dummy Person One,Cik,Dummy Minister of Testing,Blue,A11,T-1390,2026-12-11,1760,photo30.jpg,dummy,
 31,Dummy Person Two with a Very Long Name for Testing Wrapping,Puan,Dummy Minister of Very Long Job Titles That Need More Than One Line to Show Properly,Green,A18,T-1403,2026-12-14,1897,photo31.jpg,dummy,
-32,Ng,Encik,Dumb Minister,Yellow,A25,T-1416,2026-12-17,2034,photo32.jpg,dummy,
+32,Lu,Encik,Dumb Minister,Yellow,A25,T-1416,2026-12-17,2034,photo32.jpg,dummy,
