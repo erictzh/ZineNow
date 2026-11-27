@@ -6,7 +6,7 @@ import { readPhotos } from "../io/dataPhotos.js";
 import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
-import { dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
+import { cloneItems, dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
 import { PAGE_SIZES_MM, presetByKey } from "../model/dataMerge/layout.js";
 import { translatedAnnotation } from "../model/annotations.js";
 import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
@@ -37,8 +37,13 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto) : null;
 
   const page = pages[selectedIdx] || null;
-  const templatePage = page && page.mergedFrom !== undefined ? pages.find((p) => p.key === page.mergedFrom) || null : page;
+  // The designed page this page belongs to: itself, or (for a made page or a continuation design) the page it came from or is for.
+  const ownerKey = page ? (page.mergedFrom !== undefined ? page.mergedFrom : page.dataFor) : undefined;
+  const templatePage = page && ownerKey !== undefined ? pages.find((p) => p.key === ownerKey) || null : page;
+  // The continuation design: a copy of the designed page used for pages 2 onward of a group (`dataFor` = the designed page's key).
+  const continuationPage = templatePage ? pages.find((p) => p.dataFor === templatePage.key) || null : null;
   const slotCount = templatePage ? dataSlots(templatePage.annotations || []).length : 0; // data blocks on the designed page (Advanced)
+  const nextSlotCount = continuationPage ? dataSlots(continuationPage.annotations || []).length : 0; // 0: no continuation design (or none in it)
   const blockMode = slotCount > 0;
   const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
   const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
@@ -76,15 +81,15 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   function usedCheck(from, to) {
     if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-    const result = checkMerge(templatePage.annotations || [], headers, chosen);
-    const pictures = pictureProblems(templatePage.annotations || [], chosen, findPhoto);
+    const result = checkMerge([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], headers, chosen);
+    const pictures = pictureProblems([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], chosen, findPhoto);
     return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)), pictures, photoCount: view.dataPhotos.length };
   }
 
   // The pages a merge would make for the chosen rows.
   function plannedPages(from, to) {
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-    return blockMode ? planPages(chosen, { slotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
+    return blockMode ? planPages(chosen, { slotCount, nextSlotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
   }
 
   // One page per chosen row (with data blocks: one page per group of rows that fit the blocks), placed after the designed page; earlier pages
@@ -96,22 +101,25 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     history.recordUndoCheckpoint();
     const newId = () => nextAnnIdRef.current++;
     const newGroupId = () => "g" + nextAnnIdRef.current++;
-    const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, groupBy }) : null;
+    const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, nextSlotCount, groupBy }) : null;
     const made = (plans || chosen).map((item, n) => {
       const merged = plans
-        ? mergeGroupPage(templatePage.annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto })
+        ? mergeGroupPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto })
         : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en", findPhoto });
       const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: undefined };
       if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
       return copy;
     });
     const before = pages.filter((p) => p.mergedFrom !== templatePage.key);
-    const firstIndex = before.findIndex((p) => p.key === templatePage.key) + 1;
+    const lastDesign = Math.max(before.findIndex((p) => p.key === templatePage.key), ...before.map((p, i) => (p.dataFor === templatePage.key ? i : -1)));
+    const firstIndex = lastDesign + 1;
     setPages((prev) => {
       const kept = prev.filter((p) => p.mergedFrom !== templatePage.key);
       const at = kept.findIndex((p) => p.key === templatePage.key);
-      const next = kept.map((p) => (hideTemplate && p.key === templatePage.key ? { ...p, hidden: true } : p));
-      next.splice(at + 1, 0, ...made);
+      const next = kept.map((p) => (hideTemplate && (p.key === templatePage.key || p.dataFor === templatePage.key) ? { ...p, hidden: true } : p));
+      let last = at;
+      next.forEach((p, i) => { if (p.dataFor === templatePage.key) last = Math.max(last, i); }); // made pages go after the designs
+      next.splice(last + 1, 0, ...made);
       return next;
     });
     setSelectedIdx(firstIndex);
@@ -186,12 +194,37 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   function setGroupDataBlock(groupId, on) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.groupId === groupId ? { ...a, dataBlock: on || undefined, showOn: on ? undefined : a.showOn } : a)));
   }
+  // Page designs: a copy of the designed page for pages 2 onward of a group (a different number of blocks, no title). Edit it like any page.
+  function addContinuationDesign() {
+    if (!templatePage || continuationPage) return;
+    history.recordUndoCheckpoint();
+    const copy = {
+      ...templatePage, key: nextKeyRef.current++, dataFor: templatePage.key, hidden: undefined,
+      annotations: cloneItems(templatePage.annotations || [], () => nextAnnIdRef.current++, () => "g" + nextAnnIdRef.current++),
+      ...(templatePage.guides ? { guides: templatePage.guides.map((g) => ({ ...g })) } : {}),
+    };
+    const at = pages.findIndex((p) => p.key === templatePage.key);
+    setPages((prev) => { const next = prev.slice(); next.splice(prev.findIndex((p) => p.key === templatePage.key) + 1, 0, copy); return next; });
+    setSelectedIdx(at + 1);
+    setSelectedPageIndices([]);
+    setMessage("A copy of the page was added for pages 2 onward of a group. Change it (for example remove the title), then make the pages.");
+  }
+  function goToContinuationDesign() {
+    const at = pages.findIndex((p) => continuationPage && p.key === continuationPage.key);
+    if (at >= 0) { setSelectedIdx(at); setSelectedPageIndices([]); }
+  }
+  function removeContinuationDesign() {
+    if (!continuationPage) return;
+    history.recordUndoCheckpoint();
+    setPages((prev) => prev.map((p) => (p.key === continuationPage.key ? { ...p, dataFor: undefined } : p)));
+    setMessage("That page is an ordinary page again.");
+  }
   function setShowOn(value) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? undefined : value } : a)));
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };

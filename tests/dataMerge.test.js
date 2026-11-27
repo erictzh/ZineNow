@@ -1,7 +1,7 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
 import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
-import { dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
+import { cloneItems, dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/model/dataMerge/calc.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
@@ -231,4 +231,14 @@ ok(calculate({ kind: "dateparts", column: "born", part: "monthname" }, crec, 0) 
 const cres = applyCalculated(["first", "last"], [{ first: "a", last: "b" }, { first: "c", last: "d" }], [{ name: "No.", kind: "rownumber" }, { name: "first", kind: "rownumber" }, { name: "Full", kind: "join", columns: ["first", "last"] }]);
 ok(cres.headers.join() === "first,last,No.,Full" && cres.records[1]["No."] === "2" && cres.records[1].Full === "c d", "calculated columns are added to the headers and records; a clashing name is skipped");
 ok(usableName("A {b}|", []) === "A b" && usableName("Full", ["Full"]) === "Full 2" && usableName("  ", []) === "", "names are made usable and unique");
+// ---- Continuation designs
+const fourteen = band(14, "Black Flags");
+const cplan = planPages(fourteen, { slotCount: 5, nextSlotCount: 6, groupBy: "band" });
+ok(cplan.map((p) => p.slotRecords.filter(Boolean).length).join() === "5,6,3" && cplan.map((p) => p.design).join() === "first,continuation,continuation", "a group of 14 with 5 and 6 slots makes pages of 5, 6 and 3");
+ok(cplan[0].slotRecords.length === 5 && cplan[1].slotRecords.length === 6 && cplan[2].slotRecords.length === 6 && cplan[2].slotRecords[3] === null, "each page has the slots of its design");
+ok(planPages(band(4, "X"), { slotCount: 5, nextSlotCount: 6, groupBy: "band" }).length === 1 && planPages(band(4, "X"), { slotCount: 5, nextSlotCount: 6, groupBy: "band" })[0].design === "first", "a group that fits the first page uses the first design");
+ok(planPages(fourteen, { slotCount: 5, groupBy: "band" }).map((p) => p.slotRecords.length).join() === "5,5,5", "without a continuation design the first design's slots are reused");
+const cl = cloneItems(gblock, () => gid++, () => "G" + gn++);
+ok(cl.length === 2 && cl[0].dataBlock === true && cl[0].groupId === cl[1].groupId && cl[0].groupId !== "b" && cl[0].id !== 1, "a copy of the designed page keeps its data block markers, with new ids");
+ok(templatePages([{ key: 1, hidden: true, annotations: [] }, { key: 2, dataFor: 1, hidden: true, annotations: [] }, { key: 3, mergedFrom: 1, annotations: [] }]).every((p) => !p.hidden) && templatePages([{ key: 1, annotations: [] }, { key: 2, dataFor: 1, annotations: [] }, { key: 3, mergedFrom: 1, annotations: [] }]).length === 2, "a data template keeps the continuation design (shown again) and drops the made pages");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

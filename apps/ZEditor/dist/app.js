@@ -14164,7 +14164,7 @@ ${parts.join("\n")}</g>`);
   var templateFileName = (title2) => TEMPLATE_PREFIX + titleToFileName(stripTemplatePrefix(title2), ".znow");
   function templatePages(pages) {
     const designed = new Set(pages.filter((p) => p.mergedFrom !== void 0).map((p) => p.mergedFrom));
-    return pages.filter((p) => p.mergedFrom === void 0).map((p) => designed.has(p.key) && p.hidden ? { ...p, hidden: void 0 } : p);
+    return pages.filter((p) => p.mergedFrom === void 0).map((p) => (designed.has(p.key) || designed.has(p.dataFor)) && p.hidden ? { ...p, hidden: void 0 } : p);
   }
   function templateNeeds(pages, groupBy) {
     const columns = [];
@@ -22333,23 +22333,28 @@ ${parts.join("\n")}</g>`);
     }
     return [...groups.values()];
   }
-  function planPages(records, { slotCount, groupBy }) {
-    const slots = Math.max(1, slotCount || 1);
+  function planPages(records, { slotCount, nextSlotCount, groupBy }) {
+    const first = Math.max(1, slotCount || 1);
+    const next = Math.max(1, nextSlotCount || first);
     const pages = [];
     for (const group of groupRecords(records, groupBy)) {
       if (!group.records.length) continue;
-      const count = Math.max(1, Math.ceil(group.records.length / slots));
-      for (let p = 0; p < count; p++) {
-        const slice = group.records.slice(p * slots, (p + 1) * slots);
-        pages.push({
-          groupValue: group.value,
-          groupRecord: group.records[0],
-          recordsInGroup: group.records.length,
-          pageInGroup: p + 1,
-          pagesInGroup: count,
-          slotRecords: Array.from({ length: slots }, (_, k) => slice[k] || null)
-        });
-      }
+      const slices = [];
+      let rest = group.records;
+      do {
+        const cap = slices.length === 0 ? first : next;
+        slices.push({ cap, records: rest.slice(0, cap) });
+        rest = rest.slice(cap);
+      } while (rest.length);
+      slices.forEach((slice, i) => pages.push({
+        groupValue: group.value,
+        groupRecord: group.records[0],
+        recordsInGroup: group.records.length,
+        pageInGroup: i + 1,
+        pagesInGroup: slices.length,
+        design: i === 0 ? "first" : "continuation",
+        slotRecords: Array.from({ length: slice.cap }, (_, k) => slice.records[k] || null)
+      }));
     }
     return pages;
   }
@@ -22401,6 +22406,19 @@ ${parts.join("\n")}</g>`);
       rows: preset.rows
     };
   }
+  function cloneItems(items, newId2, newGroupId) {
+    const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
+    for (const a of items) ids.set(a.id, newId2());
+    return items.map((a) => {
+      const copy = { ...a, id: ids.get(a.id) };
+      if (copy.groupId) {
+        if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
+        copy.groupId = groups.get(copy.groupId);
+      }
+      if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : void 0;
+      return copy;
+    });
+  }
   function gridCopies(items, bounds, { cols, rows, gap, pitch }, { newId: newId2, newGroupId }, page) {
     const out = [];
     let outside = 0;
@@ -22449,8 +22467,11 @@ ${parts.join("\n")}</g>`);
     const showPreview = view.dataPreviewOn && count > 0;
     const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto) : null;
     const page = pages[selectedIdx] || null;
-    const templatePage = page && page.mergedFrom !== void 0 ? pages.find((p) => p.key === page.mergedFrom) || null : page;
+    const ownerKey = page ? page.mergedFrom !== void 0 ? page.mergedFrom : page.dataFor : void 0;
+    const templatePage = page && ownerKey !== void 0 ? pages.find((p) => p.key === ownerKey) || null : page;
+    const continuationPage = templatePage ? pages.find((p) => p.dataFor === templatePage.key) || null : null;
     const slotCount = templatePage ? dataSlots(templatePage.annotations || []).length : 0;
+    const nextSlotCount = continuationPage ? dataSlots(continuationPage.annotations || []).length : 0;
     const blockMode = slotCount > 0;
     const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
     const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
@@ -22495,13 +22516,13 @@ ${parts.join("\n")}</g>`);
     function usedCheck(from, to) {
       if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
       const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-      const result2 = checkMerge(templatePage.annotations || [], headers, chosen);
-      const pictures = pictureProblems(templatePage.annotations || [], chosen, findPhoto);
+      const result2 = checkMerge([...templatePage.annotations || [], ...continuationPage ? continuationPage.annotations || [] : []], headers, chosen);
+      const pictures = pictureProblems([...templatePage.annotations || [], ...continuationPage ? continuationPage.annotations || [] : []], chosen, findPhoto);
       return { ...result2, missing: result2.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)), pictures, photoCount: view.dataPhotos.length };
     }
     function plannedPages(from, to) {
       const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
-      return blockMode ? planPages(chosen, { slotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
+      return blockMode ? planPages(chosen, { slotCount, nextSlotCount, groupBy }) : chosen.map((r) => ({ groupRecord: r }));
     }
     function createPages({ from, to, hideTemplate }) {
       if (!templatePage || count === 0) return 0;
@@ -22510,20 +22531,25 @@ ${parts.join("\n")}</g>`);
       history.recordUndoCheckpoint();
       const newId2 = () => nextAnnIdRef.current++;
       const newGroupId = () => "g" + nextAnnIdRef.current++;
-      const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, groupBy }) : null;
+      const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, nextSlotCount, groupBy }) : null;
       const made = (plans || chosen).map((item, n) => {
-        const merged = plans ? mergeGroupPage(templatePage.annotations || [], item, { newId: newId2, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto }) : mergeAnnotations(templatePage.annotations || [], records[item], { newId: newId2, newGroupId, lang: "en", findPhoto });
+        const merged = plans ? mergeGroupPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId: newId2, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto }) : mergeAnnotations(templatePage.annotations || [], records[item], { newId: newId2, newGroupId, lang: "en", findPhoto });
         const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: void 0 };
         if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
         return copy;
       });
       const before = pages.filter((p) => p.mergedFrom !== templatePage.key);
-      const firstIndex = before.findIndex((p) => p.key === templatePage.key) + 1;
+      const lastDesign = Math.max(before.findIndex((p) => p.key === templatePage.key), ...before.map((p, i) => p.dataFor === templatePage.key ? i : -1));
+      const firstIndex = lastDesign + 1;
       setPages((prev) => {
         const kept = prev.filter((p) => p.mergedFrom !== templatePage.key);
         const at = kept.findIndex((p) => p.key === templatePage.key);
-        const next = kept.map((p) => hideTemplate && p.key === templatePage.key ? { ...p, hidden: true } : p);
-        next.splice(at + 1, 0, ...made);
+        const next = kept.map((p) => hideTemplate && (p.key === templatePage.key || p.dataFor === templatePage.key) ? { ...p, hidden: true } : p);
+        let last = at;
+        next.forEach((p, i) => {
+          if (p.dataFor === templatePage.key) last = Math.max(last, i);
+        });
+        next.splice(last + 1, 0, ...made);
         return next;
       });
       setSelectedIdx(firstIndex);
@@ -22605,6 +22631,40 @@ ${parts.join("\n")}</g>`);
     function setGroupDataBlock(groupId2, on) {
       edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId2 ? { ...a, dataBlock: on || void 0, showOn: on ? void 0 : a.showOn } : a));
     }
+    function addContinuationDesign() {
+      if (!templatePage || continuationPage) return;
+      history.recordUndoCheckpoint();
+      const copy = {
+        ...templatePage,
+        key: nextKeyRef.current++,
+        dataFor: templatePage.key,
+        hidden: void 0,
+        annotations: cloneItems(templatePage.annotations || [], () => nextAnnIdRef.current++, () => "g" + nextAnnIdRef.current++),
+        ...templatePage.guides ? { guides: templatePage.guides.map((g) => ({ ...g })) } : {}
+      };
+      const at = pages.findIndex((p) => p.key === templatePage.key);
+      setPages((prev) => {
+        const next = prev.slice();
+        next.splice(prev.findIndex((p) => p.key === templatePage.key) + 1, 0, copy);
+        return next;
+      });
+      setSelectedIdx(at + 1);
+      setSelectedPageIndices([]);
+      setMessage("A copy of the page was added for pages 2 onward of a group. Change it (for example remove the title), then make the pages.");
+    }
+    function goToContinuationDesign() {
+      const at = pages.findIndex((p) => continuationPage && p.key === continuationPage.key);
+      if (at >= 0) {
+        setSelectedIdx(at);
+        setSelectedPageIndices([]);
+      }
+    }
+    function removeContinuationDesign() {
+      if (!continuationPage) return;
+      history.recordUndoCheckpoint();
+      setPages((prev) => prev.map((p) => p.key === continuationPage.key ? { ...p, dataFor: void 0 } : p));
+      setMessage("That page is an ordinary page again.");
+    }
     function setShowOn(value) {
       edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? void 0 : value } : a));
     }
@@ -22622,6 +22682,13 @@ ${parts.join("\n")}</g>`);
       blockMode,
       groupBy,
       selected,
+      continuationPage,
+      nextSlotCount,
+      addContinuationDesign,
+      removeContinuationDesign,
+      goToContinuationDesign,
+      pageSlotCount: page ? dataSlots(page.annotations || []).length : 0,
+      onContinuationPage: Boolean(page && page.dataFor !== void 0),
       markDataBlock,
       setGroupDataBlock,
       makeGrid,
@@ -22782,7 +22849,7 @@ ${parts.join("\n")}</g>`);
           setPasted("");
           setPasting(false);
         }
-      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, !view.dataAdvanced && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id."))), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Data blocks"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !hasPage || merge.selected.count === 0, onClick: () => merge.markDataBlock(!merge.selected.isBlock) }, merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"), SHOW_GRID_HELPER && merge.selected.isBlock && /* @__PURE__ */ React.createElement("div", { className: "ze-data-grid" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make a grid of copies"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Sheet", " ", /* @__PURE__ */ React.createElement("select", { value: grid.preset, onChange: (e) => setGrid({ ...grid, preset: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "My own"), GRID_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), grid.preset ? /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, presetByKey(grid.preset).cols, " columns × ", presetByKey(grid.preset).rows, " rows, on an ", presetByKey(grid.preset).page.toUpperCase(), " page. Label sizes are a guide: check them against your sheet.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Columns ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.cols, onChange: (e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) }), "Rows ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.rows, onChange: (e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Gap (mm) ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "0", max: "50", step: "0.5", value: grid.gap, onChange: (e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) }) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap, preset: grid.preset }) }, grid.preset ? "Place on the sheet (" + presetByKey(grid.preset).cols * presetByKey(grid.preset).rows + " blocks)" : "Make " + (grid.cols * grid.rows - 1) + " copies")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."), merge.blockMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Group by", " ", /* @__PURE__ */ React.createElement("select", { value: merge.groupBy, onChange: (e) => view.setDataGroupBy(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "No grouping"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataRepeatOthers, onChange: (e) => view.setDataRepeatOthers(e.target.checked) }), " Repeat non-data items on the other pages")), merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected item shows on", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.showOn, onChange: (e) => merge.setShowOn(e.target.value) }, merge.selected.showOn === "" && /* @__PURE__ */ React.createElement("option", { value: "" }, "Mixed"), SHOW_ON.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label))))), view.dataAdvanced && /* @__PURE__ */ React.createElement(CalcColumns, { headers, records: merge.records, recordNo: merge.recordNo, defs: view.dataCalc, onAdd: merge.addCalc, onRemove: merge.removeCalc }), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Pictures"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put a different photo on each page or block. Add a column that holds each photo's file name (for example ana.jpg), choose the folder of photos here, then select a picture on your page and choose its column below."), /* @__PURE__ */ React.createElement("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, webkitdirectory: "", directory: "", hidden: true, onChange: (e) => {
+      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, !view.dataAdvanced && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id."))), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Data blocks"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !hasPage || merge.selected.count === 0, onClick: () => merge.markDataBlock(!merge.selected.isBlock) }, merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"), SHOW_GRID_HELPER && merge.selected.isBlock && /* @__PURE__ */ React.createElement("div", { className: "ze-data-grid" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make a grid of copies"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Sheet", " ", /* @__PURE__ */ React.createElement("select", { value: grid.preset, onChange: (e) => setGrid({ ...grid, preset: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "My own"), GRID_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), grid.preset ? /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, presetByKey(grid.preset).cols, " columns × ", presetByKey(grid.preset).rows, " rows, on an ", presetByKey(grid.preset).page.toUpperCase(), " page. Label sizes are a guide: check them against your sheet.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Columns ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.cols, onChange: (e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) }), "Rows ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.rows, onChange: (e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Gap (mm) ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "0", max: "50", step: "0.5", value: grid.gap, onChange: (e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) }) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap, preset: grid.preset }) }, grid.preset ? "Place on the sheet (" + presetByKey(grid.preset).cols * presetByKey(grid.preset).rows + " blocks)" : "Make " + (grid.cols * grid.rows - 1) + " copies")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.pageSlotCount === 0 ? "No data blocks on this page" + (merge.slotCount === 0 ? ": one record per page." : ".") : merge.pageSlotCount + " data block" + (merge.pageSlotCount === 1 ? "" : "s") + " on this page: each takes the next record."), merge.blockMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Group by", " ", /* @__PURE__ */ React.createElement("select", { value: merge.groupBy, onChange: (e) => view.setDataGroupBy(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "No grouping"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Page designs"), !merge.continuationPage ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Pages 2 onward of a group can look different (no title, a different number of blocks). Add a copy of this page for them, then change it."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: merge.addContinuationDesign }, "Add continuation design")) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.onContinuationPage ? "This page is the continuation design: pages 2 onward of a group are made from it (" + merge.pageSlotCount + " block" + (merge.pageSlotCount === 1 ? "" : "s") + "). Page 1 of each group uses the page it was copied from (" + merge.slotCount + ")." : "Page 1 of each group is made from this page (" + merge.slotCount + " block" + (merge.slotCount === 1 ? "" : "s") + "); pages 2 onward from the continuation design (" + merge.nextSlotCount + ")."), !merge.onContinuationPage && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: merge.goToContinuationDesign }, "Open the continuation design"), merge.onContinuationPage && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: merge.removeContinuationDesign }, "Not a continuation design")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataRepeatOthers, onChange: (e) => view.setDataRepeatOthers(e.target.checked) }), " Repeat non-data items on the other pages")), merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected item shows on", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.showOn, onChange: (e) => merge.setShowOn(e.target.value) }, merge.selected.showOn === "" && /* @__PURE__ */ React.createElement("option", { value: "" }, "Mixed"), SHOW_ON.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label))))), view.dataAdvanced && /* @__PURE__ */ React.createElement(CalcColumns, { headers, records: merge.records, recordNo: merge.recordNo, defs: view.dataCalc, onAdd: merge.addCalc, onRemove: merge.removeCalc }), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Pictures"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put a different photo on each page or block. Add a column that holds each photo's file name (for example ana.jpg), choose the folder of photos here, then select a picture on your page and choose its column below."), /* @__PURE__ */ React.createElement("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, webkitdirectory: "", directory: "", hidden: true, onChange: (e) => {
         const files = [...e.target.files || []];
         e.target.value = "";
         if (files.length) merge.addPhotos(files);
@@ -22906,7 +22973,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "7a67526"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "f1be7ac"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
