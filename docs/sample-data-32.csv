@@ -1,0 +1,33 @@
+id,name,title,group,seat,ticket no.,date,amount,photo,kind,note
+1,Anwar Ibrahim,YAB,Red,A8,T-1013,2026-12-08,187,photo01.jpg,cabinet list (check it is current),
+2,Ahmad Zahid Hamidi,YB,Blue,A15,T-1026,2026-12-11,324,photo02.jpg,cabinet list (check it is current),
+3,Fadillah Yusof,YB,Green,A22,T-1039,2026-12-14,461,photo03.jpg,cabinet list (check it is current),
+4,Mohamad Hasan,YB,Yellow,A29,T-1052,2026-12-17,598,photo04.jpg,cabinet list (check it is current),
+5,Anthony Loke Siew Fook,YB,Red,A36,T-1065,2026-12-20,735,photo05.jpg,cabinet list (check it is current),"Says ""hello"", then sits at the front"
+6,Tengku Zafrul Aziz,YB,Blue,A3,T-1078,2026-12-23,872,photo06.jpg,cabinet list (check it is current),
+7,Saifuddin Nasution Ismail,YB,Green,A10,T-1091,2026-12-26,1009,photo07.jpg,cabinet list (check it is current),"Vegetarian, no nuts"
+8,Mohamad Sabu,YB,Yellow,A17,T-1104,2026-12-29,1146,photo08.jpg,cabinet list (check it is current),
+9,Nga Kor Ming,YB,Red,A24,T-1117,2027-01-01,1283,photo09.jpg,cabinet list (check it is current),
+10,Gobind Singh Deo,YB,Blue,A31,T-1130,2026-12-07,1420,photo10.jpg,cabinet list (check it is current),Short note
+11,Fahmi Fadzil,YB,Green,A38,T-1143,2026-12-10,1557,photo11.jpg,cabinet list (check it is current),
+12,Hannah Yeoh,YB,Yellow,A5,T-1156,2026-12-13,1694,photo12.jpg,cabinet list (check it is current),
+13,Nik Nazmi Nik Ahmad,YB,Red,A12,T-1169,2026-12-16,1831,photo13.jpg,cabinet list (check it is current),
+14,Fadhlina Sidek,YB,Blue,A19,T-1182,2026-12-19,1968,photo14.jpg,cabinet list (check it is current),"Vegetarian, no nuts"
+15,Zambry Abd Kadir,YB,Green,A26,T-1195,2026-12-22,2105,photo15.jpg,cabinet list (check it is current),
+16,Dzulkefly Ahmad,YB,Yellow,A33,T-1208,2026-12-25,2242,photo16.jpg,cabinet list (check it is current),
+17,Azalina Othman Said,YB,Red,A40,T-1221,2026-12-28,2379,photo17.jpg,cabinet list (check it is current),
+18,Johari Abdul Ghani,YB,Blue,A7,T-1234,2026-12-31,116,photo18.jpg,cabinet list (check it is current),
+19,Chang Lih Kang,YB,Green,A14,T-1247,2026-12-06,253,photo19.jpg,cabinet list (check it is current),
+20,Steven Sim Chee Keong,YB,Yellow,A21,T-1260,2026-12-09,390,photo20.jpg,cabinet list (check it is current),
+21,Aaron Ago Dagang,YB,Red,A28,T-1273,2026-12-12,527,photo21.jpg,cabinet list (check it is current),"Vegetarian, no nuts"
+22,Armizan Mohd Ali,YB,Blue,A35,T-1286,2026-12-15,664,photo22.jpg,cabinet list (check it is current),
+23,Mohd Na'im Mokhtar,YB,Green,A2,T-1299,2026-12-18,801,photo23.jpg,cabinet list (check it is current),
+24,Tiong King Sing,YB,Yellow,A9,T-1312,2026-12-21,938,photo24.jpg,cabinet list (check it is current),
+25,Nancy Shukri,YB,Red,A16,T-1325,2026-12-24,1075,photo25.jpg,cabinet list (check it is current),
+26,Ewon Benedick,YB,Blue,A23,T-1338,2026-12-27,1212,photo26.jpg,cabinet list (check it is current),
+27,Rafizi Ramli,YB,Green,A30,T-1351,2026-12-30,1349,photo27.jpg,cabinet list (check it is current),
+28,Amir Hamzah Azizan,YB,Yellow,A37,T-1364,2026-12-05,1486,photo28.jpg,cabinet list (check it is current),"Vegetarian, no nuts"
+29,Alexander Nanta Linggi,YB,Red,A4,T-1377,2026-12-08,1623,photo29.jpg,cabinet list (check it is current),
+30,Dummy Person One,Cik,Blue,A11,T-1390,2026-12-11,1760,photo30.jpg,dummy,
+31,Dummy Person Two with a Very Long Name for Testing Wrapping,Puan,Green,A18,T-1403,2026-12-14,1897,photo31.jpg,dummy,
+32,Dummy Person Three,Encik,Yellow,A25,T-1416,2026-12-17,2034,photo32.jpg,dummy,
