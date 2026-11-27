@@ -48,6 +48,7 @@ export function useViewSettings() {
   const setDataAdvanced = (on) => { setDataAdvancedState(on); try { localStorage.setItem("zeditor.dataAdvanced", on ? "1" : "0"); } catch { /* not remembered */ } };
   const [dataTemplateColumns, setDataTemplateColumns] = useState([]); // columns the opened data template expects (shown in the Data panel until data is connected; not saved)
   const [dataCalc, setDataCalc] = useState([]); // calculated columns ([{ name, kind, ... }], model/dataMerge/calc.js); saved with the project
+  const [dataExportPattern, setDataExportPattern] = useState(""); // file name pattern for Export each record as a PDF ("" = the first column); saved with the project
   const [dataPhotos, setDataPhotos] = useState([]); // the photo folder for picture fields: [{ name, src, width, height }]; saved with the project
   const [dataGroupBy, setDataGroupBy] = useState(""); // the column the records are grouped by ("" = none); saved with the project
   const [dataRepeatOthers, setDataRepeatOthers] = useState(true); // non-data items repeat on every page of a group; saved with the project
@@ -61,7 +62,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers, dataPhotos, dataCalc,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers, dataPhotos, dataCalc, dataExportPattern,
     };
   }
 
@@ -90,6 +91,7 @@ export function useViewSettings() {
     setDataPreviewOn(s.dataPreviewOn !== false);
     setDataGroupBy(typeof s.dataGroupBy === "string" ? s.dataGroupBy : "");
     setDataRepeatOthers(s.dataRepeatOthers !== false);
+    setDataExportPattern(typeof s.dataExportPattern === "string" ? s.dataExportPattern : "");
     setDataCalc(Array.isArray(s.dataCalc) ? s.dataCalc.filter((d) => d && typeof d.name === "string" && typeof d.kind === "string") : []);
     setDataPhotos(Array.isArray(s.dataPhotos) ? s.dataPhotos.filter((p) => p && typeof p.name === "string" && typeof p.src === "string" && p.width > 0 && p.height > 0) : []);
     setRulerGuides(normalizeGuides(s.rulerGuides)); // older files: guides without a colour get the default
@@ -103,7 +105,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
-    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataCalc, setDataCalc, dataTemplateColumns, setDataTemplateColumns, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataCalc, setDataCalc, dataExportPattern, setDataExportPattern, dataTemplateColumns, setDataTemplateColumns, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
     settingsForSave, applySavedSettings,
   };
 }

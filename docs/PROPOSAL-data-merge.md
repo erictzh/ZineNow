@@ -180,6 +180,8 @@ Groups with headers and continuation pages; card slots you place yourself; pictu
 
 Now: **calculated columns**, then the **second design for continuation pages**, then **QR codes** (library licence checked: `qrcode-generator` is MIT, which is compatible with AGPL-3.0-or-later; it goes into THIRD-PARTY-NOTICES).
 
+**Upcoming list (agreed 2026-11-27):** `.xlsx` files as a data source (a small reader on JSZip: sheet picker, date cells turned into dates, formulas read as their last saved value; `.xls` not supported), one document per record (export each record as its own PDF, with records that need one or two pages; under discussion), contents and index pages, flowing lists.
+
 **Last phase, for the future only (built but hidden, or not built):** the **grid helper** ("Make a grid of copies" with ready-made sheets; code and tests exist, hidden by `SHOW_GRID_HELPER` in `DataPanel.jsx`) and the **page-size switch for sheets** (one button that sets the page to a sheet's size; not built). Contents pages and flowing lists stay later too.
 
 ## 11. Decisions so far

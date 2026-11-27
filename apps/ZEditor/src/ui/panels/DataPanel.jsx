@@ -1,5 +1,6 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { RecordExportDialog } from "../dialogs/RecordExportDialog.jsx";
 import { CalcColumns } from "./CalcColumns.jsx";
 import { SHOW_ON } from "../../model/dataMerge/groups.js";
 import { GRID_PRESETS, presetByKey } from "../../model/dataMerge/layout.js";
@@ -25,6 +26,7 @@ export function DataPanel({ merge, view, hasPage }) {
   const [range, setRange] = useState({ from: "", to: "" });
   const [hideTemplate, setHideTemplate] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [grid, setGrid] = useState({ cols: 2, rows: 5, gap: 0, preset: "" });
   const panelRef = useRef(null), headRef = useRef(null);
   const [position, setPositionState] = useState(rememberedPlace.position);
@@ -88,6 +90,7 @@ export function DataPanel({ merge, view, hasPage }) {
   }
 
   return (
+    <>
     <aside
       className={"ze-data-panel" + (size ? " is-sized" : "")} aria-label="Data merge" ref={panelRef}
       style={{
@@ -168,6 +171,14 @@ export function DataPanel({ merge, view, hasPage }) {
             )}
             {view.dataAdvanced && (
               <div className="ze-data-section">
+                <div className="ze-data-title">Long text</div>
+                <p className="ze-data-help">For letters: mark the text box that holds the long text. When a record's text is too long for the box, it carries on in a second page, and a third if needed; short ones stay on one page. Give the box a fixed height (draw it with the Text tool).</p>
+                <label className="ze-data-row"><input type="checkbox" disabled={!merge.selected.isText} checked={merge.selected.flowText} onChange={(e) => merge.setFlowText(e.target.checked)} /> The selected text box continues on the next page when it is full</label>
+                {merge.flowProblem && <p className="ze-data-warn">The long-text box has no fixed height, so it just grows and never fills. Draw it with the Text tool, or set its frame height.</p>}
+              </div>
+            )}
+            {view.dataAdvanced && (
+              <div className="ze-data-section">
                 <div className="ze-data-title">Data blocks</div>
                 <p className="ze-data-help">Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page.</p>
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.markDataBlock(!merge.selected.isBlock)}>
@@ -209,15 +220,19 @@ export function DataPanel({ merge, view, hasPage }) {
                       </select>
                     </label>
                     <p className="ze-data-help">{merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."}</p>
+                  </>
+                )}
+                {(merge.blockMode || merge.letterMode) && (
+                  <>
                     <div className="ze-data-title">Page designs</div>
                     {!merge.continuationPage ? (
                       <>
-                        <p className="ze-data-help">Pages 2 onward of a group can look different (no title, a different number of blocks). Add a copy of this page for them, then change it.</p>
+                        <p className="ze-data-help">{merge.letterMode ? "Page 2 onward of a long letter can look different (no address block, a taller text box). Add a copy of this page for them, change it, and mark its text box as the long text." : "Pages 2 onward of a group can look different (no title, a different number of blocks). Add a copy of this page for them, then change it."}</p>
                         <button type="button" className="ze-btn ze-data-wide" onClick={merge.addContinuationDesign}>Add continuation design</button>
                       </>
                     ) : (
                       <>
-                        <p className="ze-data-help">{merge.onContinuationPage ? "This page is the continuation design: pages 2 onward of a group are made from it (" + merge.pageSlotCount + " block" + (merge.pageSlotCount === 1 ? "" : "s") + "). Page 1 of each group uses the page it was copied from (" + merge.slotCount + ")." : "Page 1 of each group is made from this page (" + merge.slotCount + " block" + (merge.slotCount === 1 ? "" : "s") + "); pages 2 onward from the continuation design (" + merge.nextSlotCount + ")."}</p>
+                        <p className="ze-data-help">{merge.letterMode || (merge.onContinuationPage && merge.pageSlotCount === 0) ? (merge.onContinuationPage ? "This page is the continuation design: page 2 onward of each record are made from it." : "Page 1 of each record is made from this page; page 2 onward from the continuation design.") : merge.onContinuationPage ? "This page is the continuation design: pages 2 onward of a group are made from it (" + merge.pageSlotCount + " block" + (merge.pageSlotCount === 1 ? "" : "s") + "). Page 1 of each group uses the page it was copied from (" + merge.slotCount + ")." : "Page 1 of each group is made from this page (" + merge.slotCount + " block" + (merge.slotCount === 1 ? "" : "s") + "); pages 2 onward from the continuation design (" + merge.nextSlotCount + ")."}</p>
                         {!merge.onContinuationPage && <button type="button" className="ze-btn ze-data-wide" onClick={merge.goToContinuationDesign}>Open the continuation design</button>}
                         {merge.onContinuationPage && <button type="button" className="ze-btn ze-data-wide" onClick={merge.removeContinuationDesign}>Not a continuation design</button>}
                       </>
@@ -225,7 +240,7 @@ export function DataPanel({ merge, view, hasPage }) {
                     <label className="ze-data-row"><input type="checkbox" checked={view.dataRepeatOthers} onChange={(e) => view.setDataRepeatOthers(e.target.checked)} /> Repeat non-data items on the other pages</label>
                   </>
                 )}
-                {merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && (
+                {merge.selected.count > 0 && !merge.selected.hasBlock && (merge.blockMode || merge.letterMode) && (
                   <label className="ze-data-row">Selected item shows on{" "}
                     <select value={merge.selected.showOn} onChange={(e) => merge.setShowOn(e.target.value)}>
                       {merge.selected.showOn === "" && <option value="">Mixed</option>}
@@ -292,10 +307,13 @@ export function DataPanel({ merge, view, hasPage }) {
           <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0)} onClick={make}>
             {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
           </button>
+          <button type="button" className="ze-data-link" disabled={merge.exportGroups.length === 0} title={merge.exportGroups.length === 0 ? "Make pages first (data blocks put several records on a page, so they cannot be split by record)" : "One PDF for each record, with all of its pages"} onClick={() => setExportOpen(true)}>Export each record as a PDF…</button>
           {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
         </div>
       )}
       {EDGES.map((edge) => <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />)}
     </aside>
+    <RecordExportDialog open={exportOpen} onClose={() => setExportOpen(false)} merge={merge} view={view} />
+    </>
   );
 }
