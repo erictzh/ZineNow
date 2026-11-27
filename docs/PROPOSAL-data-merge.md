@@ -176,6 +176,12 @@ Groups with headers and continuation pages; card slots you place yourself; pictu
 4. **Flow and extras:** flowing lists, contents and index, two levels, QR codes, calculated columns, merge variables, one PDF per record.
 5. **Linked files** (bands plus members), .xlsx, shareable starting points.
 
+### Order of work from 2026-11-27 (maintainer's decision)
+
+Now: **calculated columns**, then the **second design for continuation pages**, then **QR codes** (library licence checked: `qrcode-generator` is MIT, which is compatible with AGPL-3.0-or-later; it goes into THIRD-PARTY-NOTICES).
+
+**Last phase, for the future only (built but hidden, or not built):** the **grid helper** ("Make a grid of copies" with ready-made sheets; code and tests exist, hidden by `SHOW_GRID_HELPER` in `DataPanel.jsx`) and the **page-size switch for sheets** (one button that sets the page to a sheet's size; not built). Contents pages and flowing lists stay later too.
+
 ## 11. Decisions so far
 
 | Decision | Answer |
