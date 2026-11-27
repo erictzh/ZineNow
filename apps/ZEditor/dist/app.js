@@ -24352,7 +24352,7 @@ ${parts.join("\n")}</g>`);
   var presetByKey = (key) => GRID_PRESETS.find((p) => p.key === key) || null;
 
   // apps/ZEditor/src/state/useDataMerge.js
-  var { useMemo: useMemo5, useRef: useRef33, useState: useState46 } = React;
+  var { useDeferredValue, useMemo: useMemo5, useRef: useRef33, useState: useState46 } = React;
   function useDataMerge({ doc, history, view, edits, selection, project, status }) {
     const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, nextKeyRef, nextAnnIdRef } = doc;
     const [recordNo, setRecordNo] = useState46(0);
@@ -24369,18 +24369,19 @@ ${parts.join("\n")}</g>`);
     const count = records.length;
     const shownNo = Math.min(recordNo, Math.max(0, count - 1));
     const findPhoto = useMemo5(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
+    const previewNo = useDeferredValue(shownNo);
     const showPreview = view.dataPreviewOn && count > 0;
     const previewFill = useMemo5(() => {
       if (!showPreview) return null;
       let lastAnns = null, lastEditing, lastOut = null;
       return (anns, editingId) => {
         if (anns === lastAnns && editingId === lastEditing) return lastOut;
-        lastOut = previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto, qrDataUrl);
+        lastOut = previewAnnotations(anns, records, Math.min(previewNo, Math.max(0, count - 1)), editingId, "en", findPhoto, qrDataUrl);
         lastAnns = anns;
         lastEditing = editingId;
         return lastOut;
       };
-    }, [showPreview, records, shownNo, findPhoto]);
+    }, [showPreview, records, previewNo, findPhoto]);
     const page = pages[selectedIdx] || null;
     const ownerKey = page ? page.mergedFrom !== void 0 ? page.mergedFrom : page.dataFor : void 0;
     const templatePage = page && ownerKey !== void 0 ? pages.find((p) => p.key === ownerKey) || null : page;
@@ -24392,6 +24393,16 @@ ${parts.join("\n")}</g>`);
     const flowProblem = letterMode && [templatePage, continuationPage].some((p) => p && flowBoxOf(p.annotations) && !(flowBoxOf(p.annotations).frameHeight > 0));
     const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
     const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
+    function endTextEditing() {
+      if (selection.editingAnnId !== null) {
+        selection.setEditingAnnId(null);
+        selection.setTool("select");
+      }
+    }
+    function stepRecord(n) {
+      endTextEditing();
+      setRecordNo(n);
+    }
     function connect(name, text) {
       const result2 = parseCsv(text);
       if (!result2.headers.length || !result2.records.length) {
@@ -24422,12 +24433,15 @@ ${parts.join("\n")}</g>`);
       if (ann && ann.type === "text") {
         const text = ann.text || "";
         edits.handleUpdateAnnotation(ann.id, { text: text + (text && !/\s$/.test(text) ? " " : "") + token, colorRuns: void 0 });
+        endTextEditing();
         return;
       }
       if (!page) return;
       const id = nextAnnIdRef.current;
       edits.handleAddText(60, 60, 320, 0);
       edits.handleUpdateAnnotation(id, { text: token });
+      selection.setEditingAnnId(null);
+      selection.setTool("select");
     }
     const VIRTUAL_FIELDS = ["page in group", "pages in group", "records in group"];
     const checkCache = useRef33(null);
@@ -24666,7 +24680,7 @@ ${parts.join("\n")}</g>`);
       count,
       idColumn,
       recordNo: shownNo,
-      setRecordNo,
+      setRecordNo: stepRecord,
       previewFill,
       slotCount,
       blockMode,
@@ -25000,7 +25014,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "b1c33cf"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "50407fd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
