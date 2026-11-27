@@ -1,5 +1,6 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { readWorkbook } from "../../io/xlsxReader.js";
 import { RecordExportDialog } from "../dialogs/RecordExportDialog.jsx";
 import { CalcColumns } from "./CalcColumns.jsx";
 import { SHOW_ON } from "../../model/dataMerge/groups.js";
@@ -35,6 +36,7 @@ export function DataPanel({ merge, view, hasPage }) {
   const [hideTemplate, setHideTemplate] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [workbook, setWorkbook] = useState(null); // an Excel file with several sheets, waiting for the person to choose one: { file, sheets, pick }
   const [grid, setGrid] = useState({ cols: 2, rows: 5, gap: 0, preset: "" });
   const panelRef = useRef(null), headRef = useRef(null);
   const [position, setPositionState] = useState(rememberedPlace.position);
@@ -50,6 +52,16 @@ export function DataPanel({ merge, view, hasPage }) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
+    if (/\.xls$/i.test(file.name)) { merge.setMessage("Old .xls files cannot be read here. Open it in Excel or Google Sheets and save it as .xlsx or CSV."); return; }
+    if (/\.xlsx$/i.test(file.name)) {
+      try {
+        merge.setMessage("Reading the workbook…");
+        const sheets = await readWorkbook(await file.arrayBuffer());
+        if (!sheets.length) { merge.setMessage("That workbook has no rows in its visible sheets."); return; }
+        if (sheets.length === 1) merge.connect(file.name, sheets[0].csv); else { merge.setMessage(""); setWorkbook({ file: file.name, sheets, pick: 0 }); }
+      } catch (err) { merge.setMessage("Couldn't read that workbook — " + (err && err.message ? err.message : "unknown error")); }
+      return;
+    }
     merge.connect(file.name, decodeCsv(await file.arrayBuffer()));
   }
   function make() {
@@ -137,13 +149,25 @@ export function DataPanel({ merge, view, hasPage }) {
             {view.dataTemplateColumns.length > 0 && <p className="ze-data-help"><strong>This template needs a CSV with these columns:</strong> {view.dataTemplateColumns.join(", ")}.</p>}
             <p className="ze-data-help"><strong>New to mail merge?</strong> You design one page, put the words that change in it, and ZEditor makes a copy for every row of your spreadsheet.</p>
             <ol className="ze-data-help ze-data-steps">
-              <li>Choose your spreadsheet (a CSV file) below.</li>
+              <li>Choose your spreadsheet (a CSV or Excel .xlsx file) below.</li>
               <li>Click a column name to put it in a text box on your page, for example the name.</li>
               <li>Step through the rows to preview, then press <strong>Make pages</strong>.</li>
             </ol>
-            <p className="ze-data-help">Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project.</p>
-            <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" hidden onChange={onFile} />
-            <button type="button" className="ze-btn ze-data-wide" onClick={() => fileRef.current && fileRef.current.click()}>Choose CSV file…</button>
+            <p className="ze-data-help">Fill pages from a spreadsheet: one page for each row. Choose a CSV or Excel (.xlsx) file whose first row holds the column names. It stays on your device and its rows are saved inside this project.</p>
+            <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={onFile} />
+            <button type="button" className="ze-btn ze-data-wide" onClick={() => fileRef.current && fileRef.current.click()}>Choose spreadsheet…</button>
+            {workbook && (
+              <div className="ze-data-calc-form">
+                <p className="ze-data-help"><strong>{workbook.file}</strong> has {workbook.sheets.length} sheets. Which one holds your rows?</p>
+                <select value={workbook.pick} onChange={(e) => setWorkbook({ ...workbook, pick: Number(e.target.value) })}>
+                  {workbook.sheets.map((sh, i) => <option key={sh.name} value={i}>{sh.name} ({sh.rows} {sh.rows === 1 ? "row" : "rows"})</option>)}
+                </select>
+                <div className="ze-data-row">
+                  <button type="button" className="ze-btn ze-btn-primary" onClick={() => { const sh = workbook.sheets[workbook.pick]; if (merge.connect(workbook.file + " – " + sh.name, sh.csv)) setWorkbook(null); }}>Use this sheet</button>
+                  <button type="button" className="ze-btn" onClick={() => setWorkbook(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
             <button type="button" className="ze-data-link" onClick={() => setPasting(!pasting)}>{pasting ? "Hide" : "Or paste the rows here"}</button>
             <button type="button" className="ze-data-link" onClick={() => merge.connect("sample.csv", SAMPLE_CSV)}>Or try it with 5 made-up rows</button>
             {pasting && (

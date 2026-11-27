@@ -6,6 +6,8 @@
 
 *(New to this? The Data panel starts with a three-step reminder, and **Or try it with 5 made-up rows** loads a tiny sample so you can try everything at once.)*
 
+**Excel files:** the same button also takes an **.xlsx** workbook. If it has several sheets you choose which one (name and number of rows shown); hidden and empty sheets are not offered. Row 1 is the column names, as with CSV. Dates come in as dates (`2026-12-08`, with the time if the cell has one), numbers without the `.0`, and a formula gives the value it last showed. Colours, fonts, pictures and merged-cell layouts are ignored, and the old **.xls** format and password-protected workbooks cannot be opened (save as .xlsx or CSV). The rows are kept inside the project as text, so the workbook is not needed afterwards.
+
 1. Save your sheet as a **CSV** file (in Excel or Google Sheets: *Save as / Download → CSV*). The **first line must be the column names**, then one line per row.
 2. Click the **Data** button (the table icon beside Layers), then **Choose CSV file…** (or **Or paste the rows here**). The file is kept **inside your project**, so it travels with the .znow file.
 3. Design your page. In a text box, write a field in double curly brackets, like `Dear {{name}},`, or click a **field chip** in the Data panel: it adds the field to the selected text box, or to a new one.
@@ -51,6 +53,8 @@ A **data template** is a design someone else can fill with their own spreadsheet
 ## How it works
 
 ### Reading the file
+
+`.xlsx` is a zip of XML files: `io/zipReader.js` lists the zip's files and inflates them with the browser's own `DecompressionStream` (no library), `model/dataMerge/xlsx.js` reads the shared strings, the cell styles (which show a date) and the sheet rows with a small scanner (so it also runs in the tests), and `io/xlsxReader.js` turns each visible sheet into CSV text.
 
 `model/dataMerge/csv.js` reads commas, semicolons, tabs or bars, quoted cells with line breaks, and a leading byte-order mark. Duplicate or empty column names are made unique.
 
