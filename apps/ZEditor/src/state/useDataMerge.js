@@ -20,7 +20,7 @@ import { translatedAnnotation } from "../model/annotations.js";
 import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
 
 import { MAIN_SCALE } from "../constants.js";
-const { useMemo, useRef, useState } = React;
+const { useDeferredValue, useMemo, useRef, useState } = React;
 
 export function useDataMerge({ doc, history, view, edits, selection, project, status }) {
   const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, nextKeyRef, nextAnnIdRef } = doc;
@@ -40,6 +40,8 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   const count = records.length;
   const shownNo = Math.min(recordNo, Math.max(0, count - 1));
   const findPhoto = useMemo(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
+  // The page follows the row a moment after the stepper does, so quick clicks on ◀ ▶ stay responsive on a slow device (React skips the in-between pages).
+  const previewNo = useDeferredValue(shownNo);
   const showPreview = view.dataPreviewOn && count > 0;
   // What the page canvas runs its items through to show the chosen row (and, with data blocks, the rows after it in the other blocks).
   // Kept as one function per chosen row, and it hands back the same list for the same page items: the canvas lays text out again whenever the list
@@ -49,11 +51,11 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     let lastAnns = null, lastEditing, lastOut = null;
     return (anns, editingId) => {
       if (anns === lastAnns && editingId === lastEditing) return lastOut;
-      lastOut = previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto, qrDataUrl);
+      lastOut = previewAnnotations(anns, records, Math.min(previewNo, Math.max(0, count - 1)), editingId, "en", findPhoto, qrDataUrl);
       lastAnns = anns; lastEditing = editingId;
       return lastOut;
     };
-  }, [showPreview, records, shownNo, findPhoto]);
+  }, [showPreview, records, previewNo, findPhoto]);
 
   const page = pages[selectedIdx] || null;
   // The designed page this page belongs to: itself, or (for a made page or a continuation design) the page it came from or is for.
@@ -70,6 +72,10 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   const flowProblem = letterMode && [templatePage, continuationPage].some((p) => p && flowBoxOf(p.annotations) && !(flowBoxOf(p.annotations).frameHeight > 0));
   const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
   const earlierPages = templatePage ? pages.filter((p) => p.mergedFrom === templatePage.key) : [];
+
+  // A text box that is still being typed in shows its field names, not the row's words, so the stepper and the field chips end that first.
+  function endTextEditing() { if (selection.editingAnnId !== null) { selection.setEditingAnnId(null); selection.setTool("select"); } }
+  function stepRecord(n) { endTextEditing(); setRecordNo(n); }
 
   function connect(name, text) {
     const result = parseCsv(text);
@@ -92,12 +98,15 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     if (ann && ann.type === "text") {
       const text = ann.text || "";
       edits.handleUpdateAnnotation(ann.id, { text: text + (text && !/\s$/.test(text) ? " " : "") + token, colorRuns: undefined });
+      endTextEditing();
       return;
     }
     if (!page) return;
     const id = nextAnnIdRef.current;
     edits.handleAddText(60, 60, 320, 0);
     edits.handleUpdateAnnotation(id, { text: token });
+    selection.setEditingAnnId(null); // it is not typed in, so the preview shows right away
+    selection.setTool("select");
   }
 
   const VIRTUAL_FIELDS = ["page in group", "pages in group", "records in group"];
@@ -318,7 +327,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo: stepRecord, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };
