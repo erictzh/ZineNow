@@ -182,6 +182,8 @@ Now: **calculated columns**, then the **second design for continuation pages**, 
 
 **Upcoming list (agreed 2026-11-27):** `.xlsx` files as a data source (a small reader on JSZip: sheet picker, date cells turned into dates, formulas read as their last saved value; `.xls` not supported), one document per record (export each record as its own PDF, with records that need one or two pages; under discussion), contents and index pages, flowing lists.
 
+**Phases from 2026-11-27 (maintainer):** A (make what is built solid: tablet check, Edit-it-then-Save test, folder export test, a group with photos + QR + continuation design, first-run hint) → B (`.xlsx`) → D (flowing lists, discuss first) → **E, last: contents and index pages, the grid helper, the page-size switch**. Done: calculated columns, continuation designs, QR codes, letters (variable pages), one PDF per record. Do not start E first.
+
 **Last phase, for the future only (built but hidden, or not built):** the **grid helper** ("Make a grid of copies" with ready-made sheets; code and tests exist, hidden by `SHOW_GRID_HELPER` in `DataPanel.jsx`) and the **page-size switch for sheets** (one button that sets the page to a sheet's size; not built). Contents pages and flowing lists stay later too.
 
 ## 11. Decisions so far
