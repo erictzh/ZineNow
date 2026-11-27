@@ -116,15 +116,27 @@ export function previewAnnotations(annotations, records, start, editingId, lang,
   });
 }
 
+// A ready-made sheet (model/dataMerge/layout.js GRID_PRESETS, in mm) in pixels: `k` is pixels per mm. Gives where the first cell starts, the
+// distance from one cell to the next (cell plus gap), the cell size, and how many fit.
+export function sheetGrid(preset, k) {
+  return {
+    origin: { x: preset.origin.x * k, y: preset.origin.y * k },
+    pitch: { x: (preset.cell.w + preset.gap.x) * k, y: (preset.cell.h + preset.gap.y) * k },
+    cell: { w: preset.cell.w * k, h: preset.cell.h * k },
+    cols: preset.cols, rows: preset.rows,
+  };
+}
+
 // Copies of a data block laid out as a grid: `items` are the block's items and `bounds` the box they cover ({ x, y, width, height }). The block
-// itself stays in the top-left cell; the copies fill the rest of `cols` x `rows`, `gap` ({ x, y }) apart, each a new group. Returns the new
-// items, and how many of the grid's blocks end up outside `page` ({ width, height }, optional).
-export function gridCopies(items, bounds, { cols, rows, gap }, { newId, newGroupId }, page) {
+// itself stays in the top-left cell; the copies fill the rest of `cols` x `rows`, `gap` ({ x, y }) apart (or exactly `pitch` apart, a sheet's
+// cell-to-cell distance), each a new group. Returns the new items, and how many of the grid's blocks end up outside `page` ({ width, height }).
+export function gridCopies(items, bounds, { cols, rows, gap, pitch }, { newId, newGroupId }, page) {
   const out = [];
   let outside = 0;
+  const step = pitch || { x: bounds.width + gap.x, y: bounds.height + gap.y };
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const dx = col * (bounds.width + gap.x), dy = row * (bounds.height + gap.y);
+      const dx = col * step.x, dy = row * step.y;
       if (page && (bounds.x + dx + bounds.width > page.width + 0.5 || bounds.y + dy + bounds.height > page.height + 0.5)) outside++;
       if (col === 0 && row === 0) continue;
       const groupId = newGroupId();

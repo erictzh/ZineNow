@@ -1,6 +1,7 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
 import { SHOW_ON } from "../../model/dataMerge/groups.js";
+import { GRID_PRESETS, presetByKey } from "../../model/dataMerge/layout.js";
 import { trackPointerDrag } from "../pointer.js";
 const { useRef, useState } = React;
 
@@ -20,7 +21,7 @@ export function DataPanel({ merge, view, hasPage }) {
   const [range, setRange] = useState({ from: "", to: "" });
   const [hideTemplate, setHideTemplate] = useState(true);
   const [confirming, setConfirming] = useState(false);
-  const [grid, setGrid] = useState({ cols: 2, rows: 5, gap: 0 });
+  const [grid, setGrid] = useState({ cols: 2, rows: 5, gap: 0, preset: "" });
   const panelRef = useRef(null), headRef = useRef(null);
   const [position, setPositionState] = useState(rememberedPlace.position);
   const [size, setSizeState] = useState(rememberedPlace.size);
@@ -171,13 +172,27 @@ export function DataPanel({ merge, view, hasPage }) {
                 {merge.selected.isBlock && (
                   <div className="ze-data-grid">
                     <div className="ze-data-title">Make a grid of copies</div>
-                    <p className="ze-data-help">Copies the selected block into columns and rows from its top-left corner. Place the block where the first cell should be, at the size of one cell.</p>
-                    <div className="ze-data-row">
-                      Columns <input className="ze-data-num" type="number" min="1" max="12" value={grid.cols} onChange={(e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })} />
-                      Rows <input className="ze-data-num" type="number" min="1" max="12" value={grid.rows} onChange={(e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })} />
-                    </div>
-                    <div className="ze-data-row">Gap (mm) <input className="ze-data-num" type="number" min="0" max="50" step="0.5" value={grid.gap} onChange={(e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) })} /></div>
-                    <button type="button" className="ze-btn ze-data-wide" onClick={() => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap })}>Make {grid.cols * grid.rows - 1} copies</button>
+                    <p className="ze-data-help">Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell.</p>
+                    <label className="ze-data-row">Sheet{" "}
+                      <select value={grid.preset} onChange={(e) => setGrid({ ...grid, preset: e.target.value })}>
+                        <option value="">My own</option>
+                        {GRID_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                      </select>
+                    </label>
+                    {grid.preset ? (
+                      <p className="ze-data-help">{presetByKey(grid.preset).cols} columns × {presetByKey(grid.preset).rows} rows, on an {presetByKey(grid.preset).page.toUpperCase()} page. Label sizes are a guide: check them against your sheet.</p>
+                    ) : (
+                      <>
+                        <div className="ze-data-row">
+                          Columns <input className="ze-data-num" type="number" min="1" max="12" value={grid.cols} onChange={(e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })} />
+                          Rows <input className="ze-data-num" type="number" min="1" max="12" value={grid.rows} onChange={(e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) })} />
+                        </div>
+                        <div className="ze-data-row">Gap (mm) <input className="ze-data-num" type="number" min="0" max="50" step="0.5" value={grid.gap} onChange={(e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) })} /></div>
+                      </>
+                    )}
+                    <button type="button" className="ze-btn ze-data-wide" onClick={() => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap, preset: grid.preset })}>
+                      {grid.preset ? "Place on the sheet (" + presetByKey(grid.preset).cols * presetByKey(grid.preset).rows + " blocks)" : "Make " + (grid.cols * grid.rows - 1) + " copies"}
+                    </button>
                   </div>
                 )}
                 <p className="ze-data-help">{merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."}</p>

@@ -16,7 +16,7 @@
 - Under the panel you are told if the page uses a field the file has no column for, or if some rows are empty in a field.
 - A field can have a **filter**: `{{name|upper}}`, `{{name|title}}`, `{{price|number}}`, `{{date|date:d MMMM yyyy}}`, `{{city|default:Malaysia}}`. Also `lower`, `trim`, `first`, `pad:3`.
 - One undo step undoes the whole merge.
-- Not yet: QR codes, label-sheet size presets for the grid helper.
+- Not yet: QR codes, a page-size switch for the sheets.
 
 ## Advanced: data blocks and groups
 
@@ -24,7 +24,7 @@ Under the file name at the top of the Data panel there are two tabs, **Basic** a
 
 - A **data block** is a group of items that shows **one record** (a photo, a name, a role). Select its items, group them (**Ctrl+G**), then **Mark the selected group as a data block**. Copy the block (select it, **Ctrl+C**, **Ctrl+V**; a pasted block lands 20 px down and right, so drag it to where you want it) as many times as you want on the page: each copy is a **slot**, filled in reading order (rows from the top, each left to right) with the next record. 10 records with 5 slots make 2 pages; empty slots on the last page are left out.
 - Everything else on the page is a **non-data item**. Fields in it show the group's first row, plus `{{page in group}}`, `{{pages in group}}` and `{{records in group}}`.
-- **Make a grid of copies** (shows when a data block is selected): choose **Columns**, **Rows** and a **Gap (mm)**, then the button. The block stays in the top-left cell and the copies fill the rest, one block width plus the gap apart. Size the block to one cell first (name card, label) and put it where the first cell should be. The panel tells you if some of the grid runs off the page. It is one undo step.
+- **Make a grid of copies** (shows when a data block is selected): choose **Columns**, **Rows** and a **Gap (mm)**, then the button. The block stays in the top-left cell and the copies fill the rest, one block width plus the gap apart. Size the block to one cell first (name card, label) and put it where the first cell should be. Or pick a **Sheet** (name card 90 × 55, address labels 3 × 7 or 2 × 7, invitation A6, picture gallery 3 × 4): the block moves to the sheet's first cell and the copies follow the sheet's exact cell spacing. The panel warns if your page is not the sheet's size (they are A4), or your block is bigger than one cell. Label sizes are a guide: check them against your own sheet and print one test page on plain paper first. The panel tells you if some of the grid runs off the page. It is one undo step.
 - **Pictures** (Advanced tab): put a **different photo** on each page or block. Add a column that holds each photo's file name (`ana.jpg`; the extension and capital letters may be left out). **Choose photo folder…** (or **Or choose photo files**) keeps the photos inside the project, shrunk to at most 1600 px on the longest side (PNG stays PNG, the rest become JPEG). Put an ordinary picture on your page as the frame, select it, and under **Selected picture shows the photo named in** choose the column. Each made page then shows that row's photo, cropped to fill the frame and centred. The preview shows it too. If a row has no photo name, or no file with that name, the picture is **left out** (never someone else's photo) and the panel warns you. Many large photos make the project file big: every made page carries its own copy.
 - **Group by** a column (for example `band`): each value starts on a new page, then fills its slots. Without it, records just fill the blocks page after page.
 - **Repeat non-data items on the other pages** (ticked by default): the title, footer, logo and so on show on every page of a group. Unticked, they show on the group's first page only.
@@ -57,6 +57,6 @@ A **data template** is a design someone else can fill with their own spreadsheet
 
 `model/dataMerge/template.js` names the file (`templateFileName`), keeps the designed pages (`templatePages`), lists the columns needed (`templateNeeds`) and drops the data and photos from the settings (`templateSettings`). The marker is `dataTemplate: { version, columns }` in the project file (`io/projectFile.js`); `state/useProject.js` asks "use or edit" when it finds one (`DataTemplateDialog.jsx`) and keeps `editingTemplate` so Save keeps a template a template.
 
-`gridCopies` lays out the grid of copies (`makeGrid` in the hook measures the block with `annotationBounds`; mm to pixels is mm / 25.4 x 72 x 1.1).
+`sheetGrid` turns a ready-made sheet (`GRID_PRESETS` in `layout.js`) into pixels; `gridCopies` takes its cell spacing as `pitch`. `gridCopies` lays out the grid of copies (`makeGrid` in the hook measures the block with `annotationBounds`; mm to pixels is mm / 25.4 x 72 x 1.1).
 
 `state/useDataMerge.js` keeps the parsed rows, the order and the preview row. Made pages carry `mergedFrom` (the designed page's key) and `mergeRow`; that is how a re-merge finds the pages to replace. The preview is only drawn (`ComposeCanvas` `mergeRecord`); the page's own text is never changed by it.
