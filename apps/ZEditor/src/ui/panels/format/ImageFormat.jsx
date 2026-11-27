@@ -12,6 +12,7 @@ import { PanelSection, resetPatch } from "../../controls/PanelSection.jsx";
 import { EffectControls } from "../EffectControls.jsx";
 import { TextWrapSection } from "../TextWrapSection.jsx";
 import { FormatPanelShell, SizeReadout } from "./FormatPanelShell.jsx";
+import { QrSection } from "./QrSection.jsx";
 import { RemoveBackgroundSection } from "./RemoveBackgroundSection.jsx";
 import { useAiFeatures } from "../../../state/useAiFeatures.js";
 const { useState } = React;
@@ -30,7 +31,8 @@ export function ImageFormat({ ann, onUpdate, croppingAnnId, onToggleCrop, onFlat
   const adjustedCount = PHOTO_ADJUST_CONTROLS.filter((c) => isAdjusted(ann, c)).length;
   const filtersSummary = [adjustedCount > 0 && adjustedCount + " adjusted", filterType !== "match" && filterOption && filterOption.label].filter(Boolean).join(" · ") || undefined;
   return (
-    <FormatPanelShell title="Format — Image">
+    <FormatPanelShell title={ann.qrText !== undefined ? "Format — QR code" : "Format — Image"}>
+      {ann.qrText !== undefined && <QrSection ann={ann} patch={patch} />}
       <PanelSection
         id="image.crop"
         title="Crop"

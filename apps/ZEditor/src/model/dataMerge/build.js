@@ -93,7 +93,7 @@ export function remapItems(chosen, newId, newGroupId) {
 // ---- QR codes: a picture item with `qrText` (text that may use {{fields}}, e.g. "https://example.com/{{id}}") becomes the QR code of that text.
 // `makeQr(text)` draws it: { src, width, height } or null (the text cannot be made into a code). The code is square and centred in the frame.
 export function fillQrItem(ann, record, makeQr, lang) {
-  if (ann.type !== "image" || !ann.qrText) return { handled: false, ann };
+  if (ann.type !== "image" || ann.qrText === undefined) return { handled: false, ann }; // an empty text is a QR with nothing to say yet: left out
   const result = fillTemplate(ann.qrText, record, { lang });
   const text = result.text.trim();
   if (!text || result.missing.length || result.empty.length || !makeQr) return { handled: true, ann: null };
@@ -105,7 +105,7 @@ export function fillQrItem(ann, record, makeQr, lang) {
 
 // The QR codes a page uses: [{ text, empty }]: how many of the records leave the code out (a field is empty or missing, so the code would be wrong).
 export function qrProblems(annotations, records, lang) {
-  return (annotations || []).filter((a) => a.type === "image" && a.qrText).map((a) => {
+  return (annotations || []).filter((a) => a.type === "image" && a.qrText !== undefined).map((a) => {
     let empty = 0;
     for (const r of records) { const res = fillTemplate(a.qrText, r, { lang }); if (!res.text.trim() || res.missing.length || res.empty.length) empty++; }
     return { text: a.qrText, empty };

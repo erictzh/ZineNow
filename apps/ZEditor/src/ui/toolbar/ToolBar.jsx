@@ -23,6 +23,12 @@ export function ToolBar({ selection, edits, view, zoom, dialogs }) {
             <path d="M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" />
           </svg>
         </button>
+        <button type="button" className="ze-tool-icon-btn" title="QR code: adds a QR code to the page; type its text in the Format panel (it can use {{fields}} from the Data panel)" aria-label="QR code" onClick={edits.handleAddQr}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3.5" y="3.5" width="6" height="6" /><rect x="14.5" y="3.5" width="6" height="6" /><rect x="3.5" y="14.5" width="6" height="6" />
+            <path d="M14.5 14.5h2.5v2.5M20.5 14.5v.01M14.5 20.5h.01M17.5 20.5h3v-3" />
+          </svg>
+        </button>
         <button type="button" className={"ze-tool-icon-btn" + (tool === "rect" ? " active" : "")} title="Rectangle (R)" onClick={() => selectTool("rect")}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
             <rect x="3.5" y="6" width="17" height="12" />

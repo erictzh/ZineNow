@@ -10863,6 +10863,60 @@
     return { ...ann, x: cx + rx - size.width / 2, y: cy + ry - size.height / 2, angle: ((angleOf(ann) + degrees) % 360 + 360) % 360 };
   }
 
+  // apps/ZEditor/src/io/qrImage.js
+  var import_qrcode_generator = __toESM(require_qrcode());
+  import_qrcode_generator.default.stringToBytes = (text) => Array.from(new TextEncoder().encode(text));
+  var cache3 = /* @__PURE__ */ new Map();
+  function qrDataUrl(text, moduleSize = 16) {
+    if (cache3.has(text)) return cache3.get(text);
+    let result2 = null;
+    try {
+      const qr = (0, import_qrcode_generator.default)(0, "M");
+      qr.addData(text, "Byte");
+      qr.make();
+      const count = qr.getModuleCount(), quiet = 4, size = (count + quiet * 2) * moduleSize;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#000";
+      for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) if (qr.isDark(row, col)) ctx.fillRect((col + quiet) * moduleSize, (row + quiet) * moduleSize, moduleSize, moduleSize);
+      result2 = { src: canvas.toDataURL("image/png"), width: size, height: size };
+    } catch {
+      result2 = null;
+    }
+    if (cache3.size > 500) cache3.clear();
+    cache3.set(text, result2);
+    return result2;
+  }
+  var placeholder = null;
+  function qrPlaceholder() {
+    if (placeholder) return placeholder;
+    const size = 330, canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#e3e3e3";
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = "#9a9a9a";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(24, 24, size - 48, size - 48);
+    ctx.fillStyle = "#777";
+    ctx.font = "bold 110px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("QR", size / 2, size / 2 + 6);
+    placeholder = { src: canvas.toDataURL("image/png"), width: size, height: size };
+    return placeholder;
+  }
+  function qrPatch(text) {
+    const t = String(text || "");
+    const image = !t.trim() || t.includes("{{") ? qrPlaceholder() : qrDataUrl(t.trim()) || qrPlaceholder();
+    return { qrText: t, src: image.src, naturalWidth: image.width, naturalHeight: image.height, cropX: void 0, cropY: void 0, cropW: void 0, cropH: void 0 };
+  }
+
   // apps/ZEditor/src/render/drawAnnotation.js
   async function drawAnnotationOnCanvas(ctx, ann, scaleFactor, pageFilter) {
     if (ann.type === "stroke") await drawWithOpacity(ctx, opacityOf(ann), (target) => drawStrokeOnCanvas(target, ann, scaleFactor), blendOf(ann));
@@ -11650,6 +11704,24 @@ ${parts.join("\n")}</g>`);
       setSelectedAnnIds([]);
       setEditingAnnId(id);
     }
+    async function handleAddQr() {
+      if (selectedIdx === null) return;
+      const display2 = await getPageDisplaySize(pages[selectedIdx], pdfDocsRef, MAIN_SCALE);
+      const side = 150;
+      const id = nextAnnIdRef.current++;
+      updateAnnotationsFor(selectedIdx, (anns) => [...anns, {
+        id,
+        type: "image",
+        x: Math.max(0, (display2.width - side) / 2),
+        y: Math.max(0, (display2.height - side) / 2),
+        width: side,
+        height: side,
+        ...qrPatch("")
+      }]);
+      selectTool("select");
+      setSelectedAnnId(id);
+      setSelectedAnnIds([]);
+    }
     function handleAddRect(box) {
       if (selectedIdx === null) return;
       const id = nextAnnIdRef.current++;
@@ -11870,6 +11942,7 @@ ${parts.join("\n")}</g>`);
       handleClipSelection,
       handleAddText,
       handleAddRect,
+      handleAddQr,
       handleAddStroke,
       handleToggleLayerFlag,
       handleReorderLayers,
@@ -15829,7 +15902,7 @@ ${parts.join("\n")}</g>`);
     });
   }
   function fillQrItem(ann, record, makeQr, lang) {
-    if (ann.type !== "image" || !ann.qrText) return { handled: false, ann };
+    if (ann.type !== "image" || ann.qrText === void 0) return { handled: false, ann };
     const result2 = fillTemplate(ann.qrText, record, { lang });
     const text = result2.text.trim();
     if (!text || result2.missing.length || result2.empty.length || !makeQr) return { handled: true, ann: null };
@@ -15839,7 +15912,7 @@ ${parts.join("\n")}</g>`);
     return { handled: true, ann: { ...ann, src: qr.src, naturalWidth: qr.width, naturalHeight: qr.height, cropX: void 0, cropY: void 0, cropW: void 0, cropH: void 0, x: ann.x + (ann.width - side) / 2, y: ann.y + (ann.height - side) / 2, width: side, height: side } };
   }
   function qrProblems(annotations, records, lang) {
-    return (annotations || []).filter((a) => a.type === "image" && a.qrText).map((a) => {
+    return (annotations || []).filter((a) => a.type === "image" && a.qrText !== void 0).map((a) => {
       let empty = 0;
       for (const r of records) {
         const res = fillTemplate(a.qrText, r, { lang });
@@ -20934,6 +21007,24 @@ ${parts.join("\n")}</g>`);
     );
   }
 
+  // apps/ZEditor/src/ui/panels/format/QrSection.jsx
+  function QrSection({ ann, patch }) {
+    const text = ann.qrText || "";
+    return /* @__PURE__ */ React.createElement(PanelSection, { id: "image.qr", title: "QR code", defaultOpen: true, hint: "The code holds this text. Put {{column}} where a value from your data goes, for example https://example.com/{{id}}: the page then shows a grey QR, and each merged page gets its own code." }, /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "text",
+        className: "ze-format-number",
+        "aria-label": "Text of the QR code",
+        placeholder: "https://example.com",
+        autoFocus: text === "",
+        value: text,
+        onChange: (e) => patch(qrPatch(e.target.value)),
+        spellCheck: "false"
+      }
+    ), /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty", style: { marginTop: 6 } }, text === "" ? "Type the text or web address the code should hold." : text.includes("{{") ? "Shows a grey QR here until the data is merged." : "Print one and scan it with a phone before you print many."));
+  }
+
   // apps/ZEditor/src/ui/dialogs/AiModelDialog.jsx
   function AiModelDialog({ mode, plan, onConfirm, onCancel, kind = "fill", info = null }) {
     if (!mode || !plan) return null;
@@ -21270,7 +21361,7 @@ ${parts.join("\n")}</g>`);
     const filterOption = IMAGE_FILTER_OPTIONS.find((o) => o.key === filterType);
     const adjustedCount = PHOTO_ADJUST_CONTROLS.filter((c) => isAdjusted(ann, c)).length;
     const filtersSummary = [adjustedCount > 0 && adjustedCount + " adjusted", filterType !== "match" && filterOption && filterOption.label].filter(Boolean).join(" · ") || void 0;
-    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: "Format — Image" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(FormatPanelShell, { title: ann.qrText !== void 0 ? "Format — QR code" : "Format — Image" }, ann.qrText !== void 0 && /* @__PURE__ */ React.createElement(QrSection, { ann, patch }), /* @__PURE__ */ React.createElement(
       PanelSection,
       {
         id: "image.crop",
@@ -23489,7 +23580,7 @@ ${parts.join("\n")}</g>`);
   function ToolBar({ selection, edits, view, zoom, dialogs }) {
     const { tool, selectTool, selectedAnnId } = selection;
     const { layersOpen, setLayersOpen, layersMinimized, setLayersMinimized, dataPanelOpen, setDataPanelOpen, dataMinimized, setDataMinimized, centerGuideOn, setCenterGuideOn } = view;
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "marquee" ? " active" : ""), title: "Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)", onClick: () => selectTool("marquee") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "5.5", width: "16", height: "13", strokeDasharray: "2.6 2.6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (U): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "select" ? " active" : ""), title: "Move (V)", onClick: () => selectTool("select") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 3l6.5 16 2-6.5L19 10.5z", fill: "currentColor" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "text" ? " active" : ""), title: "Text (T)", onClick: () => selectTool("text") }, /* @__PURE__ */ React.createElement("span", { className: "ze-tool-icon-text" }, "T")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Insert Image (I)", onClick: edits.handleImageToolClick }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3", y: "4", width: "18", height: "16", rx: "2" }), /* @__PURE__ */ React.createElement("circle", { cx: "8.5", cy: "9.5", r: "1.5", fill: "currentColor", stroke: "none" }), /* @__PURE__ */ React.createElement("path", { d: "M21 16l-5.5-5.5a1.5 1.5 0 0 0-2.1 0L5 19" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "QR code: adds a QR code to the page; type its text in the Format panel (it can use {{fields}} from the Data panel)", "aria-label": "QR code", onClick: edits.handleAddQr }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "3.5", width: "6", height: "6" }), /* @__PURE__ */ React.createElement("rect", { x: "14.5", y: "3.5", width: "6", height: "6" }), /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "14.5", width: "6", height: "6" }), /* @__PURE__ */ React.createElement("path", { d: "M14.5 14.5h2.5v2.5M20.5 14.5v.01M14.5 20.5h.01M17.5 20.5h3v-3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "rect" ? " active" : ""), title: "Rectangle (R)", onClick: () => selectTool("rect") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "3.5", y: "6", width: "17", height: "12" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "ellipse" ? " active" : ""), title: "Ellipse (E)", onClick: () => selectTool("ellipse") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("ellipse", { cx: "12", cy: "12", rx: "8.5", ry: "6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "pen" ? " active" : ""), title: "Draw (D)", onClick: () => selectTool("pen") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M4 20l1-4L16 5l3 3L8 19z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 7l3 3" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "highlighter" ? " active" : ""), title: "Highlight (H)", onClick: () => selectTool("highlighter") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M6 20l1-3.5 8-8 3.5 3.5-8 8z" }), /* @__PURE__ */ React.createElement("path", { d: "M14 9l3.5 3.5" }), /* @__PURE__ */ React.createElement("path", { d: "M3 21h5" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "eraser" ? " active" : ""), title: "Eraser", onClick: () => selectTool("eraser") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M17 3l4 4-9.5 9.5H7L3 12z" }), /* @__PURE__ */ React.createElement("path", { d: "M7 21h13" }), /* @__PURE__ */ React.createElement("path", { d: "M9.5 5.5l6 6" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "marquee" ? " active" : ""), title: "Marquee (M): draw a box, then Make layer (Ctrl+J copy, Ctrl+Shift+J cut)", onClick: () => selectTool("marquee") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "4", y: "5.5", width: "16", height: "13", strokeDasharray: "2.6 2.6" }))), /* @__PURE__ */ React.createElement("span", { className: "ze-tool-bar-divider", role: "separator", "aria-orientation": "vertical" }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn" + (tool === "measure" ? " active" : ""), title: "Measure (U): click two points; a third click clears", onClick: () => selectTool("measure") }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.7", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("rect", { x: "2.5", y: "8", width: "19", height: "8", rx: "1", transform: "rotate(-30 12 12)" }), /* @__PURE__ */ React.createElement("path", { d: "M8.2 11.4l1.3 2.2M11.2 9.7l1.3 2.2M14.2 8l1.3 2.2" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -23744,35 +23835,6 @@ ${parts.join("\n")}</g>`);
       at += p.length;
     }
     return out;
-  }
-
-  // apps/ZEditor/src/io/qrImage.js
-  var import_qrcode_generator = __toESM(require_qrcode());
-  import_qrcode_generator.default.stringToBytes = (text) => Array.from(new TextEncoder().encode(text));
-  var cache3 = /* @__PURE__ */ new Map();
-  function qrDataUrl(text, moduleSize = 16) {
-    if (cache3.has(text)) return cache3.get(text);
-    let result2 = null;
-    try {
-      const qr = (0, import_qrcode_generator.default)(0, "M");
-      qr.addData(text, "Byte");
-      qr.make();
-      const count = qr.getModuleCount(), quiet = 4, size = (count + quiet * 2) * moduleSize;
-      const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, size, size);
-      ctx.fillStyle = "#000";
-      for (let row = 0; row < count; row++) for (let col = 0; col < count; col++) if (qr.isDark(row, col)) ctx.fillRect((col + quiet) * moduleSize, (row + quiet) * moduleSize, moduleSize, moduleSize);
-      result2 = { src: canvas.toDataURL("image/png"), width: size, height: size };
-    } catch {
-      result2 = null;
-    }
-    if (cache3.size > 500) cache3.clear();
-    cache3.set(text, result2);
-    return result2;
   }
 
   // apps/ZEditor/src/io/dataPhotos.js
@@ -24246,7 +24308,7 @@ ${parts.join("\n")}</g>`);
       if (!record) return { ...a, hidden: true };
       if (a.type === "image" && (a.picField || a.qrText)) {
         const filled = fillItem(a, record, { findPhoto, makeQr, lang });
-        return filled.ann || { ...a, hidden: true };
+        return filled.ann || (a.qrText && !a.picField ? a : { ...a, hidden: true });
       }
       return fillTextItem(a, record, { lang }).ann;
     });
@@ -24579,7 +24641,7 @@ ${parts.join("\n")}</g>`);
       edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, picField: column || void 0, qrText: column ? void 0 : a.qrText } : a));
     }
     function setQrText(text) {
-      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, qrText: text || void 0, picField: text ? void 0 : a.picField } : a), "qr:" + selectedIds.join(","));
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...text ? qrPatch(text) : { qrText: void 0 }, picField: text ? void 0 : a.picField } : a), "qr:" + selectedIds.join(","));
     }
     function markDataBlock(on) {
       if (!selected.grouped) {
@@ -24899,7 +24961,7 @@ ${parts.join("\n")}</g>`);
         e.target.value = "";
         if (files.length) merge.addPhotos(files);
       } }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => photoRef.current && photoRef.current.click() }, "Choose photo folder…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => photoFilesRef.current && photoFilesRef.current.click() }, "Or choose photo files"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, view.dataPhotos.length === 0 ? "No photos chosen yet." : view.dataPhotos.length + " photo" + (view.dataPhotos.length === 1 ? "" : "s") + " kept in this project (shrunk to 1600 px).", view.dataPhotos.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, " ", /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => view.setDataPhotos([]) }, "Remove all"))), merge.selected.isPicture && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected picture shows the photo named in", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.picField, onChange: (e) => merge.setPicField(e.target.value) }, merge.selected.picField === "\0" && /* @__PURE__ */ React.createElement("option", { value: "\0" }, "Mixed"), /* @__PURE__ */ React.createElement("option", { value: "" }, "Nothing (an ordinary picture)"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), merge.selected.isPicture && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Or make it a QR code of", " ", /* @__PURE__ */ React.createElement("input", { type: "text", placeholder: "https://example.com/{{id}}", value: merge.selected.qrText, onChange: (e) => merge.setQrText(e.target.value) })), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put ", "{{column}}", " where a value goes, for example https://example.com/", "{{id}}", ". Each page gets its own code, drawn square and centred in the picture. Print one and scan it before you print many.")))), merge.message && /* @__PURE__ */ React.createElement("p", { className: "ze-data-note", role: "status" }, merge.message)),
-      parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-foot" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Make pages for rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", "aria-label": "From row", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), "aria-label": "To row", value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (skipped when exporting)"), check.missing.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "The page uses ", check.missing.map((f) => "{{" + f + "}}").join(", "), ", but the file has no such column."), check.emptyCounts.map((e) => /* @__PURE__ */ React.createElement("p", { key: e.field, className: "ze-data-warn" }, e.count, " of the chosen rows have nothing in “", e.field, "”.")), check.pictures.map((p) => /* @__PURE__ */ React.createElement("p", { key: p.column, className: "ze-data-warn" }, check.photoCount === 0 ? "A picture uses “" + p.column + "”, but no photos are chosen yet (Advanced tab)." : "", check.photoCount > 0 && p.notFound.length > 0 ? p.notFound.length + " photo name" + (p.notFound.length === 1 ? "" : "s") + " in “" + p.column + "” not found: " + p.notFound.slice(0, 3).join(", ") + (p.notFound.length > 3 ? "…" : "") + ". " : "", check.photoCount > 0 && p.empty > 0 ? p.empty + " row" + (p.empty === 1 ? " has" : "s have") + " no photo name." : "")), check.qrs.filter((q) => q.empty > 0).map((q) => /* @__PURE__ */ React.createElement("p", { key: q.text, className: "ze-data-warn" }, q.empty, " of the chosen rows give an empty QR code for “", q.text, "”, so it is left out.")), check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0 && hasPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "No field is used on this page yet."), merge.earlierCount > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.earlierCount, " page", merge.earlierCount === 1 ? "" : "s", " made from this page earlier will be replaced."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary ze-data-wide", disabled: !hasPage || chosenCount < 1 || check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0, onClick: make }, confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", disabled: merge.exportGroups.length === 0, title: merge.exportGroups.length === 0 ? "Make pages first (data blocks put several records on a page, so they cannot be split by record)" : "One PDF for each record, with all of its pages", onClick: () => setExportOpen(true) }, "Export each record as a PDF…"), merge.onGeneratedPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "This page was made by a merge. Edit the page you designed, then make the pages again.")),
+      parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-foot" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Make pages for rows", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: "1", "aria-label": "From row", value: range.from, onChange: (e) => setRange({ ...range, from: e.target.value }) }), " ", "to", " ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: count, placeholder: String(count), "aria-label": "To row", value: range.to, onChange: (e) => setRange({ ...range, to: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: hideTemplate, onChange: (e) => setHideTemplate(e.target.checked) }), " Hide the page you designed (skipped when exporting)"), check.missing.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "The page uses ", check.missing.map((f) => "{{" + f + "}}").join(", "), ", but the file has no such column."), check.emptyCounts.map((e) => /* @__PURE__ */ React.createElement("p", { key: e.field, className: "ze-data-warn" }, e.count, " of the chosen rows have nothing in “", e.field, "”.")), check.pictures.map((p) => /* @__PURE__ */ React.createElement("p", { key: p.column, className: "ze-data-warn" }, check.photoCount === 0 ? "A picture uses “" + p.column + "”, but no photos are chosen yet (Advanced tab)." : "", check.photoCount > 0 && p.notFound.length > 0 ? p.notFound.length + " photo name" + (p.notFound.length === 1 ? "" : "s") + " in “" + p.column + "” not found: " + p.notFound.slice(0, 3).join(", ") + (p.notFound.length > 3 ? "…" : "") + ". " : "", check.photoCount > 0 && p.empty > 0 ? p.empty + " row" + (p.empty === 1 ? " has" : "s have") + " no photo name." : "")), check.qrs.filter((q) => q.empty > 0).map((q) => /* @__PURE__ */ React.createElement("p", { key: q.text, className: "ze-data-warn" }, q.text === "" ? "A QR code on the page has no text yet, so it is left out." : q.empty + " of the chosen rows give an empty QR code for “" + q.text + "”, so it is left out.")), check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0 && hasPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-warn" }, "No field is used on this page yet."), merge.earlierCount > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.earlierCount, " page", merge.earlierCount === 1 ? "" : "s", " made from this page earlier will be replaced."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary ze-data-wide", disabled: !hasPage || chosenCount < 1 || check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0, onClick: make }, confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", disabled: merge.exportGroups.length === 0, title: merge.exportGroups.length === 0 ? "Make pages first (data blocks put several records on a page, so they cannot be split by record)" : "One PDF for each record, with all of its pages", onClick: () => setExportOpen(true) }, "Export each record as a PDF…"), merge.onGeneratedPage && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "This page was made by a merge. Edit the page you designed, then make the pages again.")),
       EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     ), /* @__PURE__ */ React.createElement(RecordExportDialog, { open: exportOpen, onClose: () => setExportOpen(false), merge, view }));
   }
@@ -25014,7 +25076,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "50407fd"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "94a57aa"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
