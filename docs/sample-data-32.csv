@@ -19,7 +19,7 @@ id,name,title,position,group,seat,ticket no.,date,amount,photo,kind,note
 18,Johari Abdul Ghani,YB,Minister of Plantation and Commodities,Blue,A7,T-1234,2026-12-31,116,photo18.jpg,cabinet list (check name and post are current),
 19,Chang Lih Kang,YB,"Minister of Science, Technology and Innovation",Green,A14,T-1247,2026-12-06,253,photo19.jpg,cabinet list (check name and post are current),
 20,Steven Sim Chee Keong,YB,Minister of Human Resources,Yellow,A21,T-1260,2026-12-09,390,photo20.jpg,cabinet list (check name and post are current),
-21,Aaron Ago Dagang,YB,,Red,A28,T-1273,2026-12-12,527,photo21.jpg,cabinet list (check name and post are current),"Vegetarian, no nuts"
+21,Aaron Ago Dagang,YB,Minister of National Unity,Red,A28,T-1273,2026-12-12,527,photo21.jpg,cabinet list (check name and post are current),"Vegetarian, no nuts"
 22,Armizan Mohd Ali,YB,Minister of Domestic Trade and Cost of Living,Blue,A35,T-1286,2026-12-15,664,photo22.jpg,cabinet list (check name and post are current),
 23,Mohd Na'im Mokhtar,YB,Minister in the Prime Minister's Department (Religious Affairs),Green,A2,T-1299,2026-12-18,801,photo23.jpg,cabinet list (check name and post are current),
 24,Tiong King Sing,YB,"Minister of Tourism, Arts and Culture",Yellow,A9,T-1312,2026-12-21,938,photo24.jpg,cabinet list (check name and post are current),
