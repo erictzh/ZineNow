@@ -11,7 +11,7 @@ const mmToPt = (mm) => (mm / MM_PER_INCH) * POINTS_PER_INCH;
 // "148" or "139.7": whole millimetres where the size is whole, else one decimal.
 export const formatMm = (pts) => String(Math.round(ptToMm(pts) * 10) / 10);
 // A preset's name with its size, e.g. "A5 (148mm × 210mm)".
-export const presetLabel = (p) => `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`;
+export const presetLabel = (p) => (p.noSize ? p.label : `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`);
 
 const CUSTOM_MIN_MM = 20, CUSTOM_MAX_MM = 1200;
 const clampMm = (text, fallback) => {
@@ -51,7 +51,7 @@ export function NewDocumentDialog({ open, onCreate, onOpenPdf, onCancel }) {
         <div className="ze-modal-body">
           <div className="ze-format-field">
             <span className="ze-format-label">Paper size</span>
-            <select className="ze-format-select" value={presetKey} onChange={(e) => setPresetKey(e.target.value)}>
+            <select className="ze-format-select" value={presetKey} onChange={(e) => { setPresetKey(e.target.value); const chosen = NEW_DOCUMENT_PRESETS.find((p) => p.key === e.target.value); if (chosen && chosen.preferLandscape) setOrientation("landscape"); }}>
               {NEW_DOCUMENT_PRESETS.map((p) => <option key={p.key} value={p.key}>{presetLabel(p)}</option>)}
               <option value="custom">Custom size (mm)…</option>
               <option value="canvas">No paper: auto-expanding canvas</option>

@@ -17,6 +17,11 @@ export const NEW_DOCUMENT_PRESETS = [
   { key: "letter", label: "US Letter", width: 612, height: 792 },
   { key: "half-letter", label: "Half Letter", width: 396, height: 612 },
   { key: "digest", label: "Digest", width: 396, height: 594 },
+  // Name cards (portrait here like the rest; choosing one switches the dialog to landscape, the way cards are usually made).
+  { key: "name-card-90x55", label: "Name card 90 × 55 mm", width: 155.91, height: 255.12, preferLandscape: true, noSize: true },
+  { key: "name-card-90x54", label: "Name card 90 × 54 mm", width: 153.07, height: 255.12, preferLandscape: true, noSize: true },
+  { key: "name-card-bank", label: "Name card 85.6 × 54 mm (bank-card size)", width: 153.07, height: 242.65, preferLandscape: true, noSize: true },
+  { key: "name-card-us", label: "Business card 3.5 × 2 in (US)", width: 144, height: 252, preferLandscape: true, noSize: true },
 ];
 export const MAX_NEW_DOCUMENT_PAGES = 100;
 // A "no paper" page (an auto-expanding canvas): where it starts, in pt, and how it grows (editor px, see state/useCanvasGrow.js).

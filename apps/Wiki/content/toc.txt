@@ -37,6 +37,7 @@ zeditor | ZEditor
     page-guide | Page Guide | trim, margin and bleed lines
     layouts | Page layouts | ready-made pages: picture slots and text, the Page menu's "Layout"
     data-merge | Data merge (Basic) | fill pages from a spreadsheet: one page for each row (the Data button)
+    page-size | Page size and name cards | Page → Size, and the name card sizes in New document
     bleed | Bleed | picture past the trimmed edge, dotted trim line, crop marks (the Page menu's "Bleed")
     page-numbers | Page Numbers
     onion-skin | Onion Skin

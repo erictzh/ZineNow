@@ -2,6 +2,8 @@
 
 import { canReadSystemFonts, fontLicenceSeen } from "../../io/fontEmbed.js";
 import { DEFAULT_DUOTONE_DARK, DEFAULT_DUOTONE_LIGHT, PAGE_FILTER_OPTIONS } from "../../model/pageFilters.js";
+import { PageSizeSettings } from "../settings/PageSizeSettings.jsx";
+import { trimSizeMm } from "../../model/pageSize.js";
 import { BleedSettings } from "../settings/BleedSettings.jsx";
 import { FilterSettings } from "../settings/FilterSettings.jsx";
 import { GuidesSettings } from "../settings/GuidesSettings.jsx";
@@ -11,7 +13,7 @@ import { RulersSettings } from "../settings/RulersSettings.jsx";
 import { PageMenuBody } from "./PageMenu.jsx";
 import { MenuCheck, MenuItem, TopMenu } from "./TopMenu.jsx";
 
-export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet, project, dialogs, exporter, status }) {
+export function Topbar({ doc, history, view, edits, layouts, pageBleed, pageSize, guideSet, project, dialogs, exporter, status }) {
   const { pages, selectedPage, pageFilter } = doc;
   const { updatePageFilter } = edits;
   const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
@@ -78,6 +80,15 @@ export function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet
                   openLabel: "Choose…",
                   disabled: doc.pages.length === 0,
                   onOpen: () => dialogs.setLayoutOpen(true),
+                },
+                {
+                  key: "size",
+                  label: "Size",
+                  detail: selectedPage && selectedPage.isBlank && !selectedPage.isCanvas ? trimSizeMm(selectedPage).width + " × " + trimSizeMm(selectedPage).height + " mm" : "blank pages only",
+                  noToggle: true,
+                  openLabel: "Set…",
+                  disabled: !selectedPage || !selectedPage.isBlank || selectedPage.isCanvas,
+                  settings: <PageSizeSettings key={selectedPage ? selectedPage.key + ":" + selectedPage.width + "x" + selectedPage.height : "none"} page={selectedPage} onApply={pageSize.setPageSizeMm} />,
                 },
                 {
                   key: "bleed",
