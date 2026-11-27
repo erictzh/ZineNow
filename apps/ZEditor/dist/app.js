@@ -6473,7 +6473,12 @@
     { key: "a6", label: "A6", width: 297.64, height: 419.53 },
     { key: "letter", label: "US Letter", width: 612, height: 792 },
     { key: "half-letter", label: "Half Letter", width: 396, height: 612 },
-    { key: "digest", label: "Digest", width: 396, height: 594 }
+    { key: "digest", label: "Digest", width: 396, height: 594 },
+    // Name cards (portrait here like the rest; choosing one switches the dialog to landscape, the way cards are usually made).
+    { key: "name-card-90x55", label: "Name card 90 × 55 mm", width: 155.91, height: 255.12, preferLandscape: true, noSize: true },
+    { key: "name-card-90x54", label: "Name card 90 × 54 mm", width: 153.07, height: 255.12, preferLandscape: true, noSize: true },
+    { key: "name-card-bank", label: "Name card 85.6 × 54 mm (bank-card size)", width: 153.07, height: 242.65, preferLandscape: true, noSize: true },
+    { key: "name-card-us", label: "Business card 3.5 × 2 in (US)", width: 144, height: 252, preferLandscape: true, noSize: true }
   ];
   var MAX_NEW_DOCUMENT_PAGES = 100;
   var CANVAS_PAGE_START = { width: 800, height: 600 };
@@ -12502,6 +12507,7 @@ ${parts.join("\n")}</g>`);
   // apps/ZEditor/src/model/bleed.js
   var MAX_BLEED_MM = 25;
   var mmToPt = (mm) => mm * 72 / 25.4;
+  var ptToMm = (pt) => pt * 25.4 / 72;
   function cleanBleedMm(value) {
     const v = Number(value);
     return Number.isFinite(v) ? Math.round(Math.min(MAX_BLEED_MM, Math.max(0, v)) * 10) / 10 : 0;
@@ -15660,6 +15666,49 @@ ${parts.join("\n")}</g>`);
       };
     }, [onionSkinOn, selectedIdx]);
     return onionGhostSrc;
+  }
+
+  // apps/ZEditor/src/model/pageSize.js
+  var SIZE_MIN_MM = 20;
+  var SIZE_MAX_MM = 1200;
+  var cleanSizeMm = (value, fallback) => {
+    const v = Number(value);
+    return Number.isFinite(v) && v > 0 ? Math.round(Math.min(SIZE_MAX_MM, Math.max(SIZE_MIN_MM, v)) * 10) / 10 : fallback;
+  };
+  function resizedPage(page, widthMm, heightMm) {
+    const b = bleedPt(page);
+    return { width: mmToPt(widthMm) + 2 * b, height: mmToPt(heightMm) + 2 * b };
+  }
+  function trimSizeMm(page) {
+    const b = bleedPt(page);
+    return { width: Math.round(ptToMm(page.width - 2 * b) * 10) / 10, height: Math.round(ptToMm(page.height - 2 * b) * 10) / 10 };
+  }
+  function presetSizeMm(preset, landscape) {
+    const w = Math.round(ptToMm(preset.width) * 10) / 10, h = Math.round(ptToMm(preset.height) * 10) / 10;
+    return landscape ? { width: h, height: w } : { width: w, height: h };
+  }
+  var PAGE_SIZE_PRESETS = NEW_DOCUMENT_PRESETS;
+
+  // apps/ZEditor/src/state/usePageSize.js
+  function usePageSize({ doc, history, status }) {
+    const { pages, setPages, selectedIdx, pageSizeRef } = doc;
+    function setPageSizeMm(widthMm, heightMm, allPages) {
+      const targets = new Set(pages.map((p, i) => (allPages || i === selectedIdx) && p.isBlank && !p.isCanvas ? p.key : null).filter((k) => k !== null));
+      if (!targets.size) return;
+      history.recordUndoCheckpoint();
+      setPages((prev) => prev.map((p) => {
+        if (!targets.has(p.key)) return p;
+        const next = resizedPage(p, widthMm, heightMm);
+        return { ...p, width: next.width, height: next.height, dataUrl: makeBlankThumb(next.width, next.height, p.rotation) };
+      }));
+      const sel = pages[selectedIdx];
+      if (allPages && sel && sel.isBlank) {
+        const next = resizedPage(sel, widthMm, heightMm);
+        pageSizeRef.current = { ...pageSizeRef.current || {}, width: next.width, height: next.height };
+      }
+      status.setNotice("Page size set to " + widthMm + " × " + heightMm + " mm on " + (targets.size === 1 ? "this page" : targets.size + " pages") + ". Your items stayed where they were. Undo takes it back.");
+    }
+    return { setPageSizeMm };
   }
 
   // apps/ZEditor/src/state/usePageOps.js
@@ -20500,10 +20549,10 @@ ${parts.join("\n")}</g>`);
   // apps/ZEditor/src/ui/dialogs/NewDocumentDialog.jsx
   var { useState: useState25 } = React;
   var MM_PER_INCH = 25.4;
-  var ptToMm = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
+  var ptToMm2 = (pts) => pts / POINTS_PER_INCH * MM_PER_INCH;
   var mmToPt2 = (mm) => mm / MM_PER_INCH * POINTS_PER_INCH;
-  var formatMm = (pts) => String(Math.round(ptToMm(pts) * 10) / 10);
-  var presetLabel = (p) => `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`;
+  var formatMm = (pts) => String(Math.round(ptToMm2(pts) * 10) / 10);
+  var presetLabel = (p) => p.noSize ? p.label : `${p.label} (${formatMm(p.width)}mm × ${formatMm(p.height)}mm)`;
   var CUSTOM_MIN_MM = 20;
   var CUSTOM_MAX_MM = 1200;
   var clampMm = (text, fallback) => {
@@ -20528,7 +20577,11 @@ ${parts.join("\n")}</g>`);
     const pageCount = Math.max(1, Math.min(MAX_NEW_DOCUMENT_PAGES, parseInt(pageCountText, 10) || 1));
     const bleedMm = noPaper ? 0 : cleanBleedMm(bleedText);
     const inches = (pts) => +(pts / POINTS_PER_INCH).toFixed(2);
-    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => setPresetKey(e.target.value) }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, presetLabel(p))), /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)…"), /* @__PURE__ */ React.createElement("option", { value: "canvas" }, "No paper: auto-expanding canvas"))), custom && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Custom size (mm)"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-modal-backdrop", onMouseDown: onCancel }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "ze-modal-head" }, "New document"), /* @__PURE__ */ React.createElement("div", { className: "ze-modal-body" }, /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => {
+      setPresetKey(e.target.value);
+      const chosen = NEW_DOCUMENT_PRESETS.find((p) => p.key === e.target.value);
+      if (chosen && chosen.preferLandscape) setOrientation("landscape");
+    } }, NEW_DOCUMENT_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, presetLabel(p))), /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)…"), /* @__PURE__ */ React.createElement("option", { value: "canvas" }, "No paper: auto-expanding canvas"))), custom && /* @__PURE__ */ React.createElement("div", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Custom size (mm)"), /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(
       NumberBox,
       {
         className: "ze-format-number",
@@ -25487,10 +25540,33 @@ ${parts.join("\n")}</g>`);
     ), /* @__PURE__ */ React.createElement(RecordExportDialog, { open: exportOpen, onClose: () => setExportOpen(false), merge, view }));
   }
 
-  // apps/ZEditor/src/ui/settings/BleedSettings.jsx
+  // apps/ZEditor/src/ui/settings/PageSizeSettings.jsx
   var { useState: useState49 } = React;
+  function PageSizeSettings({ page, onApply }) {
+    const current2 = page ? trimSizeMm(page) : { width: 148, height: 210 };
+    const [presetKey, setPresetKey] = useState49("custom");
+    const [landscape, setLandscape] = useState49(current2.width > current2.height);
+    const [wText, setWText] = useState49(String(current2.width));
+    const [hText, setHText] = useState49(String(current2.height));
+    const preset = PAGE_SIZE_PRESETS.find((p) => p.key === presetKey);
+    const size = preset ? presetSizeMm(preset, landscape) : { width: cleanSizeMm(wText, current2.width), height: cleanSizeMm(hText, current2.height) };
+    const choose = (key) => {
+      setPresetKey(key);
+      const chosen = PAGE_SIZE_PRESETS.find((p) => p.key === key);
+      if (chosen && chosen.preferLandscape) setLandscape(true);
+      if (chosen) {
+        const s = presetSizeMm(chosen, chosen.preferLandscape || landscape);
+        setWText(String(s.width));
+        setHText(String(s.height));
+      }
+    };
+    return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Paper size"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: presetKey, onChange: (e) => choose(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "custom" }, "Custom size (mm)"), PAGE_SIZE_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), preset ? /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Orientation"), /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: landscape ? "landscape" : "portrait", onChange: (e) => setLandscape(e.target.value === "landscape") }, /* @__PURE__ */ React.createElement("option", { value: "portrait" }, "Portrait"), /* @__PURE__ */ React.createElement("option", { value: "landscape" }, "Landscape"))) : /* @__PURE__ */ React.createElement("div", { className: "ze-format-inline" }, /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: SIZE_MIN_MM, max: SIZE_MAX_MM, step: "0.5", "aria-label": "Width (mm)", title: "Width (mm)", value: wText, onChange: (e) => setWText(e.target.value), onBlur: () => setWText(String(size.width)) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "×"), /* @__PURE__ */ React.createElement(NumberBox, { className: "ze-format-number", min: SIZE_MIN_MM, max: SIZE_MAX_MM, step: "0.5", "aria-label": "Height (mm)", title: "Height (mm)", value: hText, onChange: (e) => setHText(e.target.value), onBlur: () => setHText(String(size.height)) }), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint", style: { margin: 0 } }, "mm")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Will be ", size.width, " × ", size.height, " mm (the trimmed size; a bleed adds to it)."), /* @__PURE__ */ React.createElement("div", { className: "ze-format-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => onApply(size.width, size.height, false) }, "Apply to this page"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-toggle ze-format-toggle-wide", onClick: () => onApply(size.width, size.height, true) }, "Apply to all pages")), /* @__PURE__ */ React.createElement("span", { className: "ze-format-hint" }, "Items stay where they are (measured from the top-left corner); the size is not a scale. Blank pages only."));
+  }
+
+  // apps/ZEditor/src/ui/settings/BleedSettings.jsx
+  var { useState: useState50 } = React;
   function BleedSettings({ currentMm, onApply }) {
-    const [text, setText] = useState49(String(currentMm || 0));
+    const [text, setText] = useState50(String(currentMm || 0));
     const value = cleanBleedMm(text);
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (mm)"), /* @__PURE__ */ React.createElement(
       NumberBox,
@@ -25575,9 +25651,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState50 } = React;
+  var { useState: useState51 } = React;
   function PageMenuBody({ rows, close }) {
-    const [customizing, setCustomizing] = useState50(null);
+    const [customizing, setCustomizing] = useState51(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -25591,13 +25667,13 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/Topbar.jsx
-  function Topbar({ doc, history, view, edits, layouts, pageBleed, guideSet, project, dialogs, exporter, status }) {
+  function Topbar({ doc, history, view, edits, layouts, pageBleed, pageSize, guideSet, project, dialogs, exporter, status }) {
     const { pages, selectedPage, pageFilter } = doc;
     const { updatePageFilter } = edits;
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "e6c9db5"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "553754b"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -25636,6 +25712,15 @@ ${parts.join("\n")}</g>`);
             openLabel: "Choose…",
             disabled: doc.pages.length === 0,
             onOpen: () => dialogs.setLayoutOpen(true)
+          },
+          {
+            key: "size",
+            label: "Size",
+            detail: selectedPage && selectedPage.isBlank && !selectedPage.isCanvas ? trimSizeMm(selectedPage).width + " × " + trimSizeMm(selectedPage).height + " mm" : "blank pages only",
+            noToggle: true,
+            openLabel: "Set…",
+            disabled: !selectedPage || !selectedPage.isBlank || selectedPage.isCanvas,
+            settings: /* @__PURE__ */ React.createElement(PageSizeSettings, { key: selectedPage ? selectedPage.key + ":" + selectedPage.width + "x" + selectedPage.height : "none", page: selectedPage, onApply: pageSize.setPageSizeMm })
           },
           {
             key: "bleed",
@@ -25914,6 +25999,7 @@ ${parts.join("\n")}</g>`);
     } };
     const pageOps = usePageOps({ doc, history, selection });
     const pageBleed = usePageBleed({ doc, history, status });
+    const pageSize = usePageSize({ doc, history, status });
     const guides = useGuides({ doc, view, history });
     const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status, guides });
     const pickGuide = (id) => {
@@ -25973,7 +26059,7 @@ ${parts.join("\n")}</g>`);
     const pagesRef = React.useRef(doc.pages);
     pagesRef.current = doc.pages;
     const documentColors = React.useCallback(() => collectDocumentColors(pagesRef.current), []);
-    return /* @__PURE__ */ React.createElement(DocumentColorsContext.Provider, { value: documentColors }, /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, layouts, pageBleed, guideSet: guides, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement(DocumentColorsContext.Provider, { value: documentColors }, /* @__PURE__ */ React.createElement("div", { className: "ze-shell" }, /* @__PURE__ */ React.createElement(Topbar, { doc, history: uiHistory, view, edits, layouts, pageBleed, pageSize, guideSet: guides, project, dialogs, exporter, status }), status.errorMsg && /* @__PURE__ */ React.createElement("div", { className: "ze-error-bar" }, status.errorMsg), status.notice && /* @__PURE__ */ React.createElement("div", { className: "ze-notice-bar" }, /* @__PURE__ */ React.createElement("span", null, status.notice), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-notice-close", "aria-label": "Dismiss", onClick: () => status.setNotice(null) }, "×")), /* @__PURE__ */ React.createElement("div", { className: "ze-body", ref: bodyRef }, /* @__PURE__ */ React.createElement(
       PanelResizer,
       {
         bodyRef,

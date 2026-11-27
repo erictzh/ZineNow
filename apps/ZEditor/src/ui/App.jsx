@@ -15,6 +15,7 @@ import { useImageTrace } from "../state/useImageTrace.js";
 import { useMagicErase } from "../state/useMagicErase.js";
 import { useMarquee } from "../state/useMarquee.js";
 import { useOnionGhost } from "../state/useOnionGhost.js";
+import { usePageSize } from "../state/usePageSize.js";
 import { usePageOps } from "../state/usePageOps.js";
 import { useProject } from "../state/useProject.js";
 import { useSelection } from "../state/useSelection.js";
@@ -74,6 +75,7 @@ export function App() {
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
   const pageOps = usePageOps({ doc, history, selection });
   const pageBleed = usePageBleed({ doc, history, status });
+  const pageSize = usePageSize({ doc, history, status });
   const guides = useGuides({ doc, view, history });
   const layouts = useLayouts({ doc, history, edits, view, toolDefaults, status, guides });
   // Picking a guide leaves the item selection (the Format panel shows one thing); picking an item puts the guide down.
@@ -133,7 +135,7 @@ export function App() {
   return (
     <DocumentColorsContext.Provider value={documentColors}>
     <div className="ze-shell">
-      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} pageBleed={pageBleed} guideSet={guides} project={project} dialogs={dialogs} exporter={exporter} status={status} />
+      <Topbar doc={doc} history={uiHistory} view={view} edits={edits} layouts={layouts} pageBleed={pageBleed} pageSize={pageSize} guideSet={guides} project={project} dialogs={dialogs} exporter={exporter} status={status} />
 
       {status.errorMsg && <div className="ze-error-bar">{status.errorMsg}</div>}
       {status.notice && (
