@@ -48,3 +48,6 @@
 .ze-data-rowvalues > div { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
 .ze-data-rowvalues span { color: var(--ui-fg-muted); white-space: nowrap; }
 .ze-data-rowvalues strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+
+.ze-data-steps { margin: 4px 0 8px; padding-left: 18px; }
+.ze-data-steps li { margin: 2px 0; }
