@@ -12,6 +12,7 @@ import { columnIndex, excelDateText, isDateFormat, numberText, parseDateStyles, 
 import { openZip } from "../apps/ZEditor/src/io/zipReader.js";
 import { readWorkbook } from "../apps/ZEditor/src/io/xlsxReader.js";
 import zlib from "node:zlib";
+import { buildListPage, hasListDesign, layoutEntry, packList } from "../apps/ZEditor/src/model/dataMerge/list.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -368,6 +369,41 @@ readWorkbook(zbuf).then((r) => { xlsxSheets = r; }).catch((e) => { xlsxError = e
   ok(/not a zip/.test(notZip), "a file that is not a zip says so");
   finish();
 });
+
+// ---- Flowing lists
+const lbox = (id, x, y, w, h, grows = false) => ({ id, x, y, width: w, height: h, grows });
+// a photo on the left (id 1), a name above a role (ids 2 and 3) beside it, a line under both (id 4)
+const lboxes = [lbox(1, 0, 0, 60, 60), lbox(2, 70, 0, 200, 20, true), lbox(3, 70, 24, 200, 20, true), lbox(4, 0, 64, 270, 2)];
+const one = layoutEntry(lboxes, new Map([[2, 20], [3, 20]]));
+ok(one.height === 66 && one.shifts.get(3) === 0 && one.shifts.get(4) === 0, "an entry as designed keeps its height");
+const grown = layoutEntry(lboxes, new Map([[2, 40], [3, 20]]));
+ok(grown.shifts.get(3) === 20 && grown.shifts.get(1) === 0 && grown.shifts.get(4) === 0 && grown.height === 86 - 0 || grown.height === 86, "a name that grows two lines pushes the role down; the photo beside it stays");
+const taller = layoutEntry([lbox(1, 0, 0, 100, 20, true), lbox(2, 0, 30, 100, 20)], new Map([[1, 60]]));
+ok(taller.shifts.get(2) === 40 && taller.height === 90, "items below a growing box (and overlapping it sideways) move down by the growth, and the entry gets taller");
+const shorter = layoutEntry([lbox(1, 0, 0, 100, 40, true), lbox(2, 0, 50, 100, 20)], new Map([[1, 20]]));
+ok(shorter.shifts.get(2) === -20 && shorter.height === 50, "a box that comes out shorter pulls what is below it up");
+const pk = packList({ count: 7, heightFor: (d, i) => 100 + (i % 2) * 50, areaFirst: 400, areaNext: 500, gap: 10 });
+ok(pk.map((p) => p.entries.length).join() === "3,3,1" && pk[0].design === "first" && pk[1].design === "continuation", "entries stack until the next does not fit; later pages use the continuation area");
+ok(pk[0].entries.map((e) => e.y).join() === "0,110,270" && pk[1].entries[0].y === 0, "each entry sits below the last with the gap, and a new page starts at the top");
+const tallEntry = packList({ count: 3, heightFor: (d, i) => (i === 1 ? 900 : 100), areaFirst: 400, areaNext: 400, gap: 0 });
+ok(tallEntry.length === 3 && tallEntry[1].overflow === true && tallEntry[0].overflow === false, "an entry taller than the area gets a page of its own and is flagged");
+ok(packList({ count: 0, heightFor: () => 1, areaFirst: 100, areaNext: 100, gap: 0 }).length === 0, "no records, no pages");
+const lAnns = [
+  { id: 1, type: "text", text: "{{group}} list", x: 10, y: 10, width: 300, showOn: "first" },
+  { id: 2, type: "rect", x: 10, y: 100, width: 300, height: 400, listArea: true },
+  { id: 3, type: "text", text: "{{name}}", x: 20, y: 110, width: 200, groupId: "e", listEntry: true },
+  { id: 4, type: "text", text: "{{city}}", x: 20, y: 134, width: 200, groupId: "e", listEntry: true },
+  { id: 5, type: "text", text: "Page {{page in group}} of {{pages in group}}", x: 10, y: 800 },
+];
+ok(hasListDesign(lAnns) && !hasListDesign(lAnns.filter((a) => !a.listArea)), "a list design needs an entry and an area");
+let ln = 1700;
+const lPage = { design: "first", pageInGroup: 1, pagesInGroup: 2, recordsInGroup: 3, groupRecord: { group: "G", name: "A", city: "x" },
+  entries: [{ record: { name: "Ana", city: "Penang" }, y: 0, shifts: new Map([[3, 0], [4, 0]]) }, { record: { name: "Ben", city: "Ipoh" }, y: 80, shifts: new Map([[3, 0], [4, 16]]) }] };
+const lb = buildListPage(lAnns, lPage, { newId: () => ln++, newGroupId: () => "g" + ln++, repeatOthers: true });
+const lt = lb.annotations.map((a) => a.text + "@" + Math.round(a.y)).join("|");
+ok(lt === "G list@10|Ana@100|Penang@124|Ben@180|Ipoh@220|Page 1 of 2@800", "a list page: other items filled, entries placed in the area (shifts added), the area left out, the stacking order kept");
+ok(new Set(lb.annotations.filter((a) => a.groupId).map((a) => a.groupId)).size === 2 && lb.annotations.every((a) => a.listEntry === undefined && a.listArea === undefined), "each entry is its own group, and no markers remain");
+ok(buildListPage(lAnns, { ...lPage, design: "continuation", pageInGroup: 2 }, { newId: () => ln++, newGroupId: () => "g" + ln++, repeatOthers: true }).annotations.every((a) => a.text !== "G list"), "Show on first hides the title on later pages");
 
 function finish() {
 if (fails) { console.log(fails + " failed"); process.exit(1); }

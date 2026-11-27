@@ -12,7 +12,9 @@ import { readPhotos } from "../io/dataPhotos.js";
 import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
-import { fitLength } from "../render/textFit.js";
+import { fitLength, itemBox, textHeightFor } from "../render/textFit.js";
+import { buildListPage, hasListDesign, layoutEntry, listAreaOf, listEntryItems, packList } from "../model/dataMerge/list.js";
+import { fillTextItem } from "../model/dataMerge/build.js";
 import { flowBoxOf, mergeFlowPage, planFlowPages } from "../model/dataMerge/flow.js";
 import { cloneItems, dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
 import { PAGE_SIZES_MM, presetByKey } from "../model/dataMerge/layout.js";
@@ -65,9 +67,11 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   const continuationPage = templatePage ? pages.find((p) => p.dataFor === templatePage.key) || null : null;
   const slotCount = templatePage ? dataSlots(templatePage.annotations || []).length : 0; // data blocks on the designed page (Advanced)
   const nextSlotCount = continuationPage ? dataSlots(continuationPage.annotations || []).length : 0; // 0: no continuation design (or none in it)
-  const blockMode = slotCount > 0;
+  // Flowing list: an entry group and an area on the designed page (model/dataMerge/list.js). It comes before data blocks and letters.
+  const listMode = Boolean(templatePage && hasListDesign(templatePage.annotations));
+  const blockMode = slotCount > 0 && !listMode;
   // Letters: no data blocks, but a long-text box that can run onto the next page (model/dataMerge/flow.js).
-  const letterMode = !blockMode && Boolean(templatePage && flowBoxOf(templatePage.annotations));
+  const letterMode = !blockMode && !listMode && Boolean(templatePage && flowBoxOf(templatePage.annotations));
   // The long-text box needs a fixed height, or it just grows and never overflows.
   const flowProblem = letterMode && [templatePage, continuationPage].some((p) => p && flowBoxOf(p.annotations) && !(flowBoxOf(p.annotations).frameHeight > 0));
   const groupBy = blockMode && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
@@ -128,12 +132,40 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
 
   // The pages a merge would make for the chosen rows.
+  // ---- Flowing list: how the chosen records stack into pages.
+  const listCache = useRef(null);
+  function listPlansFor(chosen) {
+    const k = 72 / 25.4 * MAIN_SCALE; // pixels per mm
+    const designs = [templatePage.annotations || [], continuationPage && hasListDesign(continuationPage.annotations) ? continuationPage.annotations : templatePage.annotations || []];
+    const specs = designs.map((ann) => ({ entry: listEntryItems(ann), area: listAreaOf(ann), boxes: listEntryItems(ann).map(itemBox) }));
+    const layouts = new Map();
+    const layoutFor = (d, i) => {
+      const key = d + ":" + i;
+      if (!layouts.has(key)) {
+        const filled = new Map();
+        specs[d].entry.forEach((a) => { if (a.type === "text" && !(a.frameHeight > 0)) filled.set(a.id, textHeightFor(a, fillTextItem(a, chosen[i], { lang: "en" }).ann.text || "")); });
+        layouts.set(key, layoutEntry(specs[d].boxes, filled));
+      }
+      return layouts.get(key);
+    };
+    const packed = packList({ count: chosen.length, heightFor: (d, i) => layoutFor(d, i).height, areaFirst: specs[0].area.height, areaNext: specs[1].area.height, gap: view.dataListGap * k });
+    return packed.map((pg, n) => ({
+      design: pg.design, overflow: pg.overflow, pageInGroup: n + 1, pagesInGroup: packed.length, recordsInGroup: chosen.length, groupRecord: chosen[0],
+      entries: pg.entries.map((e) => ({ record: chosen[e.index], y: e.y, shifts: layoutFor(pg.design === "first" ? 0 : 1, e.index).shifts })),
+    }));
+  }
   const flowCache = useRef(null);
+  function plannedPagesNow() { return templatePage ? plannedPages(undefined, undefined) : []; }
   function flowPlansFor(chosen) {
     return planFlowPages(chosen, templatePage.annotations || [], continuationPage ? continuationPage.annotations || [] : null, fitLength, "en");
   }
   function plannedPages(from, to) {
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
+    if (listMode) {
+      const key = [templatePage.annotations, continuationPage && continuationPage.annotations, records, from, to, view.dataListGap];
+      if (!listCache.current || listCache.current.key.some((v, i) => v !== key[i])) listCache.current = { key, plans: chosen.length ? listPlansFor(chosen) : [] };
+      return listCache.current.plans;
+    }
     if (letterMode) { // measuring every record is slow, so it is kept until the page, the design or the rows change
       const key = [templatePage.annotations, continuationPage && continuationPage.annotations, records, from, to];
       if (!flowCache.current || flowCache.current.key.some((v, i) => v !== key[i])) flowCache.current = { key, plans: flowPlansFor(chosen) };
@@ -151,16 +183,19 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     history.recordUndoCheckpoint();
     const newId = () => nextAnnIdRef.current++;
     const newGroupId = () => "g" + nextAnnIdRef.current++;
+    const listPlans = listMode ? listPlansFor(chosen.map((i) => records[i])) : null;
     const flowPlans = letterMode ? flowPlansFor(chosen.map((i) => records[i])) : null;
-    const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, nextSlotCount, groupBy }) : flowPlans;
+    const plans = listPlans || (blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, nextSlotCount, groupBy }) : flowPlans);
     const made = (plans || chosen).map((item, n) => {
-      const merged = flowPlans
+      const merged = listPlans
+        ? buildListPage((item.design === "continuation" && continuationPage && hasListDesign(continuationPage.annotations) ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto, makeQr: qrDataUrl })
+        : flowPlans
         ? mergeFlowPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto, makeQr: qrDataUrl })
         : plans
           ? mergeGroupPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto, makeQr: qrDataUrl })
           : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en", findPhoto, makeQr: qrDataUrl });
       // `mergeRecord`: the row this page was made from, kept so Export each record as a PDF can name and group the pages (not for data blocks: a page holds several rows).
-      const record = flowPlans ? item.record : plans ? null : records[item];
+      const record = flowPlans ? item.record : plans ? null : records[item]; // (list and data block pages hold several rows)
       const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: flowPlans ? item.recordNo : plans ? n + 1 : item + 1, ...(record ? { mergeRecord: record } : {}), hidden: undefined };
       if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
       return copy;
@@ -227,6 +262,9 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     isBlock: blockTargets.length > 0 && blockTargets.every((a) => a.dataBlock),
     showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
     hasBlock: selectedItems.some((a) => a.dataBlock),
+    isListEntry: blockTargets.length > 0 && blockTargets.every((a) => a.listEntry),
+    isRect: selectedItems.length === 1 && selectedItems[0].type === "rect",
+    isListArea: selectedItems.length === 1 && Boolean(selectedItems[0].listArea),
     isText: selectedItems.length === 1 && selectedItems[0].type === "text",
     flowText: selectedItems.length === 1 && Boolean(selectedItems[0].flowText),
     isPicture: selectedItems.length > 0 && selectedItems.every((a) => a.type === "image"),
@@ -315,6 +353,13 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     setMessage("That page is an ordinary page again.");
   }
   // The selected text box is the long text: it continues onto the next page when it is full. One per page.
+  // The selected group is the list entry; the selected rectangle is the list area (one of each per page).
+  function setListEntry(on) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, listEntry: on || undefined, dataBlock: on ? undefined : a.dataBlock } : on && a.listEntry ? { ...a, listEntry: undefined } : a)));
+  }
+  function setListArea(on) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "rect" ? { ...a, listArea: on || undefined } : on && a.listArea ? { ...a, listArea: undefined } : a)));
+  }
   function setFlowText(on) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => {
       if (a.type !== "text") return a;
@@ -327,7 +372,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo: stepRecord, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo: stepRecord, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, listMode, setListEntry, setListArea, listOverflow: listMode && plannedPagesNow().some((p) => p.overflow), listHasEntry: Boolean(templatePage && listEntryItems(templatePage.annotations).length), listHasArea: Boolean(templatePage && listAreaOf(templatePage.annotations)), setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };
