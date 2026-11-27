@@ -247,7 +247,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
   // A picture becomes the QR code of `text` (which may use {{fields}}); an empty text makes it an ordinary picture again.
   function setQrText(text) {
-    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...(text ? qrPatch(text) : { qrText: undefined }), picField: text ? undefined : a.picField } : a)), "qr:" + selectedIds.join(","));
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...(text ? { ...qrPatch(text), qrType: "custom", qrValues: { text } } : { qrText: undefined, qrType: undefined, qrValues: undefined }), picField: text ? undefined : a.picField } : a)), "qr:" + selectedIds.join(","));
   }
   function markDataBlock(on) {
     if (!selected.grouped) { setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block."); return; }
