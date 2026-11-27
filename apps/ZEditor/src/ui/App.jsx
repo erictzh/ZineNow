@@ -72,7 +72,6 @@ export function App() {
   const marquee = useMarquee({ doc, selection, edits, toolDefaults, status, history });
   // Undo/Redo with a magic-eraser preview open throw the preview away instead (it isn't in the history yet).
   const uiHistory = { ...history, handleUndo: () => { if (!magic.cancel()) history.handleUndo(); }, handleRedo: () => { if (!magic.cancel()) history.handleRedo(); } };
-  const dataMerge = useDataMerge({ doc, history, view, edits, selection });
   const pageOps = usePageOps({ doc, history, selection });
   const pageBleed = usePageBleed({ doc, history, status });
   const guides = useGuides({ doc, view, history });
@@ -80,6 +79,7 @@ export function App() {
   // Picking a guide leaves the item selection (the Format panel shows one thing); picking an item puts the guide down.
   const pickGuide = (id) => { guides.select(id); if (id) { selection.setSelectedAnnId(null); selection.setSelectedAnnIds([]); } };
   const project = useProject({ doc, history, status, view, toolDefaults });
+  const dataMerge = useDataMerge({ doc, history, view, edits, selection, project, status });
   const dialogs = useDialogs({ pages: doc.pages, openProjectPicker: project.openProjectPicker });
   const files = useDocumentFiles({ doc, history, status, project, selection, dialogs });
   const exporter = useExport({ doc, status, view, project, selection });

@@ -2,6 +2,11 @@
 // one page per row from the page you designed. The file lives inside the project (view.dataSource).
 
 import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems, qrProblems } from "../model/dataMerge/build.js";
+import { titleToFileName } from "../model/documentTitle.js";
+import { recordFileNames, recordGroups } from "../model/dataMerge/export.js";
+import { saveFile, writeFileHandle } from "../io/fileSave.js";
+import { buildExportPdfBytes } from "../io/pdfExport.js";
+import { makeZip } from "../io/zipWriter.js";
 import { qrDataUrl } from "../io/qrImage.js";
 import { readPhotos } from "../io/dataPhotos.js";
 import { applyCalculated } from "../model/dataMerge/calc.js";
@@ -17,7 +22,7 @@ import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
 import { MAIN_SCALE } from "../constants.js";
 const { useMemo, useRef, useState } = React;
 
-export function useDataMerge({ doc, history, view, edits, selection }) {
+export function useDataMerge({ doc, history, view, edits, selection, project, status }) {
   const { pages, setPages, selectedIdx, setSelectedIdx, setSelectedPageIndices, nextKeyRef, nextAnnIdRef } = doc;
   const [recordNo, setRecordNo] = useState(0); // the row the page shows (0-based, in the chosen order)
   const [message, setMessage] = useState("");
@@ -150,6 +155,39 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     return made.length;
   }
 
+  // ---- Export each record as its own PDF: a zip, or files written into a folder.
+  const exportGroups = useMemo(() => (templatePage ? recordGroups(pages, templatePage.key) : []), [pages, templatePage && templatePage.key]);
+  const exportPattern = view.dataExportPattern || "{{" + (idColumn || fileHeaders[0] || "id") + "}}";
+  const exportNames = useMemo(() => recordFileNames(exportGroups, exportPattern, "en"), [exportGroups, exportPattern]);
+  const [exporting, setExporting] = useState(false);
+  async function exportRecords(target) {
+    if (!exportGroups.length || exporting) return;
+    setExporting(true);
+    try {
+      let folder = null;
+      if (target === "folder") {
+        try { folder = await window.showDirectoryPicker({ mode: "readwrite" }); } catch (err) { if (err && err.name === "AbortError") return; throw err; }
+      }
+      const files = [];
+      for (let i = 0; i < exportGroups.length; i++) {
+        setMessage("Making PDF " + (i + 1) + " of " + exportGroups.length + "…");
+        const bytes = await buildExportPdfBytes(exportGroups[i].pageIndices.map((n) => pages[n]), doc.pdfDocsRef, view.pageNumbers, () => {}, { bleed: view.exportBleed, cropMarks: view.exportCropMarks });
+        const data = new Uint8Array(bytes);
+        if (folder) await writeFileHandle(await folder.getFileHandle(exportNames[i], { create: true }), new Blob([data], { type: "application/pdf" }));
+        else files.push({ name: exportNames[i], data });
+      }
+      if (!folder) {
+        const saved = await saveFile(new Blob([makeZip(files)], { type: "application/zip" }), titleToFileName(project.docTitle + " - records", ".zip"), "application/zip", "Zip file", [".zip"]);
+        if (saved === "cancelled") { setMessage(""); return; }
+      }
+      setMessage(exportGroups.length + (exportGroups.length === 1 ? " PDF" : " PDFs") + " saved" + (folder ? ' to "' + folder.name + '"' : " in a zip") + ".");
+    } catch (err) {
+      setMessage("Couldn't export — " + (err && err.message ? err.message : "unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // ---- Advanced: mark the selected group as a data block, and say which pages a non-data item shows on.
   const selectedIds = selection.selectedAnnotationIds();
   const selectedItems = page ? (page.annotations || []).filter((a) => selectedIds.includes(a.id)) : [];
@@ -261,7 +299,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };

@@ -5,6 +5,8 @@ import { cloneItems, dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupP
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/model/dataMerge/calc.js";
 import { flowBoxOf, mergeFlowPage, planFlowPages, splitFlowText } from "../apps/ZEditor/src/model/dataMerge/flow.js";
+import { recordFileNames, recordGroups, safeFileName } from "../apps/ZEditor/src/model/dataMerge/export.js";
+import { makeZip } from "../apps/ZEditor/src/io/zipWriter.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -273,4 +275,17 @@ const fpage = (plan, ann) => mergeFlowPage(ann, plan, { newId: () => fn++, newGr
 const fp1 = fpage(fl[1], L1), fp2 = fpage(fl[2], L2);
 ok(fp1.map((a) => a.text).join("|") === fl[1].flowText + "|To Ben|Page 1 of 3" && fp2.map((a) => a.text).join("|") === fl[2].flowText + "|Page 2 of 3", "the long text goes in the long-text box, Show on and page counters work");
 ok(fp1.every((a) => a.flowText === undefined) && flowBoxOf(L1).id === 1 && flowBoxOf([{ type: "text", text: "a" }]) === null, "made pages carry no marker; the long-text box is found");
+// ---- Export each record
+const epages = [
+  { key: 1, hidden: true }, { key: 2, mergedFrom: 1, mergeRow: 1, mergeRecord: { id: "7", name: "Ana" } }, { key: 3, mergedFrom: 1, mergeRow: 2, mergeRecord: { id: "8", name: "Ana" } },
+  { key: 4, mergedFrom: 1, mergeRow: 2, mergeRecord: { id: "8", name: "Ana" } }, { key: 5, mergedFrom: 1, mergeRow: 3, mergeRecord: { id: "9", name: "a/b:c?" } },
+];
+const eg = recordGroups(epages);
+ok(eg.length === 3 && eg[1].pageIndices.join() === "2,3" && eg[0].pageIndices.join() === "1", "the pages of one record are grouped, in page order");
+ok(recordFileNames(eg, "{{id}} {{name}}", "en").join("|") === "7 Ana.pdf|8 Ana.pdf|9 a b c.pdf", "file names come from the pattern, made safe");
+ok(recordFileNames(eg, "{{name}}", "en").join("|") === "Ana.pdf|Ana (2).pdf|a b c.pdf", "a name used twice gets a number");
+ok(recordFileNames(eg, "", "en")[0] === "record 1.pdf" && safeFileName("..  ", "x") === "x" && safeFileName("A:B", "x") === "A B", "an empty name falls back to the record number");
+const zip = makeZip([{ name: "a.pdf", data: new Uint8Array([1, 2, 3]) }, { name: "é.pdf", data: new Uint8Array([9]) }], new Date(2026, 10, 27, 10, 20, 30));
+const zv = new DataView(zip.buffer);
+ok(zv.getUint32(0, true) === 0x04034b50 && zv.getUint32(zip.length - 22, true) === 0x06054b50 && zv.getUint16(zip.length - 22 + 10, true) === 2, "a zip has local headers and an end record with the number of files");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

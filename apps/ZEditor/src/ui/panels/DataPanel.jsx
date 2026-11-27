@@ -1,5 +1,6 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { RecordExportDialog } from "../dialogs/RecordExportDialog.jsx";
 import { CalcColumns } from "./CalcColumns.jsx";
 import { SHOW_ON } from "../../model/dataMerge/groups.js";
 import { GRID_PRESETS, presetByKey } from "../../model/dataMerge/layout.js";
@@ -25,6 +26,7 @@ export function DataPanel({ merge, view, hasPage }) {
   const [range, setRange] = useState({ from: "", to: "" });
   const [hideTemplate, setHideTemplate] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [grid, setGrid] = useState({ cols: 2, rows: 5, gap: 0, preset: "" });
   const panelRef = useRef(null), headRef = useRef(null);
   const [position, setPositionState] = useState(rememberedPlace.position);
@@ -88,6 +90,7 @@ export function DataPanel({ merge, view, hasPage }) {
   }
 
   return (
+    <>
     <aside
       className={"ze-data-panel" + (size ? " is-sized" : "")} aria-label="Data merge" ref={panelRef}
       style={{
@@ -304,10 +307,13 @@ export function DataPanel({ merge, view, hasPage }) {
           <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0)} onClick={make}>
             {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
           </button>
+          <button type="button" className="ze-data-link" disabled={merge.exportGroups.length === 0} title={merge.exportGroups.length === 0 ? "Make pages first (data blocks put several records on a page, so they cannot be split by record)" : "One PDF for each record, with all of its pages"} onClick={() => setExportOpen(true)}>Export each record as a PDF…</button>
           {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}
         </div>
       )}
       {EDGES.map((edge) => <div key={edge.key} className={"ze-layers-resize ze-layers-resize--" + edge.key} aria-hidden="true" onPointerDown={(e) => startResize(e, edge)} />)}
     </aside>
+    <RecordExportDialog open={exportOpen} onClose={() => setExportOpen(false)} merge={merge} view={view} />
+    </>
   );
 }
