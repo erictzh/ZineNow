@@ -17,6 +17,9 @@ const EDGES = [
   { key: "sw", left: true, bottom: true }, { key: "se", right: true, bottom: true },
 ];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+// A few made-up rows for the "Try it with sample data" button.
+const SAMPLE_CSV = "id,first name,last name,city,date\n1,Aisyah,Rahman,Penang,2026-12-05\n2,Wei Ming,Tan,Ipoh,2026-12-06\n3,Priya,Nair,Kuala Lumpur,2026-12-12\n4,Faiz,Yusof,Johor Bahru,2026-12-19\n5,Mei Ling,Lim,Kuching,2026-12-20\n";
+
 // A CSV is UTF-8 (what Google Sheets and recent Excel write), or in older files Windows-1252 (accents would show as �): then it is read that way.
 function decodeCsv(buffer) {
   try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer); } catch { return new TextDecoder("windows-1252").decode(buffer); }
@@ -132,10 +135,17 @@ export function DataPanel({ merge, view, hasPage }) {
         {!parsed && (
           <div className="ze-data-section">
             {view.dataTemplateColumns.length > 0 && <p className="ze-data-help"><strong>This template needs a CSV with these columns:</strong> {view.dataTemplateColumns.join(", ")}.</p>}
+            <p className="ze-data-help"><strong>New to mail merge?</strong> You design one page, put the words that change in it, and ZEditor makes a copy for every row of your spreadsheet.</p>
+            <ol className="ze-data-help ze-data-steps">
+              <li>Choose your spreadsheet (a CSV file) below.</li>
+              <li>Click a column name to put it in a text box on your page, for example the name.</li>
+              <li>Step through the rows to preview, then press <strong>Make pages</strong>.</li>
+            </ol>
             <p className="ze-data-help">Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project.</p>
             <input ref={fileRef} type="file" accept=".csv,.tsv,.txt,text/csv" hidden onChange={onFile} />
             <button type="button" className="ze-btn ze-data-wide" onClick={() => fileRef.current && fileRef.current.click()}>Choose CSV file…</button>
             <button type="button" className="ze-data-link" onClick={() => setPasting(!pasting)}>{pasting ? "Hide" : "Or paste the rows here"}</button>
+            <button type="button" className="ze-data-link" onClick={() => merge.connect("sample.csv", SAMPLE_CSV)}>Or try it with 5 made-up rows</button>
             {pasting && (
               <>
                 <textarea className="ze-data-paste" rows={6} placeholder={"name,city\nAna,Penang\nBen,Ipoh"} value={pasted} onChange={(e) => setPasted(e.target.value)} />

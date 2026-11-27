@@ -4,6 +4,8 @@
 
 ## How to use
 
+*(New to this? The Data panel starts with a three-step reminder, and **Or try it with 5 made-up rows** loads a tiny sample so you can try everything at once.)*
+
 1. Save your sheet as a **CSV** file (in Excel or Google Sheets: *Save as / Download → CSV*). The **first line must be the column names**, then one line per row.
 2. Click the **Data** button (the table icon beside Layers), then **Choose CSV file…** (or **Or paste the rows here**). The file is kept **inside your project**, so it travels with the .znow file.
 3. Design your page. In a text box, write a field in double curly brackets, like `Dear {{name}},`, or click a **field chip** in the Data panel: it adds the field to the selected text box, or to a new one.
