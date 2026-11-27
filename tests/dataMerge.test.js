@@ -1,6 +1,6 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
-import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
+import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, fillQrItem, qrProblems, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
 import { cloneItems, dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/model/dataMerge/calc.js";
@@ -241,4 +241,18 @@ ok(planPages(fourteen, { slotCount: 5, groupBy: "band" }).map((p) => p.slotRecor
 const cl = cloneItems(gblock, () => gid++, () => "G" + gn++);
 ok(cl.length === 2 && cl[0].dataBlock === true && cl[0].groupId === cl[1].groupId && cl[0].groupId !== "b" && cl[0].id !== 1, "a copy of the designed page keeps its data block markers, with new ids");
 ok(templatePages([{ key: 1, hidden: true, annotations: [] }, { key: 2, dataFor: 1, hidden: true, annotations: [] }, { key: 3, mergedFrom: 1, annotations: [] }]).every((p) => !p.hidden) && templatePages([{ key: 1, annotations: [] }, { key: 2, dataFor: 1, annotations: [] }, { key: 3, mergedFrom: 1, annotations: [] }]).length === 2, "a data template keeps the continuation design (shown again) and drops the made pages");
+// ---- QR codes
+const fakeQr = (text) => (text.length > 50 ? null : { src: "qr:" + text, width: 330, height: 330 });
+const qrFrame = { id: 1, type: "image", x: 10, y: 20, width: 100, height: 60, src: "x", naturalWidth: 5, naturalHeight: 5, qrText: "https://e.org/{{id}}" };
+const qrDone = fillQrItem(qrFrame, { id: "42" }, fakeQr).ann;
+ok(qrDone.src === "qr:https://e.org/42" && qrDone.width === 60 && qrDone.height === 60 && qrDone.x === 30 && qrDone.y === 20, "a QR item takes the code of its text, square and centred in its frame");
+ok(fillQrItem(qrFrame, { id: "" }, fakeQr).ann === null, "a field that is empty leaves the code out (it would point to the wrong place)");
+ok(fillQrItem({ ...qrFrame, qrText: "{{id}}" }, { id: "" }, fakeQr).ann === null && fillQrItem({ ...qrFrame, qrText: "{{nope}}" }, { id: "1" }, fakeQr).ann === null, "nothing to encode, or a field the data lacks: the code is left out");
+ok(fillQrItem({ ...qrFrame, qrText: "{{id}}" }, { id: "x".repeat(60) }, fakeQr).ann === null, "text too long for a code: left out");
+ok(fillQrItem({ id: 2, type: "image" }, {}, fakeQr).handled === false, "a picture without QR text is left alone");
+ok(fieldsUsedOnPage([qrFrame]).join() === "id", "the fields a QR code uses count as used");
+ok(qrProblems([qrFrame, { ...qrFrame, qrText: "{{c}}" }], [{ id: "1", c: "" }, { id: "2", c: "z" }]).map((q) => q.empty).join() === "0,1", "QR problems count rows with nothing to encode");
+let qn = 900;
+const qm = mergeAnnotations([qrFrame], { id: "7" }, { newId: () => qn++, newGroupId: () => "g" + qn++, makeQr: fakeQr });
+ok(qm.annotations.length === 1 && qm.annotations[0].src === "qr:https://e.org/7" && qm.annotations[0].qrText === undefined, "a merged page gets the QR code and no marker");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

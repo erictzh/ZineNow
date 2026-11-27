@@ -6,8 +6,8 @@ import { fieldsIn, fillTemplate } from "./fields.js";
 export function fieldsUsedOnPage(annotations) {
   const out = [];
   for (const a of annotations || []) {
-    if (a.type !== "text" || !a.text) continue;
-    for (const f of fieldsIn(a.text)) if (!out.includes(f)) out.push(f);
+    const sources = [a.type === "text" ? a.text : "", a.type === "image" ? a.qrText : ""]; // a QR code's text can use fields too
+    for (const t of sources) for (const f of t ? fieldsIn(t) : []) if (!out.includes(f)) out.push(f);
   }
   return out;
 }
@@ -79,7 +79,7 @@ export function remapItems(chosen, newId, newGroupId) {
   const ids = new Map(), groups = new Map();
   for (const a of chosen) ids.set(a.id, newId());
   return chosen.map((a) => {
-    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined };
+    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined, qrText: undefined };
     if (copy.groupId) {
       if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
       copy.groupId = groups.get(copy.groupId);
@@ -89,21 +89,46 @@ export function remapItems(chosen, newId, newGroupId) {
   });
 }
 
-// One item filled for a record: text gets its fields, a picture field its photo. Returns { ann, missing } (ann null: leave it out).
-export function fillItem(a, record, { lang, findPhoto } = {}) {
+// ---- QR codes: a picture item with `qrText` (text that may use {{fields}}, e.g. "https://example.com/{{id}}") becomes the QR code of that text.
+// `makeQr(text)` draws it: { src, width, height } or null (the text cannot be made into a code). The code is square and centred in the frame.
+export function fillQrItem(ann, record, makeQr, lang) {
+  if (ann.type !== "image" || !ann.qrText) return { handled: false, ann };
+  const result = fillTemplate(ann.qrText, record, { lang });
+  const text = result.text.trim();
+  if (!text || result.missing.length || result.empty.length || !makeQr) return { handled: true, ann: null };
+  const qr = makeQr(text);
+  if (!qr) return { handled: true, ann: null };
+  const side = Math.min(ann.width, ann.height);
+  return { handled: true, ann: { ...ann, src: qr.src, naturalWidth: qr.width, naturalHeight: qr.height, cropX: undefined, cropY: undefined, cropW: undefined, cropH: undefined, x: ann.x + (ann.width - side) / 2, y: ann.y + (ann.height - side) / 2, width: side, height: side } };
+}
+
+// The QR codes a page uses: [{ text, empty }]: how many of the records leave the code out (a field is empty or missing, so the code would be wrong).
+export function qrProblems(annotations, records, lang) {
+  return (annotations || []).filter((a) => a.type === "image" && a.qrText).map((a) => {
+    let empty = 0;
+    for (const r of records) { const res = fillTemplate(a.qrText, r, { lang }); if (!res.text.trim() || res.missing.length || res.empty.length) empty++; }
+    return { text: a.qrText, empty };
+  });
+}
+
+// One item filled for a record: text gets its fields, a picture field its photo, a QR code item its code. Returns { ann, missing } (ann null:
+// leave it out).
+export function fillItem(a, record, { lang, findPhoto, makeQr } = {}) {
   const pic = fillPictureItem(a, record, findPhoto);
   if (pic.handled) return { ann: pic.ann, missing: [] };
+  const qr = fillQrItem(a, record, makeQr, lang);
+  if (qr.handled) return { ann: qr.ann, missing: [] };
   const { ann, result } = fillTextItem(a, record, { lang });
   return { ann, missing: result ? result.missing : [] };
 }
 
 // The items of a template page filled for one record, as new items (see remapItems). Returns { annotations, missing } where missing lists fields
 // the text asks for that the data does not have. `findPhoto` (makePhotoFinder) supplies the photos for picture fields.
-export function mergeAnnotations(annotations, record, { newId, newGroupId, lang, findPhoto } = {}) {
+export function mergeAnnotations(annotations, record, { newId, newGroupId, lang, findPhoto, makeQr } = {}) {
   const missing = [];
   const chosen = [];
   for (const a of annotations) {
-    const filled = fillItem(a, record, { lang, findPhoto });
+    const filled = fillItem(a, record, { lang, findPhoto, makeQr });
     for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
     if (filled.ann) chosen.push(filled.ann);
   }

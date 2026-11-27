@@ -255,6 +255,14 @@ export function DataPanel({ merge, view, hasPage }) {
                     </select>
                   </label>
                 )}
+                {merge.selected.isPicture && (
+                  <>
+                    <label className="ze-data-row">Or make it a QR code of{" "}
+                      <input type="text" placeholder="https://example.com/{{id}}" value={merge.selected.qrText} onChange={(e) => merge.setQrText(e.target.value)} />
+                    </label>
+                    <p className="ze-data-help">Put {"{{column}}"} where a value goes, for example https://example.com/{"{{id}}"}. Each page gets its own code, drawn square and centred in the picture. Print one and scan it before you print many.</p>
+                  </>
+                )}
               </div>
             )}
           </>
@@ -278,9 +286,10 @@ export function DataPanel({ merge, view, hasPage }) {
               {check.photoCount > 0 && p.empty > 0 ? p.empty + " row" + (p.empty === 1 ? " has" : "s have") + " no photo name." : ""}
             </p>
           ))}
-          {check.used.length === 0 && check.pictures.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
+          {check.qrs.filter((q) => q.empty > 0).map((q) => <p key={q.text} className="ze-data-warn">{q.empty} of the chosen rows give an empty QR code for “{q.text}”, so it is left out.</p>)}
+          {check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0 && hasPage && <p className="ze-data-warn">No field is used on this page yet.</p>}
           {merge.earlierCount > 0 && <p className="ze-data-help">{merge.earlierCount} page{merge.earlierCount === 1 ? "" : "s"} made from this page earlier will be replaced.</p>}
-          <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0)} onClick={make}>
+          <button type="button" className="ze-btn ze-btn-primary ze-data-wide" disabled={!hasPage || chosenCount < 1 || (check.used.length === 0 && check.pictures.length === 0 && check.qrs.length === 0)} onClick={make}>
             {confirming ? "Replace " + merge.earlierCount + " and make " + chosenCount + " — click to confirm" : "Make " + chosenCount + " page" + (chosenCount === 1 ? "" : "s")}
           </button>
           {merge.onGeneratedPage && <p className="ze-data-help">This page was made by a merge. Edit the page you designed, then make the pages again.</p>}

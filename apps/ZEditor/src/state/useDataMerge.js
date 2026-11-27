@@ -1,7 +1,8 @@
 // Data merge (Data button), Basic: connect a spreadsheet (CSV), put its columns into text as {{column}}, preview each row on the page, and make
 // one page per row from the page you designed. The file lives inside the project (view.dataSource).
 
-import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems } from "../model/dataMerge/build.js";
+import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems, qrProblems } from "../model/dataMerge/build.js";
+import { qrDataUrl } from "../io/qrImage.js";
 import { readPhotos } from "../io/dataPhotos.js";
 import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
@@ -34,7 +35,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   const findPhoto = useMemo(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
   const showPreview = view.dataPreviewOn && count > 0;
   // What the page canvas runs its items through to show the chosen row (and, with data blocks, the rows after it in the other blocks).
-  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto) : null;
+  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto, qrDataUrl) : null;
 
   const page = pages[selectedIdx] || null;
   // The designed page this page belongs to: itself, or (for a made page or a continuation design) the page it came from or is for.
@@ -82,8 +83,9 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
     const result = checkMerge([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], headers, chosen);
+    const qrs = qrProblems([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], chosen, "en");
     const pictures = pictureProblems([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], chosen, findPhoto);
-    return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)), pictures, photoCount: view.dataPhotos.length };
+    return { ...result, missing: result.missing.filter((f) => !VIRTUAL_FIELDS.includes(f)), pictures, qrs, photoCount: view.dataPhotos.length };
   }
 
   // The pages a merge would make for the chosen rows.
@@ -104,8 +106,8 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     const plans = blockMode ? planPages(chosen.map((i) => records[i]), { slotCount, nextSlotCount, groupBy }) : null;
     const made = (plans || chosen).map((item, n) => {
       const merged = plans
-        ? mergeGroupPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto })
-        : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en", findPhoto });
+        ? mergeGroupPage((item.design === "continuation" && continuationPage ? continuationPage : templatePage).annotations || [], item, { newId, newGroupId, lang: "en", repeatOthers: view.dataRepeatOthers, findPhoto, makeQr: qrDataUrl })
+        : mergeAnnotations(templatePage.annotations || [], records[item], { newId, newGroupId, lang: "en", findPhoto, makeQr: qrDataUrl });
       const copy = { ...templatePage, key: nextKeyRef.current++, annotations: merged.annotations, mergedFrom: templatePage.key, mergeRow: plans ? n + 1 : item + 1, hidden: undefined };
       if (templatePage.guides) copy.guides = templatePage.guides.map((g) => ({ ...g }));
       return copy;
@@ -140,6 +142,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
     hasBlock: selectedItems.some((a) => a.dataBlock),
     isPicture: selectedItems.length > 0 && selectedItems.every((a) => a.type === "image"),
+    qrText: selectedItems.length > 0 && selectedItems.every((a) => (a.qrText || "") === (selectedItems[0].qrText || "")) ? selectedItems[0].qrText || "" : "",
     picField: selectedItems.length > 0 && selectedItems.every((a) => (a.picField || "") === (selectedItems[0].picField || "")) ? selectedItems[0].picField || "" : "\u0000",
   };
   // Photos for picture fields: choose a folder (or files); each is shrunk and kept in the project.
@@ -152,7 +155,11 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     setMessage(added.length + (added.length === 1 ? " photo" : " photos") + " added.");
   }
   function setPicField(column) {
-    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, picField: column || undefined } : a)));
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, picField: column || undefined, qrText: column ? undefined : a.qrText } : a)));
+  }
+  // A picture becomes the QR code of `text` (which may use {{fields}}); an empty text makes it an ordinary picture again.
+  function setQrText(text) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "image" ? { ...a, qrText: text || undefined, picField: text ? undefined : a.picField } : a)), "qr:" + selectedIds.join(","));
   }
   function markDataBlock(on) {
     if (!selected.grouped) { setMessage("Group the items first (select them and press Ctrl+G), then mark the group as a data block."); return; }
@@ -224,7 +231,7 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setQrText, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };

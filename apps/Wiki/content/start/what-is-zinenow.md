@@ -93,10 +93,11 @@ window.ZINENOW_APPS = [
     "@pdf-lib/fontkit": "^1.1.1",
     "esbuild": "0.24.0",
     "hyphen": "^1.14.1",
-    "marked": "^12.0.2"
+    "marked": "^12.0.2",
+    "qrcode-generator": "^1.4.4"
   }
 ```
 
-**The Logic:** `window.ZINENOW_APPS` is a plain **array** (an ordered list) of **objects** (`{ folder: "ZEditor", desc: "…" }`). The home page reads it ([App cards](home/app-cards)); the order in the list is the order of the cards. `experimental: true` hides an app until you switch on *Experimental AI features*. `package.json` is the project's **manifest**: `"private": true` means "never publish this to the npm package registry"; `"license"` uses an **SPDX identifier** (a standard short code for a licence). The `scripts` are shortcuts you run with `npm run <name>`: `build`, `watch`, `check` and `test` ([How it is built](start/how-its-built)). The `devDependencies` are tools used only while developing (they are **not** shipped to users): `esbuild` bundles the code, `marked` makes this wiki's pages, `hyphen` and `@pdf-lib/fontkit` are used by ZEditor.
+**The Logic:** `window.ZINENOW_APPS` is a plain **array** (an ordered list) of **objects** (`{ folder: "ZEditor", desc: "…" }`). The home page reads it ([App cards](home/app-cards)); the order in the list is the order of the cards. `experimental: true` hides an app until you switch on *Experimental AI features*. `package.json` is the project's **manifest**: `"private": true` means "never publish this to the npm package registry"; `"license"` uses an **SPDX identifier** (a standard short code for a licence). The `scripts` are shortcuts you run with `npm run <name>`: `build`, `watch`, `check` and `test` ([How it is built](start/how-its-built)). The `devDependencies` are tools used only while developing (they are **not** shipped to users): `esbuild` bundles the code, `marked` makes this wiki's pages, `hyphen`, `@pdf-lib/fontkit` and `qrcode-generator` (the QR codes of the data merge) are used by ZEditor.
 
 **Worked example.** The list has four entries, so the home page would show four cards: ZineArranger, Markdown-to-PDF, ZEditor, and AiToolsLocal, but the last has `experimental: true`, so with the AI switch off (the default) it shows **three**; turning it on shows **four**.
