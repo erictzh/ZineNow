@@ -3,6 +3,7 @@
 import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
 import { dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
+import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/model/dataMerge/calc.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -215,4 +216,19 @@ const sg = sheetGrid(presetByKey("label-3x7"), 2);
 ok(sg.cols === 3 && sg.rows === 7 && sg.pitch.x === (63.5 + 2.54) * 2 && sg.pitch.y === 38.1 * 2 && sg.origin.x === 14.4, "a label sheet in pixels: cell plus gap apart, from its first cell");
 const sgc = gridCopies(gblock, { x: 14.4, y: 30.3, width: 100, height: 50 }, { cols: 3, rows: 7, pitch: sg.pitch }, { newId: () => gid++, newGroupId: () => "G" + gn++ }, { width: 2000, height: 2000 });
 ok(sgc.items.length === 40 && Math.abs(sgc.items[0].x - (20 + sg.pitch.x)) < 1e-9 && sgc.items[0].y === 30, "a sheet grid adds one copy for every cell but the first");
+// ---- Calculated columns
+const crec = { first: "ana", last: "lopez  ", born: "1990-07-22", price: "1,200", empty: "", dob2: "26 Nov 2000" };
+const T = new Date(2026, 10, 27); // 27 Nov 2026
+ok(calculate({ kind: "rownumber", start: 5, pad: 3 }, crec, 2) === "007" && calculate({ kind: "rownumber" }, crec, 0) === "1", "row number: start and padding");
+ok(calculate({ kind: "join", columns: ["first", "empty", "last"], separator: " " }, crec, 0) === "ana lopez", "join skips empty cells");
+ok(calculate({ kind: "initials", column: "first" }, { first: "ana maria lopez" }, 0) === "AM" && calculate({ kind: "initials", column: "first", max: 3 }, { first: "ana maria lopez" }, 0) === "AML", "initials");
+ok(calculate({ kind: "word", column: "a", which: "last" }, { a: "Ahmad bin Abdullah" }, 0) === "Abdullah" && calculate({ kind: "word", column: "a", which: "first" }, { a: "Ahmad bin Abdullah" }, 0) === "Ahmad", "first or last word");
+ok(calculate({ kind: "case", column: "first", mode: "title" }, crec, 0) === "Ana" && calculate({ kind: "case", column: "first", mode: "upper" }, crec, 0) === "ANA", "capital letters");
+ok(calculate({ kind: "text", column: "price", before: "RM " }, crec, 0) === "RM 1,200" && calculate({ kind: "text", column: "empty", before: "RM " }, crec, 0) === "", "words before and after, nothing for an empty cell");
+ok(calculate({ kind: "math", column: "price", op: "*", value: 2 }, crec, 0) === "2400" && calculate({ kind: "math", column: "price", op: "/", value: 0 }, crec, 0) === "" && calculate({ kind: "math", column: "first", op: "+", value: 1 }, crec, 0) === "", "calculate with a number; no divide by zero, no text");
+ok(calculate({ kind: "age", column: "born" }, crec, 0, T) === "36" && calculate({ kind: "age", column: "dob2" }, crec, 0, new Date(2026, 10, 25)) === "25" && calculate({ kind: "age", column: "empty" }, crec, 0, T) === "", "age counts whole years, birthday day included");
+ok(calculate({ kind: "dateparts", column: "born", part: "monthname" }, crec, 0) === "July" && calculate({ kind: "dateparts", column: "born", part: "year" }, crec, 0) === "1990" && calculate({ kind: "dateparts", column: "born", part: "day" }, crec, 0) === "22", "part of a date");
+const cres = applyCalculated(["first", "last"], [{ first: "a", last: "b" }, { first: "c", last: "d" }], [{ name: "No.", kind: "rownumber" }, { name: "first", kind: "rownumber" }, { name: "Full", kind: "join", columns: ["first", "last"] }]);
+ok(cres.headers.join() === "first,last,No.,Full" && cres.records[1]["No."] === "2" && cres.records[1].Full === "c d", "calculated columns are added to the headers and records; a clashing name is skipped");
+ok(usableName("A {b}|", []) === "A b" && usableName("Full", ["Full"]) === "Full 2" && usableName("  ", []) === "", "names are made usable and unique");
 if (fails) { console.log(fails + " failed"); process.exit(1); }

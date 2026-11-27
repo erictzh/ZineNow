@@ -871,3 +871,7 @@ Sheet presets for the grid (2026-11-26): the grid helper's Sheet select uses `GR
 Grid helper hidden (2026-11-27): the maintainer found "Make a grid of copies" confusing, so `SHOW_GRID_HELPER` in `DataPanel.jsx` is false. The code (`makeGrid`, `gridCopies`, `sheetGrid`, presets) and tests stay; copy and paste of blocks (Ctrl+C / Ctrl+V) is the way to place several blocks for now.
 
 Layers panel: with data connected, a group's ⋮ menu has Make data block / Not a data block (`dataAvailable`, `onSetDataBlock` props; `setGroupDataBlock` in `useDataMerge.js`), and a marked group shows a small "data" tag.
+
+Data merge order of work (2026-11-27, maintainer): do calculated columns, then the second design for continuation pages, then QR codes (`qrcode-generator`, MIT, checked). LAST PHASE, future only: the grid helper (built, hidden by `SHOW_GRID_HELPER`) and the page-size switch for sheets (not built). Recorded in docs/PROPOSAL-data-merge.md.
+
+Calculated columns (2026-11-27): `model/dataMerge/calc.js` (kinds: rownumber, join, initials, word, case, text, math, age, dateparts; `applyCalculated(headers, records, defs)` runs after ordering so row number follows the page order; tested) and `ui/panels/CalcColumns.jsx` (Advanced tab, menu form with a live sample). Definitions live in `view.dataCalc` (saved with the project); `useDataMerge` exposes `headers` (with calculated names), `fileHeaders`, `addCalc`, `removeCalc`. Data templates do not yet list calculated columns separately: they are saved in the template's settings, so they come along.

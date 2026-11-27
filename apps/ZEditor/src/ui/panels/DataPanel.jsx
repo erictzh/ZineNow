@@ -1,5 +1,6 @@
 // The Data panel (Basic): connect a spreadsheet, put its columns into text, preview each row, and make one page per row.
 
+import { CalcColumns } from "./CalcColumns.jsx";
 import { SHOW_ON } from "../../model/dataMerge/groups.js";
 import { GRID_PRESETS, presetByKey } from "../../model/dataMerge/layout.js";
 import { trackPointerDrag } from "../pointer.js";
@@ -221,6 +222,7 @@ export function DataPanel({ merge, view, hasPage }) {
                 )}
               </div>
             )}
+            {view.dataAdvanced && <CalcColumns headers={headers} records={merge.records} recordNo={merge.recordNo} defs={view.dataCalc} onAdd={merge.addCalc} onRemove={merge.removeCalc} />}
             {view.dataAdvanced && (
               <div className="ze-data-section">
                 <div className="ze-data-title">Pictures</div>
