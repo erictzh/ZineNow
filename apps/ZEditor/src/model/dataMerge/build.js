@@ -1,6 +1,6 @@
 // Building merged pages from a template page and a record, for the data merge. Pure.
 
-import { fieldsIn, fillTemplate } from "./fields.js";
+import { columnFor, fieldsIn, fillTemplate } from "./fields.js";
 
 // The fields a page's text boxes use, in order of first use, each once.
 export function fieldsUsedOnPage(annotations) {
@@ -52,7 +52,7 @@ export function fillCrop(natW, natH, frameW, frameH) {
 // ann null when the cell is empty or names no photo (the item is left out rather than showing someone else's picture).
 export function fillPictureItem(ann, record, find) {
   if (ann.type !== "image" || !ann.picField) return { handled: false, ann };
-  const photo = find ? find(record[ann.picField]) : null;
+  const photo = find ? find(record[columnFor(record, ann.picField) || ann.picField]) : null;
   if (!photo) return { handled: true, ann: null };
   return { handled: true, ann: { ...ann, src: photo.src, naturalWidth: photo.width, naturalHeight: photo.height, ...fillCrop(photo.width, photo.height, ann.width, ann.height) } };
 }
@@ -65,7 +65,8 @@ export function pictureProblems(annotations, records, find) {
     let empty = 0;
     const notFound = [];
     for (const r of records) {
-      const cell = String(r[column] === undefined ? "" : r[column]).trim();
+      const key = columnFor(r, column) || column;
+      const cell = String(r[key] === undefined ? "" : r[key]).trim();
       if (!cell) empty++;
       else if (!find || !find(cell)) { if (!notFound.includes(cell)) notFound.push(cell); }
     }
@@ -139,7 +140,8 @@ export function mergeAnnotations(annotations, record, { newId, newGroupId, lang,
 // an empty cell in a field that is used.
 export function checkMerge(annotations, headers, records) {
   const used = fieldsUsedOnPage(annotations);
-  const missing = used.filter((f) => !headers.includes(f));
-  const emptyCounts = used.filter((f) => headers.includes(f)).map((f) => ({ field: f, count: records.filter((r) => String(r[f] === undefined ? "" : r[f]).trim() === "").length })).filter((e) => e.count > 0);
+  const header = (f) => headers.find((h) => h === f) || headers.find((h) => h.trim().toLowerCase() === f.trim().toLowerCase()) || null; // capital letters do not matter
+  const missing = used.filter((f) => header(f) === null);
+  const emptyCounts = used.filter((f) => header(f) !== null).map((f) => ({ field: f, count: records.filter((r) => String(r[header(f)] === undefined ? "" : r[header(f)]).trim() === "").length })).filter((e) => e.count > 0);
   return { used, missing, emptyCounts };
 }

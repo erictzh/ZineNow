@@ -43,3 +43,8 @@
 .ze-data-calc-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
 .ze-data-calc-form { border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
 .ze-data-row input[type=text] { flex: 1; min-width: 0; }
+
+.ze-data-rowvalues { margin: 6px 0; font-size: 12px; border: 1px solid var(--ui-border); border-radius: 6px; padding: 4px 8px; }
+.ze-data-rowvalues > div { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; }
+.ze-data-rowvalues span { color: var(--ui-fg-muted); white-space: nowrap; }
+.ze-data-rowvalues strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }

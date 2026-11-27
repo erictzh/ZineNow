@@ -57,12 +57,20 @@ export function fieldsIn(text) {
 //   used: the fields the text asks for; missing: ones the file has no column for (they stay as {{field}} in the text, so they are easy to see);
 //   empty: ones whose cell is empty.
 // options.lang: "en" or "ms" month names for the date filter.
+// The column a field name means: the exact name, else the same name in other capital letters ({{Name}} for a column called name).
+export function columnFor(record, field) {
+  if (Object.prototype.hasOwnProperty.call(record, field)) return field;
+  const wanted = field.trim().toLowerCase();
+  return Object.keys(record).find((k) => k.trim().toLowerCase() === wanted) || null;
+}
+
 export function fillTemplate(text, record, options = {}) {
   const used = [], missing = [], empty = [];
   const filled = String(text).replace(MARK, (whole, field, filters) => {
     if (!used.includes(field)) used.push(field);
-    if (!Object.prototype.hasOwnProperty.call(record, field)) { if (!missing.includes(field)) missing.push(field); return whole; }
-    let value = String(record[field]);
+    const column = columnFor(record, field);
+    if (column === null) { if (!missing.includes(field)) missing.push(field); return whole; }
+    let value = String(record[column]);
     if (value.trim() === "" && !empty.includes(field)) empty.push(field);
     for (const f of filters.split("|").slice(1)) value = applyFilter(value, f, options.lang);
     return value;

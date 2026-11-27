@@ -288,4 +288,8 @@ ok(recordFileNames(eg, "", "en")[0] === "record 1.pdf" && safeFileName("..  ", "
 const zip = makeZip([{ name: "a.pdf", data: new Uint8Array([1, 2, 3]) }, { name: "é.pdf", data: new Uint8Array([9]) }], new Date(2026, 10, 27, 10, 20, 30));
 const zv = new DataView(zip.buffer);
 ok(zv.getUint32(0, true) === 0x04034b50 && zv.getUint32(zip.length - 22, true) === 0x06054b50 && zv.getUint16(zip.length - 22 + 10, true) === 2, "a zip has local headers and an end record with the number of files");
+// ---- Friendlier matching of field names
+ok(fillTemplate("{{Name}} {{ CITY }}", { name: "Ana", city: "Ipoh" }).text === "Ana Ipoh" && fillTemplate("{{Name}}", { name: "Ana" }).missing.length === 0, "a field name matches its column whatever the capital letters");
+const cm = checkMerge([{ id: 1, type: "text", text: "{{Name}} {{AGE}}" }], ["name", "age"], [{ name: "a", age: "" }]);
+ok(cm.missing.length === 0 && cm.emptyCounts.map((e) => e.field + e.count).join() === "AGE1", "the check agrees");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
