@@ -222,6 +222,21 @@ export function DataPanel({ merge, view, hasPage }) {
             )}
             {view.dataAdvanced && (
               <div className="ze-data-section">
+                <div className="ze-data-title">Flowing list</div>
+                <p className="ze-data-help">For a directory, a timeline or a price list: entries of different heights stacked down the page, a new page when the next one does not fit. Design one entry (group its items; text boxes without a fixed height grow, and what is below them moves down), and draw a rectangle where the list may flow.</p>
+                <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.setListEntry(!merge.selected.isListEntry)}>
+                  {merge.selected.isListEntry ? "Not a list entry" : "Mark the selected group as the list entry"}
+                </button>
+                <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || !merge.selected.isRect} onClick={() => merge.setListArea(!merge.selected.isListArea)}>
+                  {merge.selected.isListArea ? "Not the list area" : "Mark the selected rectangle as the list area"}
+                </button>
+                <label className="ze-data-row">Space between entries (mm) <input className="ze-data-num" type="number" min="0" max="50" step="0.5" value={view.dataListGap} onChange={(e) => view.setDataListGap(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} /></label>
+                <p className="ze-data-help">{merge.listMode ? "List ready: " + merge.plannedPages(undefined, undefined).length + " page" + (merge.plannedPages(undefined, undefined).length === 1 ? "" : "s") + " for the rows. The area is not drawn on the made pages." : merge.listHasEntry || merge.listHasArea ? "Mark both an entry (a group) and an area (a rectangle) on this page." : "Nothing marked yet."}</p>
+                {merge.listOverflow && <p className="ze-data-warn">At least one entry is taller than the list area, so it gets a page of its own and may run off it. Make the area taller or the entry shorter.</p>}
+              </div>
+            )}
+            {view.dataAdvanced && (
+              <div className="ze-data-section">
                 <div className="ze-data-title">Data blocks</div>
                 <p className="ze-data-help">Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page.</p>
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.markDataBlock(!merge.selected.isBlock)}>
