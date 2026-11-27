@@ -39,3 +39,7 @@
 .ze-data-tab.is-active { color: var(--ui-fg); border-bottom-color: var(--ui-accent); }
 
 .ze-layer-data-tag { margin-left: 4px; text-transform: uppercase; font-size: 9px; letter-spacing: .04em; }
+
+.ze-data-calc-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.ze-data-calc-form { border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+.ze-data-row input[type=text] { flex: 1; min-width: 0; }

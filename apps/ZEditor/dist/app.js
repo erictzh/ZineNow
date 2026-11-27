@@ -10968,7 +10968,7 @@ ${parts.join("\n")}</g>`);
       }
       if (angle) outPage.pushOperators(PDF.popGraphicsState());
     }
-    function describe() {
+    function describe2() {
       const { vector, picture, reasons } = counts;
       if (!vector && !picture) return null;
       const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "es"}`;
@@ -10982,7 +10982,7 @@ ${parts.join("\n")}</g>`);
       if (reasons.font) message += " To keep those as text, upload their font (font menu → Upload Font File) or allow “Load Local System Fonts”.";
       return message;
     }
-    return { plan, draw, describe, counts };
+    return { plan, draw, describe: describe2, counts };
   }
 
   // apps/ZEditor/src/io/pdfExport.js
@@ -14084,8 +14084,8 @@ ${parts.join("\n")}</g>`);
       byName.set(base(photo.name), photo);
       if (!byStem.has(stem(photo.name))) byStem.set(stem(photo.name), photo);
     }
-    return (cell) => {
-      const name = base(cell);
+    return (cell2) => {
+      const name = base(cell2);
       if (!name) return null;
       return byName.get(name) || (/\.[^.]+$/.test(name) ? null : byStem.get(name)) || null;
     };
@@ -14112,10 +14112,10 @@ ${parts.join("\n")}</g>`);
       let empty = 0;
       const notFound = [];
       for (const r of records) {
-        const cell = String(r[column] === void 0 ? "" : r[column]).trim();
-        if (!cell) empty++;
-        else if (!find || !find(cell)) {
-          if (!notFound.includes(cell)) notFound.push(cell);
+        const cell2 = String(r[column] === void 0 ? "" : r[column]).trim();
+        if (!cell2) empty++;
+        else if (!find || !find(cell2)) {
+          if (!notFound.includes(cell2)) notFound.push(cell2);
         }
       }
       return { column, empty, notFound };
@@ -15229,6 +15229,7 @@ ${parts.join("\n")}</g>`);
       }
     };
     const [dataTemplateColumns, setDataTemplateColumns] = useState15([]);
+    const [dataCalc, setDataCalc] = useState15([]);
     const [dataPhotos, setDataPhotos] = useState15([]);
     const [dataGroupBy, setDataGroupBy] = useState15("");
     const [dataRepeatOthers, setDataRepeatOthers] = useState15(true);
@@ -15261,7 +15262,8 @@ ${parts.join("\n")}</g>`);
         dataPreviewOn,
         dataGroupBy,
         dataRepeatOthers,
-        dataPhotos
+        dataPhotos,
+        dataCalc
       };
     }
     function applySavedSettings(s) {
@@ -15288,6 +15290,7 @@ ${parts.join("\n")}</g>`);
       setDataPreviewOn(s.dataPreviewOn !== false);
       setDataGroupBy(typeof s.dataGroupBy === "string" ? s.dataGroupBy : "");
       setDataRepeatOthers(s.dataRepeatOthers !== false);
+      setDataCalc(Array.isArray(s.dataCalc) ? s.dataCalc.filter((d) => d && typeof d.name === "string" && typeof d.kind === "string") : []);
       setDataPhotos(Array.isArray(s.dataPhotos) ? s.dataPhotos.filter((p) => p && typeof p.name === "string" && typeof p.src === "string" && p.width > 0 && p.height > 0) : []);
       setRulerGuides(normalizeGuides(s.rulerGuides));
       setGuideColor(GUIDE_COLORS.some((c) => c.key === s.guideColor) ? s.guideColor : DEFAULT_GUIDE_COLOR);
@@ -15355,6 +15358,8 @@ ${parts.join("\n")}</g>`);
       setDataRepeatOthers,
       dataPhotos,
       setDataPhotos,
+      dataCalc,
+      setDataCalc,
       dataTemplateColumns,
       setDataTemplateColumns,
       dataMinimized,
@@ -21953,6 +21958,237 @@ ${parts.join("\n")}</g>`);
     return [...out.values()];
   }
 
+  // apps/ZEditor/src/model/dataMerge/records.js
+  function selectRecords(count, choice = { all: true }) {
+    const all = Array.from({ length: count }, (_, i) => i);
+    if (choice.ticked) return all.filter((i) => choice.ticked.includes(i));
+    if (choice.from || choice.to) {
+      const from = Math.max(1, choice.from || 1), to = Math.min(count, choice.to || count);
+      return all.filter((i) => i + 1 >= from && i + 1 <= to);
+    }
+    return all;
+  }
+  function numberOf(text) {
+    const t = String(text).trim();
+    const bce = /(\d[\d,]*)\s*(?:BCE|BC|B\.C\.E?\.?)/i.exec(t);
+    if (bce) return -Number(bce[1].replace(/,/g, ""));
+    const m = /-?\d[\d,]*(?:\.\d+)?/.exec(t);
+    return m ? Number(m[0].replace(/,/g, "")) : null;
+  }
+  var MONTH_WORDS = {
+    january: 1,
+    jan: 1,
+    januari: 1,
+    february: 2,
+    feb: 2,
+    februari: 2,
+    march: 3,
+    mar: 3,
+    mac: 3,
+    april: 4,
+    apr: 4,
+    may: 5,
+    mei: 5,
+    june: 6,
+    jun: 6,
+    july: 7,
+    jul: 7,
+    julai: 7,
+    august: 8,
+    aug: 8,
+    ogos: 8,
+    ogo: 8,
+    september: 9,
+    sep: 9,
+    sept: 9,
+    october: 10,
+    oct: 10,
+    oktober: 10,
+    okt: 10,
+    november: 11,
+    nov: 11,
+    december: 12,
+    dec: 12,
+    disember: 12,
+    dis: 12
+  };
+  function dateOf(text, order = "dmy") {
+    const t = String(text).trim();
+    if (!t) return null;
+    const key = (y, m2, d) => y * 400 + m2 * 32 + d;
+    let m = /^(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(t);
+    if (m && (m[2] || m[3] || m[1].length === 4 || m[1][0] === "-")) return key(Number(m[1]), m[2] ? Number(m[2]) : 0, m[3] ? Number(m[3]) : 0);
+    m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/.exec(t);
+    if (m) {
+      let a = Number(m[1]), b = Number(m[2]);
+      let day = order === "mdy" ? b : a, month = order === "mdy" ? a : b;
+      if (month > 12 && day <= 12) [day, month] = [month, day];
+      const year = m[3].length === 2 ? 2e3 + Number(m[3]) : Number(m[3]);
+      return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? key(year, month, day) : null;
+    }
+    m = /^(\d{1,2})\s+([A-Za-z]+)\.?,?\s+(\d{4})$/.exec(t);
+    if (m && MONTH_WORDS[m[2].toLowerCase()]) return key(Number(m[3]), MONTH_WORDS[m[2].toLowerCase()], Number(m[1]));
+    m = /^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/.exec(t);
+    if (m && MONTH_WORDS[m[1].toLowerCase()]) return key(Number(m[3]), MONTH_WORDS[m[1].toLowerCase()], Number(m[2]));
+    m = /^([A-Za-z]+)\.?\s+(\d{4})$/.exec(t);
+    if (m && MONTH_WORDS[m[1].toLowerCase()]) return key(Number(m[2]), MONTH_WORDS[m[1].toLowerCase()], 0);
+    const bce = /^(\d[\d,]*)\s*(?:BCE|BC|B\.C\.E?\.?)$/i.exec(t);
+    if (bce) return key(-Number(bce[1].replace(/,/g, "")), 0, 0);
+    return null;
+  }
+  var collator = new Intl.Collator("en", { sensitivity: "base", numeric: false });
+  var naturalCollator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
+  function detectSortType(records, column, order = "dmy") {
+    const cells = records.map((r) => String(r[column] === void 0 ? "" : r[column]).trim()).filter((c) => c !== "");
+    if (!cells.length) return "text";
+    if (cells.every((c) => dateOf(c, order) !== null) && cells.some((c) => /[A-Za-z\/.\-]/.test(c))) return "date";
+    if (cells.every((c) => numberOf(c) !== null && /^(?:[A-Za-z]{1,3}\.?\s+|[$€£¥]\s*)?-?\d[\d,.\s]*%?$|BCE|BC\b|^c\.?\s*\d/i.test(c))) return "number";
+    return "text";
+  }
+  function sortRecords(records, keys, options = {}) {
+    const list = Array.isArray(keys) ? keys : [keys];
+    const spec = list.map((k) => {
+      const key = typeof k === "string" ? { column: k } : k;
+      const as = !key.as || key.as === "auto" ? detectSortType(records, key.column, options.dateOrder) : key.as;
+      return { column: key.column, as, descending: Boolean(key.descending) };
+    });
+    const keyOf = (r, k) => {
+      const raw = String(r[k.column] === void 0 ? "" : r[k.column]);
+      if (raw.trim() === "") return null;
+      if (k.as === "number") return numberOf(raw);
+      if (k.as === "date") return dateOf(raw, options.dateOrder);
+      return raw;
+    };
+    const rows = records.map((r, i) => ({ r, i, keys: spec.map((k) => keyOf(r, k)) }));
+    rows.sort((a, b) => {
+      for (let n = 0; n < spec.length; n++) {
+        const x = a.keys[n], y = b.keys[n];
+        if (x === null && y === null) continue;
+        if (x === null) return 1;
+        if (y === null) return -1;
+        let c;
+        if (spec[n].as === "number" || spec[n].as === "date") c = x < y ? -1 : x > y ? 1 : 0;
+        else c = (spec[n].as === "natural" ? naturalCollator : collator).compare(String(x).trim(), String(y).trim());
+        if (c !== 0) return spec[n].descending ? -c : c;
+      }
+      return a.i - b.i;
+    });
+    return rows.map((x) => x.r);
+  }
+
+  // apps/ZEditor/src/model/dataMerge/calc.js
+  var CALC_KINDS = [
+    { key: "rownumber", label: "Row number", help: "1, 2, 3… in the order of the pages", needs: [] },
+    { key: "join", label: "Join columns", help: "for example first name + last name", needs: ["columns"] },
+    { key: "initials", label: "Initials", help: "Ana Lopez gives AL", needs: ["column"] },
+    { key: "word", label: "First or last word", help: "of a name or address", needs: ["column"] },
+    { key: "case", label: "Capital letters", help: "UPPER, lower or Title Case", needs: ["column"] },
+    { key: "text", label: "Add words before or after", help: "for example RM before a price", needs: ["column"] },
+    { key: "math", label: "Calculate with a number", help: "add, subtract, multiply or divide", needs: ["column"] },
+    { key: "age", label: "Age from a date", help: "years since a birthday or date", needs: ["column"] },
+    { key: "dateparts", label: "Part of a date", help: "the year, the month name, the day", needs: ["column"] }
+  ];
+  var DEFAULTS = {
+    rownumber: { start: 1, pad: 0 },
+    join: { columns: [], separator: " " },
+    initials: { column: "", max: 2 },
+    word: { column: "", which: "first" },
+    case: { column: "", mode: "upper" },
+    text: { column: "", before: "", after: "" },
+    math: { column: "", op: "+", value: 1 },
+    age: { column: "" },
+    dateparts: { column: "", part: "year" }
+  };
+  var cell = (record, column) => String(record[column] === void 0 ? "" : record[column]).trim();
+  function dateParts(text) {
+    const key = dateOf(text);
+    if (key === null) return null;
+    const y = Math.floor(key / 400), rest = key - y * 400;
+    return { y, m: Math.floor(rest / 32), d: rest % 32 };
+  }
+  function calculate(def, record, index, today = /* @__PURE__ */ new Date()) {
+    const d = { ...DEFAULTS[def.kind], ...def };
+    switch (def.kind) {
+      case "rownumber": {
+        const n = String(Number(d.start) + index);
+        return d.pad > 0 ? n.padStart(Number(d.pad), "0") : n;
+      }
+      case "join":
+        return d.columns.map((c) => cell(record, c)).filter((v) => v !== "").join(d.separator);
+      case "initials": {
+        const words = cell(record, d.column).split(/\s+/).filter((w) => /\p{L}/u.test(w));
+        return words.slice(0, Number(d.max) || 2).map((w) => (w.match(/\p{L}/u) || [""])[0].toUpperCase()).join("");
+      }
+      case "word": {
+        const words = cell(record, d.column).split(/\s+/).filter(Boolean);
+        return d.which === "last" ? words[words.length - 1] || "" : d.which === "allbutlast" ? words.slice(0, -1).join(" ") : words[0] || "";
+      }
+      case "case": {
+        const v = cell(record, d.column);
+        return d.mode === "title" ? applyFilter(v, "title") : d.mode === "lower" ? v.toLowerCase() : v.toUpperCase();
+      }
+      case "text": {
+        const v = cell(record, d.column);
+        return v === "" ? "" : d.before + v + d.after;
+      }
+      case "math": {
+        const v = cell(record, d.column).replace(/,/g, "");
+        const n = Number(v), k = Number(d.value);
+        if (v === "" || !Number.isFinite(n) || !Number.isFinite(k)) return "";
+        const r = d.op === "-" ? n - k : d.op === "*" ? n * k : d.op === "/" ? k === 0 ? NaN : n / k : n + k;
+        return Number.isFinite(r) ? String(Math.round(r * 1e6) / 1e6) : "";
+      }
+      case "age": {
+        const p = dateParts(cell(record, d.column));
+        if (!p || !p.m || !p.d) return "";
+        let age = today.getFullYear() - p.y;
+        if (today.getMonth() + 1 < p.m || today.getMonth() + 1 === p.m && today.getDate() < p.d) age--;
+        return age >= 0 ? String(age) : "";
+      }
+      case "dateparts": {
+        const p = dateParts(cell(record, d.column));
+        if (!p) return "";
+        if (d.part === "year") return String(p.y);
+        if (!p.m) return "";
+        if (d.part === "month") return String(p.m);
+        if (d.part === "monthname") return ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][p.m - 1];
+        return p.d ? String(p.d) : "";
+      }
+      default:
+        return "";
+    }
+  }
+  function usableName(name, taken) {
+    const clean = String(name || "").replace(/[{}|]/g, "").replace(/\s+/g, " ").trim();
+    if (!clean) return "";
+    if (!taken.includes(clean)) return clean;
+    let n = 2;
+    while (taken.includes(clean + " " + n)) n++;
+    return clean + " " + n;
+  }
+  function applyCalculated(headers, records, defs, today = /* @__PURE__ */ new Date()) {
+    const names = [], valid = [];
+    for (const def of defs || []) {
+      if (!def || !def.name || headers.includes(def.name) || names.includes(def.name)) continue;
+      names.push(def.name);
+      valid.push(def);
+    }
+    if (!valid.length) return { headers, records };
+    return {
+      headers: [...headers, ...names],
+      records: records.map((r, i) => {
+        const out = { ...r };
+        for (const def of valid) out[def.name] = calculate(def, out, i, today);
+        return out;
+      })
+    };
+  }
+  function describe(def) {
+    const kind = CALC_KINDS.find((k) => k.key === def.kind);
+    const from = def.kind === "join" ? (def.columns || []).join(" + ") : def.column;
+    return (kind ? kind.label : def.kind) + (from ? ": " + from : "");
+  }
+
   // apps/ZEditor/src/model/dataMerge/csv.js
   var DELIMITERS = [",", ";", "	", "|"];
   function guessDelimiter(text) {
@@ -21973,10 +22209,10 @@ ${parts.join("\n")}</g>`);
   }
   function splitRows(text, delimiter) {
     const rows = [];
-    let row = [], cell = "", i = 0, quoted = false, wasQuoted = false;
+    let row = [], cell2 = "", i = 0, quoted = false, wasQuoted = false;
     const endCell = () => {
-      row.push(cell);
-      cell = "";
+      row.push(cell2);
+      cell2 = "";
       wasQuoted = false;
     };
     const endRow = () => {
@@ -21989,7 +22225,7 @@ ${parts.join("\n")}</g>`);
       if (quoted) {
         if (ch === '"') {
           if (text[i + 1] === '"') {
-            cell += '"';
+            cell2 += '"';
             i += 2;
             continue;
           }
@@ -21997,11 +22233,11 @@ ${parts.join("\n")}</g>`);
           i++;
           continue;
         }
-        cell += ch;
+        cell2 += ch;
         i++;
         continue;
       }
-      if (ch === '"' && cell === "" && !wasQuoted) {
+      if (ch === '"' && cell2 === "" && !wasQuoted) {
         quoted = true;
         wasQuoted = true;
         i++;
@@ -22022,10 +22258,10 @@ ${parts.join("\n")}</g>`);
         i++;
         continue;
       }
-      cell += ch;
+      cell2 += ch;
       i++;
     }
-    if (cell !== "" || row.length > 0 || wasQuoted) endRow();
+    if (cell2 !== "" || row.length > 0 || wasQuoted) endRow();
     return rows;
   }
   function cleanHeaders(raw) {
@@ -22192,124 +22428,6 @@ ${parts.join("\n")}</g>`);
   ];
   var presetByKey = (key) => GRID_PRESETS.find((p) => p.key === key) || null;
 
-  // apps/ZEditor/src/model/dataMerge/records.js
-  function selectRecords(count, choice = { all: true }) {
-    const all = Array.from({ length: count }, (_, i) => i);
-    if (choice.ticked) return all.filter((i) => choice.ticked.includes(i));
-    if (choice.from || choice.to) {
-      const from = Math.max(1, choice.from || 1), to = Math.min(count, choice.to || count);
-      return all.filter((i) => i + 1 >= from && i + 1 <= to);
-    }
-    return all;
-  }
-  function numberOf(text) {
-    const t = String(text).trim();
-    const bce = /(\d[\d,]*)\s*(?:BCE|BC|B\.C\.E?\.?)/i.exec(t);
-    if (bce) return -Number(bce[1].replace(/,/g, ""));
-    const m = /-?\d[\d,]*(?:\.\d+)?/.exec(t);
-    return m ? Number(m[0].replace(/,/g, "")) : null;
-  }
-  var MONTH_WORDS = {
-    january: 1,
-    jan: 1,
-    januari: 1,
-    february: 2,
-    feb: 2,
-    februari: 2,
-    march: 3,
-    mar: 3,
-    mac: 3,
-    april: 4,
-    apr: 4,
-    may: 5,
-    mei: 5,
-    june: 6,
-    jun: 6,
-    july: 7,
-    jul: 7,
-    julai: 7,
-    august: 8,
-    aug: 8,
-    ogos: 8,
-    ogo: 8,
-    september: 9,
-    sep: 9,
-    sept: 9,
-    october: 10,
-    oct: 10,
-    oktober: 10,
-    okt: 10,
-    november: 11,
-    nov: 11,
-    december: 12,
-    dec: 12,
-    disember: 12,
-    dis: 12
-  };
-  function dateOf(text, order = "dmy") {
-    const t = String(text).trim();
-    if (!t) return null;
-    const key = (y, m2, d) => y * 400 + m2 * 32 + d;
-    let m = /^(-?\d{1,4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/.exec(t);
-    if (m && (m[2] || m[3] || m[1].length === 4 || m[1][0] === "-")) return key(Number(m[1]), m[2] ? Number(m[2]) : 0, m[3] ? Number(m[3]) : 0);
-    m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/.exec(t);
-    if (m) {
-      let a = Number(m[1]), b = Number(m[2]);
-      let day = order === "mdy" ? b : a, month = order === "mdy" ? a : b;
-      if (month > 12 && day <= 12) [day, month] = [month, day];
-      const year = m[3].length === 2 ? 2e3 + Number(m[3]) : Number(m[3]);
-      return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? key(year, month, day) : null;
-    }
-    m = /^(\d{1,2})\s+([A-Za-z]+)\.?,?\s+(\d{4})$/.exec(t);
-    if (m && MONTH_WORDS[m[2].toLowerCase()]) return key(Number(m[3]), MONTH_WORDS[m[2].toLowerCase()], Number(m[1]));
-    m = /^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/.exec(t);
-    if (m && MONTH_WORDS[m[1].toLowerCase()]) return key(Number(m[3]), MONTH_WORDS[m[1].toLowerCase()], Number(m[2]));
-    m = /^([A-Za-z]+)\.?\s+(\d{4})$/.exec(t);
-    if (m && MONTH_WORDS[m[1].toLowerCase()]) return key(Number(m[2]), MONTH_WORDS[m[1].toLowerCase()], 0);
-    const bce = /^(\d[\d,]*)\s*(?:BCE|BC|B\.C\.E?\.?)$/i.exec(t);
-    if (bce) return key(-Number(bce[1].replace(/,/g, "")), 0, 0);
-    return null;
-  }
-  var collator = new Intl.Collator("en", { sensitivity: "base", numeric: false });
-  var naturalCollator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
-  function detectSortType(records, column, order = "dmy") {
-    const cells = records.map((r) => String(r[column] === void 0 ? "" : r[column]).trim()).filter((c) => c !== "");
-    if (!cells.length) return "text";
-    if (cells.every((c) => dateOf(c, order) !== null) && cells.some((c) => /[A-Za-z\/.\-]/.test(c))) return "date";
-    if (cells.every((c) => numberOf(c) !== null && /^(?:[A-Za-z]{1,3}\.?\s+|[$€£¥]\s*)?-?\d[\d,.\s]*%?$|BCE|BC\b|^c\.?\s*\d/i.test(c))) return "number";
-    return "text";
-  }
-  function sortRecords(records, keys, options = {}) {
-    const list = Array.isArray(keys) ? keys : [keys];
-    const spec = list.map((k) => {
-      const key = typeof k === "string" ? { column: k } : k;
-      const as = !key.as || key.as === "auto" ? detectSortType(records, key.column, options.dateOrder) : key.as;
-      return { column: key.column, as, descending: Boolean(key.descending) };
-    });
-    const keyOf = (r, k) => {
-      const raw = String(r[k.column] === void 0 ? "" : r[k.column]);
-      if (raw.trim() === "") return null;
-      if (k.as === "number") return numberOf(raw);
-      if (k.as === "date") return dateOf(raw, options.dateOrder);
-      return raw;
-    };
-    const rows = records.map((r, i) => ({ r, i, keys: spec.map((k) => keyOf(r, k)) }));
-    rows.sort((a, b) => {
-      for (let n = 0; n < spec.length; n++) {
-        const x = a.keys[n], y = b.keys[n];
-        if (x === null && y === null) continue;
-        if (x === null) return 1;
-        if (y === null) return -1;
-        let c;
-        if (spec[n].as === "number" || spec[n].as === "date") c = x < y ? -1 : x > y ? 1 : 0;
-        else c = (spec[n].as === "natural" ? naturalCollator : collator).compare(String(x).trim(), String(y).trim());
-        if (c !== 0) return spec[n].descending ? -c : c;
-      }
-      return a.i - b.i;
-    });
-    return rows.map((x) => x.r);
-  }
-
   // apps/ZEditor/src/state/useDataMerge.js
   var { useMemo: useMemo5, useState: useState46 } = React;
   function useDataMerge({ doc, history, view, edits, selection }) {
@@ -22317,13 +22435,14 @@ ${parts.join("\n")}</g>`);
     const [recordNo, setRecordNo] = useState46(0);
     const [message, setMessage] = useState46("");
     const parsed = useMemo5(() => view.dataSource ? parseCsv(view.dataSource.text) : null, [view.dataSource]);
-    const headers = parsed ? parsed.headers : [];
-    const idColumn = headers.find((h) => h.trim().toLowerCase() === "id") || null;
-    const records = useMemo5(() => {
-      if (!parsed) return [];
-      if (view.dataOrder !== "file" && idColumn) return sortRecords(parsed.records, { column: idColumn, as: "natural", descending: view.dataOrder === "id-desc" });
-      return parsed.records;
-    }, [parsed, view.dataOrder, idColumn]);
+    const fileHeaders = parsed ? parsed.headers : [];
+    const idColumn = fileHeaders.find((h) => h.trim().toLowerCase() === "id") || null;
+    const table = useMemo5(() => {
+      if (!parsed) return { headers: [], records: [] };
+      const ordered = view.dataOrder !== "file" && idColumn ? sortRecords(parsed.records, { column: idColumn, as: "natural", descending: view.dataOrder === "id-desc" }) : parsed.records;
+      return applyCalculated(parsed.headers, ordered, view.dataCalc);
+    }, [parsed, view.dataOrder, idColumn, view.dataCalc]);
+    const headers = table.headers, records = table.records;
     const count = records.length;
     const shownNo = Math.min(recordNo, Math.max(0, count - 1));
     const findPhoto = useMemo5(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
@@ -22347,6 +22466,12 @@ ${parts.join("\n")}</g>`);
       setRecordNo(0);
       setMessage(result2.problems && result2.problems.length ? result2.problems[0] : "");
       return true;
+    }
+    function addCalc(def) {
+      view.setDataCalc([...view.dataCalc, def]);
+    }
+    function removeCalc(name) {
+      view.setDataCalc(view.dataCalc.filter((d) => d.name !== name));
     }
     function disconnect() {
       view.setDataSource(null);
@@ -22486,6 +22611,7 @@ ${parts.join("\n")}</g>`);
     return {
       parsed,
       headers,
+      fileHeaders,
       records,
       count,
       idColumn,
@@ -22510,6 +22636,8 @@ ${parts.join("\n")}</g>`);
       onGeneratedPage: Boolean(page && page.mergedFrom !== void 0),
       connect,
       disconnect,
+      addCalc,
+      removeCalc,
       insertField,
       usedCheck,
       createPages
@@ -22522,8 +22650,31 @@ ${parts.join("\n")}</g>`);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-panel-dock" }, items.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.key, className: "ze-panel-dock-item" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-panel-head ze-panel-dock-open", title: "Open " + item.label, onClick: item.onOpen }, item.label), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Close", "aria-label": "Close " + item.label, onClick: item.onClose }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 5l10 10M15 5L5 15" }))))));
   }
 
+  // apps/ZEditor/src/ui/panels/CalcColumns.jsx
+  var { useState: useState47 } = React;
+  var SEPARATORS = [[" ", "a space"], [", ", "a comma"], [" - ", "a dash"], ["", "nothing"], [" / ", "a slash"]];
+  function CalcColumns({ headers, fileHeaders, records, recordNo, defs, onAdd, onRemove }) {
+    const [draft, setDraft] = useState47(null);
+    const columnSelect = (key, label) => /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, label, " ", /* @__PURE__ */ React.createElement("select", { value: draft[key], onChange: (e) => setDraft({ ...draft, [key]: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Choose…"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h))));
+    const choose = (kind) => setDraft({ ...DEFAULTS[kind], kind, name: CALC_KINDS.find((k) => k.key === kind).label });
+    const sample = draft ? calculate(draft, records[recordNo] || {}, recordNo) : "";
+    const ready = Boolean(draft && draft.kind) && (draft.kind === "join" ? draft.columns.filter(Boolean).length > 0 : !CALC_KINDS.find((k) => k.key === draft.kind).needs.includes("column") || draft.column);
+    function add() {
+      const name = usableName(draft.name, headers);
+      if (!name) return;
+      const { name: _ignored, ...rest } = draft;
+      onAdd({ ...rest, name, ...draft.kind === "join" ? { columns: draft.columns.filter(Boolean) } : {} });
+      setDraft(null);
+    }
+    return /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Calculated columns"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Make a new column from the ones in your file, for example initials, an age from a birthday, or two columns joined. It shows among the fields."), defs.map((def) => /* @__PURE__ */ React.createElement("div", { key: def.name, className: "ze-data-calc-row" }, /* @__PURE__ */ React.createElement("span", { title: describe(def) }, /* @__PURE__ */ React.createElement("strong", null, def.name), " ", /* @__PURE__ */ React.createElement("span", { className: "ze-data-help" }, describe(def))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", "aria-label": "Remove " + def.name, onClick: () => onRemove(def.name) }, "Remove"))), !draft && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => setDraft({ kind: "", name: "" }) }, "+ New column"), draft && /* @__PURE__ */ React.createElement("div", { className: "ze-data-calc-form" }, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Kind", " ", /* @__PURE__ */ React.createElement("select", { value: draft.kind, onChange: (e) => e.target.value ? choose(e.target.value) : setDraft({ kind: "", name: "" }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Choose…"), CALC_KINDS.map((k) => /* @__PURE__ */ React.createElement("option", { key: k.key, value: k.key }, k.label)))), draft.kind && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, CALC_KINDS.find((k) => k.key === draft.kind).help), draft.kind === "rownumber" && /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Start at ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", value: draft.start, onChange: (e) => setDraft({ ...draft, start: Number(e.target.value) || 0 }) }), " ", "Digits ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "0", max: "8", value: draft.pad, onChange: (e) => setDraft({ ...draft, pad: Math.max(0, Math.min(8, Number(e.target.value) || 0)) }) })), draft.kind === "join" && /* @__PURE__ */ React.createElement(React.Fragment, null, [0, 1, 2].map((i) => /* @__PURE__ */ React.createElement("label", { key: i, className: "ze-data-row" }, i === 0 ? "First" : "Then", " ", /* @__PURE__ */ React.createElement("select", { value: draft.columns[i] || "", onChange: (e) => {
+      const columns = draft.columns.slice();
+      columns[i] = e.target.value;
+      setDraft({ ...draft, columns });
+    } }, /* @__PURE__ */ React.createElement("option", { value: "" }, i === 0 ? "Choose…" : "(none)"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h))))), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Between them", " ", /* @__PURE__ */ React.createElement("select", { value: draft.separator, onChange: (e) => setDraft({ ...draft, separator: e.target.value }) }, SEPARATORS.map(([v, l]) => /* @__PURE__ */ React.createElement("option", { key: l, value: v }, l))))), ["initials", "word", "case", "text", "math", "age", "dateparts"].includes(draft.kind) && columnSelect("column", "Column"), draft.kind === "initials" && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Letters", " ", /* @__PURE__ */ React.createElement("select", { value: draft.max, onChange: (e) => setDraft({ ...draft, max: Number(e.target.value) }) }, /* @__PURE__ */ React.createElement("option", { value: 1 }, "1"), /* @__PURE__ */ React.createElement("option", { value: 2 }, "2"), /* @__PURE__ */ React.createElement("option", { value: 3 }, "3"))), draft.kind === "word" && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Which", " ", /* @__PURE__ */ React.createElement("select", { value: draft.which, onChange: (e) => setDraft({ ...draft, which: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "first" }, "First word"), /* @__PURE__ */ React.createElement("option", { value: "last" }, "Last word"), /* @__PURE__ */ React.createElement("option", { value: "allbutlast" }, "All but the last word"))), draft.kind === "case" && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Style", " ", /* @__PURE__ */ React.createElement("select", { value: draft.mode, onChange: (e) => setDraft({ ...draft, mode: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "upper" }, "UPPER CASE"), /* @__PURE__ */ React.createElement("option", { value: "lower" }, "lower case"), /* @__PURE__ */ React.createElement("option", { value: "title" }, "Title Case"))), draft.kind === "text" && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Before ", /* @__PURE__ */ React.createElement("input", { type: "text", value: draft.before, onChange: (e) => setDraft({ ...draft, before: e.target.value }) })), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "After ", /* @__PURE__ */ React.createElement("input", { type: "text", value: draft.after, onChange: (e) => setDraft({ ...draft, after: e.target.value }) }))), draft.kind === "math" && /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("select", { value: draft.op, onChange: (e) => setDraft({ ...draft, op: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "+" }, "add"), /* @__PURE__ */ React.createElement("option", { value: "-" }, "subtract"), /* @__PURE__ */ React.createElement("option", { value: "*" }, "multiply by"), /* @__PURE__ */ React.createElement("option", { value: "/" }, "divide by")), /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", value: draft.value, onChange: (e) => setDraft({ ...draft, value: Number(e.target.value) }) })), draft.kind === "dateparts" && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Part", " ", /* @__PURE__ */ React.createElement("select", { value: draft.part, onChange: (e) => setDraft({ ...draft, part: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "year" }, "Year"), /* @__PURE__ */ React.createElement("option", { value: "monthname" }, "Month name"), /* @__PURE__ */ React.createElement("option", { value: "month" }, "Month number"), /* @__PURE__ */ React.createElement("option", { value: "day" }, "Day"))), draft.kind && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Name ", /* @__PURE__ */ React.createElement("input", { type: "text", value: draft.name, onChange: (e) => setDraft({ ...draft, name: e.target.value }) })), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, ready ? "Row " + (recordNo + 1) + " gives: " + (sample === "" ? "(nothing)" : "“" + sample + "”") : "Choose the column."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary", disabled: !ready || !usableName(draft.name, headers), onClick: add }, "Add column"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", onClick: () => setDraft(null) }, "Cancel"))), !draft.kind && /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", onClick: () => setDraft(null) }, "Cancel")));
+  }
+
   // apps/ZEditor/src/ui/panels/DataPanel.jsx
-  var { useRef: useRef33, useState: useState47 } = React;
+  var { useRef: useRef33, useState: useState48 } = React;
   var SHOW_GRID_HELPER = false;
   var MIN_WIDTH2 = 240;
   var MIN_HEIGHT2 = 200;
@@ -22538,15 +22689,15 @@ ${parts.join("\n")}</g>`);
   var rememberedPlace = { position: null, size: null };
   function DataPanel({ merge, view, hasPage }) {
     const fileRef = useRef33(null), photoRef = useRef33(null), photoFilesRef = useRef33(null);
-    const [pasting, setPasting] = useState47(false);
-    const [pasted, setPasted] = useState47("");
-    const [range, setRange] = useState47({ from: "", to: "" });
-    const [hideTemplate, setHideTemplate] = useState47(true);
-    const [confirming, setConfirming] = useState47(false);
-    const [grid, setGrid] = useState47({ cols: 2, rows: 5, gap: 0, preset: "" });
+    const [pasting, setPasting] = useState48(false);
+    const [pasted, setPasted] = useState48("");
+    const [range, setRange] = useState48({ from: "", to: "" });
+    const [hideTemplate, setHideTemplate] = useState48(true);
+    const [confirming, setConfirming] = useState48(false);
+    const [grid, setGrid] = useState48({ cols: 2, rows: 5, gap: 0, preset: "" });
     const panelRef = useRef33(null), headRef = useRef33(null);
-    const [position, setPositionState] = useState47(rememberedPlace.position);
-    const [size, setSizeState] = useState47(rememberedPlace.size);
+    const [position, setPositionState] = useState48(rememberedPlace.position);
+    const [size, setSizeState] = useState48(rememberedPlace.size);
     const setPosition = (v) => {
       rememberedPlace.position = v;
       setPositionState(v);
@@ -22631,7 +22782,7 @@ ${parts.join("\n")}</g>`);
           setPasted("");
           setPasting(false);
         }
-      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, !view.dataAdvanced && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id."))), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Data blocks"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !hasPage || merge.selected.count === 0, onClick: () => merge.markDataBlock(!merge.selected.isBlock) }, merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"), SHOW_GRID_HELPER && merge.selected.isBlock && /* @__PURE__ */ React.createElement("div", { className: "ze-data-grid" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make a grid of copies"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Sheet", " ", /* @__PURE__ */ React.createElement("select", { value: grid.preset, onChange: (e) => setGrid({ ...grid, preset: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "My own"), GRID_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), grid.preset ? /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, presetByKey(grid.preset).cols, " columns × ", presetByKey(grid.preset).rows, " rows, on an ", presetByKey(grid.preset).page.toUpperCase(), " page. Label sizes are a guide: check them against your sheet.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Columns ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.cols, onChange: (e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) }), "Rows ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.rows, onChange: (e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Gap (mm) ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "0", max: "50", step: "0.5", value: grid.gap, onChange: (e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) }) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap, preset: grid.preset }) }, grid.preset ? "Place on the sheet (" + presetByKey(grid.preset).cols * presetByKey(grid.preset).rows + " blocks)" : "Make " + (grid.cols * grid.rows - 1) + " copies")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."), merge.blockMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Group by", " ", /* @__PURE__ */ React.createElement("select", { value: merge.groupBy, onChange: (e) => view.setDataGroupBy(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "No grouping"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataRepeatOthers, onChange: (e) => view.setDataRepeatOthers(e.target.checked) }), " Repeat non-data items on the other pages")), merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected item shows on", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.showOn, onChange: (e) => merge.setShowOn(e.target.value) }, merge.selected.showOn === "" && /* @__PURE__ */ React.createElement("option", { value: "" }, "Mixed"), SHOW_ON.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label))))), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Pictures"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put a different photo on each page or block. Add a column that holds each photo's file name (for example ana.jpg), choose the folder of photos here, then select a picture on your page and choose its column below."), /* @__PURE__ */ React.createElement("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, webkitdirectory: "", directory: "", hidden: true, onChange: (e) => {
+      } }, "Use these rows"))), parsed && /* @__PURE__ */ React.createElement(React.Fragment, null, !view.dataAdvanced && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Fields"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, hasPage ? "Click a field to put it in the selected text box, or in a new one." : "Open a page first."), /* @__PURE__ */ React.createElement("div", { className: "ze-data-chips" }, headers.map((h) => /* @__PURE__ */ React.createElement("button", { key: h, type: "button", className: "ze-data-chip", disabled: !hasPage, title: "Insert {{" + h + "}}", onClick: () => merge.insertField(h) }, h)))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Preview"), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataPreviewOn, onChange: (e) => view.setDataPreviewOn(e.target.checked) }), " Show this row's words on the page"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-stepper" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Previous row", disabled: merge.recordNo <= 0, onClick: () => merge.setRecordNo(merge.recordNo - 1) }, "◀"), /* @__PURE__ */ React.createElement("span", null, "row ", merge.recordNo + 1, " of ", count), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", "aria-label": "Next row", disabled: merge.recordNo >= count - 1, onClick: () => merge.setRecordNo(merge.recordNo + 1) }, "▶")), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Order", " ", /* @__PURE__ */ React.createElement("select", { value: view.dataOrder, onChange: (e) => view.setDataOrder(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "file" }, "As in the file"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-asc" }, "By “", idColumn, "”, lowest first"), idColumn && /* @__PURE__ */ React.createElement("option", { value: "id-desc" }, "By “", idColumn, "”, highest first"))), !idColumn && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "To order rows yourself, add a column named id."))), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Data blocks"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put several records on one page, or group records (for example one page of members for each band). Design one block that shows a record, group its items (Ctrl+G), mark the group as a data block, and copy it as many times as you want on the page."), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !hasPage || merge.selected.count === 0, onClick: () => merge.markDataBlock(!merge.selected.isBlock) }, merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"), SHOW_GRID_HELPER && merge.selected.isBlock && /* @__PURE__ */ React.createElement("div", { className: "ze-data-grid" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Make a grid of copies"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Sheet", " ", /* @__PURE__ */ React.createElement("select", { value: grid.preset, onChange: (e) => setGrid({ ...grid, preset: e.target.value }) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "My own"), GRID_PRESETS.map((p) => /* @__PURE__ */ React.createElement("option", { key: p.key, value: p.key }, p.label)))), grid.preset ? /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, presetByKey(grid.preset).cols, " columns × ", presetByKey(grid.preset).rows, " rows, on an ", presetByKey(grid.preset).page.toUpperCase(), " page. Label sizes are a guide: check them against your sheet.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Columns ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.cols, onChange: (e) => setGrid({ ...grid, cols: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) }), "Rows ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "1", max: "12", value: grid.rows, onChange: (e) => setGrid({ ...grid, rows: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) })), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, "Gap (mm) ", /* @__PURE__ */ React.createElement("input", { className: "ze-data-num", type: "number", min: "0", max: "50", step: "0.5", value: grid.gap, onChange: (e) => setGrid({ ...grid, gap: Math.max(0, Number(e.target.value) || 0) }) }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => merge.makeGrid({ cols: grid.cols, rows: grid.rows, gapMm: grid.gap, preset: grid.preset }) }, grid.preset ? "Place on the sheet (" + presetByKey(grid.preset).cols * presetByKey(grid.preset).rows + " blocks)" : "Make " + (grid.cols * grid.rows - 1) + " copies")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."), merge.blockMode && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Group by", " ", /* @__PURE__ */ React.createElement("select", { value: merge.groupBy, onChange: (e) => view.setDataGroupBy(e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "No grouping"), headers.map((h) => /* @__PURE__ */ React.createElement("option", { key: h, value: h }, h)))), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."), /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: view.dataRepeatOthers, onChange: (e) => view.setDataRepeatOthers(e.target.checked) }), " Repeat non-data items on the other pages")), merge.selected.count > 0 && !merge.selected.hasBlock && merge.blockMode && /* @__PURE__ */ React.createElement("label", { className: "ze-data-row" }, "Selected item shows on", " ", /* @__PURE__ */ React.createElement("select", { value: merge.selected.showOn, onChange: (e) => merge.setShowOn(e.target.value) }, merge.selected.showOn === "" && /* @__PURE__ */ React.createElement("option", { value: "" }, "Mixed"), SHOW_ON.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.key, value: o.key }, o.label))))), view.dataAdvanced && /* @__PURE__ */ React.createElement(CalcColumns, { headers, records: merge.records, recordNo: merge.recordNo, defs: view.dataCalc, onAdd: merge.addCalc, onRemove: merge.removeCalc }), view.dataAdvanced && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-title" }, "Pictures"), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Put a different photo on each page or block. Add a column that holds each photo's file name (for example ana.jpg), choose the folder of photos here, then select a picture on your page and choose its column below."), /* @__PURE__ */ React.createElement("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, webkitdirectory: "", directory: "", hidden: true, onChange: (e) => {
         const files = [...e.target.files || []];
         e.target.value = "";
         if (files.length) merge.addPhotos(files);
@@ -22646,9 +22797,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/settings/BleedSettings.jsx
-  var { useState: useState48 } = React;
+  var { useState: useState49 } = React;
   function BleedSettings({ currentMm, onApply }) {
-    const [text, setText] = useState48(String(currentMm || 0));
+    const [text, setText] = useState49(String(currentMm || 0));
     const value = cleanBleedMm(text);
     return /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-field" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Bleed (mm)"), /* @__PURE__ */ React.createElement(
       NumberBox,
@@ -22733,9 +22884,9 @@ ${parts.join("\n")}</g>`);
   }
 
   // apps/ZEditor/src/ui/topbar/PageMenu.jsx
-  var { useState: useState49 } = React;
+  var { useState: useState50 } = React;
   function PageMenuBody({ rows, close }) {
-    const [customizing, setCustomizing] = useState49(null);
+    const [customizing, setCustomizing] = useState50(null);
     const active = rows.find((r) => r.key === customizing);
     if (active) {
       return /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings" }, /* @__PURE__ */ React.createElement("div", { className: "ze-menu-settings-head" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-menu-back", title: "Back", onClick: () => setCustomizing(null) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M12.5 5.5L8 10l4.5 4.5" }))), /* @__PURE__ */ React.createElement("span", null, active.label)), active.settings);
@@ -22755,7 +22906,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "bc60105"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "7a67526"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

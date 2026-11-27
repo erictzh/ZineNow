@@ -3,6 +3,7 @@
 
 import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems } from "../model/dataMerge/build.js";
 import { readPhotos } from "../io/dataPhotos.js";
+import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
 import { dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
@@ -19,13 +20,15 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   const [message, setMessage] = useState("");
 
   const parsed = useMemo(() => (view.dataSource ? parseCsv(view.dataSource.text) : null), [view.dataSource]);
-  const headers = parsed ? parsed.headers : [];
-  const idColumn = headers.find((h) => h.trim().toLowerCase() === "id") || null;
-  const records = useMemo(() => {
-    if (!parsed) return [];
-    if (view.dataOrder !== "file" && idColumn) return sortRecords(parsed.records, { column: idColumn, as: "natural", descending: view.dataOrder === "id-desc" });
-    return parsed.records;
-  }, [parsed, view.dataOrder, idColumn]);
+  const fileHeaders = parsed ? parsed.headers : [];
+  const idColumn = fileHeaders.find((h) => h.trim().toLowerCase() === "id") || null;
+  // The rows in the chosen order, with the calculated columns added (so "row number" follows the order the pages come in).
+  const table = useMemo(() => {
+    if (!parsed) return { headers: [], records: [] };
+    const ordered = view.dataOrder !== "file" && idColumn ? sortRecords(parsed.records, { column: idColumn, as: "natural", descending: view.dataOrder === "id-desc" }) : parsed.records;
+    return applyCalculated(parsed.headers, ordered, view.dataCalc);
+  }, [parsed, view.dataOrder, idColumn, view.dataCalc]);
+  const headers = table.headers, records = table.records;
   const count = records.length;
   const shownNo = Math.min(recordNo, Math.max(0, count - 1));
   const findPhoto = useMemo(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
@@ -50,6 +53,8 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     setMessage(result.problems && result.problems.length ? result.problems[0] : "");
     return true;
   }
+  function addCalc(def) { view.setDataCalc([...view.dataCalc, def]); }
+  function removeCalc(name) { view.setDataCalc(view.dataCalc.filter((d) => d.name !== name)); }
   function disconnect() { view.setDataSource(null); setRecordNo(0); setMessage(""); }
 
   // Puts {{column}} at the end of the selected text box, or into a new text box on the page.
@@ -186,8 +191,8 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
   }
 
   return {
-    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
-    connect, disconnect, insertField, usedCheck, createPages,
+    connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };
 }
