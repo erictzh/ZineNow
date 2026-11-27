@@ -5,6 +5,9 @@ import { GRID_PRESETS, presetByKey } from "../../model/dataMerge/layout.js";
 import { trackPointerDrag } from "../pointer.js";
 const { useRef, useState } = React;
 
+// The grid helper (Make a grid of copies, with ready-made sheets) is built but hidden for now: it was confusing. Set to true to bring it back.
+const SHOW_GRID_HELPER = false;
+
 // Dragging and resizing work as in the Layers panel. Where the panel was left is kept while the editor is open.
 const MIN_WIDTH = 240, MIN_HEIGHT = 200;
 const EDGES = [
@@ -169,7 +172,7 @@ export function DataPanel({ merge, view, hasPage }) {
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.markDataBlock(!merge.selected.isBlock)}>
                   {merge.selected.isBlock ? "Not a data block" : "Mark the selected group as a data block"}
                 </button>
-                {merge.selected.isBlock && (
+                {SHOW_GRID_HELPER && merge.selected.isBlock && (
                   <div className="ze-data-grid">
                     <div className="ze-data-title">Make a grid of copies</div>
                     <p className="ze-data-help">Copies the selected block into columns and rows. Choose a ready-made sheet (the block moves to its first cell and the copies follow its spacing), or set your own: place the block where the first cell should be, at the size of one cell.</p>
