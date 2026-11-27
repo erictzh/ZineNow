@@ -17,6 +17,11 @@ const EDGES = [
   { key: "sw", left: true, bottom: true }, { key: "se", right: true, bottom: true },
 ];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+// A CSV is UTF-8 (what Google Sheets and recent Excel write), or in older files Windows-1252 (accents would show as �): then it is read that way.
+function decodeCsv(buffer) {
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer); } catch { return new TextDecoder("windows-1252").decode(buffer); }
+}
+
 let rememberedPlace = { position: null, size: null };
 
 export function DataPanel({ merge, view, hasPage }) {
@@ -42,7 +47,7 @@ export function DataPanel({ merge, view, hasPage }) {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    merge.connect(file.name, await file.text());
+    merge.connect(file.name, decodeCsv(await file.arrayBuffer()));
   }
   function make() {
     if (merge.earlierCount > 0 && !confirming) { setConfirming(true); return; }
@@ -157,6 +162,10 @@ export function DataPanel({ merge, view, hasPage }) {
                 <button type="button" className="ze-btn" aria-label="Previous row" disabled={merge.recordNo <= 0} onClick={() => merge.setRecordNo(merge.recordNo - 1)}>◀</button>
                 <span>row {merge.recordNo + 1} of {count}</span>
                 <button type="button" className="ze-btn" aria-label="Next row" disabled={merge.recordNo >= count - 1} onClick={() => merge.setRecordNo(merge.recordNo + 1)}>▶</button>
+              </div>
+              <div className="ze-data-rowvalues" aria-label="The chosen row">
+                {headers.slice(0, 8).map((h) => <div key={h}><span>{h}</span><strong title={String((merge.records[merge.recordNo] || {})[h] || "")}>{String((merge.records[merge.recordNo] || {})[h] || "") || "\u2014"}</strong></div>)}
+                {headers.length > 8 && <div><span>…</span><strong>{headers.length - 8} more columns</strong></div>}
               </div>
               <label className="ze-data-row">Order{" "}
                 <select value={view.dataOrder} onChange={(e) => view.setDataOrder(e.target.value)}>

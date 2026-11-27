@@ -42,7 +42,18 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   const findPhoto = useMemo(() => makePhotoFinder(view.dataPhotos), [view.dataPhotos]);
   const showPreview = view.dataPreviewOn && count > 0;
   // What the page canvas runs its items through to show the chosen row (and, with data blocks, the rows after it in the other blocks).
-  const previewFill = showPreview ? (anns, editingId) => previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto, qrDataUrl) : null;
+  // Kept as one function per chosen row, and it hands back the same list for the same page items: the canvas lays text out again whenever the list
+  // it is given is a new one, so a fresh list on every render made stepping through rows (and every other redraw) slow.
+  const previewFill = useMemo(() => {
+    if (!showPreview) return null;
+    let lastAnns = null, lastEditing, lastOut = null;
+    return (anns, editingId) => {
+      if (anns === lastAnns && editingId === lastEditing) return lastOut;
+      lastOut = previewAnnotations(anns, records, shownNo, editingId, "en", findPhoto, qrDataUrl);
+      lastAnns = anns; lastEditing = editingId;
+      return lastOut;
+    };
+  }, [showPreview, records, shownNo, findPhoto]);
 
   const page = pages[selectedIdx] || null;
   // The designed page this page belongs to: itself, or (for a made page or a continuation design) the page it came from or is for.
@@ -90,7 +101,15 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
 
   const VIRTUAL_FIELDS = ["page in group", "pages in group", "records in group"];
+  const checkCache = useRef(null);
   function usedCheck(from, to) {
+    const key = [templatePage && templatePage.annotations, continuationPage && continuationPage.annotations, records, headers, from, to, findPhoto];
+    if (checkCache.current && checkCache.current.key.every((v, i) => v === key[i])) return checkCache.current.value;
+    const value = usedCheckNow(from, to);
+    checkCache.current = { key, value };
+    return value;
+  }
+  function usedCheckNow(from, to) {
     if (!templatePage) return { used: [], missing: [], emptyCounts: [] };
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
     const result = checkMerge([...(templatePage.annotations || []), ...(continuationPage ? continuationPage.annotations || [] : [])], headers, chosen);
