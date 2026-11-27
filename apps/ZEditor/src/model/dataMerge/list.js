@@ -12,6 +12,7 @@ import { showsOnPage } from "./groups.js";
 export const hasListDesign = (annotations) => (annotations || []).some((a) => a.listEntry) && (annotations || []).some((a) => a.listArea);
 export const listAreaOf = (annotations) => (annotations || []).find((a) => a.listArea) || null;
 export const listEntryItems = (annotations) => (annotations || []).filter((a) => a.listEntry);
+export const listHeadingItems = (annotations) => (annotations || []).filter((a) => a.listHeading);
 
 const overlapsX = (a, b) => a.x < b.x + b.width - 0.5 && b.x < a.x + a.width - 0.5;
 
@@ -35,32 +36,52 @@ export function layoutEntry(boxes, newHeights) {
   return { shifts: shift, height: bottom - top, top };
 }
 
-// Stacks entries down pages. `heightFor(design, i)`: the height of entry i when its page uses design 0 (the first) or 1 (the continuation);
-// `areaFirst` and `areaNext`: the heights of the area on the first page and on later pages; `gap`: space between entries. An entry never splits:
-// one taller than the whole area gets a page of its own (and the page is marked `overflow`). Returns [{ design, entries: [{ index, y, height }], overflow }].
-export function packList({ count, heightFor, areaFirst, areaNext, gap }) {
+// Stacks items down pages, in `columns` columns that fill one after the other (down the first, then the second, then the next page). `items`
+// (default: `count` plain entries) can carry `keep` (never left alone at the bottom of a column: it needs room for the item after it too: a
+// heading) and `newPage` (starts a new page). `heightFor(design, i)`: the height of item i when its page uses design 0 (the first) or 1 (the
+// continuation); `areaFirst` and `areaNext`: the heights of the area on the first page and on later pages; `gap`: space between items. An item
+// never splits: one taller than the whole area gets a column of its own (and the page is marked `overflow`).
+// Returns [{ design, entries: [{ index, col, y, height }], overflow }].
+export function packList({ count, items, heightFor, areaFirst, areaNext, gap, columns = 1 }) {
+  const list = items || Array.from({ length: count }, () => ({}));
   const pages = [];
   let cur = null;
-  const start = () => { cur = { design: pages.length === 0 ? "first" : "continuation", area: pages.length === 0 ? areaFirst : areaNext, entries: [], y: 0, overflow: false }; pages.push(cur); };
-  for (let i = 0; i < count; i++) {
-    if (!cur) start();
-    let h = heightFor(pages.length === 1 ? 0 : 1, i);
-    if (cur.entries.length > 0 && cur.y + gap + h > cur.area + 0.5) { start(); h = heightFor(1, i); }
-    const y = cur.entries.length ? cur.y + gap : 0;
-    cur.entries.push({ index: i, y, height: h });
-    cur.y = y + h;
+  const newPage = () => {
+    const first = pages.length === 0;
+    cur = { design: first ? "first" : "continuation", area: first ? areaFirst : areaNext, entries: [], col: 0, y: [0], used: [false], overflow: false };
+    pages.push(cur);
+  };
+  const design = () => (pages.length === 1 ? 0 : 1);
+  const nextColumn = () => { if (cur.col + 1 < columns) { cur.col++; cur.y[cur.col] = 0; cur.used[cur.col] = false; return true; } return false; };
+  for (let i = 0; i < list.length; i++) {
+    if (!cur || (list[i].newPage && cur.entries.length > 0)) newPage();
+    for (;;) {
+      const h = heightFor(design(), i);
+      const gapNow = cur.used[cur.col] ? gap : 0;
+      const need = h + (list[i].keep && i + 1 < list.length ? gap + heightFor(design(), i + 1) : 0);
+      const fits = cur.y[cur.col] + gapNow + need <= cur.area + 0.5;
+      if (fits || !cur.used[cur.col]) break; // an empty column takes it even when too tall (flagged below)
+      if (!nextColumn()) newPage();
+    }
+    const h = heightFor(design(), i);
+    const y = cur.used[cur.col] ? cur.y[cur.col] + gap : 0;
+    cur.entries.push({ index: i, col: cur.col, y, height: h });
+    cur.y[cur.col] = y + h;
+    cur.used[cur.col] = true;
     if (h > cur.area + 0.5) cur.overflow = true;
   }
-  return pages.map(({ design, entries, overflow }) => ({ design, entries, overflow }));
+  return pages.map(({ design: d, entries, overflow }) => ({ design: d, entries, overflow }));
 }
 
-// One made page. `page`: { design, pageInGroup, pagesInGroup, recordsInGroup, groupRecord, entries: [{ record, y, shifts }] }. The designed page's items
-// are filled for the group's first record (page counters added) except the entry and the area; each entry is a copy of the entry's items, filled for
-// its record and moved to its place in the area (from the area's top, each item's shift added). The area itself is left out.
+// One made page. `page`: { design, pageInGroup, pagesInGroup, recordsInGroup, groupRecord, entries: [{ kind: "entry" | "heading", record, y, xOffset, shifts }] }.
+// The designed page's items are filled for the group's first record (page counters added) except the entry, the heading and the area; each placed
+// entry (or heading) is a copy of its items, filled for its record and moved to its place in the area (from the area's top, each item's shift added,
+// `xOffset` for the column). The area itself is left out.
 export function buildListPage(annotations, page, { newId, newGroupId, lang, repeatOthers, findPhoto, makeQr } = {}) {
   const area = listAreaOf(annotations);
-  const entry = listEntryItems(annotations);
-  const entryTop = Math.min(...entry.map((a) => a.y));
+  const designs = { entry: listEntryItems(annotations), heading: listHeadingItems(annotations) };
+  const tops = {};
+  for (const kind of ["entry", "heading"]) tops[kind] = designs[kind].length ? Math.min(...designs[kind].map((a) => a.y)) : 0;
   const vars = { ...page.groupRecord, "page in group": String(page.pageInGroup), "pages in group": String(page.pagesInGroup), "records in group": String(page.recordsInGroup) };
   const out = [], missing = [];
   let entriesDone = false;
@@ -68,11 +89,12 @@ export function buildListPage(annotations, page, { newId, newGroupId, lang, repe
     if (entriesDone) return;
     entriesDone = true;
     for (const e of page.entries) {
+      const kind = e.kind === "heading" ? "heading" : "entry";
       const items = [];
-      for (const a of entry) {
+      for (const a of designs[kind]) {
         const filled = fillItem(a, e.record, { lang, findPhoto, makeQr });
         for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
-        if (filled.ann) items.push({ ...filled.ann, y: area.y + e.y + (a.y - entryTop) + (e.shifts.get(a.id) || 0), listEntry: undefined });
+        if (filled.ann) items.push({ ...filled.ann, x: filled.ann.x + (e.xOffset || 0), y: area.y + e.y + (a.y - tops[kind]) + (e.shifts.get(a.id) || 0), listEntry: undefined, listHeading: undefined });
       }
       out.push(...remapItems(items, newId, newGroupId));
     }
@@ -80,7 +102,7 @@ export function buildListPage(annotations, page, { newId, newGroupId, lang, repe
   const others = [];
   for (const a of annotations) {
     if (a.listArea) continue;
-    if (a.listEntry) { others.push({ place: true }); continue; }
+    if (a.listEntry || a.listHeading) { others.push({ place: true }); continue; }
     if (!showsOnPage(a.showOn, page, repeatOthers)) continue;
     const filled = fillItem(a, vars, { lang, findPhoto, makeQr });
     for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);

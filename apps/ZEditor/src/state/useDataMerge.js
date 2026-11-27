@@ -13,9 +13,10 @@ import { applyCalculated } from "../model/dataMerge/calc.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
 import { fitLength, itemBox, textHeightFor } from "../render/textFit.js";
-import { buildListPage, hasListDesign, layoutEntry, listAreaOf, listEntryItems, packList } from "../model/dataMerge/list.js";
+import { buildListPage, hasListDesign, layoutEntry, listAreaOf, listEntryItems, listHeadingItems, packList } from "../model/dataMerge/list.js";
 import { fillTextItem } from "../model/dataMerge/build.js";
 import { flowBoxOf, mergeFlowPage, planFlowPages } from "../model/dataMerge/flow.js";
+import { groupRecords } from "../model/dataMerge/groups.js";
 import { cloneItems, dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
 import { PAGE_SIZES_MM, presetByKey } from "../model/dataMerge/layout.js";
 import { translatedAnnotation } from "../model/annotations.js";
@@ -134,26 +135,49 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   // The pages a merge would make for the chosen rows.
   // ---- Flowing list: how the chosen records stack into pages.
   const listCache = useRef(null);
+  const listColumns = Math.max(1, Math.min(4, view.dataListColumns));
   function listPlansFor(chosen) {
     const k = 72 / 25.4 * MAIN_SCALE; // pixels per mm
+    const gap = view.dataListGap * k, colGap = view.dataListColumnGap * k;
     const designs = [templatePage.annotations || [], continuationPage && hasListDesign(continuationPage.annotations) ? continuationPage.annotations : templatePage.annotations || []];
-    const specs = designs.map((ann) => ({ entry: listEntryItems(ann), area: listAreaOf(ann), boxes: listEntryItems(ann).map(itemBox) }));
+    const specOf = (items) => ({ items, boxes: items.map(itemBox) });
+    const specs = designs.map((ann) => ({ area: listAreaOf(ann), entry: specOf(listEntryItems(ann)), heading: specOf(listHeadingItems(ann)) }));
+    const groupColumn = specs[0].heading.items.length && headers.includes(view.dataGroupBy) ? view.dataGroupBy : "";
+    const sequence = [];
+    groupRecords(chosen, groupColumn).forEach((g, gi) => {
+      if (groupColumn) sequence.push({ kind: "heading", record: g.records[0], keep: true, newPage: view.dataListNewPage && gi > 0 });
+      g.records.forEach((r) => sequence.push({ kind: "entry", record: r }));
+    });
     const layouts = new Map();
     const layoutFor = (d, i) => {
       const key = d + ":" + i;
       if (!layouts.has(key)) {
+        const item = sequence[i], spec = specs[d][item.kind === "heading" && specs[d].heading.items.length ? "heading" : "entry"];
         const filled = new Map();
-        specs[d].entry.forEach((a) => { if (a.type === "text" && !(a.frameHeight > 0)) filled.set(a.id, textHeightFor(a, fillTextItem(a, chosen[i], { lang: "en" }).ann.text || "")); });
-        layouts.set(key, layoutEntry(specs[d].boxes, filled));
+        spec.items.forEach((a) => { if (a.type === "text" && !(a.frameHeight > 0)) filled.set(a.id, textHeightFor(a, fillTextItem(a, item.record, { lang: "en" }).ann.text || "")); });
+        layouts.set(key, layoutEntry(spec.boxes, filled));
       }
       return layouts.get(key);
     };
-    const packed = packList({ count: chosen.length, heightFor: (d, i) => layoutFor(d, i).height, areaFirst: specs[0].area.height, areaNext: specs[1].area.height, gap: view.dataListGap * k });
-    return packed.map((pg, n) => ({
-      design: pg.design, overflow: pg.overflow, pageInGroup: n + 1, pagesInGroup: packed.length, recordsInGroup: chosen.length, groupRecord: chosen[0],
-      entries: pg.entries.map((e) => ({ record: chosen[e.index], y: e.y, shifts: layoutFor(pg.design === "first" ? 0 : 1, e.index).shifts })),
-    }));
+    const packed = packList({ items: sequence, heightFor: (d, i) => layoutFor(d, i).height, areaFirst: specs[0].area.height, areaNext: specs[1].area.height, gap, columns: listColumns });
+    return packed.map((pg, n) => {
+      const d = pg.design === "first" ? 0 : 1;
+      const step = (specs[d].area.width + colGap) / listColumns;
+      return {
+        design: pg.design, overflow: pg.overflow, pageInGroup: n + 1, pagesInGroup: packed.length, recordsInGroup: chosen.length, groupRecord: chosen[0],
+        entries: pg.entries.map((e) => ({ kind: sequence[e.index].kind, record: sequence[e.index].record, y: e.y, xOffset: e.col * step, shifts: layoutFor(d, e.index).shifts })),
+      };
+    });
   }
+  // An entry wider than its column would run into the next column.
+  const listTooWide = (() => {
+    if (!listMode || listColumns < 2) return false;
+    const boxes = listEntryItems(templatePage.annotations).map(itemBox), area = listAreaOf(templatePage.annotations);
+    if (!boxes.length || !area) return false;
+    const width = Math.max(...boxes.map((b) => b.x + b.width)) - Math.min(...boxes.map((b) => b.x));
+    const colGap = view.dataListColumnGap * 72 / 25.4 * MAIN_SCALE;
+    return width > (area.width + colGap) / listColumns - colGap + 1;
+  })();
   const flowCache = useRef(null);
   function plannedPagesNow() { return templatePage ? plannedPages(undefined, undefined) : []; }
   function flowPlansFor(chosen) {
@@ -162,7 +186,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   function plannedPages(from, to) {
     const chosen = selectRecords(count, { from, to }).map((i) => records[i]);
     if (listMode) {
-      const key = [templatePage.annotations, continuationPage && continuationPage.annotations, records, from, to, view.dataListGap];
+      const key = [templatePage.annotations, continuationPage && continuationPage.annotations, records, from, to, view.dataListGap, view.dataListColumns, view.dataListColumnGap, view.dataListNewPage, view.dataGroupBy];
       if (!listCache.current || listCache.current.key.some((v, i) => v !== key[i])) listCache.current = { key, plans: chosen.length ? listPlansFor(chosen) : [] };
       return listCache.current.plans;
     }
@@ -262,6 +286,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
     isBlock: blockTargets.length > 0 && blockTargets.every((a) => a.dataBlock),
     showOn: selectedItems.length > 0 && selectedItems.every((a) => (a.showOn || "") === (selectedItems[0].showOn || "")) ? selectedItems[0].showOn || "every" : "",
     hasBlock: selectedItems.some((a) => a.dataBlock),
+    isListHeading: blockTargets.length > 0 && blockTargets.every((a) => a.listHeading),
     isListEntry: blockTargets.length > 0 && blockTargets.every((a) => a.listEntry),
     isRect: selectedItems.length === 1 && selectedItems[0].type === "rect",
     isListArea: selectedItems.length === 1 && Boolean(selectedItems[0].listArea),
@@ -355,7 +380,10 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   // The selected text box is the long text: it continues onto the next page when it is full. One per page.
   // The selected group is the list entry; the selected rectangle is the list area (one of each per page).
   function setListEntry(on) {
-    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, listEntry: on || undefined, dataBlock: on ? undefined : a.dataBlock } : on && a.listEntry ? { ...a, listEntry: undefined } : a)));
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, listEntry: on || undefined, listHeading: on ? undefined : a.listHeading, dataBlock: on ? undefined : a.dataBlock } : on && a.listEntry ? { ...a, listEntry: undefined } : a)));
+  }
+  function setListHeading(on) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, listHeading: on || undefined, listEntry: on ? undefined : a.listEntry, dataBlock: on ? undefined : a.dataBlock } : on && a.listHeading ? { ...a, listHeading: undefined } : a)));
   }
   function setListArea(on) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && a.type === "rect" ? { ...a, listArea: on || undefined } : on && a.listArea ? { ...a, listArea: undefined } : a)));
@@ -372,7 +400,7 @@ export function useDataMerge({ doc, history, view, edits, selection, project, st
   }
 
   return {
-    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo: stepRecord, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, listMode, setListEntry, setListArea, listOverflow: listMode && plannedPagesNow().some((p) => p.overflow), listHasEntry: Boolean(templatePage && listEntryItems(templatePage.annotations).length), listHasArea: Boolean(templatePage && listAreaOf(templatePage.annotations)), setShowOn, plannedPages, message, setMessage,
+    parsed, headers, fileHeaders, records, count, idColumn, recordNo: shownNo, setRecordNo: stepRecord, previewFill, slotCount, blockMode, groupBy, selected, continuationPage, nextSlotCount, addContinuationDesign, removeContinuationDesign, goToContinuationDesign, pageSlotCount: page ? dataSlots(page.annotations || []).length : 0, onContinuationPage: Boolean(page && page.dataFor !== undefined), markDataBlock, setGroupDataBlock, makeGrid, exportGroups, exportNames, exportPattern, exporting, exportRecords, addPhotos, setPicField, setQrText, setFlowText, letterMode, flowProblem, listMode, listColumns, listTooWide, listHasHeading: Boolean(templatePage && listHeadingItems(templatePage.annotations).length), setListEntry, setListHeading, setListArea, listOverflow: listMode && plannedPagesNow().some((p) => p.overflow), listHasEntry: Boolean(templatePage && listEntryItems(templatePage.annotations).length), listHasArea: Boolean(templatePage && listAreaOf(templatePage.annotations)), setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, addCalc, removeCalc, insertField, usedCheck, createPages,
   };

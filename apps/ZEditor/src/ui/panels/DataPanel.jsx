@@ -230,6 +230,26 @@ export function DataPanel({ merge, view, hasPage }) {
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || !merge.selected.isRect} onClick={() => merge.setListArea(!merge.selected.isListArea)}>
                   {merge.selected.isListArea ? "Not the list area" : "Mark the selected rectangle as the list area"}
                 </button>
+                <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.setListHeading(!merge.selected.isListHeading)}>
+                  {merge.selected.isListHeading ? "Not the list heading" : "Mark the selected group as the group heading (optional)"}
+                </button>
+                <label className="ze-data-row">Columns{" "}
+                  <select value={view.dataListColumns} onChange={(e) => view.setDataListColumns(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+                  {view.dataListColumns > 1 && <> gap (mm) <input className="ze-data-num" type="number" min="0" max="50" step="0.5" value={view.dataListColumnGap} onChange={(e) => view.setDataListColumnGap(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} /></>}
+                </label>
+                {merge.listTooWide && <p className="ze-data-warn">The entry is wider than a column, so it would run into the next one. Make the entry narrower, or use fewer columns.</p>}
+                {merge.listHasHeading && (
+                  <>
+                    <label className="ze-data-row">Group by{" "}
+                      <select value={headers.includes(view.dataGroupBy) ? view.dataGroupBy : ""} onChange={(e) => view.setDataGroupBy(e.target.value)}>
+                        <option value="">No grouping</option>
+                        {headers.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </label>
+                    <label className="ze-data-row"><input type="checkbox" checked={view.dataListNewPage} onChange={(e) => view.setDataListNewPage(e.target.checked)} /> Start each group on a new page</label>
+                    <p className="ze-data-help">Each group starts with the heading (filled from the group's first row), and the heading is never left alone at the bottom of a column.</p>
+                  </>
+                )}
                 <label className="ze-data-row">Space between entries (mm) <input className="ze-data-num" type="number" min="0" max="50" step="0.5" value={view.dataListGap} onChange={(e) => view.setDataListGap(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} /></label>
                 <p className="ze-data-help">{merge.listMode ? "List ready: " + merge.plannedPages(undefined, undefined).length + " page" + (merge.plannedPages(undefined, undefined).length === 1 ? "" : "s") + " for the rows. The area is not drawn on the made pages." : merge.listHasEntry || merge.listHasArea ? "Mark both an entry (a group) and an area (a rectangle) on this page." : "Nothing marked yet."}</p>
                 {merge.listOverflow && <p className="ze-data-warn">At least one entry is taller than the list area, so it gets a page of its own and may run off it. Make the area taller or the entry shorter.</p>}
