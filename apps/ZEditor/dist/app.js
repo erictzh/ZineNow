@@ -5917,9 +5917,9 @@
           var _base64 = "";
           var _this = {};
           var writeEncoded = function(b) {
-            _base64 += String.fromCharCode(encode(b & 63));
+            _base64 += String.fromCharCode(encode2(b & 63));
           };
-          var encode = function(n) {
+          var encode2 = function(n) {
             if (n < 0) {
             } else if (n < 26) {
               return 65 + n;
@@ -15892,7 +15892,7 @@ ${parts.join("\n")}</g>`);
     const ids = /* @__PURE__ */ new Map(), groups = /* @__PURE__ */ new Map();
     for (const a of chosen) ids.set(a.id, newId2());
     return chosen.map((a) => {
-      const copy = { ...a, id: ids.get(a.id), dataBlock: void 0, showOn: void 0, picField: void 0, qrText: void 0, flowText: void 0 };
+      const copy = { ...a, id: ids.get(a.id), dataBlock: void 0, showOn: void 0, picField: void 0, qrText: void 0, qrType: void 0, qrValues: void 0, flowText: void 0 };
       if (copy.groupId) {
         if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
         copy.groupId = groups.get(copy.groupId);
@@ -15904,7 +15904,8 @@ ${parts.join("\n")}</g>`);
   function fillQrItem(ann, record, makeQr, lang) {
     if (ann.type !== "image" || ann.qrText === void 0) return { handled: false, ann };
     const result2 = fillTemplate(ann.qrText, record, { lang });
-    const text = result2.text.trim();
+    let text = result2.text.trim();
+    if (ann.qrType === "website" && text && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = "https://" + text;
     if (!text || result2.missing.length || result2.empty.length || !makeQr) return { handled: true, ann: null };
     const qr = makeQr(text);
     if (!qr) return { handled: true, ann: null };
@@ -21007,22 +21008,96 @@ ${parts.join("\n")}</g>`);
     );
   }
 
+  // apps/ZEditor/src/model/qrTypes.js
+  var QR_TYPES = [
+    { key: "website", label: "Website", fields: [{ key: "url", label: "Web address", placeholder: "example.com or https://example.com/{{id}}" }] },
+    { key: "phone", label: "Phone call", fields: [{ key: "number", label: "Phone number", placeholder: "+60123456789" }] },
+    { key: "sms", label: "SMS", fields: [{ key: "number", label: "Phone number", placeholder: "+60123456789" }, { key: "message", label: "Message (optional)", placeholder: "Hello" }] },
+    { key: "email", label: "Email", fields: [{ key: "to", label: "To", placeholder: "name@example.com" }, { key: "subject", label: "Subject (optional)", placeholder: "" }, { key: "body", label: "Message (optional)", placeholder: "" }] },
+    { key: "whatsapp", label: "WhatsApp", fields: [{ key: "number", label: "Phone number with country code", placeholder: "60123456789" }, { key: "message", label: "Message (optional)", placeholder: "" }] },
+    { key: "wifi", label: "Wi-Fi", fields: [{ key: "ssid", label: "Network name", placeholder: "" }, { key: "password", label: "Password", placeholder: "" }, { key: "security", label: "Security", options: [["WPA", "WPA / WPA2"], ["WEP", "WEP"], ["nopass", "No password"]] }, { key: "hidden", label: "Hidden network", checkbox: true }] },
+    { key: "contact", label: "Contact card", fields: [{ key: "first", label: "First name", placeholder: "" }, { key: "last", label: "Last name", placeholder: "" }, { key: "org", label: "Organisation (optional)", placeholder: "" }, { key: "title", label: "Job title (optional)", placeholder: "" }, { key: "phone", label: "Phone (optional)", placeholder: "+60123456789" }, { key: "email", label: "Email (optional)", placeholder: "" }, { key: "url", label: "Website (optional)", placeholder: "" }] },
+    { key: "location", label: "Map location", fields: [{ key: "lat", label: "Latitude", placeholder: "3.1390" }, { key: "lng", label: "Longitude", placeholder: "101.6869" }] },
+    { key: "custom", label: "Custom text", fields: [{ key: "text", label: "Text", placeholder: "https://example.com" }] }
+  ];
+  var qrTypeByKey = (key) => QR_TYPES.find((t) => t.key === key) || QR_TYPES[QR_TYPES.length - 1];
+  var FIELD = /\{\{[^{}]*\}\}/g;
+  function mapOutsideFields(text, fn) {
+    let out = "", last = 0;
+    for (const m of String(text).matchAll(FIELD)) {
+      out += fn(text.slice(last, m.index)) + m[0];
+      last = m.index + m[0].length;
+    }
+    return out + fn(String(text).slice(last));
+  }
+  var encode = (text) => mapOutsideFields(text, (s) => encodeURIComponent(s));
+  var escapeWifi = (text) => mapOutsideFields(text, (s) => s.replace(/([\\;,:"])/g, "\\$1"));
+  var escapeCard = (text) => mapOutsideFields(text, (s) => s.replace(/([\\;,])/g, "\\$1").replace(/\r?\n/g, "\\n"));
+  var trim = (v) => String(v === void 0 || v === null ? "" : v).trim();
+  var digitsOnly = (text) => mapOutsideFields(text, (s) => s.replace(/[^\d]/g, ""));
+  var phoneChars = (text) => mapOutsideFields(text, (s) => s.replace(/[\s\-().]/g, ""));
+  function buildQrText(typeKey, values = {}) {
+    const v = (k) => trim(values[k]);
+    switch (typeKey) {
+      case "website": {
+        const url = v("url");
+        return !url ? "" : /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("{{") ? url : "https://" + url;
+      }
+      case "phone":
+        return v("number") ? "tel:" + phoneChars(v("number")) : "";
+      case "sms":
+        return v("number") ? "SMSTO:" + phoneChars(v("number")) + ":" + v("message") : "";
+      case "email": {
+        if (!v("to")) return "";
+        const parts = [v("subject") && "subject=" + encode(v("subject")), v("body") && "body=" + encode(v("body"))].filter(Boolean);
+        return "mailto:" + v("to") + (parts.length ? "?" + parts.join("&") : "");
+      }
+      case "whatsapp":
+        return v("number") ? "https://wa.me/" + digitsOnly(v("number")) + (v("message") ? "?text=" + encode(v("message")) : "") : "";
+      case "wifi": {
+        if (!v("ssid")) return "";
+        const security = ["WPA", "WEP", "nopass"].includes(values.security) ? values.security : "WPA";
+        return "WIFI:T:" + security + ";S:" + escapeWifi(v("ssid")) + ";" + (security === "nopass" ? "" : "P:" + escapeWifi(values.password === void 0 ? "" : String(values.password)) + ";") + (values.hidden ? "H:true;" : "") + ";";
+      }
+      case "contact": {
+        if (!v("first") && !v("last")) return "";
+        const lines = ["BEGIN:VCARD", "VERSION:3.0", "N:" + escapeCard(v("last")) + ";" + escapeCard(v("first")) + ";;;", "FN:" + escapeCard((v("first") + " " + v("last")).trim())];
+        if (v("org")) lines.push("ORG:" + escapeCard(v("org")));
+        if (v("title")) lines.push("TITLE:" + escapeCard(v("title")));
+        if (v("phone")) lines.push("TEL:" + phoneChars(v("phone")));
+        if (v("email")) lines.push("EMAIL:" + v("email"));
+        if (v("url")) lines.push("URL:" + v("url"));
+        lines.push("END:VCARD");
+        return lines.join("\n");
+      }
+      case "location":
+        return v("lat") && v("lng") ? "geo:" + v("lat") + "," + v("lng") : "";
+      default:
+        return values.text === void 0 ? "" : String(values.text);
+    }
+  }
+
   // apps/ZEditor/src/ui/panels/format/QrSection.jsx
   function QrSection({ ann, patch }) {
+    const typeKey = ann.qrType || "custom";
+    const type = qrTypeByKey(typeKey);
+    const values = ann.qrValues || (typeKey === "custom" ? { text: ann.qrText || "" } : {});
     const text = ann.qrText || "";
-    return /* @__PURE__ */ React.createElement(PanelSection, { id: "image.qr", title: "QR code", defaultOpen: true, hint: "The code holds this text. Put {{column}} where a value from your data goes, for example https://example.com/{{id}}: the page then shows a grey QR, and each merged page gets its own code." }, /* @__PURE__ */ React.createElement(
+    const update = (nextType, nextValues) => patch({ ...qrPatch(buildQrText(nextType, nextValues)), qrType: nextType, qrValues: nextValues });
+    const chooseType = (key) => update(key, key === "custom" ? { text } : key === "wifi" ? { security: "WPA" } : {});
+    return /* @__PURE__ */ React.createElement(PanelSection, { id: "image.qr", title: "QR code", defaultOpen: true, hint: "Choose what the code does when someone scans it, then fill in the boxes. Put {{column}} in a box where a value from your data goes, for example https://example.com/{{id}}: the page then shows a grey QR, and each merged page gets its own code." }, /* @__PURE__ */ React.createElement("label", { className: "ze-format-label", htmlFor: "qr-type" }, "Type"), /* @__PURE__ */ React.createElement("select", { id: "qr-type", className: "ze-format-select", value: typeKey, onChange: (e) => chooseType(e.target.value) }, QR_TYPES.map((t) => /* @__PURE__ */ React.createElement("option", { key: t.key, value: t.key }, t.label))), type.fields.map((f, i) => /* @__PURE__ */ React.createElement("div", { key: typeKey + f.key, style: { marginTop: 8 } }, f.checkbox ? /* @__PURE__ */ React.createElement("label", { className: "ze-format-label" }, /* @__PURE__ */ React.createElement("input", { type: "checkbox", checked: Boolean(values[f.key]), onChange: (e) => update(typeKey, { ...values, [f.key]: e.target.checked }) }), " ", f.label) : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("label", { className: "ze-format-label" }, f.label), f.options ? /* @__PURE__ */ React.createElement("select", { className: "ze-format-select", value: values[f.key] || f.options[0][0], onChange: (e) => update(typeKey, { ...values, [f.key]: e.target.value }) }, f.options.map(([v, l]) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, l))) : /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "text",
         className: "ze-format-number",
-        "aria-label": "Text of the QR code",
-        placeholder: "https://example.com",
-        autoFocus: text === "",
-        value: text,
-        onChange: (e) => patch(qrPatch(e.target.value)),
+        "aria-label": f.label,
+        placeholder: f.placeholder,
+        autoFocus: i === 0 && text === "",
+        value: values[f.key] || "",
+        onChange: (e) => update(typeKey, { ...values, [f.key]: e.target.value }),
         spellCheck: "false"
       }
-    ), /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty", style: { marginTop: 6 } }, text === "" ? "Type the text or web address the code should hold." : text.includes("{{") ? "Shows a grey QR here until the data is merged." : "Print one and scan it with a phone before you print many."));
+    )))), /* @__PURE__ */ React.createElement("div", { className: "ze-format-empty", style: { marginTop: 8 } }, text === "" ? "Fill in the boxes above and the code appears." : text.includes("{{") ? "Shows a grey QR here until the data is merged." : "Print one and scan it with a phone before you print many."));
   }
 
   // apps/ZEditor/src/ui/dialogs/AiModelDialog.jsx
@@ -24641,7 +24716,7 @@ ${parts.join("\n")}</g>`);
       edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, picField: column || void 0, qrText: column ? void 0 : a.qrText } : a));
     }
     function setQrText(text) {
-      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...text ? qrPatch(text) : { qrText: void 0 }, picField: text ? void 0 : a.picField } : a), "qr:" + selectedIds.join(","));
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && a.type === "image" ? { ...a, ...text ? { ...qrPatch(text), qrType: "custom", qrValues: { text } } : { qrText: void 0, qrType: void 0, qrValues: void 0 }, picField: text ? void 0 : a.picField } : a), "qr:" + selectedIds.join(","));
     }
     function markDataBlock(on) {
       if (!selected.grouped) {
@@ -25076,7 +25151,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "94a57aa"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "39dbef1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",

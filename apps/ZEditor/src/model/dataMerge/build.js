@@ -80,7 +80,7 @@ export function remapItems(chosen, newId, newGroupId) {
   const ids = new Map(), groups = new Map();
   for (const a of chosen) ids.set(a.id, newId());
   return chosen.map((a) => {
-    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined, qrText: undefined, flowText: undefined };
+    const copy = { ...a, id: ids.get(a.id), dataBlock: undefined, showOn: undefined, picField: undefined, qrText: undefined, qrType: undefined, qrValues: undefined, flowText: undefined };
     if (copy.groupId) {
       if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
       copy.groupId = groups.get(copy.groupId);
@@ -95,7 +95,8 @@ export function remapItems(chosen, newId, newGroupId) {
 export function fillQrItem(ann, record, makeQr, lang) {
   if (ann.type !== "image" || ann.qrText === undefined) return { handled: false, ann }; // an empty text is a QR with nothing to say yet: left out
   const result = fillTemplate(ann.qrText, record, { lang });
-  const text = result.text.trim();
+  let text = result.text.trim();
+  if (ann.qrType === "website" && text && !/^[a-z][a-z0-9+.-]*:/i.test(text)) text = "https://" + text; // a bare www.example.com from the data gets https://
   if (!text || result.missing.length || result.empty.length || !makeQr) return { handled: true, ann: null };
   const qr = makeQr(text);
   if (!qr) return { handled: true, ann: null };

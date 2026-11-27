@@ -7,6 +7,7 @@ import { applyCalculated, calculate, usableName } from "../apps/ZEditor/src/mode
 import { flowBoxOf, mergeFlowPage, planFlowPages, splitFlowText } from "../apps/ZEditor/src/model/dataMerge/flow.js";
 import { recordFileNames, recordGroups, safeFileName } from "../apps/ZEditor/src/model/dataMerge/export.js";
 import { makeZip } from "../apps/ZEditor/src/io/zipWriter.js";
+import { buildQrText, mapOutsideFields } from "../apps/ZEditor/src/model/qrTypes.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -296,4 +297,16 @@ ok(fillQrItem({ ...qrFrame, qrText: "" }, { id: "1" }, fakeQr).ann === null && f
 ok(qrProblems([{ ...qrFrame, qrText: "" }], [{ id: "1" }])[0].empty === 1, "and counted in the check");
 const qpv = previewAnnotations([{ ...qrFrame, qrText: "{{nope}}" }], [{ id: "1" }], 0, null, "en", null, fakeQr);
 ok(qpv[0].hidden === undefined && qpv[0].src === "x", "a QR that cannot be made yet keeps its placeholder in the preview");
+// ---- QR types
+ok(buildQrText("website", { url: "example.com" }) === "https://example.com" && buildQrText("website", { url: "http://a.org/{{id}}" }) === "http://a.org/{{id}}" && buildQrText("website", { url: "{{website}}" }) === "{{website}}" && buildQrText("website", { url: " " }) === "", "website: a bare address gets https://, fields and other schemes are left alone, empty gives nothing");
+ok(buildQrText("phone", { number: "+60 12-345 6789" }) === "tel:+60123456789" && buildQrText("phone", { number: "{{phone}}" }) === "tel:{{phone}}", "phone: spaces and dashes go, fields stay");
+ok(buildQrText("sms", { number: "012 345", message: "Hi {{name}}" }) === "SMSTO:012345:Hi {{name}}", "SMS");
+ok(buildQrText("email", { to: "a@b.com", subject: "Hello there", body: "Hi {{name}}, ok?" }) === "mailto:a@b.com?subject=Hello%20there&body=Hi%20{{name}}%2C%20ok%3F" && buildQrText("email", { to: "a@b.com" }) === "mailto:a@b.com", "email: subject and message encoded, fields kept");
+ok(buildQrText("whatsapp", { number: "+60 12-3456", message: "Hi there" }) === "https://wa.me/60123456?text=Hi%20there", "WhatsApp: digits only");
+ok(buildQrText("wifi", { ssid: "My;Net", password: "p:a\\ss", security: "WPA" }) === "WIFI:T:WPA;S:My\\;Net;P:p\\:a\\\\ss;;" && buildQrText("wifi", { ssid: "Cafe", security: "nopass" }) === "WIFI:T:nopass;S:Cafe;;" && buildQrText("wifi", { ssid: "A", password: "b", security: "WEP", hidden: true }) === "WIFI:T:WEP;S:A;P:b;H:true;;" && buildQrText("wifi", { ssid: "" }) === "", "Wi-Fi: special characters escaped, no password, hidden");
+const vc = buildQrText("contact", { first: "Ana", last: "Lopez, Jr", org: "ACME", phone: "+60 1", email: "a@b.my" }).split("\n");
+ok(vc[0] === "BEGIN:VCARD" && vc.includes("N:Lopez\\, Jr;Ana;;;") && vc.includes("FN:Ana Lopez\\, Jr") && vc.includes("TEL:+601") && vc[vc.length - 1] === "END:VCARD" && !vc.some((l) => l.startsWith("TITLE")), "contact card: vCard lines, empty ones left out");
+ok(buildQrText("contact", { phone: "1" }) === "" && buildQrText("location", { lat: "3.1", lng: "101.6" }) === "geo:3.1,101.6" && buildQrText("location", { lat: "3.1" }) === "" && buildQrText("custom", { text: " x " }) === " x ", "contact needs a name, location both numbers, custom text is as typed");
+ok(mapOutsideFields("a b{{x y}}c d", (t) => t.toUpperCase()) === "A B{{x y}}C D", "text between fields can be changed without touching the fields");
+ok(fillQrItem({ ...qrFrame, qrType: "website", qrText: "{{id}}" }, { id: "www.yahoo.com" }, fakeQr).ann.src === "qr:https://www.yahoo.com" && fillQrItem({ ...qrFrame, qrType: "website", qrText: "{{id}}" }, { id: "http://a.org" }, fakeQr).ann.src === "qr:http://a.org" && fillQrItem({ ...qrFrame, qrText: "{{id}}" }, { id: "www.yahoo.com" }, fakeQr).ann.src === "qr:www.yahoo.com", "a Website QR puts https:// before an address from the data that has none; custom text is left as it is");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
