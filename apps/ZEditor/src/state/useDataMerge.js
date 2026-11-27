@@ -5,7 +5,9 @@ import { checkMerge, makePhotoFinder, mergeAnnotations, pictureProblems } from "
 import { readPhotos } from "../io/dataPhotos.js";
 import { parseCsv } from "../model/dataMerge/csv.js";
 import { annotationBounds } from "../render/itemGeometry.js";
-import { dataSlots, gridCopies, mergeGroupPage, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
+import { dataSlots, gridCopies, mergeGroupPage, sheetGrid, planPages, previewAnnotations } from "../model/dataMerge/groups.js";
+import { PAGE_SIZES_MM, presetByKey } from "../model/dataMerge/layout.js";
+import { translatedAnnotation } from "../model/annotations.js";
 import { selectRecords, sortRecords } from "../model/dataMerge/records.js";
 
 import { MAIN_SCALE } from "../constants.js";
@@ -144,17 +146,36 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     setMessage("");
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedGroups.has(a.groupId) ? { ...a, dataBlock: on || undefined, showOn: on ? undefined : a.showOn } : a)));
   }
-  // Copies of the selected data block laid out as `cols` x `rows` (the block stays top left); `gapMm` between them.
-  function makeGrid({ cols, rows, gapMm }) {
+  // Copies of the selected data block laid out as `cols` x `rows` (the block stays top left); `gapMm` between them. With `preset` (a ready-made
+  // sheet) the block is first moved to the sheet's first cell and the copies follow the sheet's cell spacing.
+  function makeGrid({ cols, rows, gapMm, preset }) {
     if (!page || !selected.isBlock) return;
-    const boxes = blockTargets.map(annotationBounds);
-    const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
-    const bounds = { x, y, width: Math.max(...boxes.map((b) => b.x + b.width)) - x, height: Math.max(...boxes.map((b) => b.y + b.height)) - y };
-    const gap = gapMm / 25.4 * 72 * MAIN_SCALE;
-    const result = gridCopies(blockTargets, bounds, { cols, rows, gap: { x: gap, y: gap } }, { newId: () => nextAnnIdRef.current++, newGroupId: () => "g" + nextAnnIdRef.current++ }, { width: page.width * MAIN_SCALE, height: page.height * MAIN_SCALE });
-    if (!result.items.length) { setMessage("A grid of 1 × 1 is just the block."); return; }
-    edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, ...result.items]);
-    setMessage(cols * rows + " blocks in a grid." + (result.outside ? " " + result.outside + " of them are partly off the page: make the block smaller, or the gap, or fewer columns and rows." : ""));
+    const k = 72 / 25.4 * MAIN_SCALE; // pixels per mm
+    const sheet = preset ? presetByKey(preset) : null;
+    const grid = sheet ? sheetGrid(sheet, k) : null;
+    const notes = [];
+    let targets = blockTargets;
+    const boxes = () => targets.map(annotationBounds);
+    const boundsOf = () => { const b = boxes(); const x = Math.min(...b.map((v) => v.x)), y = Math.min(...b.map((v) => v.y)); return { x, y, width: Math.max(...b.map((v) => v.x + v.width)) - x, height: Math.max(...b.map((v) => v.y + v.height)) - y }; };
+    let bounds = boundsOf();
+    if (grid) {
+      const dx = grid.origin.x - bounds.x, dy = grid.origin.y - bounds.y;
+      const ids = new Set(targets.map((a) => a.id));
+      targets = targets.map((a) => translatedAnnotation(a, dx, dy));
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (ids.has(a.id) ? targets.find((t) => t.id === a.id) : a)));
+      bounds = boundsOf();
+      const pageMm = { w: page.width / 72 * 25.4, h: page.height / 72 * 25.4 };
+      const want = PAGE_SIZES_MM[sheet.page];
+      if (want && (Math.abs(pageMm.w - want.w) > 2 || Math.abs(pageMm.h - want.h) > 2)) notes.push("This sheet is " + sheet.page.toUpperCase() + " (" + want.w + " × " + want.h + " mm), but your page is " + Math.round(pageMm.w) + " × " + Math.round(pageMm.h) + " mm.");
+      if (bounds.width > grid.cell.w + 1 || bounds.height > grid.cell.h + 1) notes.push("Your block (" + Math.round(bounds.width / k) + " × " + Math.round(bounds.height / k) + " mm) is bigger than one cell (" + sheet.cell.w + " × " + sheet.cell.h + " mm).");
+    }
+    const gap = (gapMm || 0) * k;
+    const result = gridCopies(targets, bounds, { cols: grid ? grid.cols : cols, rows: grid ? grid.rows : rows, gap: { x: gap, y: gap }, pitch: grid ? grid.pitch : null }, { newId: () => nextAnnIdRef.current++, newGroupId: () => "g" + nextAnnIdRef.current++ }, { width: page.width * MAIN_SCALE, height: page.height * MAIN_SCALE });
+    if (result.items.length) edits.updateAnnotationsFor(selectedIdx, (anns) => [...anns, ...result.items]);
+    const total = (grid ? grid.cols * grid.rows : cols * rows);
+    if (!result.items.length && !grid) { setMessage("A grid of 1 × 1 is just the block."); return; }
+    if (result.outside) notes.push(result.outside + " of the blocks are partly off the page: make the block smaller, or the gap, or fewer columns and rows.");
+    setMessage(total + " blocks in a grid." + (notes.length ? " " + notes.join(" ") : ""));
   }
   function setShowOn(value) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? undefined : value } : a)));

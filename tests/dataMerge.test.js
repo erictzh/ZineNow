@@ -1,7 +1,7 @@
 // The core of the planned data merge (model/dataMerge/*): CSV reading, {{field}} filling, grids, sorting and photo matching, checked against
 // the five scenarios from the proposal (docs/PROPOSAL-data-merge.md) plus labels, letters and a directory.
 import { checkMerge, fieldsUsedOnPage, fillCrop, fillPictureItem, makePhotoFinder, mergeAnnotations, pictureProblems } from "../apps/ZEditor/src/model/dataMerge/build.js";
-import { dataSlots, gridCopies, groupRecords, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
+import { dataSlots, gridCopies, groupRecords, sheetGrid, mergeGroupPage, planPages, previewAnnotations, showsOnPage } from "../apps/ZEditor/src/model/dataMerge/groups.js";
 import { isTemplateFileName, stripTemplatePrefix, templateFileName, templateNeeds, templatePages, templateSettings } from "../apps/ZEditor/src/model/dataMerge/template.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
@@ -211,4 +211,8 @@ ok(tp.length === 2 && tp[0].hidden === undefined && tp[1].key === 3, "a template
 ok(templateNeeds(tp, "band").join() === "name,photo,city,band", "a template lists the columns it needs (fields, picture columns, Group by), without page counters");
 const ts = templateSettings({ dataSource: { name: "x" }, dataPhotos: [1], dataGroupBy: "band", dataRepeatOthers: false, guidesOn: true });
 ok(ts.dataSource === undefined && ts.dataPhotos === undefined && ts.dataGroupBy === "band" && ts.guidesOn === true, "a template carries no data or photos, but keeps the other settings");
+const sg = sheetGrid(presetByKey("label-3x7"), 2);
+ok(sg.cols === 3 && sg.rows === 7 && sg.pitch.x === (63.5 + 2.54) * 2 && sg.pitch.y === 38.1 * 2 && sg.origin.x === 14.4, "a label sheet in pixels: cell plus gap apart, from its first cell");
+const sgc = gridCopies(gblock, { x: 14.4, y: 30.3, width: 100, height: 50 }, { cols: 3, rows: 7, pitch: sg.pitch }, { newId: () => gid++, newGroupId: () => "G" + gn++ }, { width: 2000, height: 2000 });
+ok(sgc.items.length === 40 && Math.abs(sgc.items[0].x - (20 + sg.pitch.x)) < 1e-9 && sgc.items[0].y === 30, "a sheet grid adds one copy for every cell but the first");
 if (fails) { console.log(fails + " failed"); process.exit(1); }
