@@ -20925,7 +20925,7 @@ ${parts.join("\n")}</g>`);
       if (v) onSetLook({ blend: v });
     } })), /* @__PURE__ */ React.createElement("div", { className: "ze-layers-look-row" }, /* @__PURE__ */ React.createElement("span", { className: "ze-format-label" }, "Opacity"), /* @__PURE__ */ React.createElement(SliderNumberInput, { min: OPACITY_CONTROL.min, max: OPACITY_CONTROL.max, value: opacity, onChange: (v) => onSetLook({ opacity: v }) })));
   }
-  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, onClose, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
+  function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, onClose, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, dataAvailable, onSetDataBlock, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
     const [renamingId, setRenamingId] = useState42(null);
     const [menuOpen, setMenuOpen] = useState42(false);
     const menuRef = useRef29(null);
@@ -21217,7 +21217,7 @@ ${parts.join("\n")}</g>`);
           setRenamingId(null);
           const n = text.trim();
           if (n && n !== name) onRenameGroup(groupId2, n);
-        } }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, name, " ", /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count" }, items.length)),
+        } }) : /* @__PURE__ */ React.createElement("span", { className: "ze-layer-name", title: "Double-click to rename" }, name, " ", /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count" }, items.length), items.every((i) => i.ann.dataBlock) && /* @__PURE__ */ React.createElement("span", { className: "ze-layer-count ze-layer-data-tag", title: "A data block: it shows one record when the data is merged" }, "data")),
         /* @__PURE__ */ React.createElement(
           "button",
           {
@@ -21253,7 +21253,7 @@ ${parts.join("\n")}</g>`);
           {
             type: "button",
             className: "ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId2 ? " is-open" : ""),
-            title: "Group actions: save as .znow",
+            title: "Group actions",
             "aria-label": "Actions for group " + name,
             "aria-haspopup": "menu",
             "aria-expanded": Boolean(rowMenu && rowMenu.id === "g:" + groupId2),
@@ -21317,7 +21317,10 @@ ${parts.join("\n")}</g>`);
           close: () => setRowMenu(null)
         }
       )),
-      groupMenuId && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layer-row-menu", role: "menu", ref: rowMenuRef, style: { left: rowMenu.x, top: rowMenu.y } }, /* @__PURE__ */ React.createElement(MenuItem, { label: "Save group as .znow", hint: "Saves just this group as a project file (it opens on its own, or comes into another document with Import group)", onClick: () => onExportGroup(groupMenuId), close: () => setRowMenu(null) })),
+      groupMenuId && /* @__PURE__ */ React.createElement("div", { className: "ze-menu ze-layer-row-menu", role: "menu", ref: rowMenuRef, style: { left: rowMenu.x, top: rowMenu.y } }, dataAvailable && (() => {
+        const isBlock = annotations.filter((a) => a.groupId === groupMenuId).every((a) => a.dataBlock);
+        return /* @__PURE__ */ React.createElement(MenuItem, { label: isBlock ? "Not a data block" : "Make data block", hint: isBlock ? "Takes this group out of the data merge's data blocks" : "Marks this group as a data block: it shows one record when the data is merged (Data panel, Advanced tab)", onClick: () => onSetDataBlock(groupMenuId, !isBlock), close: () => setRowMenu(null) });
+      })(), /* @__PURE__ */ React.createElement(MenuItem, { label: "Save group as .znow", hint: "Saves just this group as a project file (it opens on its own, or comes into another document with Import group)", onClick: () => onExportGroup(groupMenuId), close: () => setRowMenu(null) })),
       RESIZE_EDGES.map((edge) => /* @__PURE__ */ React.createElement("div", { key: edge.key, className: "ze-layers-resize ze-layers-resize--" + edge.key, "aria-hidden": "true", onPointerDown: (e) => startResize(e, edge) }))
     );
   }
@@ -22474,6 +22477,9 @@ ${parts.join("\n")}</g>`);
       if (result2.outside) notes.push(result2.outside + " of the blocks are partly off the page: make the block smaller, or the gap, or fewer columns and rows.");
       setMessage(total + " blocks in a grid." + (notes.length ? " " + notes.join(" ") : ""));
     }
+    function setGroupDataBlock(groupId2, on) {
+      edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => a.groupId === groupId2 ? { ...a, dataBlock: on || void 0, showOn: on ? void 0 : a.showOn } : a));
+    }
     function setShowOn(value) {
       edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? void 0 : value } : a));
     }
@@ -22491,6 +22497,7 @@ ${parts.join("\n")}</g>`);
       groupBy,
       selected,
       markDataBlock,
+      setGroupDataBlock,
       makeGrid,
       addPhotos,
       setPicField,
@@ -22748,7 +22755,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "74a263c"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "bc60105"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -23320,6 +23327,8 @@ ${parts.join("\n")}</g>`);
         onRelease: () => edits.handleSetClip(selection.selectedAnnotationIds(), false),
         onRename: (id, name) => edits.handleUpdateAnnotation(id, { name }),
         onReorder: edits.handleReorderLayers,
+        dataAvailable: Boolean(dataMerge.parsed),
+        onSetDataBlock: dataMerge.setGroupDataBlock,
         onExportGroup: groupFiles.handleExportGroup,
         onImportGroup: groupFiles.openImportPicker,
         guides,

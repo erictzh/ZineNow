@@ -869,3 +869,5 @@ Data templates (2026-11-26): Project > Save as data template… writes `ZDATA = 
 Sheet presets for the grid (2026-11-26): the grid helper's Sheet select uses `GRID_PRESETS` (`model/dataMerge/layout.js`) via `sheetGrid` and `gridCopies({ pitch })`; `makeGrid` first moves the selected block to the sheet's origin, then adds the copies; it warns when the page size differs from the sheet's or the block is bigger than a cell. It does not resize the page or the block. Preset label measurements are only a guide.
 
 Grid helper hidden (2026-11-27): the maintainer found "Make a grid of copies" confusing, so `SHOW_GRID_HELPER` in `DataPanel.jsx` is false. The code (`makeGrid`, `gridCopies`, `sheetGrid`, presets) and tests stay; copy and paste of blocks (Ctrl+C / Ctrl+V) is the way to place several blocks for now.
+
+Layers panel: with data connected, a group's ⋮ menu has Make data block / Not a data block (`dataAvailable`, `onSetDataBlock` props; `setGroupDataBlock` in `useDataMerge.js`), and a marked group shows a small "data" tag.
