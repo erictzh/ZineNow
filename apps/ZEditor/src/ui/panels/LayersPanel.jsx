@@ -155,7 +155,7 @@ function LayerLook({ annotations, selectedIds, onSetLook, onGroup, onUngroup, ca
 // Floats over the workspace. `position` is null until first dragged,
 // which leaves it at its default spot from the stylesheet; `size` is null
 // until an edge is dragged, which leaves the stylesheet's size.
-export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, onClose, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
+export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMinimize, onClose, annotations, selectedIds, onSelect, onGroup, onUngroup, onDelete, onToggleFlag, onRename, onReorder, onRenameGroup, onSetGroupFlag, onToggleClip, onClip, onRelease, onExportGroup, onImportGroup, dataAvailable, onSetDataBlock, onSelectRange, onUpdateLayer, guides, rulerUnit }) {
   const [renamingId, setRenamingId] = useState(null); // a layer's id, or "g:" + a group's id
   const [menuOpen, setMenuOpen] = useState(false); // the ... menu: group, ungroup, clipping mask
   const menuRef = useRef(null);
@@ -427,7 +427,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           </span>
           {isRenaming
             ? <RenameInput current={name} onDone={(text) => { setRenamingId(null); const n = text.trim(); if (n && n !== name) onRenameGroup(groupId, n); }} />
-            : <span className="ze-layer-name" title="Double-click to rename">{name} <span className="ze-layer-count">{items.length}</span></span>}
+            : <span className="ze-layer-name" title="Double-click to rename">{name} <span className="ze-layer-count">{items.length}</span>{items.every((i) => i.ann.dataBlock) && <span className="ze-layer-count ze-layer-data-tag" title="A data block: it shows one record when the data is merged">data</span>}</span>}
           <button
             type="button" className={"ze-layer-icon-btn" + (allLocked ? " active" : "")}
             title={allLocked ? "Unlock the group" : "Lock the group"} aria-pressed={allLocked}
@@ -446,7 +446,7 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
           </button>
           <button
             type="button" className={"ze-layer-icon-btn ze-layer-more-btn" + (rowMenu && rowMenu.id === "g:" + groupId ? " is-open" : "")}
-            title="Group actions: save as .znow" aria-label={"Actions for group " + name} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === "g:" + groupId)}
+            title="Group actions" aria-label={"Actions for group " + name} aria-haspopup="menu" aria-expanded={Boolean(rowMenu && rowMenu.id === "g:" + groupId)}
             onClick={(e) => toggleRowMenu(e, "g:" + groupId)}
             onDoubleClick={(e) => e.stopPropagation()}
           >
@@ -545,6 +545,10 @@ export function LayersPanel({ position, onMove, size, onResize, onSetLook, onMin
       )}
       {groupMenuId && (
         <div className="ze-menu ze-layer-row-menu" role="menu" ref={rowMenuRef} style={{ left: rowMenu.x, top: rowMenu.y }}>
+          {dataAvailable && (() => {
+            const isBlock = annotations.filter((a) => a.groupId === groupMenuId).every((a) => a.dataBlock);
+            return <MenuItem label={isBlock ? "Not a data block" : "Make data block"} hint={isBlock ? "Takes this group out of the data merge's data blocks" : "Marks this group as a data block: it shows one record when the data is merged (Data panel, Advanced tab)"} onClick={() => onSetDataBlock(groupMenuId, !isBlock)} close={() => setRowMenu(null)} />;
+          })()}
           <MenuItem label="Save group as .znow" hint="Saves just this group as a project file (it opens on its own, or comes into another document with Import group)" onClick={() => onExportGroup(groupMenuId)} close={() => setRowMenu(null)} />
         </div>
       )}

@@ -319,6 +319,8 @@ export function App() {
           onRelease={() => edits.handleSetClip(selection.selectedAnnotationIds(), false)}
           onRename={(id, name) => edits.handleUpdateAnnotation(id, { name })}
           onReorder={edits.handleReorderLayers}
+          dataAvailable={Boolean(dataMerge.parsed)}
+          onSetDataBlock={dataMerge.setGroupDataBlock}
           onExportGroup={groupFiles.handleExportGroup}
           onImportGroup={groupFiles.openImportPicker}
           guides={guides}

@@ -177,12 +177,16 @@ export function useDataMerge({ doc, history, view, edits, selection }) {
     if (result.outside) notes.push(result.outside + " of the blocks are partly off the page: make the block smaller, or the gap, or fewer columns and rows.");
     setMessage(total + " blocks in a grid." + (notes.length ? " " + notes.join(" ") : ""));
   }
+  // The Layers panel's group menu: mark or unmark one group (by id) on the open page.
+  function setGroupDataBlock(groupId, on) {
+    edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (a.groupId === groupId ? { ...a, dataBlock: on || undefined, showOn: on ? undefined : a.showOn } : a)));
+  }
   function setShowOn(value) {
     edits.updateAnnotationsFor(selectedIdx, (anns) => anns.map((a) => (selectedIds.includes(a.id) && !a.dataBlock ? { ...a, showOn: value === "every" ? undefined : value } : a)));
   }
 
   return {
-    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
+    parsed, headers, records, count, idColumn, recordNo: shownNo, setRecordNo, previewFill, slotCount, blockMode, groupBy, selected, markDataBlock, setGroupDataBlock, makeGrid, addPhotos, setPicField, setShowOn, plannedPages, message, setMessage,
     templatePage, earlierCount: earlierPages.length, onGeneratedPage: Boolean(page && page.mergedFrom !== undefined),
     connect, disconnect, insertField, usedCheck, createPages,
   };
