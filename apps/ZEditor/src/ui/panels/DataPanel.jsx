@@ -199,7 +199,7 @@ export function DataPanel({ merge, view, hasPage }) {
                     </button>
                   </div>
                 )}
-                <p className="ze-data-help">{merge.slotCount === 0 ? "No data blocks on this page: one record per page." : merge.slotCount + " data block" + (merge.slotCount === 1 ? "" : "s") + " on this page: each takes the next record."}</p>
+                <p className="ze-data-help">{merge.pageSlotCount === 0 ? "No data blocks on this page" + (merge.slotCount === 0 ? ": one record per page." : ".") : merge.pageSlotCount + " data block" + (merge.pageSlotCount === 1 ? "" : "s") + " on this page: each takes the next record."}</p>
                 {merge.blockMode && (
                   <>
                     <label className="ze-data-row">Group by{" "}
@@ -209,6 +209,19 @@ export function DataPanel({ merge, view, hasPage }) {
                       </select>
                     </label>
                     <p className="ze-data-help">{merge.groupBy ? "Each " + merge.groupBy + " starts on a new page. Fields in non-data items show the group's first row; {{page in group}}, {{pages in group}} and {{records in group}} are available." : "Records fill the blocks page after page."}</p>
+                    <div className="ze-data-title">Page designs</div>
+                    {!merge.continuationPage ? (
+                      <>
+                        <p className="ze-data-help">Pages 2 onward of a group can look different (no title, a different number of blocks). Add a copy of this page for them, then change it.</p>
+                        <button type="button" className="ze-btn ze-data-wide" onClick={merge.addContinuationDesign}>Add continuation design</button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="ze-data-help">{merge.onContinuationPage ? "This page is the continuation design: pages 2 onward of a group are made from it (" + merge.pageSlotCount + " block" + (merge.pageSlotCount === 1 ? "" : "s") + "). Page 1 of each group uses the page it was copied from (" + merge.slotCount + ")." : "Page 1 of each group is made from this page (" + merge.slotCount + " block" + (merge.slotCount === 1 ? "" : "s") + "); pages 2 onward from the continuation design (" + merge.nextSlotCount + ")."}</p>
+                        {!merge.onContinuationPage && <button type="button" className="ze-btn ze-data-wide" onClick={merge.goToContinuationDesign}>Open the continuation design</button>}
+                        {merge.onContinuationPage && <button type="button" className="ze-btn ze-data-wide" onClick={merge.removeContinuationDesign}>Not a continuation design</button>}
+                      </>
+                    )}
                     <label className="ze-data-row"><input type="checkbox" checked={view.dataRepeatOthers} onChange={(e) => view.setDataRepeatOthers(e.target.checked)} /> Repeat non-data items on the other pages</label>
                   </>
                 )}

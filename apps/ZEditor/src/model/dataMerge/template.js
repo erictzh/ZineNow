@@ -16,7 +16,8 @@ export const templateFileName = (title) => TEMPLATE_PREFIX + titleToFileName(str
 // not export it is shown again.
 export function templatePages(pages) {
   const designed = new Set(pages.filter((p) => p.mergedFrom !== undefined).map((p) => p.mergedFrom));
-  return pages.filter((p) => p.mergedFrom === undefined).map((p) => (designed.has(p.key) && p.hidden ? { ...p, hidden: undefined } : p));
+  // A continuation design (`dataFor`: the key of the page it belongs to) was hidden along with its page, and is shown again with it.
+  return pages.filter((p) => p.mergedFrom === undefined).map((p) => ((designed.has(p.key) || designed.has(p.dataFor)) && p.hidden ? { ...p, hidden: undefined } : p));
 }
 
 // Which columns a template needs: the fields its text uses, the columns its pictures take photos from, and the Group by column.

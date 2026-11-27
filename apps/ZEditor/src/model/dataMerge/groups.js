@@ -49,22 +49,28 @@ export function groupRecords(records, column) {
   return [...groups.values()];
 }
 
-// The pages a merge makes: [{ groupValue, groupRecord, recordsInGroup, pageInGroup, pagesInGroup, slotRecords }]. `slotRecords` has one entry per
-// slot (null where a last page runs short). A group of 10 with 5 slots makes 2 pages.
-export function planPages(records, { slotCount, groupBy }) {
-  const slots = Math.max(1, slotCount || 1);
+// The pages a merge makes: [{ groupValue, groupRecord, recordsInGroup, pageInGroup, pagesInGroup, design, slotRecords }]. `slotRecords` has one entry
+// per slot of the page's design (null where a last page runs short). The first page of a group uses the first design (`slotCount` slots); later
+// pages use the continuation design (`nextSlotCount` slots, default the same): a group of 14 with 5 and 6 slots makes pages of 5, 6 and 3.
+// `design` is "first" or "continuation".
+export function planPages(records, { slotCount, nextSlotCount, groupBy }) {
+  const first = Math.max(1, slotCount || 1);
+  const next = Math.max(1, nextSlotCount || first);
   const pages = [];
   for (const group of groupRecords(records, groupBy)) {
     if (!group.records.length) continue;
-    const count = Math.max(1, Math.ceil(group.records.length / slots));
-    for (let p = 0; p < count; p++) {
-      const slice = group.records.slice(p * slots, (p + 1) * slots);
-      pages.push({
-        groupValue: group.value, groupRecord: group.records[0], recordsInGroup: group.records.length,
-        pageInGroup: p + 1, pagesInGroup: count,
-        slotRecords: Array.from({ length: slots }, (_, k) => slice[k] || null),
-      });
-    }
+    const slices = [];
+    let rest = group.records;
+    do {
+      const cap = slices.length === 0 ? first : next;
+      slices.push({ cap, records: rest.slice(0, cap) });
+      rest = rest.slice(cap);
+    } while (rest.length);
+    slices.forEach((slice, i) => pages.push({
+      groupValue: group.value, groupRecord: group.records[0], recordsInGroup: group.records.length,
+      pageInGroup: i + 1, pagesInGroup: slices.length, design: i === 0 ? "first" : "continuation",
+      slotRecords: Array.from({ length: slice.cap }, (_, k) => slice.records[k] || null),
+    }));
   }
   return pages;
 }
@@ -125,6 +131,22 @@ export function sheetGrid(preset, k) {
     cell: { w: preset.cell.w * k, h: preset.cell.h * k },
     cols: preset.cols, rows: preset.rows,
   };
+}
+
+// A page's items duplicated as they are (new ids, groups kept as new groups, data block and Show on markers kept): for a copy of the designed
+// page, such as the continuation design.
+export function cloneItems(items, newId, newGroupId) {
+  const ids = new Map(), groups = new Map();
+  for (const a of items) ids.set(a.id, newId());
+  return items.map((a) => {
+    const copy = { ...a, id: ids.get(a.id) };
+    if (copy.groupId) {
+      if (!groups.has(copy.groupId)) groups.set(copy.groupId, newGroupId());
+      copy.groupId = groups.get(copy.groupId);
+    }
+    if (copy.threadFrom != null) copy.threadFrom = ids.has(copy.threadFrom) ? ids.get(copy.threadFrom) : undefined;
+    return copy;
+  });
 }
 
 // Copies of a data block laid out as a grid: `items` are the block's items and `bounds` the box they cover ({ x, y, width, height }). The block
