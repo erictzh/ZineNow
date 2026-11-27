@@ -12,7 +12,7 @@ import { columnIndex, excelDateText, isDateFormat, numberText, parseDateStyles, 
 import { openZip } from "../apps/ZEditor/src/io/zipReader.js";
 import { readWorkbook } from "../apps/ZEditor/src/io/xlsxReader.js";
 import zlib from "node:zlib";
-import { buildListPage, hasListDesign, layoutEntry, packList } from "../apps/ZEditor/src/model/dataMerge/list.js";
+import { buildListPage, hasListDesign, layoutEntry, listHeadingItems, packList } from "../apps/ZEditor/src/model/dataMerge/list.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -404,6 +404,29 @@ const lt = lb.annotations.map((a) => a.text + "@" + Math.round(a.y)).join("|");
 ok(lt === "G list@10|Ana@100|Penang@124|Ben@180|Ipoh@220|Page 1 of 2@800", "a list page: other items filled, entries placed in the area (shifts added), the area left out, the stacking order kept");
 ok(new Set(lb.annotations.filter((a) => a.groupId).map((a) => a.groupId)).size === 2 && lb.annotations.every((a) => a.listEntry === undefined && a.listArea === undefined), "each entry is its own group, and no markers remain");
 ok(buildListPage(lAnns, { ...lPage, design: "continuation", pageInGroup: 2 }, { newId: () => ln++, newGroupId: () => "g" + ln++, repeatOthers: true }).annotations.every((a) => a.text !== "G list"), "Show on first hides the title on later pages");
+
+// ---- Flowing lists: columns, headings
+const col2 = packList({ count: 7, heightFor: () => 100, areaFirst: 250, areaNext: 250, gap: 10, columns: 2 });
+ok(col2.length === 2 && col2[0].entries.map((e) => e.col + ":" + e.y).join() === "0:0,0:110,1:0,1:110" && col2[1].entries.map((e) => e.col).join() === "0,0,1", "with two columns the first fills down, then the second, then a new page");
+const headed = packList({ items: [{ keep: true }, { }, { }, { keep: true }, { }, { }], heightFor: () => 100, areaFirst: 330, areaNext: 330, gap: 10 });
+ok(headed[0].entries.map((e) => e.index).join() === "0,1,2" && headed[1].entries.map((e) => e.index).join() === "3,4,5", "a heading never stays alone at the bottom: it moves to the next page with its first entry");
+const headed2 = packList({ items: [{ keep: true }, { }, { }, { keep: true }, { }, { }], heightFor: () => 100, areaFirst: 540, areaNext: 540, gap: 10 });
+ok(headed2[0].entries.map((e) => e.index).join() === "0,1,2,3,4" && headed2[1].entries.map((e) => e.index).join() === "5", "a heading with room for its first entry stays where it is")
+const nb = packList({ items: [{ keep: true }, { }, { keep: true, newPage: true }, { }], heightFor: () => 50, areaFirst: 1000, areaNext: 1000, gap: 0 });
+ok(nb.length === 2 && nb[1].entries.map((e) => e.index).join() === "2,3", "a heading that starts a new page does");
+const tall2 = packList({ count: 3, heightFor: (d, i) => (i === 1 ? 500 : 100), areaFirst: 300, areaNext: 300, gap: 0, columns: 2 });
+ok(tall2[0].entries.map((e) => e.col).join() === "0,1" || tall2[0].overflow === true, "a too-tall entry takes an empty column and the page is flagged");
+const hAnns = [
+  { id: 2, type: "rect", x: 10, y: 100, width: 300, height: 400, listArea: true },
+  { id: 3, type: "text", text: "== {{group}} ==", x: 10, y: 20, width: 100, groupId: "h", listHeading: true },
+  { id: 4, type: "text", text: "{{name}}", x: 20, y: 110, width: 100, groupId: "e", listEntry: true },
+];
+ok(listHeadingItems(hAnns).length === 1, "heading items are found");
+let hn = 1900;
+const hp = buildListPage(hAnns, { design: "first", pageInGroup: 1, pagesInGroup: 1, recordsInGroup: 2, groupRecord: { group: "Red" },
+  entries: [{ kind: "heading", record: { group: "Red" }, y: 0, xOffset: 0, shifts: new Map([[3, 0]]) }, { kind: "entry", record: { name: "Ana" }, y: 30, xOffset: 0, shifts: new Map([[4, 0]]) }, { kind: "entry", record: { name: "Ben" }, y: 0, xOffset: 150, shifts: new Map([[4, 0]]) }] },
+  { newId: () => hn++, newGroupId: () => "g" + hn++, repeatOthers: true });
+ok(hp.annotations.map((a) => a.text + "@" + a.x + "," + Math.round(a.y)).join("|") === "== Red ==@10,100|Ana@20,130|Ben@170,100", "headings and entries are placed in the area, a column adds its offset");
 
 function finish() {
 if (fails) { console.log(fails + " failed"); process.exit(1); }
