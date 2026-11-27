@@ -87,7 +87,7 @@ export function showsOnPage(showOn, plan, repeatOthers) {
 
 // One made page: the designed page's items, data blocks filled from their slot's record (an empty slot is left out), the rest from the group's
 // first record plus the page counters, and skipped where Show on says. New ids as in mergeAnnotations.
-export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, repeatOthers, findPhoto } = {}) {
+export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, repeatOthers, findPhoto, makeQr } = {}) {
   const slots = dataSlots(annotations);
   const vars = { ...plan.groupRecord, "page in group": String(plan.pageInGroup), "pages in group": String(plan.pagesInGroup), "records in group": String(plan.recordsInGroup) };
   const chosen = [];
@@ -98,7 +98,7 @@ export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, rep
       record = plan.slotRecords[slots.indexOf(slotKey(a))];
       if (!record) continue;
     } else if (!showsOnPage(a.showOn, plan, repeatOthers)) continue;
-    const filled = fillItem(a, record, { lang, findPhoto });
+    const filled = fillItem(a, record, { lang, findPhoto, makeQr });
     for (const f of filled.missing) if (!missing.includes(f)) missing.push(f);
     if (filled.ann) chosen.push(filled.ann);
   }
@@ -107,15 +107,15 @@ export function mergeGroupPage(annotations, plan, { newId, newGroupId, lang, rep
 
 // The designed page as the preview shows it: data blocks show the records from `start` on, one per slot (empty slots hidden), other text shows
 // the record at `start`. The item being typed in is left alone.
-export function previewAnnotations(annotations, records, start, editingId, lang, findPhoto) {
+export function previewAnnotations(annotations, records, start, editingId, lang, findPhoto, makeQr) {
   const slots = dataSlots(annotations);
   const counters = { ...records[start], "page in group": "1", "pages in group": "1", "records in group": String(records.length) };
   return annotations.map((a) => {
     if (a.id === editingId) return a;
     const record = a.dataBlock ? records[start + slots.indexOf(slotKey(a))] : counters;
     if (!record) return { ...a, hidden: true };
-    if (a.type === "image" && a.picField) {
-      const filled = fillItem(a, record, { findPhoto });
+    if (a.type === "image" && (a.picField || a.qrText)) {
+      const filled = fillItem(a, record, { findPhoto, makeQr, lang });
       return filled.ann || { ...a, hidden: true };
     }
     return fillTextItem(a, record, { lang }).ann;

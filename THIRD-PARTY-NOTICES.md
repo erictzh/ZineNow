@@ -51,6 +51,9 @@ Nash High's copyright and MIT licence notice must stay with any copy of ZineArra
 | html2canvas | 1.4.1 | MIT | https://github.com/niklasvh/html2canvas |
 | Paged.js | 0.4.3 | MIT | https://github.com/pagedjs/pagedjs |
 | Prism | 1.29.0 | MIT | https://github.com/PrismJS/prism |
+| qrcode-generator (QR codes in ZEditor's data merge; built into `dist/app.js`) | 1.4.4 | MIT | https://github.com/kazuhikoarase/qrcode-generator |
+
+"QR Code" is a registered trademark of DENSO WAVE INCORPORATED.
 
 ## Fonts
 
