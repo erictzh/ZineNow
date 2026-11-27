@@ -8,6 +8,10 @@ import { flowBoxOf, mergeFlowPage, planFlowPages, splitFlowText } from "../apps/
 import { recordFileNames, recordGroups, safeFileName } from "../apps/ZEditor/src/model/dataMerge/export.js";
 import { makeZip } from "../apps/ZEditor/src/io/zipWriter.js";
 import { buildQrText, mapOutsideFields } from "../apps/ZEditor/src/model/qrTypes.js";
+import { columnIndex, excelDateText, isDateFormat, numberText, parseDateStyles, parseSharedStrings, parseSheetRows, rowsToCsv } from "../apps/ZEditor/src/model/dataMerge/xlsx.js";
+import { openZip } from "../apps/ZEditor/src/io/zipReader.js";
+import { readWorkbook } from "../apps/ZEditor/src/io/xlsxReader.js";
+import zlib from "node:zlib";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -309,4 +313,62 @@ ok(vc[0] === "BEGIN:VCARD" && vc.includes("N:Lopez\\, Jr;Ana;;;") && vc.includes
 ok(buildQrText("contact", { phone: "1" }) === "" && buildQrText("location", { lat: "3.1", lng: "101.6" }) === "geo:3.1,101.6" && buildQrText("location", { lat: "3.1" }) === "" && buildQrText("custom", { text: " x " }) === " x ", "contact needs a name, location both numbers, custom text is as typed");
 ok(mapOutsideFields("a b{{x y}}c d", (t) => t.toUpperCase()) === "A B{{x y}}C D", "text between fields can be changed without touching the fields");
 ok(fillQrItem({ ...qrFrame, qrType: "website", qrText: "{{id}}" }, { id: "www.yahoo.com" }, fakeQr).ann.src === "qr:https://www.yahoo.com" && fillQrItem({ ...qrFrame, qrType: "website", qrText: "{{id}}" }, { id: "http://a.org" }, fakeQr).ann.src === "qr:http://a.org" && fillQrItem({ ...qrFrame, qrText: "{{id}}" }, { id: "www.yahoo.com" }, fakeQr).ann.src === "qr:www.yahoo.com", "a Website QR puts https:// before an address from the data that has none; custom text is left as it is");
+
+// ---- .xlsx files
+ok(columnIndex("A1") === 0 && columnIndex("Z9") === 25 && columnIndex("AA3") === 26 && columnIndex("") === -1, "column letters become numbers");
+ok(excelDateText(46364) === "2026-12-08" && excelDateText(45658) === "2025-01-01" && excelDateText(46364.5) === "2026-12-08 12:00" && excelDateText(0.75) === "18:00" && excelDateText(60) === "1900-02-29" || excelDateText(61) === "1900-03-01", "Excel date numbers become dates, with the time when there is one");
+ok(excelDateText(61) === "1900-03-01" && excelDateText(43831) === "2020-01-01" && excelDateText(1, true) === "1904-01-02", "the 1900 leap-year quirk and the 1904 system");
+ok(numberText("1.0") === "1" && numberText("187") === "187" && numberText("0.1") === "0.1" && numberText("85.50000000000001") === "85.5" && numberText("60123456789") === "60123456789", "numbers lose the .0 and the floating-point dust");
+ok(isDateFormat("yyyy-mm-dd") && isDateFormat("d mmm yy") && isDateFormat("h:mm AM/PM") && !isDateFormat("General") && !isDateFormat('0.00 "days"') && !isDateFormat("#,##0.00") && !isDateFormat('"RM" #,##0'), "date number formats are told from the rest");
+const styles = '<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></numFmts><cellXfs count="4"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/><xf numFmtId="2"/></cellXfs></styleSheet>';
+const isDateStyle = parseDateStyles(styles);
+ok(!isDateStyle(0) && isDateStyle(1) && isDateStyle(2) && !isDateStyle(3) && !isDateStyle(null), "cell styles that show a date are found (built-in and custom)");
+const sst = parseSharedStrings('<sst><si><t>id</t></si><si><r><t>Ana </t></r><r><rPr/><t xml:space="preserve">Lopez</t></r><rPh sb="0"><t>x</t></rPh></si><si><t>A &amp; B &lt;ok&gt; caf&#233;</t></si><si/></sst>');
+ok(sst.join("|") === "id|Ana Lopez|A & B <ok> café|", "shared strings: plain, rich text without phonetic hints, entities, empty");
+const sheetXml = '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="D1" t="inlineStr"><is><t>when</t></is></c></row>'
+  + '<row r="2"><c r="A2"><v>1.0</v></c><c r="B2" t="s"><v>2</v></c><c r="C2" t="b"><v>1</v></c><c r="D2" s="2"><v>46364.0</v></c></row><row r="3"/><row r="4"><c r="B4" t="str"><f>A2&amp;"x"</f><v>1x</v></c><c r="C4" t="e"><v>#N/A</v></c></row><row r="7"><c r="A7"/></row></sheetData></worksheet>';
+const parsedRows = parseSheetRows(sheetXml, sst, isDateStyle);
+ok(parsedRows[0].join("|") === "id|Ana Lopez||when" && parsedRows[1].join("|") === "1|A & B <ok> café|TRUE|2026-12-08" && parsedRows[3].join("|") === "|1x|", "sheet rows: shared and inline strings, numbers, booleans, dates, formula values, errors blank, gaps filled");
+const csvOut = rowsToCsv(parsedRows);
+ok(csvOut.rows === 3 && csvOut.csv.split("\n")[0] === "id,Ana Lopez,,when" && csvOut.csv.includes('"A & B <ok> café"') === false && csvOut.csv.split("\n").length === 5, "rows become CSV text; trailing empty rows are dropped");
+ok(rowsToCsv([[], ["", ""]]) === null && rowsToCsv([[], ["a", "b", ""], ["1", 'say "hi", ok', ""]]).csv === 'a,b\n1,"say ""hi"", ok"\n', "empty sheets give nothing; leading empty rows and trailing empty columns are dropped; cells are quoted when needed");
+// a real zip: built here with deflate, as Excel and Google Sheets write them
+function zipOf(files) {
+  const parts = [], central = []; let offset = 0;
+  for (const [name, text] of files) {
+    const nameBytes = Buffer.from(name), raw = Buffer.from(text), data = zlib.deflateRawSync(raw), crc = zlib.crc32(raw);
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(8, 8); local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(raw.length, 22); local.writeUInt16LE(nameBytes.length, 26);
+    const entry = Buffer.alloc(46); entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt16LE(8, 10); entry.writeUInt32LE(crc, 16); entry.writeUInt32LE(data.length, 20); entry.writeUInt32LE(raw.length, 24); entry.writeUInt16LE(nameBytes.length, 28); entry.writeUInt32LE(offset, 42);
+    parts.push(local, nameBytes, data); central.push(entry, nameBytes); offset += 30 + nameBytes.length + data.length;
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+  const all = Buffer.concat([...parts, cd, end]);
+  return all.buffer.slice(all.byteOffset, all.byteOffset + all.length);
+}
+const workbookFiles = [
+  ["xl/workbook.xml", '<workbook><workbookPr/><sheets><sheet state="visible" name="People" sheetId="1" r:id="rId5"/><sheet state="hidden" name="Secret" sheetId="2" r:id="rId6"/><sheet name="Empty" sheetId="3" r:id="rId7"/><sheet name="More &amp; more" sheetId="4" r:id="rId8"/></sheets></workbook>'],
+  ["xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId5" Target="worksheets/sheet1.xml"/><Relationship Id="rId6" Target="worksheets/sheet2.xml"/><Relationship Id="rId7" Target="worksheets/sheet3.xml"/><Relationship Id="rId8" Target="/xl/worksheets/sheet4.xml"/></Relationships>'],
+  ["xl/sharedStrings.xml", '<sst><si><t>id</t></si><si><t>name</t></si><si><t>Ana, "A"</t></si><si><t>x</t></si></sst>'],
+  ["xl/styles.xml", styles],
+  ["xl/worksheets/sheet1.xml", '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="inlineStr"><is><t>when</t></is></c></row><row r="2"><c r="A2"><v>1.0</v></c><c r="B2" t="s"><v>2</v></c><c r="C2" s="2"><v>46364.0</v></c></row></sheetData></worksheet>'],
+  ["xl/worksheets/sheet2.xml", '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c></row></sheetData></worksheet>'],
+  ["xl/worksheets/sheet3.xml", '<worksheet><sheetData/></worksheet>'],
+  ["xl/worksheets/sheet4.xml", '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>3</v></c></row><row r="2"><c r="A2"><v>2</v></c></row></sheetData></worksheet>'],
+];
+const zbuf = zipOf(workbookFiles);
+const zipped = openZip(zbuf);
+ok(zipped.names.includes("xl/workbook.xml"), "a zip's files are listed");
+let xlsxSheets = null, xlsxError = null;
+readWorkbook(zbuf).then((r) => { xlsxSheets = r; }).catch((e) => { xlsxError = e; }).then(() => {
+  ok(xlsxError === null && xlsxSheets.map((x) => x.name).join("|") === "People|More & more", "a workbook gives its visible, non-empty sheets, by name");
+  ok(xlsxSheets[0].csv === 'id,name,when\n1,"Ana, ""A""",2026-12-08\n' && xlsxSheets[0].rows === 1 && xlsxSheets[1].csv === "x\n2\n", "and each sheet as CSV text, dates as dates");
+  const parsedBack = parseCsv(xlsxSheets[0].csv);
+  ok(parsedBack.headers.join() === "id,name,when" && parsedBack.records[0].name === 'Ana, "A"' && parsedBack.records[0].when === "2026-12-08", "which the CSV reader reads back");
+  let notZip = null; try { openZip(new ArrayBuffer(40)); } catch (e) { notZip = e.message; }
+  ok(/not a zip/.test(notZip), "a file that is not a zip says so");
+  finish();
+});
+
+function finish() {
 if (fails) { console.log(fails + " failed"); process.exit(1); }
+}

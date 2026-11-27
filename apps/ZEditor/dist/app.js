@@ -9277,11 +9277,11 @@
         if (py < y0) y0 = py;
         if (py > y1) y1 = py;
       }
-      const pad = item.stroke ? item.strokeWidth / 2 : 0;
-      x0 -= pad;
-      y0 -= pad;
-      x1 += pad;
-      y1 += pad;
+      const pad2 = item.stroke ? item.strokeWidth / 2 : 0;
+      x0 -= pad2;
+      y0 -= pad2;
+      x1 += pad2;
+      y1 += pad2;
     }
     if (!(x1 > x0 && y1 > y0)) return null;
     const sx = ann.width / ann.traceW, sy = ann.height / ann.traceH;
@@ -9524,13 +9524,13 @@
   }
   function bevelCanvas(outline, w, h, scale, settings) {
     const o = bevelOptions(settings, scale);
-    const pad = Math.ceil(o.sigma * 3) + 2;
-    const cw = Math.max(1, Math.ceil(w * scale)) + pad * 2, ch = Math.max(1, Math.ceil(h * scale)) + pad * 2;
+    const pad2 = Math.ceil(o.sigma * 3) + 2;
+    const cw = Math.max(1, Math.ceil(w * scale)) + pad2 * 2, ch = Math.max(1, Math.ceil(h * scale)) + pad2 * 2;
     const mask = document.createElement("canvas");
     mask.width = cw;
     mask.height = ch;
     const mctx = mask.getContext("2d");
-    mctx.translate(pad, pad);
+    mctx.translate(pad2, pad2);
     mctx.scale(scale, scale);
     mctx.fillStyle = "#000";
     mctx.fill(new Path2D(outline));
@@ -9544,7 +9544,7 @@
     const image = ctx.createImageData(cw, ch);
     image.data.set(bevelPixels(alpha, cw, ch, o));
     ctx.putImageData(image, 0, 0);
-    return { canvas, pad };
+    return { canvas, pad: pad2 };
   }
 
   // apps/ZEditor/src/render/boxEffects.js
@@ -9651,12 +9651,12 @@
     if (outline || strokes.length > 0 || ann.texture || ann.bevel || shadows.length > 1) {
       const reach = strokeReach(strokes);
       const bevel = ann.bevel ? bevelCanvas(outline || rectOutline(ann), ann.width, ann.height, scaleFactor, effectSettings(ann, BEVEL_EFFECT)) : null;
-      const pad = Math.max(strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0, bevel ? bevel.pad : 0);
+      const pad2 = Math.max(strokes.length > 0 ? Math.ceil(reach * scaleFactor) + 2 : 0, bevel ? bevel.pad : 0);
       const cut = document.createElement("canvas");
-      cut.width = Math.max(1, Math.ceil(w)) + pad * 2;
-      cut.height = Math.max(1, Math.ceil(h)) + pad * 2;
+      cut.width = Math.max(1, Math.ceil(w)) + pad2 * 2;
+      cut.height = Math.max(1, Math.ceil(h)) + pad2 * 2;
       const cctx = cut.getContext("2d");
-      cctx.translate(pad, pad);
+      cctx.translate(pad2, pad2);
       cctx.scale(scaleFactor, scaleFactor);
       cctx.save();
       if (outline) cctx.clip(new Path2D(outline));
@@ -9676,11 +9676,11 @@
           ctx.shadowOffsetX = s.x * scaleFactor + far;
           ctx.shadowOffsetY = s.y * scaleFactor;
           ctx.shadowBlur = s.blur * scaleFactor;
-          ctx.drawImage(cut, x - pad - farX, y - pad - farY);
+          ctx.drawImage(cut, x - pad2 - farX, y - pad2 - farY);
           ctx.restore();
         }
       }
-      ctx.drawImage(cut, x - pad, y - pad);
+      ctx.drawImage(cut, x - pad2, y - pad2);
     } else {
       ctx.translate(x, y);
       ctx.scale(scaleFactor, scaleFactor);
@@ -10833,8 +10833,8 @@
   function annotationBounds(ann) {
     if (ann.type === "stroke") {
       const box = bboxOf(ann);
-      const pad = (ann.strokeWidth || (ann.tool === "highlighter" ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)) / 2;
-      return { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 };
+      const pad2 = (ann.strokeWidth || (ann.tool === "highlighter" ? HIGHLIGHTER_DEFAULTS.width : PEN_DEFAULTS.width)) / 2;
+      return { x: box.x - pad2, y: box.y - pad2, width: box.width + pad2 * 2, height: box.height + pad2 * 2 };
     }
     const size = ann.type === "text" ? measureTextBox(ann) : ann;
     const centerX = ann.x + size.width / 2, centerY = ann.y + size.height / 2;
@@ -11476,8 +11476,8 @@
       x1: Math.max(u.x1, b.x + b.width),
       y1: Math.max(u.y1, b.y + b.height)
     }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
-    const pad = 1;
-    const vb = { x: bounds.x0 - pad, y: bounds.y0 - pad, w: bounds.x1 - bounds.x0 + pad * 2, h: bounds.y1 - bounds.y0 + pad * 2 };
+    const pad2 = 1;
+    const vb = { x: bounds.x0 - pad2, y: bounds.y0 - pad2, w: bounds.x1 - bounds.x0 + pad2 * 2, h: bounds.y1 - bounds.y0 + pad2 * 2 };
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${num2(vb.w / MAIN_SCALE)}pt" height="${num2(vb.h / MAIN_SCALE)}pt" viewBox="${num2(vb.x)} ${num2(vb.y)} ${num2(vb.w)} ${num2(vb.h)}">
 ` + (ctx.defs.length ? `<defs>${ctx.defs.join("")}</defs>
@@ -12513,8 +12513,8 @@ ${parts.join("\n")}</g>`);
     const grow = after - before;
     return { width: page.width + 2 * grow, height: page.height + 2 * grow, bleedMm: next, shiftPt: grow };
   }
-  function cropMarkLines(trimW, trimH, b, pad, gap = 2, len = 14) {
-    const x0 = pad + b, x1 = pad + b + trimW, y0 = pad + b, y1 = pad + b + trimH;
+  function cropMarkLines(trimW, trimH, b, pad2, gap = 2, len = 14) {
+    const x0 = pad2 + b, x1 = pad2 + b + trimW, y0 = pad2 + b, y1 = pad2 + b + trimH;
     const near = b + gap, far = b + gap + len;
     const lines = [];
     for (const x of [x0, x1]) {
@@ -12545,11 +12545,11 @@ ${parts.join("\n")}</g>`);
     let x, y, w, h;
     if (ann.type === "stroke") {
       const b = bboxOf(ann);
-      const pad = (ann.width || 10) / 2 + 2;
-      x = b.x - pad;
-      y = b.y - pad;
-      w = b.width + pad * 2;
-      h = b.height + pad * 2;
+      const pad2 = (ann.width || 10) / 2 + 2;
+      x = b.x - pad2;
+      y = b.y - pad2;
+      w = b.width + pad2 * 2;
+      h = b.height + pad2 * 2;
     } else if (ann.type === "text") {
       const m = measureTextBox(ann);
       x = ann.x;
@@ -12768,15 +12768,15 @@ ${parts.join("\n")}</g>`);
       const pageHeightPts = canvas.height / EXPORT_SCALE;
       const b = bleedPt(pages[pageIdx]);
       const trimW = pageWidthPts - 2 * b, trimH = pageHeightPts - 2 * b;
-      const pad = b > 0 && keepBleed && options.cropMarks ? CROP_PAD : 0;
-      const outPage = outDoc.addPage(b > 0 && !keepBleed ? [trimW, trimH] : [pageWidthPts + 2 * pad, pageHeightPts + 2 * pad]);
+      const pad2 = b > 0 && keepBleed && options.cropMarks ? CROP_PAD : 0;
+      const outPage = outDoc.addPage(b > 0 && !keepBleed ? [trimW, trimH] : [pageWidthPts + 2 * pad2, pageHeightPts + 2 * pad2]);
       if (b > 0 && !keepBleed) outPage.translateContent(-b, -b);
-      else if (pad) outPage.translateContent(pad, pad);
+      else if (pad2) outPage.translateContent(pad2, pad2);
       outPage.drawImage(pngImage, { x: 0, y: 0, width: pageWidthPts, height: pageHeightPts });
       if (b > 0 && keepBleed) {
-        outPage.setBleedBox(pad, pad, pageWidthPts, pageHeightPts);
-        outPage.setTrimBox(pad + b, pad + b, trimW, trimH);
-        if (pad) for (const [x1, y1, x2, y2] of cropMarkLines(trimW, trimH, b, 0)) outPage.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: 0.35, color: PDFLib.rgb(0, 0, 0) });
+        outPage.setBleedBox(pad2, pad2, pageWidthPts, pageHeightPts);
+        outPage.setTrimBox(pad2 + b, pad2 + b, trimW, trimH);
+        if (pad2) for (const [x1, y1, x2, y2] of cropMarkLines(trimW, trimH, b, 0)) outPage.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: 0.35, color: PDFLib.rgb(0, 0, 0) });
       }
       for (const ann of annotations) {
         if (vectorIds.has(ann.id)) await vectorText.draw(outPage, ann, pageHeightPts);
@@ -15494,10 +15494,10 @@ ${parts.join("\n")}</g>`);
     const area = areaFromRegion(marquee, scale);
     const ctx = picture.getContext("2d");
     if (!await fillCanvasRegion(ctx, picture.width, picture.height, area, fillOpts, fillInfo)) return null;
-    const grow = fillOpts.grow || 0, pad = grow + 3;
+    const grow = fillOpts.grow || 0, pad2 = grow + 3;
     const b = areaBounds(area);
-    const left = Math.max(0, Math.floor(b.x0) - pad), top = Math.max(0, Math.floor(b.y0) - pad);
-    const right = Math.min(picture.width, Math.ceil(b.x1) + pad), bottom = Math.min(picture.height, Math.ceil(b.y1) + pad);
+    const left = Math.max(0, Math.floor(b.x0) - pad2), top = Math.max(0, Math.floor(b.y0) - pad2);
+    const right = Math.min(picture.width, Math.ceil(b.x1) + pad2), bottom = Math.min(picture.height, Math.ceil(b.y1) + pad2);
     const out = document.createElement("canvas");
     out.width = Math.max(1, right - left);
     out.height = Math.max(1, bottom - top);
@@ -18152,7 +18152,7 @@ ${parts.join("\n")}</g>`);
   }
   function BevelOverlay({ ann, outline }) {
     const ref = useRef16(null);
-    const [pad, setPad] = React.useState(0);
+    const [pad2, setPad] = React.useState(0);
     const settings = effectSettings(ann, BEVEL_EFFECT);
     const key = JSON.stringify([settings, outline, Math.round(ann.width), Math.round(ann.height)]);
     useEffect13(() => {
@@ -18165,7 +18165,7 @@ ${parts.join("\n")}</g>`);
       canvas.getContext("2d").drawImage(made.canvas, 0, 0);
       setPad(made.pad / S);
     }, [key]);
-    return /* @__PURE__ */ React.createElement("canvas", { ref, className: "ze-ann-image-bevel", style: { left: -pad, top: -pad, width: ann.width + 2 * pad, height: ann.height + 2 * pad } });
+    return /* @__PURE__ */ React.createElement("canvas", { ref, className: "ze-ann-image-bevel", style: { left: -pad2, top: -pad2, width: ann.width + 2 * pad2, height: ann.height + 2 * pad2 } });
   }
 
   // apps/ZEditor/src/ui/canvas/ResizeHandles.jsx
@@ -24867,6 +24867,200 @@ ${parts.join("\n")}</g>`);
     return /* @__PURE__ */ React.createElement("div", { className: "ze-panel-dock" }, items.map((item) => /* @__PURE__ */ React.createElement("div", { key: item.key, className: "ze-panel-dock-item" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-format-panel-head ze-panel-dock-open", title: "Open " + item.label, onClick: item.onOpen }, item.label), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Close", "aria-label": "Close " + item.label, onClick: item.onClose }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 5l10 10M15 5L5 15" }))))));
   }
 
+  // apps/ZEditor/src/model/dataMerge/xlsx.js
+  var decodeEntities2 = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (m, e) => {
+    const x = e.toLowerCase();
+    if (x === "amp") return "&";
+    if (x === "lt") return "<";
+    if (x === "gt") return ">";
+    if (x === "quot") return '"';
+    if (x === "apos") return "'";
+    const code = x[1] === "x" ? parseInt(x.slice(2), 16) : parseInt(x.slice(1), 10);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+  });
+  var attr = (tag, name) => {
+    const m = new RegExp("(?:^|\\s)" + name.replace(":", "\\:") + '="([^"]*)"').exec(tag);
+    return m ? decodeEntities2(m[1]) : null;
+  };
+  function columnIndex(ref) {
+    const letters = /^[A-Z]+/i.exec(ref || "");
+    if (!letters) return -1;
+    let n = 0;
+    for (const ch of letters[0].toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+    return n - 1;
+  }
+  function parseSharedStrings(xml) {
+    const out = [];
+    for (const si of xml.matchAll(/<si\b[^>]*?(?:\/>|>([\s\S]*?)<\/si>)/g)) {
+      const body = (si[1] || "").replace(/<rPh\b[\s\S]*?<\/rPh>/g, "");
+      out.push(decodeEntities2([...body.matchAll(/<t\b[^>]*?(?:\/>|>([\s\S]*?)<\/t>)/g)].map((t) => t[1] || "").join("")));
+    }
+    return out;
+  }
+  var BUILTIN_DATE_FORMATS = /* @__PURE__ */ new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 45, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58]);
+  function isDateFormat(code) {
+    const plain = String(code).replace(/"[^"]*"/g, "").replace(/\[[^\]]*\]/g, "").replace(/\\./g, "").replace(/_./g, "");
+    if (/^\s*general\s*$/i.test(plain)) return false;
+    return /[dmyhs]/i.test(plain.replace(/general/gi, ""));
+  }
+  function parseDateStyles(stylesXml) {
+    const custom = /* @__PURE__ */ new Map();
+    for (const f of stylesXml.matchAll(/<numFmt\b[^>]*>/g)) custom.set(Number(attr(f[0], "numFmtId")), attr(f[0], "formatCode") || "");
+    const cellXfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(stylesXml);
+    const isDate = [];
+    for (const xf of (cellXfs ? cellXfs[1] : "").matchAll(/<xf\b[^>]*>/g)) {
+      const id = Number(attr(xf[0], "numFmtId") || 0);
+      isDate.push(BUILTIN_DATE_FORMATS.has(id) || custom.has(id) && isDateFormat(custom.get(id)));
+    }
+    return (style) => Boolean(isDate[Number(style)]);
+  }
+  var pad = (n, w = 2) => String(n).padStart(w, "0");
+  function excelDateText(serial, date1904 = false) {
+    const n = Number(serial);
+    if (!Number.isFinite(n) || n < 0) return String(serial);
+    const day = Math.floor(n + 1e-9), fraction = n - day;
+    let minutes = Math.round(fraction * 1440);
+    let whole = day;
+    if (minutes >= 1440) {
+      whole += 1;
+      minutes -= 1440;
+    }
+    const time = pad(Math.floor(minutes / 60)) + ":" + pad(minutes % 60);
+    if (day === 0 && !date1904) return time;
+    const base = date1904 ? Date.UTC(1904, 0, 1) : whole < 60 ? Date.UTC(1899, 11, 31) : Date.UTC(1899, 11, 30);
+    const d = new Date(base + whole * 864e5);
+    const text = d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+    return minutes ? text + " " + time : text;
+  }
+  function numberText(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return String(raw);
+    if (Number.isInteger(n)) return String(n);
+    return String(parseFloat(n.toPrecision(15)));
+  }
+  function parseSheetRows(xml, strings, isDate = () => false, date1904 = false) {
+    const rows = [];
+    for (const row of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const cells = [];
+      let next = 0;
+      const rowNumber = Number(attr(row[1], "r") || rows.length + 1) - 1;
+      for (const c of (row[2] || "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const col = columnIndex(attr(c[1], "r")) >= 0 ? columnIndex(attr(c[1], "r")) : next;
+        next = col + 1;
+        const type = attr(c[1], "t"), body = c[2] || "";
+        const v = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(body);
+        let text = "";
+        if (type === "s") text = v ? strings[Number(v[1])] || "" : "";
+        else if (type === "inlineStr") text = decodeEntities2([...body.matchAll(/<t\b[^>]*?(?:\/>|>([\s\S]*?)<\/t>)/g)].map((t) => t[1] || "").join(""));
+        else if (type === "str") text = v ? decodeEntities2(v[1]) : "";
+        else if (type === "b") text = v ? v[1].trim() === "1" ? "TRUE" : "FALSE" : "";
+        else if (type === "e") text = "";
+        else if (type === "d") text = v ? decodeEntities2(v[1]).replace("T", " ").replace(/Z$/, "") : "";
+        else if (v && v[1].trim() !== "") text = isDate(attr(c[1], "s")) ? excelDateText(v[1], date1904) : numberText(v[1]);
+        cells[col] = text;
+      }
+      for (let i = 0; i < cells.length; i++) if (cells[i] === void 0) cells[i] = "";
+      while (rows.length < rowNumber) rows.push([]);
+      rows[rowNumber] = cells;
+    }
+    return rows;
+  }
+  var csvCell = (t) => /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  function rowsToCsv(rows) {
+    const filled = rows.map((r) => r.map((c) => String(c)));
+    let start = filled.findIndex((r) => r.some((c) => c.trim() !== ""));
+    if (start < 0) return null;
+    let end = filled.length - 1;
+    while (end > start && !filled[end].some((c) => c.trim() !== "")) end--;
+    const table = filled.slice(start, end + 1);
+    const width = Math.max(...table.map((r) => {
+      let w = r.length;
+      while (w > 0 && r[w - 1].trim() === "") w--;
+      return w;
+    }));
+    if (width === 0) return null;
+    const lines = table.map((r) => Array.from({ length: width }, (_, i) => csvCell(r[i] || "")).join(","));
+    return { csv: lines.join("\n") + "\n", rows: table.length - 1 };
+  }
+  function parseWorkbook(xml) {
+    return {
+      date1904: /<workbookPr\b[^>]*date1904="(?:1|true)"/i.test(xml),
+      sheets: [...xml.matchAll(/<sheet\b[^>]*>/g)].map((m) => ({ name: attr(m[0], "name") || "Sheet", rid: attr(m[0], "r:id"), hidden: /^(hidden|veryHidden)$/.test(attr(m[0], "state") || "") }))
+    };
+  }
+  function parseRelationships(xml) {
+    const map = /* @__PURE__ */ new Map();
+    for (const m of xml.matchAll(/<Relationship\b[^>]*>/g)) map.set(attr(m[0], "Id"), attr(m[0], "Target"));
+    return map;
+  }
+
+  // apps/ZEditor/src/io/zipReader.js
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream !== "function") throw new Error("This browser cannot open .xlsx files. Save the sheet as a CSV file instead.");
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  function openZip(buffer) {
+    const bytes = new Uint8Array(buffer), view = new DataView(buffer);
+    let end = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 101010256) {
+      end = i;
+      break;
+    }
+    if (end < 0) throw new Error("That file is not a zip file (an .xlsx workbook is one).");
+    const count = view.getUint16(end + 10, true);
+    let at = view.getUint32(end + 16, true);
+    const entries = /* @__PURE__ */ new Map();
+    const decoder = new TextDecoder();
+    for (let n = 0; n < count; n++) {
+      if (view.getUint32(at, true) !== 33639248) throw new Error("The zip file is damaged.");
+      const flags = view.getUint16(at + 8, true), method = view.getUint16(at + 10, true);
+      const size = view.getUint32(at + 20, true), nameLength = view.getUint16(at + 28, true), extraLength = view.getUint16(at + 30, true), commentLength = view.getUint16(at + 32, true);
+      const offset = view.getUint32(at + 42, true);
+      const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLength));
+      entries.set(name, { flags, method, size, offset });
+      at += 46 + nameLength + extraLength + commentLength;
+    }
+    async function read(name) {
+      const e = entries.get(name);
+      if (!e) return null;
+      if (e.flags & 1) throw new Error("This workbook is password protected, so it cannot be opened here.");
+      const nameLength = view.getUint16(e.offset + 26, true), extraLength = view.getUint16(e.offset + 28, true);
+      const start = e.offset + 30 + nameLength + extraLength;
+      const data = bytes.subarray(start, start + e.size);
+      if (e.method === 0) return data;
+      if (e.method === 8) return inflateRaw(data);
+      throw new Error("This workbook uses a zip method that cannot be read here.");
+    }
+    return { names: [...entries.keys()], read, text: async (name) => {
+      const d = await read(name);
+      return d ? decoder.decode(d) : null;
+    } };
+  }
+
+  // apps/ZEditor/src/io/xlsxReader.js
+  async function readWorkbook(buffer) {
+    const zip = openZip(buffer);
+    const workbookXml = await zip.text("xl/workbook.xml");
+    if (!workbookXml) throw new Error("That does not look like an .xlsx workbook.");
+    const workbook = parseWorkbook(workbookXml);
+    const rels = parseRelationships(await zip.text("xl/_rels/workbook.xml.rels") || "");
+    const strings = parseSharedStrings(await zip.text("xl/sharedStrings.xml") || "");
+    const isDate = parseDateStyles(await zip.text("xl/styles.xml") || "");
+    const sheets = [];
+    for (const sheet of workbook.sheets) {
+      if (sheet.hidden) continue;
+      const target = rels.get(sheet.rid);
+      if (!target) continue;
+      const path = target.startsWith("/") ? target.slice(1) : "xl/" + target.replace(/^\.\//, "");
+      const xml = await zip.text(path);
+      if (!xml) continue;
+      const result2 = rowsToCsv(parseSheetRows(xml, strings, isDate, workbook.date1904));
+      if (result2) sheets.push({ name: sheet.name, rows: result2.rows, csv: result2.csv });
+    }
+    return sheets;
+  }
+
   // apps/ZEditor/src/ui/dialogs/RecordExportDialog.jsx
   var { useEffect: useEffect35 } = React;
   function RecordExportDialog({ open, onClose, merge, view }) {
@@ -24940,6 +25134,7 @@ ${parts.join("\n")}</g>`);
     const [hideTemplate, setHideTemplate] = useState48(true);
     const [confirming, setConfirming] = useState48(false);
     const [exportOpen, setExportOpen] = useState48(false);
+    const [workbook, setWorkbook] = useState48(null);
     const [grid, setGrid] = useState48({ cols: 2, rows: 5, gap: 0, preset: "" });
     const panelRef = useRef34(null), headRef = useRef34(null);
     const [position, setPositionState] = useState48(rememberedPlace.position);
@@ -24960,6 +25155,28 @@ ${parts.join("\n")}</g>`);
       const file = e.target.files && e.target.files[0];
       e.target.value = "";
       if (!file) return;
+      if (/\.xls$/i.test(file.name)) {
+        merge.setMessage("Old .xls files cannot be read here. Open it in Excel or Google Sheets and save it as .xlsx or CSV.");
+        return;
+      }
+      if (/\.xlsx$/i.test(file.name)) {
+        try {
+          merge.setMessage("Reading the workbook…");
+          const sheets = await readWorkbook(await file.arrayBuffer());
+          if (!sheets.length) {
+            merge.setMessage("That workbook has no rows in its visible sheets.");
+            return;
+          }
+          if (sheets.length === 1) merge.connect(file.name, sheets[0].csv);
+          else {
+            merge.setMessage("");
+            setWorkbook({ file: file.name, sheets, pick: 0 });
+          }
+        } catch (err) {
+          merge.setMessage("Couldn't read that workbook — " + (err && err.message ? err.message : "unknown error"));
+        }
+        return;
+      }
       merge.connect(file.name, decodeCsv(await file.arrayBuffer()));
     }
     function make() {
@@ -25023,7 +25240,10 @@ ${parts.join("\n")}</g>`);
       },
       /* @__PURE__ */ React.createElement("div", { className: "ze-format-panel-head ze-layers-head", ref: headRef, onMouseDown: startDrag }, /* @__PURE__ */ React.createElement("span", null, "Data"), /* @__PURE__ */ React.createElement("span", { className: "ze-layers-head-actions", onMouseDown: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Minimize to the bottom right", "aria-label": "Minimize the Data panel", onMouseDown: (e) => e.stopPropagation(), onClick: () => view.setDataMinimized(true) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 10h10" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-guides-settings-btn", title: "Close (remembers its place and size)", "aria-label": "Close the Data panel", onMouseDown: (e) => e.stopPropagation(), onClick: () => view.setDataPanelOpen(false) }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 20 20", width: "12", height: "12", fill: "none", stroke: "currentColor", strokeWidth: "1.6", strokeLinecap: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M5 5l10 10M15 5L5 15" }))))),
       parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-pinned" }, /* @__PURE__ */ React.createElement("div", { className: "ze-data-file" }, /* @__PURE__ */ React.createElement("strong", { title: view.dataSource.name }, view.dataSource.name), /* @__PURE__ */ React.createElement("span", null, count, " ", count === 1 ? "row" : "rows")), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: merge.disconnect }, "Remove this data"), /* @__PURE__ */ React.createElement("div", { className: "ze-data-tabs", role: "tablist" }, /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": !view.dataAdvanced, className: "ze-data-tab" + (!view.dataAdvanced ? " is-active" : ""), onClick: () => view.setDataAdvanced(false) }, "Basic"), /* @__PURE__ */ React.createElement("button", { type: "button", role: "tab", "aria-selected": view.dataAdvanced, className: "ze-data-tab" + (view.dataAdvanced ? " is-active" : ""), onClick: () => view.setDataAdvanced(true) }, "Advanced"))),
-      /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, view.dataTemplateColumns.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, "This template needs a CSV with these columns:"), " ", view.dataTemplateColumns.join(", "), "."), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, "New to mail merge?"), " You design one page, put the words that change in it, and ZEditor makes a copy for every row of your spreadsheet."), /* @__PURE__ */ React.createElement("ol", { className: "ze-data-help ze-data-steps" }, /* @__PURE__ */ React.createElement("li", null, "Choose your spreadsheet (a CSV file) below."), /* @__PURE__ */ React.createElement("li", null, "Click a column name to put it in a text box on your page, for example the name."), /* @__PURE__ */ React.createElement("li", null, "Step through the rows to preview, then press ", /* @__PURE__ */ React.createElement("strong", null, "Make pages"), ".")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Save your sheet as a CSV file, then choose it here. It stays on your device and is saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,text/csv", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose CSV file…"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => merge.connect("sample.csv", SAMPLE_CSV) }, "Or try it with 5 made-up rows"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
+      /* @__PURE__ */ React.createElement("div", { className: "ze-data-body" }, !parsed && /* @__PURE__ */ React.createElement("div", { className: "ze-data-section" }, view.dataTemplateColumns.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, "This template needs a CSV with these columns:"), " ", view.dataTemplateColumns.join(", "), "."), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, "New to mail merge?"), " You design one page, put the words that change in it, and ZEditor makes a copy for every row of your spreadsheet."), /* @__PURE__ */ React.createElement("ol", { className: "ze-data-help ze-data-steps" }, /* @__PURE__ */ React.createElement("li", null, "Choose your spreadsheet (a CSV or Excel .xlsx file) below."), /* @__PURE__ */ React.createElement("li", null, "Click a column name to put it in a text box on your page, for example the name."), /* @__PURE__ */ React.createElement("li", null, "Step through the rows to preview, then press ", /* @__PURE__ */ React.createElement("strong", null, "Make pages"), ".")), /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, "Fill pages from a spreadsheet: one page for each row. Choose a CSV or Excel (.xlsx) file whose first row holds the column names. It stays on your device and its rows are saved inside this project."), /* @__PURE__ */ React.createElement("input", { ref: fileRef, type: "file", accept: ".csv,.tsv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", hidden: true, onChange: onFile }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", onClick: () => fileRef.current && fileRef.current.click() }, "Choose spreadsheet…"), workbook && /* @__PURE__ */ React.createElement("div", { className: "ze-data-calc-form" }, /* @__PURE__ */ React.createElement("p", { className: "ze-data-help" }, /* @__PURE__ */ React.createElement("strong", null, workbook.file), " has ", workbook.sheets.length, " sheets. Which one holds your rows?"), /* @__PURE__ */ React.createElement("select", { value: workbook.pick, onChange: (e) => setWorkbook({ ...workbook, pick: Number(e.target.value) }) }, workbook.sheets.map((sh, i) => /* @__PURE__ */ React.createElement("option", { key: sh.name, value: i }, sh.name, " (", sh.rows, " ", sh.rows === 1 ? "row" : "rows", ")"))), /* @__PURE__ */ React.createElement("div", { className: "ze-data-row" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-btn-primary", onClick: () => {
+        const sh = workbook.sheets[workbook.pick];
+        if (merge.connect(workbook.file + " – " + sh.name, sh.csv)) setWorkbook(null);
+      } }, "Use this sheet"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn", onClick: () => setWorkbook(null) }, "Cancel"))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => setPasting(!pasting) }, pasting ? "Hide" : "Or paste the rows here"), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-data-link", onClick: () => merge.connect("sample.csv", SAMPLE_CSV) }, "Or try it with 5 made-up rows"), pasting && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("textarea", { className: "ze-data-paste", rows: 6, placeholder: "name,city\nAna,Penang\nBen,Ipoh", value: pasted, onChange: (e) => setPasted(e.target.value) }), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-btn ze-data-wide", disabled: !pasted.trim(), onClick: () => {
         if (merge.connect("pasted data.csv", pasted)) {
           setPasted("");
           setPasting(false);
@@ -25152,7 +25372,7 @@ ${parts.join("\n")}</g>`);
     const { docTitle, setDocTitle, projectFile, savingProject, justSaved } = project;
     const { exporting, sendingToArranger } = exporter;
     const canReadFonts = canReadSystemFonts();
-    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "71d9e0e"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("header", { className: "topbar" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-brand" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-logo" }, "ZE"), /* @__PURE__ */ React.createElement("div", { className: "topbar-brand-text" }, /* @__PURE__ */ React.createElement("div", { className: "topbar-title" }, "ZEditor"), /* @__PURE__ */ React.createElement("div", { className: "topbar-subtitle", title: "Build number: changes whenever the app is updated" }, "Compose zine pages · build ", "08a41d1"))), /* @__PURE__ */ React.createElement("div", { className: "topbar-actions" }, /* @__PURE__ */ React.createElement("div", { className: "ze-tool-bar-group" }, /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Undo (Ctrl+Z)", disabled: history.undoStack.length === 0, onClick: history.handleUndo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M9 7L4 12l5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M4 12h11a5 5 0 0 1 0 10h-1" }))), /* @__PURE__ */ React.createElement("button", { type: "button", className: "ze-tool-icon-btn", title: "Redo (Ctrl+Shift+Z)", disabled: history.redoStack.length === 0, onClick: history.handleRedo }, /* @__PURE__ */ React.createElement("svg", { viewBox: "0 0 24 24", width: "16", height: "16", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true" }, /* @__PURE__ */ React.createElement("path", { d: "M15 7l5 5-5 5" }), /* @__PURE__ */ React.createElement("path", { d: "M20 12H9a5 5 0 0 0 0 10h1" }))), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
