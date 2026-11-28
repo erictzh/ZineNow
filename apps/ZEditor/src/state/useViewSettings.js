@@ -49,6 +49,7 @@ export function useViewSettings() {
   const [dataTemplateColumns, setDataTemplateColumns] = useState([]); // columns the opened data template expects (shown in the Data panel until data is connected; not saved)
   const [dataCalc, setDataCalc] = useState([]); // calculated columns ([{ name, kind, ... }], model/dataMerge/calc.js); saved with the project
   const [dataExportPattern, setDataExportPattern] = useState(""); // file name pattern for Export each record as a PDF ("" = the first column); saved with the project
+  const [dataSheetOutline, setDataSheetOutline] = useState(false); // print each card's outline (for cutting) when a sheet is made; saved with the project
   const [dataListColumns, setDataListColumns] = useState(1); // columns of a flowing list (1 to 4); saved with the project
   const [dataListColumnGap, setDataListColumnGap] = useState(6); // mm between those columns
   const [dataListNewPage, setDataListNewPage] = useState(false); // each group of a flowing list starts on a new page
@@ -66,7 +67,7 @@ export function useViewSettings() {
       guidesOn, guideFormat, guideMarginIn, guideBleedIn, centerGuideOn,
       onionSkinOn, onionSkinOpacity, pageNumbers,
       rulersOn, rulerUnit, rulerGuides, guideColor, snapToGuidesOn, guidesLocked,
-      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers, dataPhotos, dataCalc, dataExportPattern, dataListGap, dataListColumns, dataListColumnGap, dataListNewPage,
+      embedFonts, embedFontsSkip, layoutSettings, exportBleed, exportCropMarks, svgOutlineText, dataSource, dataOrder, dataPreviewOn, dataGroupBy, dataRepeatOthers, dataPhotos, dataCalc, dataExportPattern, dataListGap, dataListColumns, dataListColumnGap, dataListNewPage, dataSheetOutline,
     };
   }
 
@@ -98,6 +99,7 @@ export function useViewSettings() {
     setDataListColumns(Number.isFinite(s.dataListColumns) ? Math.max(1, Math.min(4, Math.round(s.dataListColumns))) : 1);
     setDataListColumnGap(Number.isFinite(s.dataListColumnGap) ? Math.max(0, Math.min(50, s.dataListColumnGap)) : 6);
     setDataListNewPage(s.dataListNewPage === true);
+    setDataSheetOutline(s.dataSheetOutline === true);
     setDataListGap(Number.isFinite(s.dataListGap) ? Math.max(0, Math.min(50, s.dataListGap)) : 3);
     setDataExportPattern(typeof s.dataExportPattern === "string" ? s.dataExportPattern : "");
     setDataCalc(Array.isArray(s.dataCalc) ? s.dataCalc.filter((d) => d && typeof d.name === "string" && typeof d.kind === "string") : []);
@@ -113,7 +115,7 @@ export function useViewSettings() {
     layersOpen, setLayersOpen, layersPosition, setLayersPosition, layersSize, setLayersSize,
     rulersOn, setRulersOn, rulerUnit, setRulerUnit, rulerGuides, setRulerGuides, guideColor, setGuideColor, snapToGuidesOn, setSnapToGuidesOn, guidesLocked, setGuidesLocked,
     embedFonts, setEmbedFonts, embedFontsSkip, setEmbedFontsSkip, layoutSettings, setLayoutSettings,
-    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataCalc, setDataCalc, dataExportPattern, setDataExportPattern, dataListGap, setDataListGap, dataListColumns, setDataListColumns, dataListColumnGap, setDataListColumnGap, dataListNewPage, setDataListNewPage, dataTemplateColumns, setDataTemplateColumns, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
+    dataSource, setDataSource, dataOrder, setDataOrder, dataPreviewOn, setDataPreviewOn, dataPanelOpen, setDataPanelOpen, dataAdvanced, setDataAdvanced, dataGroupBy, setDataGroupBy, dataRepeatOthers, setDataRepeatOthers, dataPhotos, setDataPhotos, dataCalc, setDataCalc, dataExportPattern, setDataExportPattern, dataListGap, setDataListGap, dataListColumns, setDataListColumns, dataListColumnGap, setDataListColumnGap, dataListNewPage, setDataListNewPage, dataSheetOutline, setDataSheetOutline, dataTemplateColumns, setDataTemplateColumns, dataMinimized, setDataMinimized, layersMinimized, setLayersMinimized,
     settingsForSave, applySavedSettings,
   };
 }

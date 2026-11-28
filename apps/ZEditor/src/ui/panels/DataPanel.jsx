@@ -222,6 +222,24 @@ export function DataPanel({ merge, view, hasPage }) {
             )}
             {view.dataAdvanced && (
               <div className="ze-data-section">
+                <div className="ze-data-title">Cards or labels on a sheet</div>
+                <p className="ze-data-help">Pick a sheet and design <strong>one card</strong> inside the dashed frame. Making pages repeats it in every cell, each with the next row, so you never copy or place anything.</p>
+                <label className="ze-data-row">Sheet{" "}
+                  <select value={merge.templatePage && merge.templatePage.dataSheet ? merge.templatePage.dataSheet : ""} disabled={!hasPage} onChange={(e) => merge.chooseSheet(e.target.value)}>
+                    <option value="">None</option>
+                    {GRID_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </label>
+                {merge.sheetMode && (
+                  <>
+                    <p className="ze-data-help">{merge.sheetPerPage} cards on each {merge.sheetPreset.page.toUpperCase()} sheet. Label and card sizes are a guide: check them against your own sheet and print one test page on plain paper first.</p>
+                    <label className="ze-data-row"><input type="checkbox" checked={view.dataSheetOutline} onChange={(e) => view.setDataSheetOutline(e.target.checked)} /> Print the outline of each card (to help cutting)</label>
+                  </>
+                )}
+              </div>
+            )}
+            {view.dataAdvanced && (
+              <div className="ze-data-section">
                 <div className="ze-data-title">Flowing list</div>
                 <p className="ze-data-help">For a directory, a timeline or a price list: entries of different heights stacked down the page, a new page when the next one does not fit. Design one entry (group its items; text boxes without a fixed height grow, and what is below them moves down), and draw a rectangle where the list may flow.</p>
                 <button type="button" className="ze-btn ze-data-wide" disabled={!hasPage || merge.selected.count === 0} onClick={() => merge.setListEntry(!merge.selected.isListEntry)}>

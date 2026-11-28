@@ -13,6 +13,7 @@ import { openZip } from "../apps/ZEditor/src/io/zipReader.js";
 import { readWorkbook } from "../apps/ZEditor/src/io/xlsxReader.js";
 import zlib from "node:zlib";
 import { buildListPage, hasListDesign, layoutEntry, listHeadingItems, packList } from "../apps/ZEditor/src/model/dataMerge/list.js";
+import { cellOffsets, mergeSheetPage, sheetCellOf, sheetPreviewExtras, splitSheet } from "../apps/ZEditor/src/model/dataMerge/sheet.js";
 import { parseCsv } from "../apps/ZEditor/src/model/dataMerge/csv.js";
 import { fieldsIn, fillTemplate, formatDate, isEmptyFill } from "../apps/ZEditor/src/model/dataMerge/fields.js";
 import { GRID_PRESETS, PAGE_SIZES_MM, fitGrid, gridCells, mergedPageCount, presetByKey, sheetsFor } from "../apps/ZEditor/src/model/dataMerge/layout.js";
@@ -427,6 +428,28 @@ const hp = buildListPage(hAnns, { design: "first", pageInGroup: 1, pagesInGroup:
   entries: [{ kind: "heading", record: { group: "Red" }, y: 0, xOffset: 0, shifts: new Map([[3, 0]]) }, { kind: "entry", record: { name: "Ana" }, y: 30, xOffset: 0, shifts: new Map([[4, 0]]) }, { kind: "entry", record: { name: "Ben" }, y: 0, xOffset: 150, shifts: new Map([[4, 0]]) }] },
   { newId: () => hn++, newGroupId: () => "g" + hn++, repeatOthers: true });
 ok(hp.annotations.map((a) => a.text + "@" + a.x + "," + Math.round(a.y)).join("|") === "== Red ==@10,100|Ana@20,130|Ben@170,100", "headings and entries are placed in the area, a column adds its offset");
+
+// ---- Cards on a sheet
+const shAnns = [
+  { id: 1, type: "text", text: "Event: {{title}}", x: 10, y: 5, width: 100, showOn: "first" },
+  { id: 2, type: "rect", x: 20, y: 20, width: 100, height: 60, sheetCell: true },
+  { id: 3, type: "text", text: "{{name}}", x: 30, y: 30, width: 80 },
+  { id: 4, type: "image", x: 30, y: 50, width: 20, height: 20, src: "x", naturalWidth: 5, naturalHeight: 5, picField: "photo" },
+  { id: 5, type: "text", text: "outside", x: 400, y: 400, width: 10 },
+];
+const shSplit = splitSheet(shAnns);
+ok(sheetCellOf(shAnns).id === 2 && shSplit.card.map((a) => a.id).join() === "3,4" && shSplit.others.map((a) => a.id).join() === "1,5", "the card is what is inside the cell rectangle; the rest are the page's other items");
+const shPreset = { cols: 2, rows: 3, cell: { w: 10, h: 5 }, gap: { x: 2, y: 1 } };
+const shOff = cellOffsets(shPreset, 2);
+ok(shOff.length === 6 && shOff[1].dx === 24 && shOff[1].dy === 0 && shOff[2].dx === 0 && shOff[2].dy === 12 && shOff[5].dx === 24 && shOff[5].dy === 24, "cell offsets: across then down, cell plus gap apart");
+let sn = 2100;
+const shPlan = { slotRecords: [{ name: "Ana", title: "T", photo: "" }, { name: "Ben", title: "T", photo: "" }, null, null, null, null], groupRecord: { name: "Ana", title: "T" }, pageInGroup: 1, pagesInGroup: 2, recordsInGroup: 5 };
+const shMade = mergeSheetPage(shAnns, shPlan, { offsets: shOff, drawOutline: false, newId: () => sn++, newGroupId: () => "g" + sn++, repeatOthers: true });
+ok(shMade.annotations.map((a) => a.text + "@" + a.x + "," + a.y).join("|") === "Event: T@10,5|Ana@30,30|Ben@54,30|outside@400,400", "each cell gets a copy of the card with its row; empty cells and cards with no photo give nothing; the page's other items stay");
+const shOutline = mergeSheetPage(shAnns, shPlan, { offsets: shOff, drawOutline: true, newId: () => sn++, newGroupId: () => "g" + sn++, repeatOthers: true });
+ok(shOutline.annotations.filter((a) => a.type === "rect").length === 2 && shOutline.annotations.every((a) => a.sheetCell === undefined), "with the outline on, each filled cell keeps its rectangle");
+const shPrev = sheetPreviewExtras(shAnns, [{ name: "A" }, { name: "B" }, { name: "C" }], 0, shOff, 9000);
+ok(shPrev.length === 2 && shPrev[0].text === "B" && shPrev[0].x === 54 && shPrev[0].locked === true && shPrev[1].id === 9001, "the preview adds locked copies for the other cells with the next rows");
 
 function finish() {
 if (fails) { console.log(fails + " failed"); process.exit(1); }
